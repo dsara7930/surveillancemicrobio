@@ -1,0 +1,869 @@
+[
+  {
+    "name": "Staphylococcus spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Corynebacterium spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Cutibacterium acnes",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Micrococcus spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Dermabacter hominis",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Brevibacterium epidermidis",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Peau / Muqueuses"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Streptococcus mitis/salivarius/sanguinis/anginosus",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Oropharynx"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Streptococcus pyogenes/agalactiae/pneumoniae",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Oropharynx"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène primaire",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Escherichia coli",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant (O157:H7 = pathogène primaire)",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Enterococcus spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Enterobacter spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Citrobacter spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Klebsiella pneumoniae",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Proteus spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Morganella spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Providencia spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Salmonella spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène primaire",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Shigella spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène primaire",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Yersinia enterocolitica",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Humains",
+      "Flore fécale"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène primaire",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Pseudomonas spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Acinetobacter spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Paenibacillus spp. (SPORULES)",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 2,
+    "pathotype": "Non pathogène",
+    "surfa": "Risque de résistance (spore)",
+    "apa": "Risque de résistance (spore)",
+    "notes": "Sporulé",
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Hafnia alvei",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 2,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Sphingomonas paucimobilis",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 2,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Sphingobium spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 2,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Methylobacterium spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Caulobacter crescentus",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Mycobacterium non tuberculeux",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance",
+    "apa": "Risque de résistance",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Burkholderia cepacia",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance (biofilm)",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Massilia spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Bacillus spp. (SPORULES)",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 2,
+    "pathotype": "Non pathogène",
+    "surfa": "Risque de résistance (spore)",
+    "apa": "Risque de résistance (spore)",
+    "notes": "Sporulé",
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Clostridium spp. (SPORULES)",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance (spore)",
+    "apa": "Risque de résistance (spore)",
+    "notes": "Sporulé",
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Geobacillus stearothermophilus (SPORULES)",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance (spore)",
+    "apa": "Risque de résistance (spore)",
+    "notes": "Sporulé thermophile",
+    "comment": null,
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Arthrobacter spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Cellulomonas spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Curtobacterium spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Agrococcus spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Microbacterium spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Brevibacterium linens/casei",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 2,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 10,
+    "action_threshold": 50
+  },
+  {
+    "name": "Georgenia spp.",
+    "path": [
+      "Germes",
+      "Bactéries",
+      "Environnemental",
+      "Sol / Carton / Surface sèche"
+    ],
+    "risk": 1,
+    "pathotype": "Non pathogène",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": null,
+    "comment": null,
+    "alert_threshold": 20,
+    "action_threshold": 100
+  },
+  {
+    "name": "Candida spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Humain",
+      "Peau / Muqueuse"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": "Levure",
+    "comment": "Levures = pas de production de spores",
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Trichosporon spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Humain",
+      "Peau / Muqueuse"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste résistant aux échinocandines",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": "Levure",
+    "comment": "Levures = pas de production de spores",
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Rhodotorula spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 3,
+    "pathotype": "Pathogène opportuniste résistant aux échinocandines",
+    "surfa": "Sensible",
+    "apa": "Sensible",
+    "notes": "Levure",
+    "comment": "Levures = pas de production de spores",
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Fusarium spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste multirésistant",
+    "surfa": "Risque de résistance",
+    "apa": "Risque de résistance",
+    "notes": "Conidies 2-4um",
+    "comment": "Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants",
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Aureobasidium spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Humidité"
+    ],
+    "risk": 4,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance",
+    "apa": "Sensible",
+    "notes": "Blastospores + biofilm",
+    "comment": "Production de blastospores (moins résistante aux agents oxydants et ne se dissémine pas dans l'air comme les conidies d'Aspergillus ou Fusarium) et production de biofilm",
+    "alert_threshold": 1,
+    "action_threshold": 5
+  },
+  {
+    "name": "Mucorales",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Sol / Surface / Carton"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste résistant aux échinocandines",
+    "surfa": "Risque de résistance",
+    "apa": "Risque modéré de résistance",
+    "notes": "Sporangiospores",
+    "comment": "Production de sporangiospores (moins résistant aux agents oxydants que les conidies d'Aspergillus ou Fusarium)",
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Alternaria spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Air"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance",
+    "apa": "Risque modéré de résistance",
+    "notes": "Conidies grandes",
+    "comment": "Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistante à l'oxydation",
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Aspergillus spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Air"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance",
+    "apa": "Risque de résistance",
+    "notes": "Conidies 2-4um",
+    "comment": "Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants",
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Cladosporium spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Air"
+    ],
+    "risk": 4,
+    "pathotype": "Très rarement pathogène",
+    "surfa": "Risque de résistance",
+    "apa": "Risque modéré de résistance",
+    "notes": "Conidies grandes",
+    "comment": "Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées => Moins résistante à l'oxydation",
+    "alert_threshold": 5,
+    "action_threshold": 20
+  },
+  {
+    "name": "Penicillium spp.",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Air"
+    ],
+    "risk": 5,
+    "pathotype": "Pathogène opportuniste",
+    "surfa": "Risque de résistance",
+    "apa": "Risque modéré de résistance",
+    "notes": "Conidies",
+    "comment": "Production de spores (conidies) mais moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistantes à l'oxydation",
+    "alert_threshold": 1,
+    "action_threshold": 1
+  },
+  {
+    "name": "Wallemia sebi",
+    "path": [
+      "Germes",
+      "Champignons",
+      "Environnemental",
+      "Air"
+    ],
+    "risk": 4,
+    "pathotype": "Très rarement pathogène",
+    "surfa": "Risque de résistance",
+    "apa": "Risque de résistance",
+    "notes": "Arthroconidies",
+    "comment": null,
+    "alert_threshold": 5,
+    "action_threshold": 20
+  }
+]
