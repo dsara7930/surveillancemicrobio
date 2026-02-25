@@ -2542,12 +2542,7 @@ elif active == "parametres":
                 profession_opts = [
                     "Préparateur en pharmacie hospitalière",
                     "Pharmacien",
-                    "Technicien de laboratoire",
-                    "Infirmier(e)",
-                    "Aide-soignant(e)",
-                    "Agent de stérilisation",
-                    "Responsable qualité",
-                    "Autre",
+                    "Interne de pharmacie",
                 ]
                 cur_prof = op.get('profession', '')
                 if cur_prof not in profession_opts:
@@ -2580,12 +2575,7 @@ elif active == "parametres":
                 profession_opts_new = [
                     "Préparateur en pharmacie hospitalière",
                     "Pharmacien",
-                    "Technicien de laboratoire",
-                    "Infirmier(e)",
-                    "Aide-soignant(e)",
-                    "Agent de stérilisation",
-                    "Responsable qualité",
-                    "Autre",
+                    "Interne de pharmacie",
                 ]
                 new_prof = st.selectbox("Profession / Fonction *", profession_opts_new, key="op_new_prof")
 
