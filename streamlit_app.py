@@ -1857,35 +1857,129 @@ elif active == "planning":
 
             st.divider()
 
-            # ── Charge par jour ouvré ─────────────────────────────────────────
-            st.markdown("#### 📅 Charge par jour ouvré")
-            JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
-            day_cols = st.columns(nb_jours if nb_jours > 0 else 1)
-            for di, wd in enumerate(ch_working_days):
-                dj0 = sum(1 for p in ch_j0 if datetime.fromisoformat(p['date']).date() == wd)
-                dj2 = sum(1 for s in ch_j2 if datetime.fromisoformat(s['due_date']).date() == wd)
-                dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
-                d_total = dj0 + dj2 + dj7
-                is_today_d = wd == _today_dt
-                bg_d = "#eff6ff" if is_today_d else "#f8fafc"
-                border_d = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
-                jour_col = "#1e40af" if is_today_d else "#475569"
-                inner = ""
-                if dj0: inner += "<div style='background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>🧪 " + str(dj0) + " J0</div>"
-                if dj2: inner += "<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📖 " + str(dj2) + " J2</div>"
-                if dj7: inner += "<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📗 " + str(dj7) + " J7</div>"
-                if d_total == 0: inner += "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien de planifié</div>"
-                card = (
-                    "<div style='background:" + bg_d + ";border:" + border_d + ";border-radius:12px;padding:14px;text-align:center'>"
-                    "<div style='font-size:.82rem;font-weight:800;color:" + jour_col + "'>" + JOURS_FR2[wd.weekday()] + "</div>"
-                    "<div style='font-size:.75rem;color:#94a3b8;margin-bottom:10px'>" + wd.strftime('%d/%m') + "</div>"
-                    "<div style='font-size:2.2rem;font-weight:900;color:#0f172a'>" + str(d_total) + "</div>"
-                    "<div style='font-size:.7rem;color:#94a3b8;margin-top:4px'>acte(s)</div>"
-                    "<div style='margin-top:10px;display:flex;flex-direction:column;gap:4px'>" + inner + "</div>"
-                    "</div>"
+            # ── Charge par jour ouvré — répartition automatique ───────────────
+            st.markdown("#### 📅 Planning automatique par jour ouvré")
+
+            if nb_jours == 0:
+                st.warning("Aucun jour ouvré cette semaine.")
+            else:
+                # ── Algorithme de répartition ─────────────────────────────────
+                # 1. Construire la liste de toutes les tâches à planifier
+                taches = []
+                for pt in st.session_state.points:
+                    pt_freq = pt.get('frequency', 1)
+                    pt_freq_unit = pt.get('frequency_unit', '/ semaine')
+                    if pt_freq_unit == '/ jour':
+                        nb_fois = int(pt_freq) * nb_jours
+                    elif pt_freq_unit == '/ mois':
+                        nb_fois = max(1, round(pt_freq / 4))
+                    else:
+                        nb_fois = int(pt_freq)
+                    risk = int(pt.get('risk_level', 1))
+                    for _ in range(nb_fois):
+                        taches.append({
+                            "label": pt['label'],
+                            "type": pt.get('type','—'),
+                            "risk": risk,
+                        })
+                # 2. Trier par risque décroissant (points critiques prioritaires)
+                taches.sort(key=lambda x: -x['risk'])
+
+                # 3. Répartir sur les jours ouvrés en round-robin équilibré
+                #    en tenant compte du nb de préleveurs par jour
+                capacite_par_jour = nb_preleveurs  # tâches simultanées par jour
+                planning = {wd: [] for wd in ch_working_days}
+                # Compteur de charge par jour
+                charge_jour = {wd: 0 for wd in ch_working_days}
+
+                for tache in taches:
+                    # Choisir le jour avec le moins de charge
+                    jour_cible = min(ch_working_days, key=lambda d: charge_jour[d])
+                    planning[jour_cible].append(tache)
+                    charge_jour[jour_cible] += 1
+
+                # 4. Calculer stats réelles sur la semaine
+                real_par_jour = {}
+                for wd in ch_working_days:
+                    dj0 = sum(1 for p in ch_j0 if datetime.fromisoformat(p['date']).date() == wd)
+                    dj2 = sum(1 for s in ch_j2 if datetime.fromisoformat(s['due_date']).date() == wd)
+                    dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
+                    real_par_jour[wd] = {"j0": dj0, "j2": dj2, "j7": dj7, "total": dj0+dj2+dj7}
+
+                risk_colors_plan = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+                JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
+                day_cols = st.columns(nb_jours)
+
+                for di, wd in enumerate(ch_working_days):
+                    taches_j = planning[wd]
+                    prevu_j = len(taches_j)
+                    real_j = real_par_jour[wd]
+                    realise_j = real_j["j0"]
+                    is_today_d = wd == _today_dt
+
+                    bg_d = "#eff6ff" if is_today_d else "#f8fafc"
+                    border_d = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
+                    jour_col = "#1e40af" if is_today_d else "#475569"
+
+                    # Badge statut jour
+                    if realise_j >= prevu_j and prevu_j > 0:
+                        stat_bg="#f0fdf4";stat_col="#166534";stat_lbl="✅ Complet"
+                    elif realise_j > 0:
+                        stat_bg="#fffbeb";stat_col="#92400e";stat_lbl="⏳ "+str(realise_j)+"/"+str(prevu_j)
+                    elif prevu_j > 0:
+                        stat_bg="#fef2f2";stat_col="#991b1b";stat_lbl="🔴 0/"+str(prevu_j)
+                    else:
+                        stat_bg="#f8fafc";stat_col="#94a3b8";stat_lbl="— Libre"
+
+                    # Liste des points du jour (max 5 affichés)
+                    pts_html = ""
+                    for ti, t in enumerate(taches_j[:6]):
+                        rc = risk_colors_plan.get(str(t['risk']), "#94a3b8")
+                        icon = "💨" if t['type']=="Air" else "🧴"
+                        label_short = t['label'][:22] + ("…" if len(t['label'])>22 else "")
+                        pts_html += (
+                            "<div style='background:#fff;border:1px solid " + rc + "44;border-left:3px solid " + rc + ";border-radius:6px;padding:3px 7px;font-size:.62rem;font-weight:600;color:#0f172a;text-align:left;margin-bottom:2px'>"
+                            + icon + " " + label_short +
+                            "</div>"
+                        )
+                    if len(taches_j) > 6:
+                        pts_html += "<div style='font-size:.6rem;color:#94a3b8;font-style:italic'>+" + str(len(taches_j)-6) + " autres</div>"
+                    if not taches_j:
+                        pts_html = "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien à planifier</div>"
+
+                    # Lectures J2/J7 réelles
+                    lectures_html = ""
+                    if real_j["j2"]: lectures_html += "<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>📖 " + str(real_j["j2"]) + " lecture J2</div>"
+                    if real_j["j7"]: lectures_html += "<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>📗 " + str(real_j["j7"]) + " lecture J7</div>"
+
+                    card = (
+                        "<div style='background:" + bg_d + ";border:" + border_d + ";border-radius:12px;padding:12px;'>"
+                        "<div style='font-size:.82rem;font-weight:800;color:" + jour_col + ";text-align:center'>" + JOURS_FR2[wd.weekday()] + "</div>"
+                        "<div style='font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:8px'>" + wd.strftime('%d/%m') + "</div>"
+                        "<div style='background:" + stat_bg + ";border-radius:8px;padding:5px;text-align:center;font-size:.75rem;font-weight:800;color:" + stat_col + ";margin-bottom:8px'>" + stat_lbl + "</div>"
+                        "<div style='font-size:.68rem;color:#475569;font-weight:700;margin-bottom:4px;text-align:center'>📋 " + str(prevu_j) + " prélèv. prévus · " + str(nb_preleveurs) + " préleveur(s)</div>"
+                        + pts_html + lectures_html +
+                        "</div>"
+                    )
+                    with day_cols[di]:
+                        st.markdown(card, unsafe_allow_html=True)
+
+                # ── Résumé de répartition ─────────────────────────────────────
+                st.divider()
+                charge_min = min(charge_jour.values()) if charge_jour else 0
+                charge_max = max(charge_jour.values()) if charge_jour else 0
+                charge_moy = sum(charge_jour.values()) / nb_jours if nb_jours > 0 else 0
+                par_prev = charge_moy / nb_preleveurs if nb_preleveurs > 0 else 0
+                st.markdown(
+                    "<div style='background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;padding:14px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center'>"
+                    "<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Charge min/jour</div><div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>" + str(charge_min) + "</div></div>"
+                    "<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Charge max/jour</div><div style='font-size:1.4rem;font-weight:900;color:#fbbf24'>" + str(charge_max) + "</div></div>"
+                    "<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Moy./jour</div><div style='font-size:1.4rem;font-weight:900;color:#86efac'>" + str(round(charge_moy,1)) + "</div></div>"
+                    "<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Par préleveur/jour</div><div style='font-size:1.4rem;font-weight:900;color:#f9a8d4'>" + str(round(par_prev,1)) + "</div></div>"
+                    "<div style='flex:1;text-align:right;font-size:.72rem;color:#475569'>⬆️ Points à risque élevé planifiés en priorité</div>"
+                    "</div>",
+                    unsafe_allow_html=True
                 )
-                with day_cols[di]:
-                    st.markdown(card, unsafe_allow_html=True)
 
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
