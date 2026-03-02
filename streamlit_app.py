@@ -1479,7 +1479,7 @@ elif active == "planning":
     JOURS_FR_COURT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
     JOURS_FR = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    plan_tab_view, plan_tab_list, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📋 Vue liste", "📊 Charge hebdo", "📥 Export Excel"])
+    plan_tab_view, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📊 Charge hebdo", "📥 Export Excel"])
 
     with plan_tab_view:
         nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
@@ -1573,19 +1573,25 @@ elif active == "planning":
             '</div>'
         )
 
+        # ── Grille calendrier mensuelle ───────────────────────────────────────
+        # État pour le jour sélectionné (détail au clic)
+        if 'cal_selected_day' not in st.session_state:
+            st.session_state.cal_selected_day = None
+
         grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'
+        day_has_content = {}
         for week in cal_weeks:
             for day_idx, day_num in enumerate(week):
                 is_weekend = day_idx >= 5
                 if day_num == 0:
-                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:100px"></div>'
+                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:90px"></div>'
                     continue
                 d = date_type(cal_year, cal_month, day_num)
                 is_today = d == _today_dt
                 is_holiday = d in holidays_this_month
                 is_non_working = is_weekend or is_holiday
                 is_past = d < _today_dt
-                j0r, j2r, j7r, j0p, j2p, j7p = get_day_activities(d)
+                j0r, j2r, j7r, j0p, j2p_count, j7p_count = get_day_activities(d)
 
                 bg = "#dbeafe" if is_today else ("#f1f5f9" if is_non_working else "#ffffff")
                 bdr = "2px solid #2563eb" if is_today else "1px solid #e2e8f0"
@@ -1593,136 +1599,134 @@ elif active == "planning":
                 op = "0.65" if is_past and not is_today else "1"
 
                 b = ""
-                # Réels (fond plein)
+                # Réels J0 (plein violet)
                 if j0r:
                     b += '<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0r)) + ' J0</div>'
+                # J2 réels depuis schedules
                 for s in j2r:
-                    done=s['status']=='done'; late=not done and d<_today_dt
-                    sc="#22c55e" if done else ("#ef4444" if late else "#d97706")
-                    si="✅" if done else ("⚠️" if late else "📖")
+                    done = s['status'] == 'done'
+                    late = not done and d < _today_dt
+                    sc = "#22c55e" if done else ("#ef4444" if late else "#d97706")
+                    si = "✅" if done else ("⚠️" if late else "📖")
                     b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J2</div>'
+                # J7 réels depuis schedules
                 for s in j7r:
-                    done=s['status']=='done'; late=not done and d<_today_dt
-                    sc="#22c55e" if done else ("#ef4444" if late else "#0369a1")
-                    si="✅" if done else ("⚠️" if late else "📗")
+                    done = s['status'] == 'done'
+                    late = not done and d < _today_dt
+                    sc = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
+                    si = "✅" if done else ("⚠️" if late else "📗")
                     b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J7</div>'
-                # Prévisionnels (tiretés) uniquement si pas de réel
+                # Prévisionnels (tiretés) si pas de réel
                 if not j0r and j0p and not is_non_working:
                     b += '<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0p)) + ' prévu</div>'
-                if not j2r and j2p:
-                    b += '<div style="border:1.5px dashed #d97706;color:#d97706;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📖 ' + str(j2p) + ' J2</div>'
-                if not j7r and j7p:
-                    b += '<div style="border:1.5px dashed #0369a1;color:#0369a1;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📗 ' + str(j7p) + ' J7</div>'
+                if not j2r and j2p_count and not is_non_working:
+                    b += '<div style="border:1.5px dashed #d97706;color:#d97706;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📖 ' + str(j2p_count) + ' J2</div>'
+                if not j7r and j7p_count and not is_non_working:
+                    b += '<div style="border:1.5px dashed #0369a1;color:#0369a1;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📗 ' + str(j7p_count) + ' J7</div>'
 
                 hlbl = ""
-                if is_holiday and not is_weekend: hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
-                elif is_weekend: hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
+                if is_holiday and not is_weekend:
+                    hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
+                elif is_weekend:
+                    hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
 
-                grid += '<div style="background:' + bg + ';border:' + bdr + ';border-radius:8px;padding:6px;min-height:100px;opacity:' + op + ';display:flex;flex-direction:column"><div style="font-weight:800;font-size:.9rem;color:' + dnc + ';margin-bottom:2px">' + str(day_num) + '</div>' + hlbl + b + '</div>'
+                has_content = bool(j0r or j2r or j7r or (j0p and not is_non_working))
+                day_has_content[d] = {"j0r": j0r, "j2r": j2r, "j7r": j7r, "j0p": j0p}
+
+                grid += '<div style="background:' + bg + ';border:' + bdr + ';border-radius:8px;padding:6px;min-height:90px;opacity:' + op + ';display:flex;flex-direction:column"><div style="font-weight:800;font-size:.9rem;color:' + dnc + ';margin-bottom:2px">' + str(day_num) + '</div>' + hlbl + b + '</div>'
         grid += '</div>'
 
         st.markdown(legend, unsafe_allow_html=True)
         st.markdown(hdr + grid, unsafe_allow_html=True)
-    with plan_tab_list:
-        def get_week_start(d):
-            return d - timedelta(days=d.weekday())
-        def fmt_week(ws):
-            we = ws + timedelta(days=6)
-            return f"Semaine du {ws.day} {MOIS_FR[ws.month]} au {we.day} {MOIS_FR[we.month]} {we.year}"
-        ws_set = set()
-        ws_set.add(get_week_start(_today_dt))
-        for _p in st.session_state.prelevements:
-            try: ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
-            except: pass
-        for _s in st.session_state.schedules:
-            try: ws_set.add(get_week_start(datetime.fromisoformat(_s["due_date"]).date()))
-            except: pass
-        for _i in range(1, 5):
-            ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
-        week_starts = sorted(ws_set)
-        week_labels = [fmt_week(ws) for ws in week_starts]
-        cur_week_idx = 0
-        for _i, _ws in enumerate(week_starts):
-            if _ws <= _today_dt < _ws + timedelta(days=7):
-                cur_week_idx = _i
-                break
-        sel_week_label = st.selectbox("📆 Sélectionner la semaine", week_labels, index=cur_week_idx, label_visibility="collapsed", key="view_week_sel")
-        sel_week_start = week_starts[week_labels.index(sel_week_label)]
-        st.markdown(f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:12px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
-          <div style="color:#fff;font-weight:700;font-size:1rem">📅 {sel_week_label}</div>
-          <div style="color:#bfdbfe;font-size:.75rem">Semaine {sel_week_start.isocalendar()[1]}</div>
-        </div>""", unsafe_allow_html=True)
-        holidays_week = get_holidays_cached(sel_week_start.year)
-        has_any = False
-        for day_offset in range(5):
-            day = sel_week_start + timedelta(days=day_offset)
-            jour_nom = JOURS_FR[day_offset]
-            is_today = day == _today_dt
-            is_past = day < _today_dt
-            is_holiday = day in holidays_week
-            j0_d = [p for p in st.session_state.prelevements if p.get('date') and datetime.fromisoformat(p['date']).date() == day and not p.get('archived', False)]
-            j2_d = [s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date() == day]
-            j7_d = [s for s in st.session_state.schedules if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date() == day]
-            has_activity = bool(j0_d or j2_d or j7_d)
-            if is_holiday:
-                st.markdown(f'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;opacity:0.6"><span style="font-weight:700;color:#dc2626;font-size:.82rem;min-width:130px">🎌 {jour_nom} {day.strftime("%d/%m")}</span><span style="font-size:.72rem;color:#dc2626;font-style:italic">Jour férié — pas de prélèvement</span></div>', unsafe_allow_html=True)
-                continue
-            if not has_activity:
-                bg = "#eff6ff" if is_today else "#f8fafc"
-                border = "#2563eb" if is_today else "#e2e8f0"
-                today_lbl = " • AUJOURD'HUI" if is_today else ""
-                st.markdown(f'<div style="background:{bg};border:1.5px solid {border};border-radius:10px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;opacity:{"1" if not is_past else "0.55"}"><span style="font-weight:700;color:{"#2563eb" if is_today else "#475569"};font-size:.82rem;min-width:130px">{jour_nom} {day.strftime("%d/%m")}{today_lbl}</span><span style="font-size:.72rem;color:#94a3b8;font-style:italic">Aucune activité planifiée</span></div>', unsafe_allow_html=True)
-                continue
-            has_any = True
-            bg = "#eff6ff" if is_today else "#ffffff"
-            border = "#2563eb" if is_today else "#cbd5e1"
-            bw = "2px"
-            past_style = "opacity:0.75;" if is_past and not is_today else ""
-            badges = ""
-            if j0_d: badges += f'<span style="background:#7c3aed22;color:#7c3aed;border:1px solid #e9d5ff;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">🧪 {len(j0_d)} prélèv.</span> '
-            if j2_d: badges += f'<span style="background:#d9770622;color:#d97706;border:1px solid #fde68a;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📖 {len(j2_d)} J2</span> '
-            if j7_d: badges += f'<span style="background:#0369a122;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📗 {len(j7_d)} J7</span>'
-            today_badge = f'<span style="background:#2563eb;color:#fff;font-size:.55rem;font-weight:700;padding:2px 8px;border-radius:8px;margin-left:8px">AUJOURD\'HUI</span>' if is_today else ""
-            st.markdown(f'<div style="background:{bg};border:{bw} solid {border};border-radius:12px 12px 0 0;padding:12px 16px 10px 16px;margin-bottom:0;{past_style}"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><span style="font-weight:800;font-size:.95rem;color:{"#1e40af" if is_today else "#0f172a"}">{jour_nom} {day.strftime("%d/%m/%Y")}</span>{today_badge}</div><div style="display:flex;gap:6px;flex-wrap:wrap">{badges}</div></div></div>', unsafe_allow_html=True)
-            if j0_d:
-                st.markdown(f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#7c3aed;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">🧪 Prélèvements J0</div></div>', unsafe_allow_html=True)
-                for p in j0_d:
-                    _pc1, _pc2 = st.columns([11, 1])
-                    with _pc1:
-                        st.markdown(f'<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;padding:9px 12px;margin:0 16px 4px 16px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-weight:700;color:#0f172a;font-size:.82rem">{p["label"]}</span><span style="background:#7c3aed;color:#fff;font-size:.55rem;padding:2px 7px;border-radius:5px">J0 — {p.get("type","—")}</span><span style="color:#475569;font-size:.7rem">Classe {p.get("room_class","—")}</span><span style="color:#475569;font-size:.7rem">🧫 {p.get("gelose","—")}</span><span style="color:#475569;font-size:.7rem;margin-left:auto">Oper. {p.get("operateur","—")}</span></div></div>', unsafe_allow_html=True)
-                    with _pc2:
-                        if st.button("🗑️", key=f"del_plan_p_{p['id']}_{day_offset}", help=f"Supprimer {p['label']}"):
-                            _sid = p['id']
-                            st.session_state.schedules = [x for x in st.session_state.schedules if x['sample_id'] != _sid]
-                            save_schedules(st.session_state.schedules)
-                            st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != _sid]
-                            save_prelevements(st.session_state.prelevements)
-                            st.success(f"✅ Prélèvement **{p['label']}** supprimé.")
-                            st.rerun()
-            if j2_d:
-                j2_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#d97706;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📖 Lectures J2 (2 jours ouvrés après J0)</div>'
-                for sch in j2_d:
-                    is_done = sch["status"]=="done"; is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < _today_dt
-                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706"); st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
-                    samp = next((p for p in st.session_state.prelevements if p["id"]==sch["sample_id"]),None); j0_date = samp.get("date","—") if samp else "—"
-                    j2_html += f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#d97706;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J2</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
-                j2_html += "</div>"
-                st.markdown(j2_html, unsafe_allow_html=True)
-            if j7_d:
-                j7_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#0369a1;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📗 Lectures J7 (5 jours ouvrés après J0)</div>'
-                for sch in j7_d:
-                    is_done = sch["status"]=="done"; is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < _today_dt
-                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1"); st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
-                    samp = next((p for p in st.session_state.prelevements if p["id"]==sch["sample_id"]),None); j0_date = samp.get("date","—") if samp else "—"
-                    j7_html += f'<div style="background:#eff6ff;border:1px solid #bae6fd;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#0369a1;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J7</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
-                j7_html += "</div>"
-                st.markdown(j7_html, unsafe_allow_html=True)
-            st.markdown(f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};border-bottom:{bw} solid {border};border-radius:0 0 12px 12px;padding:4px 16px;margin-bottom:10px;{past_style}"></div>', unsafe_allow_html=True)
-        if not has_any:
-            st.markdown("""<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;padding:48px;text-align:center">
-              <div style="font-size:2.5rem;margin-bottom:12px">📅</div>
-              <div style="font-size:.95rem;color:#475569;font-weight:600">Aucune activité cette semaine</div>
-            </div>""", unsafe_allow_html=True)
+
+        # ── Détail du jour sélectionné ────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("**💡 Détail par jour** — sélectionnez un jour ci-dessous pour voir le détail des prélèvements :")
+        import calendar as _cal2
+        _, n_days = _cal2.monthrange(cal_year, cal_month)
+        working_days_month = [date_type(cal_year, cal_month, d) for d in range(1, n_days+1)
+                              if date_type(cal_year, cal_month, d).weekday() < 5
+                              and date_type(cal_year, cal_month, d) not in holidays_this_month]
+        if working_days_month:
+            day_options = {d.strftime('%A %d/%m') + (" 📍" if day_has_content.get(d) else ""): d for d in working_days_month}
+            sel_day_label = st.selectbox("Jour à détailler", list(day_options.keys()), label_visibility="collapsed", key="cal_day_detail_sel")
+            sel_day = day_options[sel_day_label]
+            data = day_has_content.get(sel_day, {"j0r": [], "j2r": [], "j7r": [], "j0p": []})
+            j0r_d = data["j0r"]; j2r_d = data["j2r"]; j7r_d = data["j7r"]; j0p_d = data["j0p"]
+
+            if not j0r_d and not j2r_d and not j7r_d and not j0p_d:
+                st.info("Aucune activité ce jour.")
+            else:
+                det_cols = st.columns(3)
+                with det_cols[0]:
+                    st.markdown("**🧪 Prélèvements J0 réels**")
+                    if j0r_d:
+                        for p in j0r_d:
+                            st.markdown(
+                                "<div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='font-weight:700;color:#0f172a;font-size:.82rem'>" + p['label'] + "</div>"
+                                "<div style='font-size:.7rem;color:#475569;margin-top:3px'>Type : " + p.get('type','—') + " · Classe : " + p.get('room_class','—') + "</div>"
+                                "<div style='font-size:.7rem;color:#475569'>Opérateur : " + (p.get('operateur','—') or '—') + "</div>"
+                                "<div style='font-size:.7rem;color:#475569'>Gélose : " + p.get('gelose','—') + "</div>"
+                                "</div>",
+                                unsafe_allow_html=True
+                            )
+                    elif j0p_d:
+                        for lbl in j0p_d:
+                            st.markdown(
+                                "<div style='border:1.5px dashed #7c3aed;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='font-weight:600;color:#7c3aed;font-size:.82rem'>📋 " + lbl + " (prévu)</div>"
+                                "</div>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucun prélèvement</span>", unsafe_allow_html=True)
+
+                with det_cols[1]:
+                    st.markdown("**📖 Lectures J2**")
+                    if j2r_d:
+                        for s in j2r_d:
+                            samp = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
+                            done = s['status']=='done'; late = not done and sel_day < _today_dt
+                            st_col = "#22c55e" if done else ("#ef4444" if late else "#d97706")
+                            st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
+                            st.markdown(
+                                "<div style='background:#fffbeb;border:1px solid #fde68a;border-left:3px solid #d97706;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='font-weight:700;color:#0f172a;font-size:.82rem'>" + s['label'] + "</div>"
+                                "<div style='font-size:.7rem;color:#475569;margin-top:3px'>J0 : " + (samp.get('date','—') if samp else '—') + "</div>"
+                                "<div style='font-size:.7rem;color:#475569'>Opérateur : " + (samp.get('operateur','—') if samp else '—') + "</div>"
+                                "<div style='font-size:.72rem;font-weight:700;color:" + st_col + ";margin-top:3px'>" + st_txt + "</div>"
+                                "</div>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J2</span>", unsafe_allow_html=True)
+
+                with det_cols[2]:
+                    st.markdown("**📗 Lectures J7**")
+                    if j7r_d:
+                        for s in j7r_d:
+                            samp = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
+                            done = s['status']=='done'; late = not done and sel_day < _today_dt
+                            st_col = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
+                            st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
+                            st.markdown(
+                                "<div style='background:#eff6ff;border:1px solid #bae6fd;border-left:3px solid #0369a1;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='font-weight:700;color:#0f172a;font-size:.82rem'>" + s['label'] + "</div>"
+                                "<div style='font-size:.7rem;color:#475569;margin-top:3px'>J0 : " + (samp.get('date','—') if samp else '—') + "</div>"
+                                "<div style='font-size:.7rem;color:#475569'>Opérateur : " + (samp.get('operateur','—') if samp else '—') + "</div>"
+                                "<div style='font-size:.72rem;font-weight:700;color:" + st_col + ";margin-top:3px'>" + st_txt + "</div>"
+                                "</div>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J7</span>", unsafe_allow_html=True)
+    # ── Fonctions utilitaires semaine ────────────────────────────────────────
+    def get_week_start(d):
+        return d - timedelta(days=d.weekday())
+    def fmt_week(ws):
+        we = ws + timedelta(days=6)
+        return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
 
     with plan_tab_charge:
         st.markdown("### 📊 Charge hebdomadaire — Préleveurs & Points")
@@ -1743,12 +1747,16 @@ elif active == "planning":
                 ch_cur_idx = _i
                 break
 
-        csel_col1, csel_col2 = st.columns([3, 1])
+        csel_col1, csel_col2, csel_col3 = st.columns([3, 1, 0.6])
         with csel_col1:
             ch_sel_label = st.selectbox("Semaine", ch_week_labels, index=ch_cur_idx, label_visibility="collapsed", key="ch_week_sel")
         with csel_col2:
             nb_preleveurs = st.number_input("Nb préleveurs", min_value=1, max_value=20, value=max(1, len(st.session_state.operators)), step=1, key="ch_nb_prev",
                 help="Nombre de préleveurs disponibles cette semaine")
+        with csel_col3:
+            st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
+            if st.button("🔄", use_container_width=True, key="ch_refresh", help="Recalculer la charge"):
+                st.rerun()
 
         ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
         ch_sel_we = ch_sel_ws + timedelta(days=6)
