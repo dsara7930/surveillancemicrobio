@@ -1694,15 +1694,18 @@ elif active == "planning":
                 ch_cur_idx = _i
                 break
 
-        csel_col1, csel_col2, csel_col3 = st.columns([3, 1, 0.6])
+        csel_col1, csel_col2, csel_col3, csel_col4 = st.columns([3, 1, 1, 0.6])
         with csel_col1:
             ch_sel_label = st.selectbox("Semaine", ch_week_labels, index=ch_cur_idx, label_visibility="collapsed", key="ch_week_sel")
         with csel_col2:
             nb_preleveurs = st.number_input("Nb préleveurs", min_value=1, max_value=20, value=max(1, len(st.session_state.operators)), step=1, key="ch_nb_prev",
                 help="Nombre de préleveurs disponibles cette semaine")
         with csel_col3:
+            nb_prelevements_max = st.number_input("Nb prélèv. max / semaine", min_value=0, max_value=500, value=0, step=1, key="ch_nb_prelev_max",
+                help="Nombre maximum de prélèvements à réaliser cette semaine (0 = pas de limite)")
+        with csel_col4:
             st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
-            if st.button("🔄", use_container_width=True, key="ch_refresh", help="Recalculer la charge"):
+        if st.button("🔄", use_container_width=True, key="ch_refresh", help="Recalculer la charge"):
                 st.rerun()
 
         ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
@@ -1919,6 +1922,10 @@ elif active == "planning":
 
                 # Mélange aléatoire reproductible pour la semaine
                 _rng.shuffle(taches_all)
+
+                # ── Appliquer le plafond de prélèvements si défini ────────────────────
+                if nb_prelevements_max > 0 and len(taches_all) > nb_prelevements_max:
+                    taches_all = taches_all[:nb_prelevements_max]
 
                 planning = {wd: [] for wd in ch_working_days}
                 charge_jour = {wd: 0 for wd in ch_working_days}
