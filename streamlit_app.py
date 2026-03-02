@@ -4,10 +4,11 @@ import csv
 import io
 import os
 import base64
-from datetime import datetime, timedelta
+import calendar as cal_module
+from datetime import datetime, timedelta, date as date_type
 import difflib
 
-# Optional Supabase integration (falls back to local file persistence)
+# ── SUPABASE ───────────────────────────────────────────────────────────────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 try:
@@ -28,76 +29,116 @@ def get_supabase_client():
             _supabase_client = None
     return _supabase_client
 
+# ── JOURS FÉRIÉS & JOURS TRAVAILLÉS ───────────────────────────────────────────
+def get_french_holidays(year):
+    h = set()
+    h.add(date_type(year, 1, 1))
+    h.add(date_type(year, 5, 1))
+    h.add(date_type(year, 5, 8))
+    h.add(date_type(year, 7, 14))
+    h.add(date_type(year, 8, 15))
+    h.add(date_type(year, 11, 1))
+    h.add(date_type(year, 11, 11))
+    h.add(date_type(year, 12, 25))
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    hh = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - hh - k) % 7
+    m = (a + 11 * hh + 22 * l) // 451
+    month = (hh + l - 7 * m + 114) // 31
+    day = ((hh + l - 7 * m + 114) % 31) + 1
+    easter = date_type(year, month, day)
+    h.add(easter + timedelta(days=1))
+    h.add(easter + timedelta(days=39))
+    h.add(easter + timedelta(days=50))
+    return h
+
+_HOLIDAY_CACHE = {}
+
+def get_holidays_cached(year):
+    if year not in _HOLIDAY_CACHE:
+        _HOLIDAY_CACHE[year] = get_french_holidays(year)
+    return _HOLIDAY_CACHE[year]
+
+def is_working_day(d):
+    if d.weekday() >= 5:
+        return False
+    return d not in get_holidays_cached(d.year)
+
+def next_working_day_offset(d, offset_working_days):
+    current = d
+    counted = 0
+    while counted < offset_working_days:
+        current += timedelta(days=1)
+        if is_working_day(current):
+            counted += 1
+    return current
+
+# ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(layout="wide", page_title="MicroSurveillance URC", page_icon="🦠")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap');
-
-html,body,[class*="css"]{font-family:'Syne',sans-serif;font-size:16px}
+html,body,[class*="css"]{font-family:'Syne',sans-serif;font-size:17px}
 .stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:#f8fafc!important}
 [data-testid="stHeader"]{background:#f8fafc!important;border-bottom:1px solid #e2e8f0!important}
 #MainMenu,footer{visibility:hidden}
-
-/* Pleine largeur */
 .block-container{max-width:100%!important;padding-left:1rem!important;padding-right:1rem!important}
-
-p,li,div{color:#1e293b}
-h1,h2,h3,h4{color:#0f172a!important}
-.stMarkdown p,.stMarkdown li{color:#0f172a}
-
+p,li,div{color:#1e293b;font-size:1rem}
+h1,h2,h3,h4{color:#0f172a!important;font-size:1.15rem!important}
+.stMarkdown p,.stMarkdown li{color:#0f172a;font-size:1rem}
 [data-testid="stSidebar"]{background:#ffffff!important;border-right:2px solid #e2e8f0!important;box-shadow:2px 0 12px rgba(0,0,0,.07)!important}
-[data-testid="stSidebar"] *{color:#1e293b!important}
-[data-testid="stSidebar"] p{color:#0f172a!important}
-
+[data-testid="stSidebar"] *{color:#1e293b!important;font-size:.95rem!important}
+[data-testid="stSidebar"] p{color:#0f172a!important;font-size:.95rem!important}
 [data-testid="collapsedControl"]{background:#2563eb!important;border-radius:0 12px 12px 0!important;width:32px!important;min-width:32px!important;box-shadow:4px 0 16px rgba(37,99,235,.5)!important;border:none!important}
 [data-testid="collapsedControl"]:hover{background:#1d4ed8!important}
 [data-testid="collapsedControl"] svg{fill:#ffffff!important;stroke:#ffffff!important;width:20px!important;height:20px!important;opacity:1!important}
 [data-testid="stSidebarCollapsedControl"]{background:#2563eb!important;border-radius:0 12px 12px 0!important;width:32px!important;box-shadow:4px 0 16px rgba(37,99,235,.5)!important}
 [data-testid="stSidebarCollapsedControl"] svg{fill:#ffffff!important;stroke:#ffffff!important}
 [data-testid="stSidebarCollapsedControl"]:hover{background:#1d4ed8!important}
-
-.stButton>button{border-radius:8px!important;font-size:.82rem!important;font-weight:600!important;border:1.5px solid #e2e8f0!important;color:#1e293b!important;background:#ffffff!important;transition:all .15s}
+.stButton>button{border-radius:8px!important;font-size:.95rem!important;font-weight:600!important;border:1.5px solid #e2e8f0!important;color:#1e293b!important;background:#ffffff!important;transition:all .15s;padding:8px 16px!important}
 .stButton>button:hover{background:#f1f5f9!important;border-color:#0f172a!important}
 .stButton>button[kind="primary"]{background:#2563eb!important;color:#fff!important;border-color:#2563eb!important}
 .stButton>button[kind="primary"]:hover{background:#1d4ed8!important;border-color:#1d4ed8!important}
-
-.stTextInput>div>div>input,.stTextArea>div>div>textarea,.stSelectbox>div>div,.stNumberInput>div>div>input{background:#ffffff!important;color:#1e293b!important;border:1.5px solid #cbd5e1!important;border-radius:8px!important}
+.stTextInput>div>div>input,.stTextArea>div>div>textarea,.stSelectbox>div>div,.stNumberInput>div>div>input{background:#ffffff!important;color:#1e293b!important;border:1.5px solid #cbd5e1!important;border-radius:8px!important;font-size:1rem!important}
 .stTextInput>div>div>input:focus,.stTextArea>div>div>textarea:focus{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.15)!important}
-label{color:#374151!important;font-size:.8rem!important;font-weight:600!important}
-.stCheckbox label{color:#374151!important}
-.stCheckbox span{color:#374151!important}
-
+label{color:#374151!important;font-size:.95rem!important;font-weight:600!important}
+.stCheckbox label{color:#374151!important;font-size:.95rem!important}
+.stCheckbox span{color:#374151!important;font-size:.95rem!important}
 div[data-testid="stExpander"]{background:#ffffff!important;border:1.5px solid #e2e8f0!important;border-radius:10px!important;box-shadow:0 1px 4px rgba(0,0,0,.06)!important}
-div[data-testid="stExpander"] summary,div[data-testid="stExpander"] summary *{color:#1e293b!important}
+div[data-testid="stExpander"] summary,div[data-testid="stExpander"] summary *{color:#1e293b!important;font-size:1rem!important}
 div[data-testid="stExpander"] summary svg{fill:#0f172a!important;stroke:#0f172a!important}
-
 .stTabs [data-baseweb="tab-list"]{background:#f1f5f9!important;border-radius:10px!important;padding:3px!important;border:1.5px solid #e2e8f0!important}
-.stTabs [data-baseweb="tab"]{background:transparent!important;color:#0f172a!important;border-radius:8px!important;font-weight:600!important}
+.stTabs [data-baseweb="tab"]{background:transparent!important;color:#0f172a!important;border-radius:8px!important;font-weight:600!important;font-size:1rem!important;padding:8px 18px!important}
 .stTabs [aria-selected="true"]{background:#ffffff!important;color:#2563eb!important;box-shadow:0 1px 4px rgba(0,0,0,.1)!important}
-
-[data-testid="stMetric"]{background:#fff!important;border:1.5px solid #e2e8f0!important;border-radius:10px!important;padding:12px!important}
-[data-testid="stMetricValue"]{color:#0f172a!important}
-[data-testid="stMetricLabel"]{color:#0f172a!important}
-
+[data-testid="stMetric"]{background:#fff!important;border:1.5px solid #e2e8f0!important;border-radius:10px!important;padding:16px!important}
+[data-testid="stMetricValue"]{color:#0f172a!important;font-size:1.6rem!important}
+[data-testid="stMetricLabel"]{color:#0f172a!important;font-size:.9rem!important}
+[data-testid="stMetricDelta"]{font-size:.85rem!important}
 .stAlert{border-radius:10px!important}
-.stSuccess>div{background:#f0fdf4!important;border:1px solid #86efac!important;color:#166534!important}
-.stWarning>div{background:#fffbeb!important;border:1px solid #fcd34d!important;color:#92400e!important}
-.stInfo>div{background:#eff6ff!important;border:1px solid #93c5fd!important;color:#1e40af!important}
-.stError>div{background:#fef2f2!important;border:1px solid #fca5a5!important;color:#991b1b!important}
-
+.stSuccess>div{background:#f0fdf4!important;border:1px solid #86efac!important;color:#166534!important;font-size:1rem!important}
+.stWarning>div{background:#fffbeb!important;border:1px solid #fcd34d!important;color:#92400e!important;font-size:1rem!important}
+.stInfo>div{background:#eff6ff!important;border:1px solid #93c5fd!important;color:#1e40af!important;font-size:1rem!important}
+.stError>div{background:#fef2f2!important;border:1px solid #fca5a5!important;color:#991b1b!important;font-size:1rem!important}
 hr{border-color:#e2e8f0!important}
-
 [data-testid="stSidebar"] .stButton>button[kind="primary"]{background:#2563eb!important;color:#fff!important;border-color:#2563eb!important}
-[data-testid="stSidebar"] .stButton>button{background:#f8fafc!important;color:#374151!important;border:1.5px solid #e2e8f0!important;font-size:.9rem!important;padding:10px 8px!important}
+[data-testid="stSidebar"] .stButton>button{background:#f8fafc!important;color:#374151!important;border:1.5px solid #e2e8f0!important;font-size:1rem!important;padding:12px 8px!important}
 [data-testid="stSidebar"] .stButton>button:hover{background:#eff6ff!important;border-color:#93c5fd!important}
-[data-testid="stSidebar"] p{font-size:.82rem!important}
-
+[data-testid="stSidebar"] p{font-size:.95rem!important}
 .stSlider [data-testid="stThumbValue"]{color:#2563eb!important}
-.stNumberInput button{background:#f1f5f9!important;border-color:#e2e8f0!important;color:#1e293b!important}
+.stNumberInput button{background:#f1f5f9!important;border-color:#e2e8f0!important;color:#1e293b!important;font-size:1rem!important}
 .stNumberInput button:hover{background:#e2e8f0!important}
-.stDownloadButton>button{color:#2563eb!important;border-color:#93c5fd!important;background:#eff6ff!important}
+.stDownloadButton>button{color:#2563eb!important;border-color:#93c5fd!important;background:#eff6ff!important;font-size:.95rem!important}
 .stDownloadButton>button:hover{background:#dbeafe!important}
+.stCaption{font-size:.88rem!important}
+[data-testid="stSelectbox"] div,[data-testid="stSelectbox"] span{font-size:1rem!important}
+[data-testid="stRadio"] label,[data-testid="stRadio"] span{font-size:1rem!important}
+[data-testid="stDateInput"] input{font-size:1rem!important}
 </style>""", unsafe_allow_html=True)
 
 RISK_COLORS = {1:"#22c55e",2:"#84cc16",3:"#f59e0b",4:"#f97316",5:"#ef4444"}
@@ -121,7 +162,7 @@ DEFAULT_MEASURES = {
     },
     4: {
         "alert": "• Informer le responsable qualité\n• Renforcer le bionettoyage de la zone concernée\n• Vérifier les procédures d'habillage et d'hygiène\n• Contrôler les flux d'air et la pression différentielle\n• Programmer un prélèvement de contrôle sous 48h",
-        "action": "• Alerter le pharmacien responsable\n• Suspendre les préparations critiques si nécessaire\n• Nettoyage et désinfection renforcés de la zone\n• Vérification complète de l'installation (filtres, flux)\n• Enquête sur l'origine de la contamination\n• Prélèvements de contrôle avant reprise\n• Enregistrement et analyse des causes"
+        "action": "• Alerter le pharmacien responsable\n• Suspendre les préparations critiques si nécessaire\n• Nettoyage et désinfection renforcés de la zone\n• Vérification complète de l'installation\n• Enquête sur l'origine de la contamination\n• Prélèvements de contrôle avant reprise\n• Enregistrement et analyse des causes"
     },
     3: {
         "alert": "• Informer le responsable d'équipe\n• Renforcer les mesures d'hygiène du personnel\n• Vérifier le respect des procédures de bionettoyage\n• Programmer un prélèvement de contrôle\n• Surveiller l'évolution",
@@ -206,135 +247,205 @@ DEFAULT_ORIGIN_MEASURES = [
 ]
 
 DEFAULT_GERMS = [
-    dict(name="Staphylococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    # ── BACTÉRIES — HUMAINS — PEAU / MUQUEUSES ─────────────────────────────────
+    dict(name="Staphylococcus epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=3,pathotype="Pathogène opportuniste multirésistant (SCN)",surfa="Sensible",apa="Sensible",notes="Staphylocoque coagulase négatif (SCN)",comment="Principal contaminant cutané des ZAC — biofilm fréquent sur cathéters"),
+    dict(name="Staphylococcus aureus",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=4,pathotype="Pathogène primaire — SARM possible",surfa="Sensible",apa="Sensible",notes="SARM si résistant méticilline",comment="Portage nasal fréquent (20-30% population). SARM = problème majeur en milieu hospitalier"),
+    dict(name="Staphylococcus spp. (autres SCN)",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes="Staphylocoque coagulase négatif",comment=None),
+    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Flore cutanée commensale résiduelle — indicateur d'hygiène des mains insuffisante"),
+    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes="Anaérobie strict",comment="Bactérie anaérobie — indicateur de contamination par les follicules pileux / pores cutanés"),
+    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=1,pathotype="Commensal cutané — faible pouvoir pathogène",surfa="Sensible",apa="Sensible",notes=None,comment="Très fréquent dans l'air des ZAC — peu pathogène mais indicateur de contamination humaine"),
     dict(name="Dermabacter hominis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Brevibacterium epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Streptococcus mitis/salivarius/sanguinis/anginosus",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Streptococcus pyogenes/agalactiae/pneumoniae",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Escherichia coli",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant (O157:H7 = pathogène primaire)",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Enterococcus spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Enterobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Citrobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Klebsiella pneumoniae",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Proteus spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Morganella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Providencia spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Salmonella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Shigella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Yersinia enterocolitica",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Pseudomonas spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Acinetobacter spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Paenibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
-    dict(name="Hafnia alvei",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Sphingomonas paucimobilis",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Sphingobium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Methylobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Caulobacter crescentus",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Mycobacterium non tuberculeux",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes=None,comment=None),
-    dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Bacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
-    dict(name="Clostridium spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
-    dict(name="Geobacillus stearothermophilus (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Non pathogène",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé thermophile",comment=None),
-    dict(name="Arthrobacter spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Cellulomonas spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Curtobacterium spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Agrococcus spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Microbacterium spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Brevibacterium linens/casei",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Georgenia spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Candida spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
-    dict(name="Trichosporon spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
-    dict(name="Rhodotorula spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
-    dict(name="Fusarium spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-4um",comment="Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants"),
-    dict(name="Aureobasidium spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Sensible",notes="Blastospores + biofilm",comment="Production de blastospores (moins résistante aux agents oxydants et ne se dissémine pas dans l'air comme les conidies d'Aspergillus ou Fusarium) et production de biofilm"),
-    dict(name="Mucorales",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Sporangiospores",comment="Production de sporangiospores (moins résistant aux agents oxydants que les conidies d'Aspergillus ou Fusarium)"),
-    dict(name="Alternaria spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies grandes",comment="Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistante à l'oxydation"),
-    dict(name="Aspergillus spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-4um",comment="Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants"),
-    dict(name="Cladosporium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Très rarement pathogène",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies grandes",comment="Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées => Moins résistante à l'oxydation"),
-    dict(name="Penicillium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies",comment="Production de spores (conidies) mais moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistantes à l'oxydation"),
-    dict(name="Wallemia sebi",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Très rarement pathogène",surfa="Risque de résistance",apa="Risque de résistance",notes="Arthroconidies",comment=None),
+    dict(name="Brevibacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Odeur caractéristique de fromage — indicateur de présence cutanée"),
+    dict(name="Rothia spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Présent sur peau et muqueuses buccales"),
+    dict(name="Aerococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Gemella spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+
+    # ── BACTÉRIES — HUMAINS — OROPHARYNX / GOUTTELETTES ────────────────────────
+    dict(name="Streptococcus mitis / salivarius / sanguinis / anginosus",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Pathogène opportuniste (strepto alpha-hémolytique)",surfa="Sensible",apa="Sensible",notes=None,comment="Indicateur de parole ou d'absence de masque en ZAC"),
+    dict(name="Streptococcus pyogenes / agalactiae / pneumoniae",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène primaire (strepto beta-hémolytique)",surfa="Sensible",apa="Sensible",notes=None,comment="Pathogène communautaire — présence en ZAC signe un personnel symptomatique non évincé"),
+    dict(name="Neisseria spp.",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Commensal oropharyngé",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Haemophilus spp.",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Présence possible en cas d'infection ORL active du personnel"),
+
+    # ── BACTÉRIES — HUMAINS — FLORE FÉCALE ─────────────────────────────────────
+    dict(name="Escherichia coli",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant — BLSE/EPC possible",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Présence en ZAC = défaut majeur d'hygiène des mains. BLSE/EPC = alerte maximale"),
+    dict(name="Klebsiella pneumoniae",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant — BLSE/EPC possible",surfa="Sensible",apa="Sensible",notes=None,comment="Productrice fréquente de BLSE et carbapénémases (KPC, NDM, OXA-48)"),
+    dict(name="Klebsiella oxytoca",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Enterococcus faecalis / faecium",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste — ERV possible",surfa="Sensible",apa="Sensible",notes=None,comment="ERV (Entérocoque Résistant aux Glycopeptides) = risque nosocomial majeur"),
+    dict(name="Enterobacter cloacae / aerogenes",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant — céphalosporinase inductible",surfa="Sensible",apa="Sensible",notes=None,comment="Céphalosporinase de bas niveau inductible — attention aux traitements par C3G"),
+    dict(name="Citrobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Proteus mirabilis",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Uréase positif — indicateur de contamination fécale/urinaire"),
+    dict(name="Serratia marcescens",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Pigment rouge (prodigiosine) — bactérie redoutée en milieu hospitalier, biofilm persistant"),
+    dict(name="Morganella morganii",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Hafnia spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+
+    # ── BACTÉRIES — ENVIRONNEMENTAL — HUMIDITÉ ──────────────────────────────────
+    dict(name="Pseudomonas aeruginosa",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — BMR prioritaire",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Biofilm +++",comment="Pathogène redouté en oncohématologie. Biofilm résistant sur surfaces humides, robinets, éviers. EPC-PA émergent"),
+    dict(name="Pseudomonas spp. (autres)",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Acinetobacter baumannii",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — BMR prioritaire OMS",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Résistance extrême",comment="Survie prolongée sur surfaces sèches (jusqu'à plusieurs semaines). Résistance pan-antibiotique émergente"),
+    dict(name="Acinetobacter spp. (autres)",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Stenotrophomonas maltophilia",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant — résistance intrinsèque aux carbapénèmes",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Résistance carbapénèmes",comment="Résistance intrinsèque aux carbapénèmes et à de nombreux antibiotiques — réservoir eau et surfaces humides"),
+    dict(name="Burkholderia cepacia complex",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — interdit en préparations",surfa="Risque de résistance (biofilm)",apa="Risque de résistance",notes="Résistance intrinsèque ++++",comment="Contaminant de solutions aqueuses et antiseptiques (chlorhexidine). Résistance quasi-totale. Redouté en mucoviscidose"),
+    dict(name="Ralstonia spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Risque modéré de résistance",notes=None,comment="Contaminant de l'eau purifiée et des solutions injectables — surveillance critique en URC"),
+    dict(name="Chryseobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Présent dans l'eau et environnements humides — résistance aux carbapénèmes"),
+    dict(name="Sphingomonas spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes=None,comment="Résistant à la chlorhexidine — contaminant eau purifiée"),
+    dict(name="Methylobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Colonie rose-rouge",comment="Colonie rose-rouge caractéristique — contaminant eau purifiée et condensats"),
+    dict(name="Mycobacterium fortuitum / chelonae / abscessus",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste — mycobactérie à croissance rapide",surfa="Risque de résistance",apa="Risque de résistance (spore)",notes="Mycobactérie à croissance rapide",comment="MCR (Mycobactérie à Croissance Rapide) — résistance aux désinfectants usuels. Réservoir : eau, sols, biofilm. Croissance 3-7 jours sur gélose"),
+
+    # ── BACTÉRIES — ENVIRONNEMENTAL — SOL / CARTON / SURFACE SÈCHE ─────────────
+    dict(name="Bacillus subtilis / licheniformis (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=4,pathotype="Pathogène opportuniste — spore résistante",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment="Spores résistantes à la chaleur sèche (160°C / 2h nécessaire), aux UV et à la plupart des désinfectants. Indicateur de dé-cartonnage insuffisant"),
+    dict(name="Bacillus cereus (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — toxines + spores résistantes",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — toxinogène",comment="Production de toxines thermostables. Spores extrêmement résistantes. Redouté en préparations injectables"),
+    dict(name="Bacillus anthracis (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — agent de bioterrorisme classe A",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — classe A",comment="Exceptionnel mais à signalement immédiat. Spores stabilisées des mois dans l'environnement"),
+    dict(name="Clostridium spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — spore anaérobie",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — anaérobie",comment="C. difficile : colite pseudomembraneuse. Spores résistantes à l'alcool — décontamination au chlore uniquement"),
+    dict(name="Paenibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste — sporulé",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment="Sol et matières organiques — parfois confondu avec Bacillus à l'identification"),
+    dict(name="Brevibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste — sporulé",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
+
+    # ── CHAMPIGNONS — HUMAIN — PEAU / MUQUEUSE ──────────────────────────────────
+    dict(name="Candida albicans",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — levure pathogène primaire",surfa="Sensible",apa="Sensible",notes="Levure — dimorphique",comment="Dimorphique : levure à 37°C, filaments invasifs en conditions de stress. Commensal muqueux — candidémie redoutée en immunodépression"),
+    dict(name="Candida auris",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=5,pathotype="Pathogène opportuniste multirésistant — émergent pandémique",surfa="Risque de résistance",apa="Risque de résistance",notes="Levure — multirésistante émergente",comment="Levure émergente résistante aux 3 classes d'antifongiques. Persistance sur surfaces plusieurs semaines. Épidémies hospitalières mondiales"),
+    dict(name="Candida glabrata / Nakaseomyces glabrata",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — résistance azolés fréquente",surfa="Sensible",apa="Sensible",notes="Levure — résistance azolés",comment="Résistance intrinsèque réductrice aux azolés. Mortalité élevée en candidémie chez immunodéprimé"),
+    dict(name="Candida parapsilosis",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste — lié aux mains",surfa="Sensible",apa="Sensible",notes="Levure — transmission manuportée",comment="Transmission manuportée +++ — indicateur direct d'hygiène des mains. Biofilm sur cathéters"),
+    dict(name="Candida tropicalis",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes="Levure",comment=None),
+    dict(name="Candida krusei / Pichia kudriavzevii",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — résistance intrinsèque fluconazole",surfa="Sensible",apa="Sensible",notes="Levure — résistance fluconazole",comment="Résistance intrinsèque au fluconazole"),
+    dict(name="Trichosporon spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — levure filamenteuse",surfa="Risque de résistance",apa="Risque de résistance",notes="Levure filamenteuse",comment="Résistance aux échinocandines — mortalité élevée chez immunodéprimé profond"),
+    dict(name="Malassezia spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=2,pathotype="Commensal cutané — lipophile",surfa="Sensible",apa="Sensible",notes="Levure lipophile",comment="Indicateur de contamination cutanée — pousse sur milieu supplémenté en lipides"),
+
+    # ── CHAMPIGNONS — ENVIRONNEMENTAL — AIR ─────────────────────────────────────
+    dict(name="Aspergillus fumigatus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — aspergillose invasive mortelle",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-3 µm — thermophile",comment="Conidies de 2-3 µm — pénétration profonde dans les voies respiratoires. Aspergilllose invasive mortelle chez immunodéprimé. Résistance aux azolés émergente (TR34/L98H)"),
+    dict(name="Aspergillus niger",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies noires — productrices d'ochratoxine",comment="Conidies noires caractéristiques. Production possible d'ochratoxine A (mycotoxine). Indicateur de matériaux humides/cartons"),
+    dict(name="Aspergillus flavus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — producteurd'aflatoxine",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies vertes — aflatoxine",comment="Producteur d'aflatoxines B1 (cancérogène classe 1). 2ème cause d'aspergillose invasive après A. fumigatus"),
+    dict(name="Aspergillus terreus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — résistance amphotéricine B",surfa="Risque de résistance",apa="Risque de résistance",notes="Résistance AmB intrinsèque",comment="Résistance intrinsèque à l'amphotéricine B — options thérapeutiques très limitées"),
+    dict(name="Penicillium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies 2-5 µm",comment="Très fréquent dans l'air intérieur — indicateur de qualité de l'air et de l'intégrité des filtres HEPA"),
+    dict(name="Cladosporium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies en chaînes",comment="Moisissure aérienne très fréquente — indicateur d'infiltration d'air extérieur non filtré"),
+    dict(name="Alternaria spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies septées en massue",comment="Moisissure extérieure — indicateur de défaut de filtration ou d'étanchéité"),
+    dict(name="Curvularia spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes=None,comment="Moisissure mélanisée (phéohyphomycose) — traitement difficile"),
+
+    # ── CHAMPIGNONS — ENVIRONNEMENTAL — SOL / CARTON / SURFACE SÈCHE ───────────
+    dict(name="Fusarium solani / oxysporum",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes="Macroconidies falciformes",comment="2ème cause d'infection fongique invasive après Aspergillus. Résistance aux azolés et amphotéricine B. Macroconidies en forme de faucille"),
+    dict(name="Mucor / Rhizopus spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — mucormycose angioinvasive",surfa="Risque de résistance",apa="Risque de résistance",notes="Sporangiospores — angioinvasif",comment="Mucormycose angioinvasive (mortalité > 50%). Spores omniprésentes — cartons et substrats organiques. Résistance aux échinocandines et voriconazole"),
+    dict(name="Lichtheimia / Cunninghamella spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — mucorales",surfa="Risque de résistance",apa="Risque de résistance",notes="Mucorales",comment="Mucorales rares mais mortalité > 70% chez immunodéprimé"),
+    dict(name="Scedosporium / Lomentospora spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — résistance étendue",surfa="Risque de résistance",apa="Risque de résistance",notes="Résistance étendue aux antifongiques",comment="Lomentospora prolificans : résistance pan-antifongique. Pronostic très sombre en immunodépression profonde"),
+    dict(name="Trichoderma spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies vertes — parasites d'autres champignons",comment="Contaminant de végétaux et matières organiques — indicateur de mauvais dé-cartonnage"),
+    dict(name="Scopulariopsis spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes=None,comment="Résistance à l'amphotéricine B fréquente"),
+
+    # ── CHAMPIGNONS — ENVIRONNEMENTAL — HUMIDITÉ ────────────────────────────────
+    dict(name="Exophiala / Rhinocladiella spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste — champignon noir",surfa="Risque de résistance",apa="Risque de résistance",notes="Champignon mélanisé — chromomycose",comment="Champignons noirs (mélanisés) — résistance naturelle aux UV et désinfectants oxydants. Réservoir : eaux, drains, siphons"),
+    dict(name="Cladophialophora spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste — phéohyphomycose",surfa="Risque de résistance",apa="Risque de résistance",notes="Champignon mélanisé",comment="Phéohyphomycose cérébrale possible. Résistance liée à la mélanine pariétale"),
 ]
 
+# Nom court de référence pour chaque germe (pour la liste sidebar du logigramme)
+DEFAULT_GERM_NAMES = {g["name"] for g in DEFAULT_GERMS}
 
-# ── PERSISTENCE ───────────────────────────────────────────────────────────────
-def load_germs():
-    defaults_by_name = {}
-    for d in DEFAULT_GERMS:
-        defaults_by_name.setdefault(d["name"], d)
+# ── PERSISTENCE ────────────────────────────────────────────────────────────────
+def _supa_upsert(key, value_json):
     supa = get_supabase_client()
-    if supa is not None:
+    if supa is None:
+        return False
+    try:
+        supa.table('app_state').upsert(
+            {'key': key, 'value': value_json},
+            on_conflict='key'
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+def _supa_get(key):
+    supa = get_supabase_client()
+    if supa is None:
+        return None
+    try:
+        res = supa.table('app_state').select('value').eq('key', key).execute()
+        if res and getattr(res, 'data', None):
+            row = res.data[0]
+            return row.get('value') if isinstance(row, dict) else row['value']
+    except Exception:
+        pass
+    return None
+
+def load_germs():
+    """Charge les germes et synchronise TOUJOURS depuis DEFAULT_GERMS.
+    
+    Logique de fusion :
+    - Pour chaque germe de DEFAULT_GERMS → ses champs officiels (path, risk, pathotype,
+      surfa, apa, notes, comment) sont TOUJOURS mis à jour depuis le code.
+    - Les germes ajoutés par l'utilisateur (non présents dans DEFAULT_GERMS) sont conservés.
+    - Les germes de DEFAULT_GERMS absents des données sauvegardées sont réintégrés.
+    - L'ordre : germes DEFAULT en premier, puis germes custom.
+    """
+    defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
+    saved = []
+
+    raw_json = _supa_get('germs')
+    if raw_json:
         try:
-            res = supa.table('app_state').select('value').eq('key','germs').execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                try:
-                    data = json.loads(row.get('value') if isinstance(row, dict) else row['value'])
-                    for g in data:
-                        dflt = defaults_by_name.get(g['name'], {})
-                        if not g.get('notes'):
-                            g['notes'] = dflt.get('notes', None)
-                        if not g.get('comment'):
-                            g['comment'] = dflt.get('comment', None)
-                        g.setdefault('comment', None)
-                        g.setdefault('notes', None)
-                    return data
-                except Exception:
-                    pass
+            saved = json.loads(raw_json)
         except Exception:
-            pass
-    if os.path.exists(GERMS_FILE):
+            saved = []
+
+    if not saved and os.path.exists(GERMS_FILE):
         try:
             with open(GERMS_FILE) as f:
-                data = json.load(f)
-            for g in data:
-                dflt = defaults_by_name.get(g["name"], {})
-                if not g.get("notes"):
-                    g["notes"] = dflt.get("notes", None)
-                if not g.get("comment"):
-                    g["comment"] = dflt.get("comment", None)
-                g.setdefault("comment", None)
-                g.setdefault("notes", None)
-            return data
-        except:
-            pass
-    return [dict(g) for g in DEFAULT_GERMS]
+                saved = json.load(f)
+        except Exception:
+            saved = []
+
+    saved_by_name = {g.get("name", ""): g for g in saved}
+    merged = []
+    synced_count = 0
+
+    # 1. Parcourir DEFAULT_GERMS dans l'ordre — toujours en premier dans la liste
+    for dflt in DEFAULT_GERMS:
+        name = dflt["name"]
+        if name in saved_by_name:
+            # Germe existant : on écrase les champs officiels depuis le code
+            g = dict(saved_by_name[name])
+            old_risk = g.get("risk")
+            for field in ["path", "risk", "pathotype", "surfa", "apa", "notes", "comment"]:
+                g[field] = dflt[field]
+            if old_risk != dflt["risk"]:
+                synced_count += 1
+        else:
+            # Germe absent → on l'ajoute depuis les defaults
+            g = dict(dflt)
+            synced_count += 1
+        merged.append(g)
+
+    # 2. Conserver les germes custom (non présents dans DEFAULT_GERMS) à la fin
+    for g in saved:
+        name = g.get("name", "")
+        if name and name not in defaults_by_name:
+            merged.append(dict(g))
+
+    return merged, synced_count
 
 def save_germs(germs):
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            payload = {'key': 'germs', 'value': json.dumps(germs, ensure_ascii=False)}
-            supa.table('app_state').upsert(payload).eq('key', 'germs').execute()
-        except Exception:
-            pass
-    with open(GERMS_FILE, "w") as f:
-        json.dump(germs, f, ensure_ascii=False, indent=2)
+    js = json.dumps(germs, ensure_ascii=False)
+    _supa_upsert('germs', js)
+    try:
+        with open(GERMS_FILE, "w") as f:
+            f.write(js)
+    except Exception:
+        pass
 
 def load_thresholds():
-    supa = get_supabase_client()
-    if supa is not None:
+    saved = {}
+    raw_json = _supa_get('thresholds')
+    if raw_json:
         try:
-            res = supa.table('app_state').select('value').eq('key','thresholds').execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                raw = json.loads(row.get('value') if isinstance(row, dict) else row['value'])
-                return {int(k): v for k, v in raw.items()}
+            raw = json.loads(raw_json)
+            saved = {int(k): v for k, v in raw.items() if k != 'measures'}
         except Exception:
-            pass
-    if os.path.exists(THRESHOLDS_FILE):
+            saved = {}
+    if not saved and os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
                 raw = json.load(f)
-            return {int(k): v for k, v in raw.items()}
-        except:
-            pass
-    return {k: dict(v) for k, v in DEFAULT_THRESHOLDS.items()}
+            saved = {int(k): v for k, v in raw.items() if k != 'measures'}
+        except Exception:
+            saved = {}
+    merged = {k: dict(v) for k, v in DEFAULT_THRESHOLDS.items()}
+    merged.update(saved)
+    return merged
 
 def load_measures():
     if os.path.exists(THRESHOLDS_FILE):
@@ -343,119 +454,75 @@ def load_measures():
                 raw = json.load(f)
             if "measures" in raw:
                 return {int(k): v for k, v in raw["measures"].items()}
-        except:
+        except Exception:
             pass
     return {k: dict(v) for k, v in DEFAULT_MEASURES.items()}
 
 def save_thresholds_and_measures(thresholds, measures):
     data = {str(k): v for k, v in thresholds.items()}
     data["measures"] = {str(k): v for k, v in measures.items()}
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            supa.table('app_state').upsert({'key': 'thresholds', 'value': json.dumps(data, ensure_ascii=False)}).eq('key','thresholds').execute()
-        except Exception:
-            pass
-    with open(THRESHOLDS_FILE, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    js = json.dumps(data, ensure_ascii=False)
+    _supa_upsert('thresholds', js)
+    try:
+        with open(THRESHOLDS_FILE, "w") as f:
+            f.write(js)
+    except Exception:
+        pass
 
 def get_thresholds_for_risk(risk, thresholds):
     return thresholds.get(risk, {"alert": 25, "action": 40})
 
 def load_origin_measures():
-    supa = get_supabase_client()
-    if supa is not None:
+    defaults_by_id = {m["id"]: m for m in DEFAULT_ORIGIN_MEASURES}
+    saved = []
+    raw_json = _supa_get('measures')
+    if raw_json:
         try:
-            res = supa.table('app_state').select('value').eq('key','measures').execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                raw = json.loads(row.get('value') if isinstance(row, dict) else row['value'])
-                if isinstance(raw, dict):
-                    try:
-                        items = [raw[k] for k in sorted(raw.keys(), key=lambda x: int(x))]
-                    except Exception:
-                        items = list(raw.values())
-                    return [dict(m) for m in items]
-                elif isinstance(raw, list):
-                    return [dict(m) for m in raw]
+            raw = json.loads(raw_json)
+            if isinstance(raw, list):
+                saved = raw
         except Exception:
-            pass
-    if os.path.exists(THRESHOLDS_FILE):
+            saved = []
+    if not saved and os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
                 raw = json.load(f)
-            if "measures" in raw:
-                mdata = raw["measures"]
-                if isinstance(mdata, list):
-                    return [dict(m) for m in mdata]
-        except:
-            pass
-    return [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
+            if "measures" in raw and isinstance(raw["measures"], list):
+                saved = raw["measures"]
+        except Exception:
+            saved = []
+    saved_ids = {m.get("id") for m in saved}
+    merged = [dict(m) for m in saved]
+    for dflt in DEFAULT_ORIGIN_MEASURES:
+        if dflt["id"] not in saved_ids:
+            merged.append(dict(dflt))
+    return merged if merged else [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
 
 def save_origin_measures(measures):
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            supa.table('app_state').upsert({'key': 'measures', 'value': json.dumps(measures, ensure_ascii=False)}).eq('key','measures').execute()
-        except Exception:
-            pass
+    js = json.dumps(measures, ensure_ascii=False)
+    _supa_upsert('measures', js)
     if os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
                 raw = json.load(f)
-        except:
+        except Exception:
             raw = {}
     else:
         raw = {}
     raw["measures"] = measures
-    with open(THRESHOLDS_FILE, "w") as f:
-        json.dump(raw, f, ensure_ascii=False, indent=2)
-
-def load_points():
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            res = supa.table('app_state').select('value').eq('key','points').execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                raw = json.loads(row.get('value') if isinstance(row, dict) else row['value'])
-                if isinstance(raw, list):
-                    return [dict(p) for p in raw]
-        except Exception:
-            pass
-    if os.path.exists(POINTS_FILE):
-        try:
-            with open(POINTS_FILE, 'r', encoding='utf-8') as f:
-                raw = json.load(f)
-            if isinstance(raw, list):
-                return [dict(p) for p in raw]
-        except Exception:
-            pass
-    return []
-
-def save_points(points):
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            supa.table('app_state').upsert({'key': 'points', 'value': json.dumps(points, ensure_ascii=False)}).eq('key','points').execute()
-        except Exception:
-            pass
     try:
-        with open(POINTS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(points, f, ensure_ascii=False, indent=2)
+        with open(THRESHOLDS_FILE, "w") as f:
+            json.dump(raw, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
 def _load_json_key(key, local_file):
-    supa = get_supabase_client()
-    if supa is not None:
+    raw_json = _supa_get(key)
+    if raw_json:
         try:
-            res = supa.table('app_state').select('value').eq('key', key).execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                raw = json.loads(row.get('value') if isinstance(row, dict) else row['value'])
-                if isinstance(raw, list):
-                    return [dict(x) for x in raw]
+            raw = json.loads(raw_json)
+            if isinstance(raw, list):
+                return [dict(x) for x in raw]
         except Exception:
             pass
     if os.path.exists(local_file):
@@ -469,56 +536,32 @@ def _load_json_key(key, local_file):
     return []
 
 def _save_json_key(key, data, local_file):
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            supa.table('app_state').upsert({'key': key, 'value': json.dumps(data, ensure_ascii=False)}).eq('key', key).execute()
-        except Exception:
-            pass
+    js = json.dumps(data, ensure_ascii=False)
+    _supa_upsert(key, js)
     try:
         with open(local_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write(js)
     except Exception:
         pass
 
-def load_prelevements():
-    return _load_json_key('prelevements', PRELEVEMENTS_FILE)
-
-def save_prelevements(data):
-    return _save_json_key('prelevements', data, PRELEVEMENTS_FILE)
-
-def load_schedules():
-    return _load_json_key('schedules', SCHEDULES_FILE)
-
-def save_schedules(data):
-    return _save_json_key('schedules', data, SCHEDULES_FILE)
-
-def load_pending_identifications():
-    return _load_json_key('pending_identifications', PENDING_FILE)
-
-def save_pending_identifications(data):
-    return _save_json_key('pending_identifications', data, PENDING_FILE)
-
-def load_archived_samples():
-    return _load_json_key('archived_samples', ARCHIVED_FILE)
-
-def save_archived_samples(data):
-    return _save_json_key('archived_samples', data, ARCHIVED_FILE)
-
-def load_operators():
-    return _load_json_key('operators', OPERATORS_FILE)
-
-def save_operators(data):
-    return _save_json_key('operators', data, OPERATORS_FILE)
+def load_points(): return _load_json_key('points', POINTS_FILE)
+def save_points(d): _save_json_key('points', d, POINTS_FILE)
+def load_prelevements(): return _load_json_key('prelevements', PRELEVEMENTS_FILE)
+def save_prelevements(d): _save_json_key('prelevements', d, PRELEVEMENTS_FILE)
+def load_schedules(): return _load_json_key('schedules', SCHEDULES_FILE)
+def save_schedules(d): _save_json_key('schedules', d, SCHEDULES_FILE)
+def load_pending_identifications(): return _load_json_key('pending_identifications', PENDING_FILE)
+def save_pending_identifications(d): _save_json_key('pending_identifications', d, PENDING_FILE)
+def load_archived_samples(): return _load_json_key('archived_samples', ARCHIVED_FILE)
+def save_archived_samples(d): _save_json_key('archived_samples', d, ARCHIVED_FILE)
+def load_operators(): return _load_json_key('operators', OPERATORS_FILE)
+def save_operators(d): _save_json_key('operators', d, OPERATORS_FILE)
 
 def load_surveillance():
-    supa = get_supabase_client()
-    if supa is not None:
+    raw_json = _supa_get('surveillance')
+    if raw_json:
         try:
-            res = supa.table('app_state').select('value').eq('key','surveillance').execute()
-            if res and getattr(res, 'data', None):
-                row = res.data[0]
-                return json.loads(row.get('value') if isinstance(row, dict) else row['value'])
+            return json.loads(raw_json)
         except Exception:
             pass
     if os.path.exists(CSV_FILE):
@@ -529,23 +572,87 @@ def load_surveillance():
                 for row in reader:
                     rows.append(row)
             return rows
-        except:
+        except Exception:
             pass
     return []
 
 def save_surveillance(records):
     if not records:
         return
-    supa = get_supabase_client()
-    if supa is not None:
-        try:
-            supa.table('app_state').upsert({'key': 'surveillance', 'value': json.dumps(records, ensure_ascii=False)}).eq('key','surveillance').execute()
-        except Exception:
-            pass
-    with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=records[0].keys())
-        writer.writeheader()
-        writer.writerows(records)
+    js = json.dumps(records, ensure_ascii=False)
+    _supa_upsert('surveillance', js)
+    try:
+        with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=records[0].keys())
+            writer.writeheader()
+            writer.writerows(records)
+    except Exception:
+        pass
+
+def export_all_data():
+    return {
+        "_meta": {
+            "version": "5.0",
+            "exported_at": datetime.now().isoformat(),
+            "app": "MicroSurveillance URC"
+        },
+        "germs":                    st.session_state.germs,
+        "thresholds":               {str(k): v for k, v in st.session_state.thresholds.items()},
+        "measures":                 {str(k): v for k, v in st.session_state.measures.items()},
+        "origin_measures":          st.session_state.origin_measures,
+        "points":                   st.session_state.points,
+        "operators":                st.session_state.operators,
+        "prelevements":             st.session_state.prelevements,
+        "schedules":                st.session_state.schedules,
+        "pending_identifications":  st.session_state.pending_identifications,
+        "archived_samples":         st.session_state.archived_samples,
+        "surveillance":             st.session_state.surveillance,
+    }
+
+def import_all_data(data: dict):
+    try:
+        required = ["germs", "points", "operators", "prelevements", "schedules", "surveillance"]
+        for key in required:
+            if key not in data:
+                return False, f"Clé manquante dans le fichier : '{key}'"
+        st.session_state.germs                   = [dict(g) for g in data["germs"]]
+        # Resynchroniser depuis DEFAULT_GERMS après import
+        _germs_sync, _ = load_germs()
+        # Garder les germes custom de l'import qui ne sont pas dans defaults
+        _default_names = {d["name"] for d in DEFAULT_GERMS}
+        _custom = [g for g in st.session_state.germs if g.get("name") not in _default_names]
+        st.session_state.germs = _germs_sync + [g for g in _custom if g.get("name") not in {x["name"] for x in _germs_sync}]
+        st.session_state.origin_measures         = [dict(m) for m in data.get("origin_measures", [])] or [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
+        st.session_state.points                  = [dict(p) for p in data.get("points", [])]
+        st.session_state.operators               = [dict(o) for o in data.get("operators", [])]
+        st.session_state.prelevements            = [dict(p) for p in data.get("prelevements", [])]
+        st.session_state.schedules               = [dict(s) for s in data.get("schedules", [])]
+        st.session_state.pending_identifications = [dict(x) for x in data.get("pending_identifications", [])]
+        st.session_state.archived_samples        = [dict(x) for x in data.get("archived_samples", [])]
+        st.session_state.surveillance            = list(data.get("surveillance", []))
+        if "thresholds" in data:
+            st.session_state.thresholds = {int(k): v for k, v in data["thresholds"].items()}
+        if "measures" in data:
+            st.session_state.measures   = {int(k): v for k, v in data["measures"].items()}
+        save_germs(st.session_state.germs)
+        save_origin_measures(st.session_state.origin_measures)
+        save_points(st.session_state.points)
+        save_operators(st.session_state.operators)
+        save_prelevements(st.session_state.prelevements)
+        save_schedules(st.session_state.schedules)
+        save_pending_identifications(st.session_state.pending_identifications)
+        save_archived_samples(st.session_state.archived_samples)
+        save_surveillance(st.session_state.surveillance)
+        save_thresholds_and_measures(st.session_state.thresholds, st.session_state.measures)
+        n_p = len(st.session_state.prelevements)
+        n_s = len(st.session_state.schedules)
+        n_g = len(st.session_state.germs)
+        n_h = len(st.session_state.surveillance)
+        return True, (f"Restauration réussie — {n_g} germes, {n_p} prélèvements, "
+                      f"{n_s} lectures planifiées, {n_h} entrées historique.")
+    except Exception as e:
+        return False, f"Erreur lors de la restauration : {e}"
+
 
 def find_germ_match(query, germs):
     query_low = query.lower().strip()
@@ -566,10 +673,14 @@ def find_germ_match(query, germs):
             best_match = g
     return best_match, best_score
 
-
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 if "germs" not in st.session_state:
-    st.session_state.germs = [dict(g) for g in DEFAULT_GERMS]
+    _germs, _synced = load_germs()
+    st.session_state.germs = _germs
+    st.session_state.germs_synced_count = _synced
+    # Sauvegarder immédiatement après sync
+    if _synced > 0:
+        save_germs(st.session_state.germs)
 if "thresholds" not in st.session_state:
     st.session_state.thresholds = load_thresholds()
 if "measures" not in st.session_state:
@@ -606,6 +717,10 @@ if "due_alert_shown" not in st.session_state:
     st.session_state.due_alert_shown = False
 if "current_process" not in st.session_state:
     st.session_state.current_process = None
+if "cal_year" not in st.session_state:
+    st.session_state.cal_year = datetime.today().year
+if "cal_month" not in st.session_state:
+    st.session_state.cal_month = datetime.today().month
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -624,11 +739,29 @@ with st.sidebar:
             st.session_state.active_tab = key
             st.rerun()
     st.divider()
-    st.markdown('<p style="font-size:.75rem;color:#94a3b8;text-align:center">MicroSurveillance URC<br>v4.2</p>', unsafe_allow_html=True)
+    supa_ok = get_supabase_client() is not None
+    supa_icon = "🟢" if supa_ok else "🔴"
+    supa_txt = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
+    st.markdown(f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:.75rem;color:#94a3b8;text-align:center">MicroSurveillance URC v5.0</p>', unsafe_allow_html=True)
+    st.divider()
+    st.markdown('<p style="font-size:.7rem;color:#f59e0b;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:.08em">💾 Sauvegarde données</p>', unsafe_allow_html=True)
+    _backup_data = json.dumps(export_all_data(), ensure_ascii=False, indent=2)
+    _backup_name = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+    st.download_button(
+        label="⬇️ Exporter toutes les données",
+        data=_backup_data,
+        file_name=_backup_name,
+        mime="application/json",
+        use_container_width=True,
+        key="sidebar_export",
+        help="Téléchargez ce fichier avant toute modification du code pour ne jamais perdre vos données"
+    )
+    if not supa_ok:
+        st.markdown('<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">⚠️ Sans Supabase, exportez régulièrement vos données !</p>', unsafe_allow_html=True)
 
 active = st.session_state.active_tab
 
-# Global due-alert
 today = datetime.today().date()
 due_global = [s for s in st.session_state.schedules if s["status"] == "pending" and datetime.fromisoformat(s["due_date"]).date() <= today]
 if due_global and not st.session_state.due_alert_shown:
@@ -647,6 +780,41 @@ st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimio
 # TAB 1 : LOGIGRAMME
 # ═══════════════════════════════════════════════════════════════════════════════
 if active == "logigramme":
+    # ── Bannière de synchronisation au démarrage ──────────────────────────────
+    _synced = st.session_state.get("germs_synced_count", 0)
+    _total_default = len(DEFAULT_GERMS)
+    _total_germs = len(st.session_state.germs)
+    _custom_count = _total_germs - _total_default if _total_germs > _total_default else 0
+
+    st.markdown(f"""<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:12px;padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span style="font-size:1.4rem">🦠</span>
+        <div>
+          <div style="font-weight:800;color:#1e40af;font-size:.88rem">Base de données germes — synchronisée</div>
+          <div style="font-size:.7rem;color:#3b82f6;margin-top:2px">
+            {_total_default} germes standards · {_custom_count} germe(s) personnalisé(s) · {_total_germs} au total
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="background:#ffffff;border:1px solid #93c5fd;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;font-weight:700">Standard</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#1e40af">{_total_default}</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #86efac;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#166534;text-transform:uppercase;font-weight:700">Custom</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#166534">{_custom_count}</div>
+        </div>
+        <div style="background:#ffffff;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#92400e;text-transform:uppercase;font-weight:700">Total</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#92400e">{_total_germs}</div>
+        </div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    if _synced > 0:
+        st.success(f"✅ Synchronisation : {_synced} germe(s) mis à jour / ajouté(s) depuis la base de référence du code.")
+
     col_btn1, col_btn2 = st.columns([1,1])
     with col_btn1:
         if st.button("➕ Ajouter un germe", use_container_width=True):
@@ -732,10 +900,12 @@ if active == "logigramme":
     st.divider()
 
     germs_json = json.dumps(st.session_state.germs, ensure_ascii=False)
-    default_names_json = json.dumps([g["name"] for g in DEFAULT_GERMS], ensure_ascii=False)
+    default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
     thresholds_json = json.dumps({str(k): v for k, v in st.session_state.thresholds.items()})
 
-    # LOGIGRAMME — sans le dropdown "Sélectionner un point"
+    # ─────────────────────────────────────────────────────────────────────────
+    # LOGIGRAMME HTML — BUG CORRIGÉ : cur=c est maintenant DANS le forEach
+    # ─────────────────────────────────────────────────────────────────────────
     tree_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -749,18 +919,30 @@ svg{{min-width:900px;width:100%;height:100%}}
 .node.highlighted text{{fill:#0f172a;font-weight:600}}
 .link{{fill:none;stroke:#e2e8f0;stroke-width:1.5;transition:all 0.3s}}
 .link.highlighted{{stroke-width:2.5}}
-.right-panel{{width:300px;border-left:1px solid #e2e8f0;display:flex;flex-direction:column;background:#f1f5f9;flex-shrink:0}}
-.sbox{{padding:10px;border-bottom:1px solid #e2e8f0}}
-.sbox input{{width:100%;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;color:#1e293b;font-size:.75rem;outline:none}}
-.sbox input:focus{{border-color:#2563eb}}
-.germ-list{{flex:1;overflow-y:auto;padding:5px;scrollbar-width:thin;scrollbar-color:#1e293b transparent}}
-.germ-item{{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:6px;cursor:pointer;transition:background .15s;font-size:.72rem;color:#0f172a;border:1px solid transparent;margin-bottom:2px}}
-.germ-item:hover{{background:#ffffff;color:#1e293b}}
-.germ-item.active{{background:#ffffff;border-color:#2563eb;color:#1e293b}}
-.risk-dot{{width:8px;height:8px;border-radius:50%;flex-shrink:0}}
-.info-panel{{border-top:1px solid #e2e8f0;padding:12px;background:#ffffff;display:none;max-height:420px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#1e293b transparent}}
+.right-panel{{width:480px;border-left:2px solid #e2e8f0;display:flex;flex-direction:column;background:#f1f5f9;flex-shrink:0}}
+.sbox{{padding:12px 14px;border-bottom:1px solid #e2e8f0}}
+.sbox input{{width:100%;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;color:#1e293b;font-size:.95rem;outline:none}}
+.sbox input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
+.germ-list{{flex:1;overflow-y:auto;padding:6px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}}
+.germ-item{{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .15s;font-size:.88rem;color:#0f172a;border:1px solid transparent;margin-bottom:3px;line-height:1.35}}
+.germ-item:hover{{background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,.08)}}
+.germ-item.active{{background:#ffffff;border-color:#2563eb;box-shadow:0 1px 6px rgba(37,99,235,.2)}}
+.risk-dot{{width:11px;height:11px;border-radius:50%;flex-shrink:0}}
+.germ-count{{font-size:.75rem;color:#64748b;padding:6px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-weight:600}}
+.group-header{{font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#475569;padding:10px 12px 4px 12px;background:#e2e8f0;margin:6px -6px 3px -6px;border-radius:4px}}
+.info-panel{{border-top:2px solid #e2e8f0;padding:16px;background:#ffffff;display:none;max-height:560px;overflow-y:auto}}
 .info-panel.visible{{display:block}}
-.info-name{{font-size:.85rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:4px;line-height:1.3}}
+.info-name{{font-size:1rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:5px}}
+.info-path{{font-size:.72rem;color:#2563eb;opacity:.85;margin-bottom:9px;font-family:monospace}}
+.info-badge{{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;padding:4px 12px;border-radius:20px;border:1px solid;margin-bottom:11px;font-weight:600}}
+.info-lbl{{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:3px;margin-top:8px;font-weight:700}}
+.info-val{{font-size:.88rem;color:#1e293b;line-height:1.5}}
+.sens{{display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;border:1px solid #e2e8f0;font-size:.85rem;margin-top:3px}}
+.ok{{color:#22c55e;font-weight:700;font-size:1rem}}.warn{{color:#f97316;font-weight:700;font-size:1rem}}.crit{{color:#ef4444;font-weight:700;font-size:1rem}}
+.notes-box{{margin-top:8px;padding:9px 12px;border-radius:8px;background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.18);font-size:.85rem;color:#0f172a;line-height:1.6}}
+.threshold-row{{display:flex;gap:8px;margin-top:8px}}
+.th-badge{{flex:1;text-align:center;padding:7px 4px;border-radius:8px;font-size:.78rem;font-weight:700}}
+.info-name{{font-size:.85rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:4px}}
 .info-path{{font-size:.6rem;color:#2563eb;opacity:.8;margin-bottom:7px;font-family:monospace}}
 .info-badge{{display:inline-flex;align-items:center;gap:5px;font-size:.63rem;padding:2px 9px;border-radius:20px;border:1px solid;margin-bottom:9px}}
 .info-lbl{{font-size:.57rem;letter-spacing:.1em;text-transform:uppercase;color:#0f172a;margin-bottom:2px;margin-top:6px}}
@@ -770,12 +952,12 @@ svg{{min-width:900px;width:100%;height:100%}}
 .notes-box{{margin-top:6px;padding:6px 9px;border-radius:6px;background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.15);font-size:.7rem;color:#0f172a;line-height:1.5}}
 .threshold-row{{display:flex;gap:6px;margin-top:6px}}
 .th-badge{{flex:1;text-align:center;padding:4px;border-radius:6px;font-size:.65rem;font-weight:600}}
-.new-badge{{font-size:.55rem;background:rgba(56,189,248,0.15);color:#2563eb;border:1px solid #38bdf855;border-radius:4px;padding:1px 5px;margin-left:4px}}
 </style></head><body>
 <div class="app">
     <div class="tree-wrap"><svg id="svg"></svg></div>
     <div class="right-panel">
         <div class="sbox"><input type="text" id="sbox" placeholder="🔍 Rechercher un germe..." oninput="filterList()"></div>
+        <div class="germ-count" id="germCount">Chargement...</div>
         <div class="germ-list" id="germList"></div>
         <div class="info-panel" id="infoPanel"></div>
     </div>
@@ -789,48 +971,77 @@ const DEFAULT_NAMES=new Set({default_names_json});
 const NODE_W=190,NODE_H=28,H_GAP=28,V_GAP=10;
 const LEVEL_COLS=["#38bdf8","#818cf8","#fb923c","#34d399","#a3e635"];
 
+// ✅ BUG CORRIGÉ : cur=c est maintenant DANS le forEach (portée correcte)
 function buildTree(){{
   const root={{name:"Germes",children:[]}};
-  GERMS.forEach(g=>{{let cur=root;g.path.slice(1).forEach(n=>{{let c=cur.children&&cur.children.find(x=>x.name===n);if(!c){{c={{name:n,children:[]}};if(!cur.children)cur.children=[];cur.children.push(c);}}cur=c;}});}});
-  function clean(n){{if(n.children&&n.children.length===0)delete n.children;else if(n.children)n.children.forEach(clean);}}
-  clean(root);return root;
+  GERMS.forEach(g=>{{
+    let cur=root;
+    g.path.slice(1).forEach(n=>{{
+      let c=cur.children&&cur.children.find(x=>x.name===n);
+      if(!c){{
+        c={{name:n,children:[]}};
+        if(!cur.children)cur.children=[];
+        cur.children.push(c);
+      }}
+      cur=c;  // ← déplacé ICI, à l'intérieur du forEach
+    }});
+  }});
+  function clean(n){{
+    if(n.children&&n.children.length===0)delete n.children;
+    else if(n.children)n.children.forEach(clean);
+  }}
+  clean(root);
+  return root;
 }}
+
 function computeLayout(node,depth=0,y=0){{
   node.depth=depth;node.x=depth*(NODE_W+H_GAP);
   if(!node.children||!node.children.length){{node.y=y;return y+NODE_H;}}
-  let cy=y;node.children.forEach(c=>{{cy=computeLayout(c,depth+1,cy);cy+=V_GAP;}});
+  let cy=y;
+  node.children.forEach(c=>{{cy=computeLayout(c,depth+1,cy);cy+=V_GAP;}});
   cy-=V_GAP;node.y=(y+cy)/2;return cy+V_GAP;
 }}
+
 function allNodes(n){{return[n,...(n.children||[]).flatMap(allNodes)];}}
 function allLinks(n){{return(n.children||[]).flatMap(c=>[{{source:n,target:c}},...allLinks(c)]);}}
 function buildPaths(n,p=[]){{n.fullPath=[...p,n.name];(n.children||[]).forEach(c=>buildPaths(c,n.fullPath));}}
 
 function renderTree(){{
-  const tree=buildTree();computeLayout(tree);buildPaths(tree);
+  const tree=buildTree();
+  computeLayout(tree);
+  buildPaths(tree);
   const nodes=allNodes(tree),links=allLinks(tree);
   const maxY=Math.max(...nodes.map(n=>n.y))+NODE_H+20;
   const maxX=Math.max(...nodes.map(n=>n.x))+NODE_W+20;
   const svg=document.getElementById('svg');
-  svg.innerHTML='';svg.setAttribute('viewBox',`0 0 ${{maxX}} ${{maxY}}`);
-  svg.setAttribute('height',maxY);svg.setAttribute('width',maxX);
+  svg.innerHTML='';
+  svg.setAttribute('viewBox',`0 0 ${{maxX}} ${{maxY}}`);
+  svg.setAttribute('height',maxY);
+  svg.setAttribute('width',maxX);
+
   links.forEach(l=>{{
     const p=document.createElementNS('http://www.w3.org/2000/svg','path');
     const x1=l.source.x+NODE_W,y1=l.source.y+NODE_H/2,x2=l.target.x,y2=l.target.y+NODE_H/2,mx=(x1+x2)/2;
     p.setAttribute('d',`M${{x1}},${{y1}} C${{mx}},${{y1}} ${{mx}},${{y2}} ${{x2}},${{y2}}`);
-    p.setAttribute('class','link');p.dataset.source=l.source.name;p.dataset.target=l.target.name;
-    p.dataset.sourcefull=l.source.fullPath.join('|||');p.dataset.targetfull=l.target.fullPath.join('|||');
+    p.setAttribute('class','link');
+    p.dataset.source=l.source.name;p.dataset.target=l.target.name;
+    p.dataset.sourcefull=l.source.fullPath.join('|||');
+    p.dataset.targetfull=l.target.fullPath.join('|||');
     svg.appendChild(p);
   }});
+
   nodes.forEach(node=>{{
     const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('class','node');g.setAttribute('transform',`translate(${{node.x}},${{node.y}})`);
-    g.dataset.name=node.name;
-    g.dataset.fullpath=node.fullPath.join('|||');
-    const col=LEVEL_COLS[node.depth]||"#0f172a";g.style.setProperty('--col',col);
+    g.setAttribute('class','node');
+    g.setAttribute('transform',`translate(${{node.x}},${{node.y}})`);
+    g.dataset.name=node.name;g.dataset.fullpath=node.fullPath.join('|||');
+    const col=LEVEL_COLS[node.depth]||"#0f172a";
     const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('width',NODE_W);rect.setAttribute('height',NODE_H);rect.setAttribute('rx',5);rect.setAttribute('stroke',col);
+    rect.setAttribute('width',NODE_W);rect.setAttribute('height',NODE_H);
+    rect.setAttribute('rx',5);rect.setAttribute('stroke',col);
     const text=document.createElementNS('http://www.w3.org/2000/svg','text');
-    text.setAttribute('x',NODE_W/2);text.setAttribute('y',NODE_H/2+4);text.setAttribute('text-anchor','middle');
+    text.setAttribute('x',NODE_W/2);text.setAttribute('y',NODE_H/2+4);
+    text.setAttribute('text-anchor','middle');
     text.textContent=node.name.length>27?node.name.substring(0,25)+'...':node.name;
     g.appendChild(rect);g.appendChild(text);
     g.addEventListener('mouseenter',()=>highlightPath(node.fullPath));
@@ -838,49 +1049,97 @@ function renderTree(){{
     svg.appendChild(g);
   }});
 }}
+
 let selectedPath=null;
+
 function highlightPath(exactPath){{
   const validNodePaths=new Set();
-  const validLinkPairs=new Set();
   for(let i=1;i<=exactPath.length;i++)validNodePaths.add(exactPath.slice(0,i).join('|||'));
-  for(let i=0;i<exactPath.length-1;i++)validLinkPairs.add(exactPath[i]+'>>'+exactPath[i+1]);
-  document.querySelectorAll('.node').forEach(n=>{{n.classList.toggle('highlighted',validNodePaths.has(n.dataset.fullpath||''));}});
+  document.querySelectorAll('.node').forEach(n=>{{
+    n.classList.toggle('highlighted',validNodePaths.has(n.dataset.fullpath||''));
+  }});
   document.querySelectorAll('.link').forEach(l=>{{
     const on=validNodePaths.has(l.dataset.sourcefull||'')&&validNodePaths.has(l.dataset.targetfull||'');
     l.classList.toggle('highlighted',on);
-    if(on){{const depth=(l.dataset.sourcefull||'').split('|||').length-1;l.style.stroke=LEVEL_COLS[depth]||'#38bdf8';}}else l.style.stroke='';
+    if(on){{
+      const depth=(l.dataset.sourcefull||'').split('|||').length-1;
+      l.style.stroke=LEVEL_COLS[depth]||'#38bdf8';
+    }}else l.style.stroke='';
   }});
 }}
+
 function clearHighlight(){{
   if(selectedPath){{highlightPath(selectedPath);return;}}
   document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlighted'));
   document.querySelectorAll('.link').forEach(l=>{{l.classList.remove('highlighted');l.style.stroke=''}});
 }}
+
 function renderList(filter=''){{
-  const list=document.getElementById('germList');list.innerHTML='';
-  GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase())).forEach(g=>{{
-    const div=document.createElement('div');div.className='germ-item';div.dataset.name=g.name;
-    const col=RISK_COLORS[g.risk];const isNew=!DEFAULT_NAMES.has(g.name);
-    div.innerHTML=`<span class="risk-dot" style="background:${{col}}"></span><span style="flex:1">${{g.name}}${{isNew?'<span class="new-badge">new</span>':''}}</span><span style="font-size:.6rem;color:${{col}};font-weight:700">${{g.risk}}</span>`;
-    div.addEventListener('click',()=>selectGerm(g));list.appendChild(div);
+  const list=document.getElementById('germList');
+  const countEl=document.getElementById('germCount');
+  list.innerHTML='';
+  const filtered=GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase()));
+  countEl.textContent=filter?`${{filtered.length}} / ${{GERMS.length}} germe(s)`:`${{GERMS.length}} germe(s) — cliquez pour détails`;
+
+  // Grouper par catégorie (path[3])
+  const groups={{}};
+  filtered.forEach(g=>{{
+    const cat=(g.path&&g.path[3])||'Autres';
+    if(!groups[cat])groups[cat]=[];
+    groups[cat].push(g);
+  }});
+
+  Object.keys(groups).sort().forEach(cat=>{{
+    // En-tête de groupe
+    const header=document.createElement('div');
+    header.style.cssText='';
+    header.className='group-header';
+    header.textContent=cat;
+    list.appendChild(header);
+
+    groups[cat].forEach(g=>{{
+      const div=document.createElement('div');
+      div.className='germ-item';div.dataset.name=g.name;
+      const col=RISK_COLORS[g.risk];
+      const isCustom=!DEFAULT_NAMES.has(g.name);
+      const hasSporule=g.notes&&g.notes.toLowerCase().includes('sporul');
+      const hasResistance=g.surfa&&g.surfa.toLowerCase().includes('risque');
+      let badges='';
+      if(hasSporule)badges+='<span style="font-size:.5rem;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;margin-left:3px">🧬</span>';
+      if(hasResistance)badges+='<span style="font-size:.5rem;background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 4px;margin-left:2px">⚠</span>';
+      if(isCustom)badges+='<span style="font-size:.5rem;background:rgba(56,189,248,0.15);color:#2563eb;border-radius:3px;padding:0 4px;margin-left:2px">★</span>';
+      div.innerHTML=`<span class="risk-dot" style="background:${{col}}"></span><span style="flex:1;line-height:1.3">${{g.name}}${{badges}}</span><span style="font-size:.65rem;color:${{col}};font-weight:800;flex-shrink:0">${{g.risk}}</span>`;
+      div.addEventListener('click',()=>selectGerm(g));
+      list.appendChild(div);
+    }});
   }});
 }}
+
 function filterList(){{renderList(document.getElementById('sbox').value);}}
+
 function selectGerm(g){{
-  selectedPath=g.path;highlightPath(g.path);
+  selectedPath=g.path;
+  highlightPath(g.path);
   document.querySelectorAll('.germ-item').forEach(el=>el.classList.toggle('active',el.dataset.name===g.name));
   showInfo(g);
 }}
+
 function showInfo(g){{
-  const panel=document.getElementById('infoPanel');panel.classList.add('visible');
+  const panel=document.getElementById('infoPanel');
+  panel.classList.add('visible');
   const col=RISK_COLORS[g.risk];
   const th=THRESHOLDS[g.risk]||{{alert:25,action:40}};
-  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
+  function sens(v){{
+    if(!v)return['ok','✓'];
+    const l=v.toLowerCase();
+    if(l.includes('modéré'))return['warn','⚠'];
+    if(l.includes('risque'))return['crit','✗'];
+    return['ok','✓'];
+  }}
   const[sc,si]=sens(g.surfa),[ac,ai]=sens(g.apa);
   const nh=g.notes?`<div class="info-lbl">📝 Notes</div><div class="notes-box">${{g.notes}}</div>`:'';
   const ch=g.comment?`<div class="info-lbl" style="color:#fb923c;margin-top:8px">💬 Commentaire</div><div class="notes-box" style="color:#fb923c;background:rgba(251,146,60,0.06);border-color:rgba(251,146,60,.35);font-style:italic">${{g.comment}}</div>`:'';
-  panel.innerHTML=`
-    <div class="info-name">${{g.name}}</div>
+  panel.innerHTML=`<div class="info-name">${{g.name}}</div>
     <div class="info-path">${{g.path.join(' › ')}}</div>
     <div class="info-badge" style="color:${{col}};background:${{col}}22;border-color:${{col}}55">
       <span style="width:7px;height:7px;border-radius:50%;background:${{col}};display:inline-block"></span>
@@ -896,10 +1155,12 @@ function showInfo(g){{
     </div>
     ${{nh}}${{ch}}`;
 }}
-renderTree();renderList();
+
+renderTree();
+renderList();
 </script></body></html>"""
 
-    st.components.v1.html(tree_html, height=920, scrolling=False)
+    st.components.v1.html(tree_html, height=1200, scrolling=False)
 
     st.markdown("### ✏️ Gérer les germes")
     search_edit = st.text_input("Filtrer", placeholder="Rechercher un germe...", label_visibility="collapsed")
@@ -925,12 +1186,11 @@ renderTree();renderList();
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2 : SURVEILLANCE — Workflow J2/J7 avec navigation
+# TAB 2 : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    # ── Nouveau prélèvement ──────────────────────────────────────────────────
     with st.expander("🧪 Nouveau prélèvement", expanded=False):
         if not st.session_state.points:
             st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement** pour en créer.")
@@ -940,7 +1200,6 @@ elif active == "surveillance":
                 point_labels = [f"{pt['label']} — {pt.get('type','?')} — {pt.get('room_class','?')}" for pt in st.session_state.points]
                 sel_idx = st.selectbox("Point de prélèvement", list(range(len(point_labels))), format_func=lambda i: point_labels[i], key="new_prelev_point")
                 selected_point = st.session_state.points[sel_idx]
-                # Affichage détaillé du point sélectionné
                 pt_type = selected_point.get('type', '—')
                 pt_class = selected_point.get('room_class', '—')
                 pt_gelose = selected_point.get('gelose', '—')
@@ -948,30 +1207,26 @@ elif active == "surveillance":
                 st.markdown(f"""<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
                   <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Type de prélèvement</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
-                    </div>
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Classe de salle</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_class}</div>
-                    </div>
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;grid-column:1/-1">
-                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Gélose utilisée</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
-                    </div>
+                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div></div>
+                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_class}</div></div>
+                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;grid-column:1/-1"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div></div>
                   </div>
                 </div>""", unsafe_allow_html=True)
             with p_col2:
-                # Liste déroulante opérateurs
                 oper_list = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
                 if oper_list:
                     oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
                     p_oper = oper_sel if oper_sel != "— Sélectionner —" else ""
                 else:
-                    st.info("Aucun opérateur — ajoutez-en dans Paramètres → Opérateurs")
+                    st.info("Aucun opérateur — ajoutez-en dans Paramètres")
                     p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
                 p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
+                j2_date_calc = next_working_day_offset(p_date, 2)
+                j7_date_calc = next_working_day_offset(p_date, 5)
+                st.markdown(f"""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+                  📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
+                  📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
+                </div>""", unsafe_allow_html=True)
             with p_col3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
@@ -988,13 +1243,11 @@ elif active == "surveillance":
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
-                    j2_date = (p_date + timedelta(days=2)).isoformat()
-                    j7_date = (p_date + timedelta(days=7)).isoformat()
                     st.session_state.schedules.append({
                         "id": f"sch_{pid}_J2",
                         "sample_id": pid,
                         "label": sample['label'],
-                        "due_date": j2_date,
+                        "due_date": j2_date_calc.isoformat(),
                         "when": "J2",
                         "status": "pending"
                     })
@@ -1002,46 +1255,35 @@ elif active == "surveillance":
                         "id": f"sch_{pid}_J7",
                         "sample_id": pid,
                         "label": sample['label'],
-                        "due_date": j7_date,
+                        "due_date": j7_date_calc.isoformat(),
                         "when": "J7",
                         "status": "pending"
                     })
                     save_schedules(st.session_state.schedules)
-                    st.success(f"✅ Prélèvement **{sample['label']}** enregistré ! Lectures planifiées : J2 ({j2_date[:10]}) et J7 ({j7_date[:10]})")
+                    st.success(f"✅ **{sample['label']}** enregistré ! J2 → {j2_date_calc.strftime('%d/%m/%Y')} | J7 → {j7_date_calc.strftime('%d/%m/%Y')} (jours ouvrés)")
                     st.rerun()
 
     st.divider()
-
-    # ── WORKFLOW LECTURES J2/J7 ──────────────────────────────────────────────
     st.markdown("#### 📅 Lectures en attente")
 
-    today = datetime.today().date()
     pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
     overdue = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() <= today]
     upcoming = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() > today]
 
     if overdue:
         st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">🔔 {len(overdue)} lecture(s) due(s) — à traiter dès que possible</span></div>', unsafe_allow_html=True)
-
     if upcoming:
         st.markdown(f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">📆 {len(upcoming)} lecture(s) à venir</span></div>', unsafe_allow_html=True)
-
     if not pending_schedules:
         st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
 
-    # Logique J2 → J7 : n'afficher J7 que si J2 est déjà validée pour ce sample
     def should_show_schedule(s, all_schedules):
-        """Affiche J2 toujours. Affiche J7 seulement si J2 est done pour ce sample."""
-        if s['when'] == 'J2':
-            return True
+        if s['when'] == 'J2': return True
         if s['when'] == 'J7':
             j2 = next((x for x in all_schedules if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
-            if j2 is None or j2['status'] == 'done':
-                return True
-            return False
+            return j2 is None or j2['status'] == 'done'
         return True
 
-    all_pending = [s for s in st.session_state.schedules if s['status'] == 'pending']
     all_to_show = [s for s in (overdue + upcoming) if should_show_schedule(s, st.session_state.schedules)]
     for s in all_to_show:
         sched_date = datetime.fromisoformat(s["due_date"]).date()
@@ -1050,8 +1292,6 @@ elif active == "surveillance":
         bg_col = "#fef2f2" if is_overdue else "#eff6ff"
         badge_col = "#dc2626" if is_overdue else "#1d4ed8"
         status_txt = "EN RETARD" if is_overdue else f"dans {(sched_date - today).days}j"
-
-        # Trouver le sample associé
         sample = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
         pt_type = sample.get('type', '?') if sample else '?'
         pt_gelose = sample.get('gelose', '?') if sample else '?'
@@ -1061,40 +1301,26 @@ elif active == "surveillance":
         with st.container():
             st.markdown(f"""<div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;padding:14px 16px;margin-bottom:8px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div>
-                  <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                <div><span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
                   <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
                   <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
                 </div>
                 <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
               </div>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:0">
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
-                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
-                </div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                  <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
-                </div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div>
-                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div>
-                </div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
-                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
-                </div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div></div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div></div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div></div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div></div>
               </div>
             </div>""", unsafe_allow_html=True)
-
             btn_cols = st.columns([3, 1])
             with btn_cols[0]:
                 if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
                     st.session_state.current_process = s['id']
                     st.rerun()
             with btn_cols[1]:
-                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True, help="Supprimer ce prélèvement et ses lectures planifiées"):
+                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
                     sample_id = s.get('sample_id')
                     st.session_state.schedules = [x for x in st.session_state.schedules if x['sample_id'] != sample_id]
                     save_schedules(st.session_state.schedules)
@@ -1103,7 +1329,6 @@ elif active == "surveillance":
                     st.success("Prélèvement et lectures associées supprimés.")
                     st.rerun()
 
-    # ── FORMULAIRE DE TRAITEMENT DE LECTURE ──────────────────────────────────
     if st.session_state.current_process:
         proc_id = st.session_state.current_process
         proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
@@ -1121,54 +1346,31 @@ elif active == "surveillance":
                 <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
               </div>
               <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                  <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;letter-spacing:.08em">Type</div>
-                  <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div>
-                </div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                  <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;letter-spacing:.08em">Gélose</div>
-                  <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div>
-                </div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                  <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;letter-spacing:.08em">Classe</div>
-                  <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_class}</div>
-                </div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                  <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;letter-spacing:.08em">Opérateur</div>
-                  <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div>
-                </div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                  <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;letter-spacing:.08em">Date prélèv.</div>
-                  <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div>
-                </div>
+                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div></div>
+                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div></div>
+                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_class}</div></div>
+                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
+                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
               </div>
             </div>""", unsafe_allow_html=True)
 
-            lc1, lc2, lc3 = st.columns([2, 2, 1])
+            lc1, lc2 = st.columns([2, 2])
             with lc1:
-                res = st.radio("Résultat de la lecture", ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"], index=0, key=f"res_{proc_id}")
+                res = st.radio("Résultat", ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"], index=0, key=f"res_{proc_id}")
             with lc2:
                 if "Positif" in res:
                     ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
                 else:
                     ncol = 0
-            with lc3:
-                st.markdown("<br>", unsafe_allow_html=True)
 
-            btn_col1, btn_col2, btn_col3 = st.columns([2, 2, 1])
+            btn_col1, btn_col2 = st.columns([2, 2])
             with btn_col1:
                 if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
                     proc['status'] = 'done'
                     save_schedules(st.session_state.schedules)
-
                     if "Négatif" in res:
-                        # J2 négatif → on attend J7 (déjà planifié)
-                        # J7 négatif → archiver
-                        j7_sch = next((x for x in st.session_state.schedules
-                            if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
-
+                        j7_sch = next((x for x in st.session_state.schedules if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
                         if proc['when'] == 'J7' or (proc['when'] == 'J2' and not j7_sch):
-                            # Archive
                             if sample:
                                 sample['archived'] = True
                                 st.session_state.archived_samples.append(sample)
@@ -1176,9 +1378,7 @@ elif active == "surveillance":
                                 save_prelevements(st.session_state.prelevements)
                             st.success("✅ Lecture négative — prélèvement archivé.")
                         else:
-                            st.success(f"✅ Lecture {proc['when']} négative — en attente de la lecture J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
-
-                        # Enregistrer dans historique
+                            st.success(f"✅ Lecture J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
                         hist = {"date": str(today), "prelevement": proc['label'], "sample_id": proc.get('sample_id',''),
                             "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
                             "ufc": 0, "risk": 0, "alert_threshold": "—", "action_threshold": "—",
@@ -1186,68 +1386,33 @@ elif active == "surveillance":
                         st.session_state.surveillance.append(hist)
                         save_surveillance(st.session_state.surveillance)
                     else:
-                        # Positif → créer entrée en attente d'identification
-                        entry = {
-                            "sample_id": proc['sample_id'],
-                            "label": proc['label'],
-                            "when": proc['when'],
-                            "colonies": int(ncol),
-                            "date": str(today),
-                            "status": "pending"
-                        }
+                        entry = {"sample_id": proc['sample_id'], "label": proc['label'], "when": proc['when'], "colonies": int(ncol), "date": str(today), "status": "pending"}
                         st.session_state.pending_identifications.append(entry)
                         save_pending_identifications(st.session_state.pending_identifications)
-                        st.success(f"🔴 Lecture {proc['when']} positive ({ncol} UFC) — identification du germe requise ci-dessous.")
-
+                        st.success(f"🔴 {proc['when']} positive ({ncol} UFC) — identification requise ci-dessous.")
                     st.session_state.current_process = None
                     st.rerun()
-
             with btn_col2:
                 if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
                     st.session_state.current_process = None
                     st.rerun()
 
-    # ── IDENTIFICATIONS EN ATTENTE ────────────────────────────────────────────
     pending_ids = [p for p in st.session_state.pending_identifications if p.get('status') == 'pending']
     if pending_ids:
         st.markdown("---")
-        st.markdown("#### 🔴 Identifications en attente (lectures positives)")
+        st.markdown("#### 🔴 Identifications en attente")
         for pi_idx, pi in enumerate(pending_ids):
             real_pi_idx = st.session_state.pending_identifications.index(pi)
             sample = next((p for p in st.session_state.prelevements if p['id'] == pi['sample_id']), None)
-            pt_type = sample.get('type', '?') if sample else '?'
             pt_gelose = sample.get('gelose', '?') if sample else '?'
-            pt_class = sample.get('room_class', '?') if sample else '?'
             pt_oper = sample.get('operateur', '?') if sample else '?'
-
             with st.expander(f"🔴 {pi['label']} — {pi['when']} — {pi['colonies']} UFC — {pi['date']}", expanded=True):
-                st.markdown(f"""<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
-                  <div style="background:#fef2f2;border-radius:6px;padding:8px;text-align:center;border:1px solid #fca5a5">
-                    <div style="font-size:.55rem;color:#dc2626;text-transform:uppercase">Type</div>
-                    <div style="font-size:.8rem;font-weight:700;color:#0f172a">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div>
-                  </div>
-                  <div style="background:#fef2f2;border-radius:6px;padding:8px;text-align:center;border:1px solid #fca5a5">
-                    <div style="font-size:.55rem;color:#dc2626;text-transform:uppercase">Gélose</div>
-                    <div style="font-size:.8rem;font-weight:700;color:#1d4ed8">🧫 {pt_gelose}</div>
-                  </div>
-                  <div style="background:#fef2f2;border-radius:6px;padding:8px;text-align:center;border:1px solid #fca5a5">
-                    <div style="font-size:.55rem;color:#dc2626;text-transform:uppercase">Classe</div>
-                    <div style="font-size:.8rem;font-weight:700;color:#0f172a">{pt_class}</div>
-                  </div>
-                  <div style="background:#fef2f2;border-radius:6px;padding:8px;text-align:center;border:1px solid #fca5a5">
-                    <div style="font-size:.55rem;color:#dc2626;text-transform:uppercase">UFC détectés</div>
-                    <div style="font-size:.8rem;font-weight:700;color:#dc2626">{pi['colonies']}</div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
                 id_col1, id_col2 = st.columns([3, 1])
                 with id_col1:
                     germ_input = st.text_input("Germe identifié *", placeholder="Ex: Pseudomonas aeruginosa", key=f"germ_id_{real_pi_idx}")
                     remarque = st.text_area("Remarque", height=60, key=f"rem_id_{real_pi_idx}")
                 with id_col2:
                     date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{real_pi_idx}")
-                    st.markdown("<br>", unsafe_allow_html=True)
-
                 idc1, idc2, idc3 = st.columns([2, 2, 1])
                 with idc1:
                     if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{real_pi_idx}"):
@@ -1258,618 +1423,659 @@ elif active == "surveillance":
                                 th = get_thresholds_for_risk(risk, st.session_state.thresholds)
                                 ufc = pi['colonies']
                                 status = "action" if ufc >= th["action"] else "alert" if ufc >= th["alert"] else "ok"
-                                record = {
-                                    "date": str(date_id),
-                                    "prelevement": pi['label'],
-                                    "sample_id": pi.get('sample_id', ''),
-                                    "germ_saisi": germ_input,
-                                    "germ_match": match["name"],
-                                    "match_score": f"{int(score*100)}%",
-                                    "ufc": ufc,
-                                    "risk": risk,
-                                    "alert_threshold": th["alert"],
-                                    "action_threshold": th["action"],
-                                    "status": status,
-                                    "operateur": pt_oper,
-                                    "remarque": remarque
-                                }
+                                record = {"date": str(date_id), "prelevement": pi['label'], "sample_id": pi.get('sample_id',''),
+                                    "germ_saisi": germ_input, "germ_match": match["name"], "match_score": f"{int(score*100)}%",
+                                    "ufc": ufc, "risk": risk, "alert_threshold": th["alert"], "action_threshold": th["action"],
+                                    "status": status, "operateur": pt_oper, "remarque": remarque}
                                 st.session_state.surveillance.append(record)
                                 save_surveillance(st.session_state.surveillance)
-                                # Marquer comme traité
                                 st.session_state.pending_identifications[real_pi_idx]['status'] = 'done'
                                 save_pending_identifications(st.session_state.pending_identifications)
-                                col = RISK_COLORS.get(risk, "#0f172a")
                                 status_txt = "🚨 Action requise" if status == "action" else "⚠️ Alerte" if status == "alert" else "✅ Conforme"
-                                st.success(f"✅ {match['name']} identifié ({int(score*100)}%) — {ufc} UFC — {status_txt}")
+                                st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — {status_txt}")
                                 st.rerun()
                             else:
-                                st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**. Vérifiez ou ajoutez ce germe.")
+                                st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
                         else:
                             st.error("Le nom du germe est obligatoire.")
                 with idc2:
-                    if st.button("↩️ Corriger la lecture (annuler)", use_container_width=True, key=f"cancel_id_{real_pi_idx}"):
-                        # Remettre le schedule en pending pour permettre correction
-                        matching_sch = next((x for x in st.session_state.schedules
-                            if x['sample_id'] == pi['sample_id'] and x['when'] == pi['when'] and x['status'] == 'done'), None)
+                    if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{real_pi_idx}"):
+                        matching_sch = next((x for x in st.session_state.schedules if x['sample_id'] == pi['sample_id'] and x['when'] == pi['when'] and x['status'] == 'done'), None)
                         if matching_sch:
                             matching_sch['status'] = 'pending'
                             save_schedules(st.session_state.schedules)
                         st.session_state.pending_identifications.pop(real_pi_idx)
                         save_pending_identifications(st.session_state.pending_identifications)
-                        st.success("Lecture annulée — vous pouvez la retraiter.")
                         st.rerun()
                 with idc3:
-                    if st.button("🗑️ Supprimer", use_container_width=True, key=f"del_id_{real_pi_idx}", help="Supprimer définitivement cette lecture en attente"):
+                    if st.button("🗑️", use_container_width=True, key=f"del_id_{real_pi_idx}"):
                         st.session_state.pending_identifications.pop(real_pi_idx)
                         save_pending_identifications(st.session_state.pending_identifications)
-                        st.success("Lecture supprimée.")
                         st.rerun()
 
-    # ── DERNIERS PRÉLÈVEMENTS ─────────────────────────────────────────────────
     if st.session_state.surveillance:
         st.markdown("---")
-        st.markdown("### 📋 Derniers résultats enregistrés")
+        st.markdown("### 📋 Derniers résultats")
         for r in list(reversed(st.session_state.surveillance[-10:])):
             sc = "#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
             ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
             ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
-            st.markdown(f"""
-            <div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
+            st.markdown(f"""<div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
               <span style="font-size:1.1rem">{ic}</span>
-              <div style="flex:1">
-                <div style="font-size:.78rem;color:#1e293b;font-weight:600">{r['prelevement']} — <span style="font-style:italic">{r['germ_match']}</span></div>
-                <div style="font-size:.68rem;color:#0f172a">{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>
-              </div>
+              <div style="flex:1"><div style="font-size:.78rem;color:#1e293b;font-weight:600">{r['prelevement']} — <span style="font-style:italic">{r['germ_match']}</span></div>
+              <div style="font-size:.68rem;color:#0f172a">{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div></div>
               <span style="font-size:.7rem;color:{sc};font-weight:700">{ufc_display}</span>
             </div>""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3 : PLAN URC
+# TAB 3 : PLANNING
 # ═══════════════════════════════════════════════════════════════════════════════
-elif active == "plan":
-    st.markdown("#### 🗺️ Plan URC interactif — placement des prélèvements")
-
-    uploaded = st.file_uploader(
-        "Uploader le plan URC (PNG, JPG ou PDF)",
-        type=["png", "jpg", "jpeg", "pdf"],
-        key="plan_upload_main"
-    )
-
-    if uploaded:
-        raw = uploaded.read()
-        if uploaded.type == "application/pdf":
-            pdf_b64 = base64.b64encode(raw).decode()
-            surv_points = [{"label": r["prelevement"], "germ": r["germ_match"],
-                "ufc": r["ufc"], "date": r["date"], "status": r["status"]}
-                for r in st.session_state.surveillance]
-            surv_json = json.dumps(surv_points, ensure_ascii=False)
-            pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
-
-            pdfjs_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:82vh;display:flex;flex-direction:column}}
-.toolbar{{padding:8px 12px;background:#ffffff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}}
-.toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
-.toolbar button{{cursor:pointer}}
-.toolbar button:hover,.toolbar button.active{{background:#2563eb;color:#ffffff}}
-.map-container{{flex:1;overflow:auto;position:relative;background:#f8fafc}}
-.map-inner{{position:relative;display:inline-block}}
-#pdfCanvas{{display:block}}
-.point{{position:absolute;width:24px;height:24px;border-radius:50%;border:2px solid white;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;box-shadow:0 0 10px rgba(0,0,0,.6);transition:transform .2s;z-index:10}}
-.point:hover{{transform:translate(-50%,-50%) scale(1.5)}}
-.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#0f172a}}
-.tooltip{{position:fixed;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:.72rem;pointer-events:none;z-index:1000;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
-.tooltip.visible{{display:block}}
-.legend{{display:flex;gap:10px;align-items:center;font-size:.65rem;color:#0f172a}}
-.leg{{display:flex;align-items:center;gap:4px}}
-.leg-dot{{width:9px;height:9px;border-radius:50%}}
-</style></head><body>
-<div class="toolbar">
-  <input id="ptLabel" placeholder="Nom du point" style="width:130px">
-  <select id="ptSurv" style="width:200px">
-    <option value="">-- Lier à un prélèvement --</option>
-    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
-  </select>
-  <button id="addBtn" onclick="toggleAddMode()">📍 Placer un point</button>
-  <button onclick="clearLast()">↩️ Annuler dernier</button>
-  <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <span style="font-size:.7rem;color:#0f172a">Page :</span>
-  <button onclick="prevPage()">◀</button>
-  <span id="pageInfo" style="font-size:.72rem;color:#1e293b;min-width:50px;text-align:center">1 / 1</span>
-  <button onclick="nextPage()">▶</button>
-  <div class="legend">
-    <div class="leg"><div class="leg-dot" style="background:#22c55e"></div>OK</div>
-    <div class="leg"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
-    <div class="leg"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
-  </div>
-</div>
-<div class="map-container" id="mapContainer">
-  <div class="map-inner" id="mapInner">
-    <canvas id="pdfCanvas"></canvas>
-    <div id="tooltip" class="tooltip"></div>
-  </div>
-</div>
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-const PDF_B64='{pdf_b64}';
-const survData={surv_json};
-let points={pts_json};
-let addMode=false,pdfDoc=null,currentPage=1,totalPages=1;
-const pdfData=atob(PDF_B64);
-const pdfBytes=new Uint8Array(pdfData.length);
-for(let i=0;i<pdfData.length;i++)pdfBytes[i]=pdfData.charCodeAt(i);
-pdfjsLib.getDocument({{data:pdfBytes}}).promise.then(doc=>{{pdfDoc=doc;totalPages=doc.numPages;document.getElementById('pageInfo').textContent=`${{currentPage}} / ${{totalPages}}`;renderPage(currentPage);}});
-function renderPage(n){{pdfDoc.getPage(n).then(page=>{{const vp=page.getViewport({{scale:1.5}});const canvas=document.getElementById('pdfCanvas');canvas.width=vp.width;canvas.height=vp.height;canvas.getContext('2d').clearRect(0,0,vp.width,vp.height);page.render({{canvasContext:canvas.getContext('2d'),viewport:vp}}).promise.then(()=>renderPoints());}});}}
-function prevPage(){{if(currentPage>1){{currentPage--;document.getElementById('pageInfo').textContent=`${{currentPage}} / ${{totalPages}}`;renderPage(currentPage);}}}}
-function nextPage(){{if(currentPage<totalPages){{currentPage++;document.getElementById('pageInfo').textContent=`${{currentPage}} / ${{totalPages}}`;renderPage(currentPage);}}}}
-function toggleAddMode(){{addMode=!addMode;const btn=document.getElementById('addBtn');btn.classList.toggle('active',addMode);btn.textContent=addMode?'✋ Annuler':'📍 Placer un point';document.getElementById('mapContainer').style.cursor=addMode?'crosshair':'default';}}
-function renderPoints(){{document.querySelectorAll('.point').forEach(p=>p.remove());const inner=document.getElementById('mapInner');points.forEach((pt,i)=>{{const surv=survData.find(s=>s.label===(pt.survLabel||pt.label));const status=surv?surv.status:'none';const div=document.createElement('div');div.className=`point ${{status}}`;div.style.left=pt.x+'%';div.style.top=pt.y+'%';div.textContent=i+1;div.addEventListener('mouseenter',e=>showTip(e,pt,surv));div.addEventListener('mouseleave',hideTip);inner.appendChild(div);}});}}
-function showTip(e,pt,surv){{const t=document.getElementById('tooltip');const icon=surv?{{ok:'✅',alert:'⚠️',action:'🚨',none:'📍'}}[surv.status]||'📍':'📍';t.innerHTML=`<div style="font-weight:700;margin-bottom:6px;color:#1e293b">${{icon}} ${{pt.label}}</div>`+(surv?`<div>Germe : <span style="font-style:italic">${{surv.germ}}</span></div><div>UFC : <strong>${{surv.ufc}}</strong></div><div>Date : ${{surv.date}}</div>`:'<div style="font-size:.68rem">Aucune donnée liée</div>');t.style.left=(e.clientX+15)+'px';t.style.top=(e.clientY-10)+'px';t.classList.add('visible');}}
-function hideTip(){{document.getElementById('tooltip').classList.remove('visible');}}
-function clearLast(){{if(points.length>0){{points.pop();renderPoints();}}}}
-function clearAll(){{if(confirm('Effacer tous les points ?')){{points=[];renderPoints();}}}}
-document.getElementById('mapInner').addEventListener('click',function(e){{if(!addMode)return;const canvas=document.getElementById('pdfCanvas');const rect=canvas.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;const x=((e.clientX-rect.left)/rect.width*100);const y=((e.clientY-rect.top)/rect.height*100);const label=document.getElementById('ptLabel').value||`Point ${{points.length+1}}`;const survLabel=document.getElementById('ptSurv').value||null;points.push({{x,y,label,survLabel}});renderPoints();toggleAddMode();}});
-</script></body></html>"""
-            st.components.v1.html(pdfjs_html, height=700, scrolling=False)
-        else:
-            img_data = base64.b64encode(raw).decode()
-            st.session_state.map_image = f"data:{uploaded.type};base64,{img_data}"
-
-    if st.session_state.map_image and (not uploaded or uploaded.type != "application/pdf"):
-        surv_points = [{"label": r["prelevement"], "germ": r["germ_match"],
-            "ufc": r["ufc"], "date": r["date"], "status": r["status"]}
-            for r in st.session_state.surveillance]
-        surv_json = json.dumps(surv_points, ensure_ascii=False)
-        pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
-
-        map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:80vh;display:flex;flex-direction:column}}
-.toolbar{{padding:8px 12px;background:#ffffff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}}
-.toolbar select,.toolbar input,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
-.toolbar button{{cursor:pointer}}
-.toolbar button:hover,.toolbar button.active{{background:#2563eb;color:#ffffff}}
-.map-container{{flex:1;overflow:auto;position:relative;background:#f8fafc}}
-.map-inner{{position:relative;display:inline-block;min-width:100%;min-height:100%}}
-#planImg{{max-width:100%;display:block}}
-.point{{position:absolute;width:24px;height:24px;border-radius:50%;border:2px solid white;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;box-shadow:0 0 10px rgba(0,0,0,.6);transition:transform .2s;z-index:10}}
-.point:hover{{transform:translate(-50%,-50%) scale(1.5)}}
-.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#0f172a}}
-.tooltip{{position:fixed;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:.72rem;pointer-events:none;z-index:1000;display:none;min-width:200px}}
-.tooltip.visible{{display:block}}
-.legend{{display:flex;gap:10px;align-items:center;font-size:.65rem;color:#6b7280}}
-.leg{{display:flex;align-items:center;gap:4px}}.leg-dot{{width:9px;height:9px;border-radius:50%}}
-</style></head><body>
-<div class="toolbar">
-  <input id="ptLabel" placeholder="Nom du point" style="width:130px">
-  <select id="ptSurv" style="width:200px">
-    <option value="">-- Lier à un prélèvement --</option>
-    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
-  </select>
-  <button id="addBtn" onclick="toggleAddMode()">📍 Placer un point</button>
-  <button onclick="clearLast()">↩️ Annuler dernier</button>
-  <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <div class="legend">
-    <div class="leg"><div class="leg-dot" style="background:#22c55e"></div>OK</div>
-    <div class="leg"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
-    <div class="leg"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
-    <div class="leg"><div class="leg-dot" style="background:#0f172a"></div>Non lié</div>
-  </div>
-</div>
-<div class="map-container" id="mapContainer">
-  <div class="map-inner" id="mapInner">
-    <img id="planImg" src="{st.session_state.map_image}" draggable="false">
-    <div id="tooltip" class="tooltip"></div>
-  </div>
-</div>
-<script>
-let addMode=false;let points={pts_json};const survData={surv_json};
-function toggleAddMode(){{addMode=!addMode;const btn=document.getElementById('addBtn');btn.classList.toggle('active',addMode);btn.textContent=addMode?'✋ Annuler':'📍 Placer un point';document.getElementById('mapContainer').style.cursor=addMode?'crosshair':'default';}}
-function renderPoints(){{document.querySelectorAll('.point').forEach(p=>p.remove());const img=document.getElementById('planImg');if(!img)return;const inner=document.getElementById('mapInner');points.forEach((pt,i)=>{{const surv=survData.find(s=>s.label===(pt.survLabel||pt.label));const status=surv?surv.status:'none';const div=document.createElement('div');div.className=`point ${{status}}`;div.style.left=pt.x+'%';div.style.top=pt.y+'%';div.textContent=i+1;div.addEventListener('mouseenter',e=>showTip(e,pt,surv,i));div.addEventListener('mouseleave',hideTip);inner.appendChild(div);}});}}
-function showTip(e,pt,surv){{const t=document.getElementById('tooltip');const icon=surv?{{ok:'✅',alert:'⚠️',action:'🚨',none:'📍'}}[surv.status]||'📍':'📍';t.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${{icon}} ${{pt.label}}</div>`+(surv?`<div>Germe : <i>${{surv.germ}}</i></div><div>UFC : <b>${{surv.ufc}}</b></div><div>Date : ${{surv.date}}</div>`:'<div>Aucune donnée liée</div>');t.style.left=(e.clientX+15)+'px';t.style.top=(e.clientY-10)+'px';t.classList.add('visible');}}
-function hideTip(){{document.getElementById('tooltip').classList.remove('visible');}}
-function clearLast(){{if(points.length>0){{points.pop();renderPoints();}}}}
-function clearAll(){{if(confirm('Effacer tous les points ?')){{points=[];renderPoints();}}}}
-document.getElementById('mapInner').addEventListener('click',function(e){{if(!addMode)return;const img=document.getElementById('planImg');if(!img)return;const rect=img.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;const x=((e.clientX-rect.left)/rect.width*100);const y=((e.clientY-rect.top)/rect.height*100);const label=document.getElementById('ptLabel').value||`Point ${{points.length+1}}`;const survLabel=document.getElementById('ptSurv').value||null;points.push({{x,y,label,survLabel}});renderPoints();toggleAddMode();}});
-const img=document.getElementById('planImg');if(img)img.addEventListener('load',renderPoints);else renderPoints();
-</script></body></html>"""
-        st.components.v1.html(map_html, height=650, scrolling=False)
-        st.info("💡 Nommez le point, liez-le à un prélèvement (optionnel), cliquez **📍 Placer**, puis cliquez sur le plan.")
-    elif not uploaded:
-        st.markdown('''<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;padding:48px;text-align:center;color:#0f172a"><div style="font-size:2rem;margin-bottom:8px">🗺️</div><div>Uploadez un plan URC (PNG/JPG/PDF) pour placer les points de prélèvement</div></div>''', unsafe_allow_html=True)
-
-
-
-# TAB PLANNING
-# ================================================================================
 elif active == "planning":
     st.markdown("### 📅 Planning des prélèvements & lectures")
 
     _today_dt = datetime.today().date()
-    _JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-    _MOIS_FR = ["","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    MOIS_FR = ["","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    JOURS_FR_COURT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
+    JOURS_FR = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    def _get_week_start(d):
-        return d - timedelta(days=d.weekday())
+    plan_tab_view, plan_tab_list, plan_tab_edit, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📋 Vue liste", "✏️ Modifier", "📊 Charge hebdo", "📥 Export Excel"])
 
-    def _fmt_week(ws):
-        we = ws + timedelta(days=6)
-        return f"Semaine du {ws.day} {_MOIS_FR[ws.month]} au {we.day} {_MOIS_FR[we.month]} {we.year}"
+    with plan_tab_view:
+        nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
+        with nav_c1:
+            if st.button("◀◀", use_container_width=True, key="cal_prev_year"):
+                st.session_state.cal_year -= 1
+                st.rerun()
+        with nav_c2:
+            if st.button("◀", use_container_width=True, key="cal_prev_month"):
+                if st.session_state.cal_month == 1:
+                    st.session_state.cal_month = 12
+                    st.session_state.cal_year -= 1
+                else:
+                    st.session_state.cal_month -= 1
+                st.rerun()
+        with nav_c3:
+            st.markdown(f"""<div style="text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem">
+              📅 {MOIS_FR[st.session_state.cal_month]} {st.session_state.cal_year}
+            </div>""", unsafe_allow_html=True)
+        with nav_c4:
+            if st.button("▶", use_container_width=True, key="cal_next_month"):
+                if st.session_state.cal_month == 12:
+                    st.session_state.cal_month = 1
+                    st.session_state.cal_year += 1
+                else:
+                    st.session_state.cal_month += 1
+                st.rerun()
+        with nav_c5:
+            if st.button("▶▶", use_container_width=True, key="cal_next_year"):
+                st.session_state.cal_year += 1
+                st.rerun()
 
-    def _build_week_list():
+        if st.button("📍 Aujourd'hui", key="cal_today"):
+            st.session_state.cal_year = _today_dt.year
+            st.session_state.cal_month = _today_dt.month
+            st.rerun()
+
+        cal_year = st.session_state.cal_year
+        cal_month = st.session_state.cal_month
+        holidays_this_month = get_holidays_cached(cal_year)
+
+        def get_day_activities(d):
+            j0 = [p for p in st.session_state.prelevements
+                  if p.get('date') and datetime.fromisoformat(p['date']).date() == d and not p.get('archived', False)]
+            j2 = [s for s in st.session_state.schedules
+                  if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
+            j7 = [s for s in st.session_state.schedules
+                  if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
+            return j0, j2, j7
+
+        cal_weeks = cal_module.monthcalendar(cal_year, cal_month)
+
+        header_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">'
+        for i, jour in enumerate(JOURS_FR_COURT):
+            col_color = "#ef4444" if i >= 5 else "#1e40af"
+            header_html += f'<div style="text-align:center;padding:8px 4px;font-weight:800;font-size:.78rem;color:{col_color};border-radius:6px;background:#eff6ff">{jour}</div>'
+        header_html += '</div>'
+
+        legend_html = """<div style="display:flex;gap:14px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px">
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#7c3aed"></div><span style="font-size:.72rem;color:#1e293b">Prélèvement J0</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#d97706"></div><span style="font-size:.72rem;color:#1e293b">Lecture J2</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#0369a1"></div><span style="font-size:.72rem;color:#1e293b">Lecture J7</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#e2e8f0;border:1px solid #cbd5e1"></div><span style="font-size:.72rem;color:#94a3b8">Weekend / Férié</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#dbeafe;border:2px solid #2563eb"></div><span style="font-size:.72rem;color:#1e293b">Aujourd'hui</span></div>
+        </div>"""
+
+        grid_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'
+        for week in cal_weeks:
+            for day_idx, day_num in enumerate(week):
+                is_weekend = day_idx >= 5
+                if day_num == 0:
+                    grid_html += '<div style="background:#f8fafc;border-radius:8px;min-height:100px"></div>'
+                    continue
+                d = date_type(cal_year, cal_month, day_num)
+                is_today = d == _today_dt
+                is_holiday = d in holidays_this_month
+                is_non_working = is_weekend or is_holiday
+                is_past = d < _today_dt
+                j0, j2, j7 = get_day_activities(d)
+                if is_today:
+                    bg = "#dbeafe"; border = "2px solid #2563eb"
+                elif is_non_working:
+                    bg = "#f1f5f9"; border = "1px solid #e2e8f0"
+                else:
+                    bg = "#ffffff"; border = "1px solid #e2e8f0"
+                day_num_color = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
+                opacity = "0.6" if is_past and not is_today else "1"
+                badges = ""
+                if j0:
+                    j0_title = j0[0].get('label','') if j0 else ''
+                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;cursor:default" title="{j0_title}">🧪 {len(j0)} J0</div>'
+                for s in j2:
+                    is_done = s['status'] == 'done'
+                    is_late = not is_done and d < _today_dt
+                    s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706")
+                    s_icon = "✅" if is_done else ("⚠️" if is_late else "📖")
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J2</div>'
+                for s in j7:
+                    is_done = s['status'] == 'done'
+                    is_late = not is_done and d < _today_dt
+                    s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1")
+                    s_icon = "✅" if is_done else ("⚠️" if is_late else "📗")
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J7</div>'
+                holiday_lbl = ""
+                if is_holiday and not is_weekend:
+                    holiday_lbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
+                elif is_weekend:
+                    holiday_lbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
+                grid_html += f"""<div style="background:{bg};border:{border};border-radius:8px;padding:6px;min-height:100px;opacity:{opacity};display:flex;flex-direction:column">
+                  <div style="font-weight:800;font-size:.9rem;color:{day_num_color};margin-bottom:2px">{day_num}</div>
+                  {holiday_lbl}{badges}
+                </div>"""
+        grid_html += '</div>'
+
+        st.markdown(legend_html, unsafe_allow_html=True)
+        st.markdown(header_html + grid_html, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### 📊 Bilan du mois")
+        from datetime import date as dt_date
+        first_day = dt_date(cal_year, cal_month, 1)
+        last_day = dt_date(cal_year, cal_month, cal_module.monthrange(cal_year, cal_month)[1])
+        month_prelevs = [p for p in st.session_state.prelevements
+            if p.get('date') and first_day <= datetime.fromisoformat(p['date']).date() <= last_day and not p.get('archived', False)]
+        month_j2 = [s for s in st.session_state.schedules if s['when']=='J2' and first_day <= datetime.fromisoformat(s['due_date']).date() <= last_day]
+        month_j7 = [s for s in st.session_state.schedules if s['when']=='J7' and first_day <= datetime.fromisoformat(s['due_date']).date() <= last_day]
+        j2_done = sum(1 for s in month_j2 if s['status']=='done')
+        j7_done = sum(1 for s in month_j7 if s['status']=='done')
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("🧪 Prélèvements", len(month_prelevs))
+        mc2.metric("📖 Lectures J2", f"{j2_done}/{len(month_j2)}", delta=f"{len(month_j2)-j2_done} restantes" if month_j2 else None, delta_color="inverse")
+        mc3.metric("📗 Lectures J7", f"{j7_done}/{len(month_j7)}", delta=f"{len(month_j7)-j7_done} restantes" if month_j7 else None, delta_color="inverse")
+        mc4.metric("⏳ Total en attente", sum(1 for s in st.session_state.schedules if s['status']=='pending'))
+
+    with plan_tab_list:
+        def get_week_start(d):
+            return d - timedelta(days=d.weekday())
+        def fmt_week(ws):
+            we = ws + timedelta(days=6)
+            return f"Semaine du {ws.day} {MOIS_FR[ws.month]} au {we.day} {MOIS_FR[we.month]} {we.year}"
         ws_set = set()
-        ws_set.add(_get_week_start(_today_dt))
+        ws_set.add(get_week_start(_today_dt))
         for _p in st.session_state.prelevements:
-            try: ws_set.add(_get_week_start(datetime.fromisoformat(_p["date"]).date()))
+            try: ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
             except: pass
         for _s in st.session_state.schedules:
-            try: ws_set.add(_get_week_start(datetime.fromisoformat(_s["due_date"]).date()))
+            try: ws_set.add(get_week_start(datetime.fromisoformat(_s["due_date"]).date()))
             except: pass
         for _i in range(1, 5):
-            ws_set.add(_get_week_start(_today_dt) + timedelta(weeks=_i))
-        return sorted(ws_set)
-
-    _week_starts = _build_week_list()
-    _week_labels = [_fmt_week(ws) for ws in _week_starts]
-    _cur_week_idx = 0
-    for _i, _ws in enumerate(_week_starts):
-        if _ws <= _today_dt < _ws + timedelta(days=7):
-            _cur_week_idx = _i
-            break
-
-    plan_tab_view, plan_tab_edit, plan_tab_export = st.tabs(["📅 Vue planning", "✏️ Modifier le planning", "📥 Exporter en Excel"])
-
-    # ═══════════════ VUE PLANNING — PATCHED ═══════════════
-    with plan_tab_view:
-        today_dt = _today_dt
-        JOURS_FR = _JOURS_FR
-        MOIS_FR = _MOIS_FR
-        week_starts = _week_starts
-        week_labels = _week_labels
-        cur_week_idx = _cur_week_idx
-
+            ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
+        week_starts = sorted(ws_set)
+        week_labels = [fmt_week(ws) for ws in week_starts]
+        cur_week_idx = 0
+        for _i, _ws in enumerate(week_starts):
+            if _ws <= _today_dt < _ws + timedelta(days=7):
+                cur_week_idx = _i
+                break
         sel_week_label = st.selectbox("📆 Sélectionner la semaine", week_labels, index=cur_week_idx, label_visibility="collapsed", key="view_week_sel")
         sel_week_start = week_starts[week_labels.index(sel_week_label)]
-
         st.markdown(f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:12px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
           <div style="color:#fff;font-weight:700;font-size:1rem">📅 {sel_week_label}</div>
           <div style="color:#bfdbfe;font-size:.75rem">Semaine {sel_week_start.isocalendar()[1]}</div>
         </div>""", unsafe_allow_html=True)
-
-        def get_day_data(day):
-            prelevs_day = [p for p in st.session_state.prelevements
-                if p.get('date') and datetime.fromisoformat(p['date']).date() == day
-                and not p.get('archived', False)]
-            j2_due = [s for s in st.session_state.schedules
-                if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == day]
-            j7_due = [s for s in st.session_state.schedules
-                if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == day]
-            return prelevs_day, j2_due, j7_due
-
-        # ── PATCH 1 APPLIED: nouveau rendu avec bouton 🗑️ sur J0 + date J0 dans J2/J7 ──
+        holidays_week = get_holidays_cached(sel_week_start.year)
         has_any = False
-        for day_offset in range(7):
+        for day_offset in range(5):
             day = sel_week_start + timedelta(days=day_offset)
             jour_nom = JOURS_FR[day_offset]
-            prelevs, j2, j7 = get_day_data(day)
-            is_today = day == today_dt
-            is_past = day < today_dt
-            is_weekend = day_offset >= 5
-            has_activity = bool(prelevs or j2 or j7)
-
-            if not has_activity:
-                if not is_weekend:
-                    bg = "#eff6ff" if is_today else "#f8fafc"
-                    border = "#2563eb" if is_today else "#e2e8f0"
-                    today_lbl = " • AUJOURD'HUI" if is_today else ""
-                    st.markdown(f'<div style="background:{bg};border:1.5px solid {border};border-radius:10px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;opacity:{"1" if not is_past else "0.55"}"><span style="font-weight:700;color:{"#2563eb" if is_today else "#475569"};font-size:.82rem;min-width:130px">{jour_nom} {day.strftime("%d/%m")}{today_lbl}</span><span style="font-size:.72rem;color:#94a3b8;font-style:italic">Aucune activité planifiée</span></div>', unsafe_allow_html=True)
+            is_today = day == _today_dt
+            is_past = day < _today_dt
+            is_holiday = day in holidays_week
+            j0_d = [p for p in st.session_state.prelevements if p.get('date') and datetime.fromisoformat(p['date']).date() == day and not p.get('archived', False)]
+            j2_d = [s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date() == day]
+            j7_d = [s for s in st.session_state.schedules if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date() == day]
+            has_activity = bool(j0_d or j2_d or j7_d)
+            if is_holiday:
+                st.markdown(f'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;opacity:0.6"><span style="font-weight:700;color:#dc2626;font-size:.82rem;min-width:130px">🎌 {jour_nom} {day.strftime("%d/%m")}</span><span style="font-size:.72rem;color:#dc2626;font-style:italic">Jour férié — pas de prélèvement</span></div>', unsafe_allow_html=True)
                 continue
-
+            if not has_activity:
+                bg = "#eff6ff" if is_today else "#f8fafc"
+                border = "#2563eb" if is_today else "#e2e8f0"
+                today_lbl = " • AUJOURD'HUI" if is_today else ""
+                st.markdown(f'<div style="background:{bg};border:1.5px solid {border};border-radius:10px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;opacity:{"1" if not is_past else "0.55"}"><span style="font-weight:700;color:{"#2563eb" if is_today else "#475569"};font-size:.82rem;min-width:130px">{jour_nom} {day.strftime("%d/%m")}{today_lbl}</span><span style="font-size:.72rem;color:#94a3b8;font-style:italic">Aucune activité planifiée</span></div>', unsafe_allow_html=True)
+                continue
             has_any = True
-            bg = "#fefce8" if is_weekend else ("#eff6ff" if is_today else "#ffffff")
-            border = "#2563eb" if is_today else ("#f59e0b" if is_weekend else "#cbd5e1")
+            bg = "#eff6ff" if is_today else "#ffffff"
+            border = "#2563eb" if is_today else "#cbd5e1"
             bw = "2px"
-            past_style = "opacity:0.7;" if is_past and not is_today else ""
+            past_style = "opacity:0.75;" if is_past and not is_today else ""
             badges = ""
-            if prelevs: badges += f'<span style="background:#7c3aed22;color:#7c3aed;border:1px solid #e9d5ff;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">🧪 {len(prelevs)} prélèv.</span> '
-            if j2: badges += f'<span style="background:#d9770622;color:#d97706;border:1px solid #fde68a;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📖 {len(j2)} J2</span> '
-            if j7: badges += f'<span style="background:#0369a122;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📗 {len(j7)} J7</span>'
+            if j0_d: badges += f'<span style="background:#7c3aed22;color:#7c3aed;border:1px solid #e9d5ff;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">🧪 {len(j0_d)} prélèv.</span> '
+            if j2_d: badges += f'<span style="background:#d9770622;color:#d97706;border:1px solid #fde68a;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📖 {len(j2_d)} J2</span> '
+            if j7_d: badges += f'<span style="background:#0369a122;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;padding:3px 9px;font-size:.6rem;font-weight:700">📗 {len(j7_d)} J7</span>'
             today_badge = f'<span style="background:#2563eb;color:#fff;font-size:.55rem;font-weight:700;padding:2px 8px;border-radius:8px;margin-left:8px">AUJOURD\'HUI</span>' if is_today else ""
-
-            # En-tête du jour
             st.markdown(f'<div style="background:{bg};border:{bw} solid {border};border-radius:12px 12px 0 0;padding:12px 16px 10px 16px;margin-bottom:0;{past_style}"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><span style="font-weight:800;font-size:.95rem;color:{"#1e40af" if is_today else "#0f172a"}">{jour_nom} {day.strftime("%d/%m/%Y")}</span>{today_badge}</div><div style="display:flex;gap:6px;flex-wrap:wrap">{badges}</div></div></div>', unsafe_allow_html=True)
-
-            # Prélèvements J0 avec bouton supprimer
-            if prelevs:
-                st.markdown(f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#7c3aed;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">🧪 Prélèvements J0 à réaliser</div></div>', unsafe_allow_html=True)
-                for p in prelevs:
+            if j0_d:
+                st.markdown(f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#7c3aed;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">🧪 Prélèvements J0</div></div>', unsafe_allow_html=True)
+                for p in j0_d:
                     _pc1, _pc2 = st.columns([11, 1])
                     with _pc1:
                         st.markdown(f'<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:7px;padding:9px 12px;margin:0 16px 4px 16px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-weight:700;color:#0f172a;font-size:.82rem">{p["label"]}</span><span style="background:#7c3aed;color:#fff;font-size:.55rem;padding:2px 7px;border-radius:5px">J0 — {p.get("type","—")}</span><span style="color:#475569;font-size:.7rem">Classe {p.get("room_class","—")}</span><span style="color:#475569;font-size:.7rem">🧫 {p.get("gelose","—")}</span><span style="color:#475569;font-size:.7rem;margin-left:auto">Oper. {p.get("operateur","—")}</span></div></div>', unsafe_allow_html=True)
                     with _pc2:
-                        if st.button("🗑️", key=f"del_plan_p_{p['id']}_{day_offset}", help=f"Supprimer {p['label']} + lectures J2/J7"):
+                        if st.button("🗑️", key=f"del_plan_p_{p['id']}_{day_offset}", help=f"Supprimer {p['label']}"):
                             _sid = p['id']
                             st.session_state.schedules = [x for x in st.session_state.schedules if x['sample_id'] != _sid]
                             save_schedules(st.session_state.schedules)
                             st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != _sid]
                             save_prelevements(st.session_state.prelevements)
-                            st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != _sid]
-                            save_pending_identifications(st.session_state.pending_identifications)
-                            st.success(f"✅ Prélèvement **{p['label']}** et ses lectures J2/J7 supprimés.")
+                            st.success(f"✅ Prélèvement **{p['label']}** supprimé.")
                             st.rerun()
-
-            # Lectures J2 (J0 + 2 jours) — avec date J0 visible
-            if j2:
-                j2_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#d97706;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📖 Lectures J2 à réaliser (J0 + 2 jours)</div>'
-                for sch in j2:
-                    is_done = sch["status"] == "done"
-                    is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < today_dt
-                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706")
-                    st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
-                    samp = next((p for p in st.session_state.prelevements if p["id"] == sch["sample_id"]), None)
-                    j0_date = samp.get("date", "—") if samp else "—"
-                    j2_html += f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#d97706;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J2</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:#475569;font-size:.7rem">Oper. {samp.get("operateur","—") if samp else "—"}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
+            if j2_d:
+                j2_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#d97706;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📖 Lectures J2 (2 jours ouvrés après J0)</div>'
+                for sch in j2_d:
+                    is_done = sch["status"]=="done"; is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < _today_dt
+                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706"); st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
+                    samp = next((p for p in st.session_state.prelevements if p["id"]==sch["sample_id"]),None); j0_date = samp.get("date","—") if samp else "—"
+                    j2_html += f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#d97706;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J2</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
                 j2_html += "</div>"
                 st.markdown(j2_html, unsafe_allow_html=True)
-
-            # Lectures J7 (J0 + 7 jours) — avec date J0 visible
-            if j7:
-                j7_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#0369a1;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📗 Lectures J7 à réaliser (J0 + 7 jours)</div>'
-                for sch in j7:
-                    is_done = sch["status"] == "done"
-                    is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < today_dt
-                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1")
-                    st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
-                    samp = next((p for p in st.session_state.prelevements if p["id"] == sch["sample_id"]), None)
-                    j0_date = samp.get("date", "—") if samp else "—"
-                    j7_html += f'<div style="background:#eff6ff;border:1px solid #bae6fd;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#0369a1;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J7</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:#475569;font-size:.7rem">Oper. {samp.get("operateur","—") if samp else "—"}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
+            if j7_d:
+                j7_html = f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};padding:6px 16px 4px 16px;{past_style}"><div style="font-size:.6rem;color:#0369a1;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px">📗 Lectures J7 (5 jours ouvrés après J0)</div>'
+                for sch in j7_d:
+                    is_done = sch["status"]=="done"; is_late = not is_done and datetime.fromisoformat(sch["due_date"]).date() < _today_dt
+                    st_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1"); st_txt = "✅ Faite" if is_done else ("⚠️ En retard" if is_late else "⏳ À faire")
+                    samp = next((p for p in st.session_state.prelevements if p["id"]==sch["sample_id"]),None); j0_date = samp.get("date","—") if samp else "—"
+                    j7_html += f'<div style="background:#eff6ff;border:1px solid #bae6fd;border-radius:7px;padding:9px 12px;margin-bottom:4px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="background:#0369a1;color:#fff;font-size:.58rem;padding:2px 8px;border-radius:5px;font-weight:700">J7</span><span style="font-weight:700;color:#0f172a;font-size:.82rem">{sch["label"]}</span><span style="color:#475569;font-size:.7rem">🧫 {samp.get("gelose","—") if samp else "—"}</span><span style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:600">📅 J0 : {j0_date}</span><span style="color:{st_col};font-size:.72rem;font-weight:700;margin-left:auto">{st_txt}</span></div></div>'
                 j7_html += "</div>"
                 st.markdown(j7_html, unsafe_allow_html=True)
-
-            # Pied du cadre
             st.markdown(f'<div style="background:{bg};border-left:{bw} solid {border};border-right:{bw} solid {border};border-bottom:{bw} solid {border};border-radius:0 0 12px 12px;padding:4px 16px;margin-bottom:10px;{past_style}"></div>', unsafe_allow_html=True)
-
         if not has_any:
             st.markdown("""<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;padding:48px;text-align:center">
               <div style="font-size:2.5rem;margin-bottom:12px">📅</div>
               <div style="font-size:.95rem;color:#475569;font-weight:600">Aucune activité cette semaine</div>
-              <div style="font-size:.8rem;color:#94a3b8;margin-top:6px">Enregistrez des prélèvements dans l'onglet Identification & Surveillance</div>
             </div>""", unsafe_allow_html=True)
 
-        st.divider()
-        st.markdown("#### Bilan de la semaine")
-        week_prelevs = sum(1 for p in st.session_state.prelevements
-            if p.get('date') and sel_week_start <= datetime.fromisoformat(p['date']).date() < sel_week_start + timedelta(days=7))
-        week_j2 = [s for s in st.session_state.schedules if s['when']=='J2'
-            and sel_week_start <= datetime.fromisoformat(s['due_date']).date() < sel_week_start + timedelta(days=7)]
-        week_j7 = [s for s in st.session_state.schedules if s['when']=='J7'
-            and sel_week_start <= datetime.fromisoformat(s['due_date']).date() < sel_week_start + timedelta(days=7)]
-        j2_done = sum(1 for s in week_j2 if s['status']=='done')
-        j7_done = sum(1 for s in week_j7 if s['status']=='done')
-        total_pending = sum(1 for s in st.session_state.schedules if s['status']=='pending')
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("🧪 Prélèvements", week_prelevs)
-        mc2.metric("📖 Lectures J2", f"{j2_done}/{len(week_j2)}", delta=f"{len(week_j2)-j2_done} restantes" if week_j2 else None, delta_color="inverse")
-        mc3.metric("📗 Lectures J7", f"{j7_done}/{len(week_j7)}", delta=f"{len(week_j7)-j7_done} restantes" if week_j7 else None, delta_color="inverse")
-        mc4.metric("⏳ Total en attente", total_pending)
-
-    # ═══════════════ MODIFIER LE PLANNING ═══════════════
     with plan_tab_edit:
         st.markdown("""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:16px">
-          <span style="color:#166534;font-weight:700;font-size:.85rem">✏️ Mode édition — modifiez, ajoutez ou supprimez des prélèvements et des lectures dans le planning</span>
+          <span style="color:#166534;font-weight:700;font-size:.85rem">✏️ Mode édition</span>
         </div>""", unsafe_allow_html=True)
-
-        edit_sub1, edit_sub2 = st.tabs(["Prélèvements planifiés", "Lectures planifiées (J2/J7)"])
-
+        edit_sub1, edit_sub2 = st.tabs(["Prélèvements", "Lectures J2/J7"])
         with edit_sub1:
             st.markdown("##### 🧪 Prélèvements actifs")
             active_prelevs = [p for p in st.session_state.prelevements if not p.get('archived', False)]
             if not active_prelevs:
-                st.info("Aucun prélèvement actif. Créez-en dans l'onglet Identification & Surveillance.")
+                st.info("Aucun prélèvement actif.")
             else:
                 for pe_i, pe in enumerate(active_prelevs):
                     real_pe_i = st.session_state.prelevements.index(pe)
                     pe_col1, pe_col2 = st.columns([5, 1])
                     with pe_col1:
-                        pe_type = pe.get('type','—')
-                        pe_class = pe.get('room_class','—')
-                        pe_gelose = pe.get('gelose','—')
-                        pe_oper = pe.get('operateur','—')
-                        pe_date = pe.get('date','—')
                         st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
                           <span style="font-weight:700;color:#0f172a">{pe['label']}</span>
-                          <span style="background:#7c3aed;color:#fff;font-size:.6rem;padding:2px 8px;border-radius:5px">{pe_type}</span>
-                          <span style="color:#475569;font-size:.75rem">Classe {pe_class}</span>
-                          <span style="color:#475569;font-size:.75rem">🧫 {pe_gelose}</span>
-                          <span style="color:#475569;font-size:.75rem">Oper. {pe_oper}</span>
-                          <span style="color:#475569;font-size:.75rem">📅 {pe_date}</span>
+                          <span style="background:#7c3aed;color:#fff;font-size:.6rem;padding:2px 8px;border-radius:5px">{pe.get('type','—')}</span>
+                          <span style="color:#475569;font-size:.75rem">Classe {pe.get('room_class','—')}</span>
+                          <span style="color:#475569;font-size:.75rem">🧫 {pe.get('gelose','—')}</span>
+                          <span style="color:#475569;font-size:.75rem">📅 {pe.get('date','—')}</span>
                         </div>""", unsafe_allow_html=True)
                     with pe_col2:
                         if st.button("✏️ Éditer", key=f"edit_pe_{real_pe_i}", use_container_width=True):
                             st.session_state[f"editing_pe_{real_pe_i}"] = True
                             st.rerun()
-
                     if st.session_state.get(f"editing_pe_{real_pe_i}", False):
-                        with st.container():
-                            ep1, ep2, ep3, ep4 = st.columns([3, 2, 2, 2])
-                            with ep1:
-                                new_label_pe = st.text_input("Nom / Point", value=pe['label'], key=f"ep_label_{real_pe_i}")
-                            with ep2:
-                                oper_list_pe = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
-                                cur_oper = pe.get('operateur','')
-                                oper_opts = ['— Sélectionner —'] + oper_list_pe
-                                oper_idx = next((i+1 for i,o in enumerate(oper_list_pe) if o.startswith(cur_oper)), 0)
-                                new_oper_pe = st.selectbox("Opérateur", oper_opts, index=oper_idx, key=f"ep_oper_{real_pe_i}")
-                            with ep3:
-                                new_date_pe = st.date_input("Date prél.", value=datetime.fromisoformat(pe['date']).date() if pe.get('date') else datetime.today().date(), key=f"ep_date_{real_pe_i}")
-                            with ep4:
-                                gelose_opts_pe = ["Gélose de sédimentation","Gélose contact (RODAC)","Gélose TSA","Gélose Columbia","Ecouvillonnage","Autre"]
-                                cur_g = pe.get('gelose','—')
-                                if cur_g not in gelose_opts_pe: gelose_opts_pe.append(cur_g)
-                                g_idx = gelose_opts_pe.index(cur_g) if cur_g in gelose_opts_pe else 0
-                                new_gelose_pe = st.selectbox("Gélose", gelose_opts_pe, index=g_idx, key=f"ep_gelose_{real_pe_i}")
-                            epc1, epc2 = st.columns(2)
-                            with epc1:
-                                if st.button("✅ Enregistrer", key=f"ep_save_{real_pe_i}", use_container_width=True):
-                                    st.session_state.prelevements[real_pe_i]['label'] = new_label_pe
-                                    st.session_state.prelevements[real_pe_i]['operateur'] = new_oper_pe if new_oper_pe != '— Sélectionner —' else cur_oper
-                                    st.session_state.prelevements[real_pe_i]['date'] = str(new_date_pe)
-                                    st.session_state.prelevements[real_pe_i]['gelose'] = new_gelose_pe
-                                    for sch in st.session_state.schedules:
-                                        if sch['sample_id'] == pe['id']:
-                                            days_offset = 2 if sch['when'] == 'J2' else 7
-                                            sch['due_date'] = (new_date_pe + timedelta(days=days_offset)).isoformat()
-                                    save_prelevements(st.session_state.prelevements)
-                                    save_schedules(st.session_state.schedules)
-                                    st.session_state[f"editing_pe_{real_pe_i}"] = False
-                                    st.success(f"✅ Prélèvement mis à jour — lectures J2/J7 recalculées.")
-                                    st.rerun()
-                            with epc2:
-                                if st.button("Annuler", key=f"ep_cancel_{real_pe_i}", use_container_width=True):
-                                    st.session_state[f"editing_pe_{real_pe_i}"] = False
-                                    st.rerun()
-
+                        ep1, ep2, ep3 = st.columns([3, 2, 2])
+                        with ep1:
+                            new_label_pe = st.text_input("Nom / Point", value=pe['label'], key=f"ep_label_{real_pe_i}")
+                        with ep2:
+                            oper_list_pe = [o['nom'] for o in st.session_state.operators]
+                            cur_oper = pe.get('operateur','')
+                            oper_opts = ['— Sélectionner —'] + oper_list_pe
+                            oper_idx = next((i+1 for i,o in enumerate(oper_list_pe) if o == cur_oper), 0)
+                            new_oper_pe = st.selectbox("Opérateur", oper_opts, index=oper_idx, key=f"ep_oper_{real_pe_i}")
+                        with ep3:
+                            new_date_pe = st.date_input("Date prél.", value=datetime.fromisoformat(pe['date']).date() if pe.get('date') else datetime.today().date(), key=f"ep_date_{real_pe_i}")
+                        epc1, epc2 = st.columns(2)
+                        with epc1:
+                            if st.button("✅ Enregistrer", key=f"ep_save_{real_pe_i}", use_container_width=True):
+                                st.session_state.prelevements[real_pe_i]['label'] = new_label_pe
+                                st.session_state.prelevements[real_pe_i]['operateur'] = new_oper_pe if new_oper_pe != '— Sélectionner —' else cur_oper
+                                st.session_state.prelevements[real_pe_i]['date'] = str(new_date_pe)
+                                new_j2 = next_working_day_offset(new_date_pe, 2)
+                                new_j7 = next_working_day_offset(new_date_pe, 5)
+                                for sch in st.session_state.schedules:
+                                    if sch['sample_id'] == pe['id']:
+                                        sch['due_date'] = new_j2.isoformat() if sch['when'] == 'J2' else new_j7.isoformat()
+                                save_prelevements(st.session_state.prelevements)
+                                save_schedules(st.session_state.schedules)
+                                st.session_state[f"editing_pe_{real_pe_i}"] = False
+                                st.success(f"✅ Mis à jour — J2: {new_j2.strftime('%d/%m/%Y')} | J7: {new_j7.strftime('%d/%m/%Y')} (jours ouvrés)")
+                                st.rerun()
+                        with epc2:
+                            if st.button("Annuler", key=f"ep_cancel_{real_pe_i}", use_container_width=True):
+                                st.session_state[f"editing_pe_{real_pe_i}"] = False
+                                st.rerun()
             st.divider()
-            st.markdown("##### ➕ Ajouter un prélèvement manuellement")
-            if not st.session_state.points:
-                st.warning("Aucun point de prélèvement. Ajoutez-en dans Paramètres.")
-            else:
+            st.markdown("##### ➕ Ajouter un prélèvement")
+            if st.session_state.points:
                 ap1, ap2, ap3 = st.columns([3, 2, 2])
                 with ap1:
-                    ap_point_labels = [f"{pt['label']} — {pt.get('type','?')}" for pt in st.session_state.points]
-                    ap_sel = st.selectbox("Point de prélèvement", range(len(ap_point_labels)), format_func=lambda i: ap_point_labels[i], key="ap_point_sel")
+                    ap_labels = [f"{pt['label']} — {pt.get('type','?')}" for pt in st.session_state.points]
+                    ap_sel = st.selectbox("Point", range(len(ap_labels)), format_func=lambda i: ap_labels[i], key="ap_point_sel")
                     ap_point = st.session_state.points[ap_sel]
                 with ap2:
-                    oper_list_ap = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
+                    oper_list_ap = [o['nom'] for o in st.session_state.operators]
                     ap_oper = st.selectbox("Opérateur", ['— Sélectionner —'] + oper_list_ap, key="ap_oper_sel")
                 with ap3:
-                    ap_date = st.date_input("Date du prélèvement", value=datetime.today().date(), key="ap_date_sel")
-                if st.button("➕ Ajouter au planning", use_container_width=True, key="ap_add_btn"):
+                    ap_date = st.date_input("Date", value=datetime.today().date(), key="ap_date_sel")
+                if st.button("➕ Ajouter", use_container_width=True, key="ap_add_btn"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                    j2_d_new = next_working_day_offset(ap_date, 2)
+                    j7_d_new = next_working_day_offset(ap_date, 5)
                     new_pe = {"id": pid, "label": ap_point['label'], "type": ap_point.get('type'), "gelose": ap_point.get('gelose','—'), "room_class": ap_point.get('room_class'), "operateur": ap_oper if ap_oper != '— Sélectionner —' else '', "date": str(ap_date), "archived": False}
                     st.session_state.prelevements.append(new_pe)
-                    j2_d = (ap_date + timedelta(days=2)).isoformat()
-                    j7_d = (ap_date + timedelta(days=7)).isoformat()
-                    st.session_state.schedules.append({"id": f"sch_{pid}_J2", "sample_id": pid, "label": ap_point['label'], "due_date": j2_d, "when": "J2", "status": "pending"})
-                    st.session_state.schedules.append({"id": f"sch_{pid}_J7", "sample_id": pid, "label": ap_point['label'], "due_date": j7_d, "when": "J7", "status": "pending"})
+                    st.session_state.schedules.append({"id": f"sch_{pid}_J2", "sample_id": pid, "label": ap_point['label'], "due_date": j2_d_new.isoformat(), "when": "J2", "status": "pending"})
+                    st.session_state.schedules.append({"id": f"sch_{pid}_J7", "sample_id": pid, "label": ap_point['label'], "due_date": j7_d_new.isoformat(), "when": "J7", "status": "pending"})
                     save_prelevements(st.session_state.prelevements)
                     save_schedules(st.session_state.schedules)
-                    st.success(f"✅ Prélèvement ajouté — J2 le {j2_d[:10]}, J7 le {j7_d[:10]}")
+                    st.success(f"✅ Ajouté — J2 le {j2_d_new.strftime('%d/%m/%Y')} | J7 le {j7_d_new.strftime('%d/%m/%Y')} (jours ouvrés)")
                     st.rerun()
-
         with edit_sub2:
-            st.markdown("##### 📖 Lectures planifiées")
             pending_schs = [s for s in st.session_state.schedules if s['status'] == 'pending']
             if not pending_schs:
-                st.info("Aucune lecture planifiée en attente.")
+                st.info("Aucune lecture en attente.")
             else:
                 for sh_i, sh in enumerate(pending_schs):
                     real_sh_i = st.session_state.schedules.index(sh)
                     sh_date = datetime.fromisoformat(sh['due_date']).date()
                     is_sh_overdue = sh_date < _today_dt
-                    samp_sh = next((p for p in st.session_state.prelevements if p['id'] == sh['sample_id']), None)
                     badge_col = "#d97706" if sh['when']=='J2' else "#0369a1"
-                    overdue_badge = ' <span style="background:#ef4444;color:#fff;font-size:.55rem;padding:1px 6px;border-radius:6px">EN RETARD</span>' if is_sh_overdue else ''
                     sh_col1, sh_col2, sh_col3 = st.columns([5, 1, 1])
                     with sh_col1:
+                        overdue_badge = ' <span style="background:#ef4444;color:#fff;font-size:.55rem;padding:1px 6px;border-radius:6px">EN RETARD</span>' if is_sh_overdue else ''
                         st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
                           <span style="background:{badge_col};color:#fff;font-size:.6rem;padding:2px 8px;border-radius:5px;font-weight:700">{sh['when']}</span>
                           <span style="font-weight:700;color:#0f172a;font-size:.82rem">{sh['label']}</span>
                           <span style="color:#475569;font-size:.75rem">📅 {sh_date.strftime('%d/%m/%Y')}</span>
                           {overdue_badge}
-                          <span style="color:#475569;font-size:.72rem;margin-left:auto">Oper. {samp_sh.get('operateur','—') if samp_sh else '—'}</span>
                         </div>""", unsafe_allow_html=True)
                     with sh_col2:
-                        if st.button("✏️", key=f"edit_sh_{real_sh_i}", use_container_width=True, help="Modifier la date"):
+                        if st.button("✏️", key=f"edit_sh_{real_sh_i}", use_container_width=True):
                             st.session_state[f"editing_sh_{real_sh_i}"] = True
                             st.rerun()
                     with sh_col3:
-                        if st.button("🗑️", key=f"del_sh_edit_{real_sh_i}", use_container_width=True, help="Supprimer"):
+                        if st.button("🗑️", key=f"del_sh_edit_{real_sh_i}", use_container_width=True):
                             st.session_state.schedules.pop(real_sh_i)
                             save_schedules(st.session_state.schedules)
-                            st.success("Lecture supprimée.")
                             st.rerun()
-
                     if st.session_state.get(f"editing_sh_{real_sh_i}", False):
-                        with st.container():
-                            new_sh_date = st.date_input("Nouvelle date de lecture", value=sh_date, key=f"sh_date_{real_sh_i}")
-                            sc1, sc2 = st.columns(2)
-                            with sc1:
-                                if st.button("✅ Enregistrer", key=f"sh_save_{real_sh_i}", use_container_width=True):
-                                    st.session_state.schedules[real_sh_i]['due_date'] = new_sh_date.isoformat()
-                                    save_schedules(st.session_state.schedules)
-                                    st.session_state[f"editing_sh_{real_sh_i}"] = False
-                                    st.success(f"✅ Date mise à jour : {new_sh_date}")
-                                    st.rerun()
-                            with sc2:
-                                if st.button("Annuler", key=f"sh_cancel_{real_sh_i}", use_container_width=True):
-                                    st.session_state[f"editing_sh_{real_sh_i}"] = False
-                                    st.rerun()
-    # ═══════════════ EXPORT EXCEL ═══════════════
+                        new_sh_date = st.date_input("Nouvelle date", value=sh_date, key=f"sh_date_{real_sh_i}")
+                        sc1, sc2 = st.columns(2)
+                        with sc1:
+                            if st.button("✅ Enregistrer", key=f"sh_save_{real_sh_i}", use_container_width=True):
+                                st.session_state.schedules[real_sh_i]['due_date'] = new_sh_date.isoformat()
+                                save_schedules(st.session_state.schedules)
+                                st.session_state[f"editing_sh_{real_sh_i}"] = False
+                                st.rerun()
+                        with sc2:
+                            if st.button("Annuler", key=f"sh_cancel_{real_sh_i}", use_container_width=True):
+                                st.session_state[f"editing_sh_{real_sh_i}"] = False
+                                st.rerun()
+
+    with plan_tab_charge:
+        st.markdown("### 📊 Charge hebdomadaire — Préleveurs & Points")
+
+        # ── Sélection de la semaine ────────────────────────────────────────────
+        ch_ws_set = set()
+        ch_ws_set.add(get_week_start(_today_dt))
+        for _p in st.session_state.prelevements:
+            try: ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
+            except: pass
+        for _i in range(1, 9):
+            ch_ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
+        ch_week_starts = sorted(ch_ws_set)
+        ch_week_labels = [fmt_week(ws) for ws in ch_week_starts]
+        ch_cur_idx = 0
+        for _i, _ws in enumerate(ch_week_starts):
+            if _ws <= _today_dt < _ws + timedelta(days=7):
+                ch_cur_idx = _i
+                break
+
+        csel_col1, csel_col2 = st.columns([3, 1])
+        with csel_col1:
+            ch_sel_label = st.selectbox("Semaine", ch_week_labels, index=ch_cur_idx, label_visibility="collapsed", key="ch_week_sel")
+        with csel_col2:
+            nb_preleveurs = st.number_input("Nb préleveurs", min_value=1, max_value=20, value=max(1, len(st.session_state.operators)), step=1, key="ch_nb_prev",
+                help="Nombre de préleveurs disponibles cette semaine")
+
+        ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
+        ch_sel_we = ch_sel_ws + timedelta(days=6)
+        ch_holidays = get_holidays_cached(ch_sel_ws.year)
+
+        # ── Calcul des jours ouvrés de la semaine ─────────────────────────────
+        ch_working_days = [ch_sel_ws + timedelta(days=i) for i in range(5)
+                           if (ch_sel_ws + timedelta(days=i)) not in ch_holidays]
+        nb_jours = len(ch_working_days)
+
+        # ── Prélèvements planifiés sur la semaine ─────────────────────────────
+        ch_j0 = [p for p in st.session_state.prelevements
+                 if p.get('date') and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
+                 and not p.get('archived', False)]
+        ch_j2 = [s for s in st.session_state.schedules
+                 if s['when'] == 'J2' and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
+        ch_j7 = [s for s in st.session_state.schedules
+                 if s['when'] == 'J7' and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
+
+        total_actes = len(ch_j0) + len(ch_j2) + len(ch_j7)
+        actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
+        actes_par_preleveur = total_actes / nb_preleveurs if nb_preleveurs > 0 else 0
+
+        # ── Bandeau semaine ───────────────────────────────────────────────────
+        st.markdown(f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div style="color:#fff">
+            <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
+            <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">{nb_jours} jour(s) ouvré(s) · {nb_preleveurs} préleveur(s) disponible(s)</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center;min-width:80px">
+              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
+              <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
+            </div>
+            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center;min-width:80px">
+              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
+              <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
+            </div>
+            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center;min-width:80px">
+              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ préleveur</div>
+              <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_preleveur:.1f}</div>
+            </div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── Métriques synthèse ────────────────────────────────────────────────
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("👤 Préleveurs", nb_preleveurs)
+        m2.metric("📍 Points actifs", len(st.session_state.points))
+        m3.metric("🧪 Prélèv. J0", len(ch_j0))
+        m4.metric("📖 Lectures J2", len(ch_j2))
+        m5.metric("📗 Lectures J7", len(ch_j7))
+
+        st.divider()
+
+        # ── Configuration : nb prélèvements attendus par point ────────────────
+        st.markdown("#### 📍 Points de prélèvement — charge par point")
+        if not st.session_state.points:
+            st.info("Aucun point de prélèvement défini. Créez-en dans **Paramètres → Points de prélèvement**.")
+        else:
+            # En-tête tableau
+            st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px;margin-bottom:0">
+              <div style="font-size:.78rem;font-weight:800;color:#fff">Point de prélèvement</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Type</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Classe</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Prévu/sem.</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Réalisé</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Statut</div>
+            </div>""", unsafe_allow_html=True)
+
+            total_prevu = 0
+            total_realise = 0
+
+            for pt_i, pt in enumerate(st.session_state.points):
+                key_freq = f"ch_freq_{pt.get('id', pt_i)}"
+                # Fréquence par défaut selon le type
+                default_freq = 2 if pt.get('type') == 'Air' else 1
+
+                # Prélèvements réalisés sur ce point cette semaine
+                realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
+                # Fréquence configurée (stockée en session)
+                if key_freq not in st.session_state:
+                    st.session_state[key_freq] = default_freq
+                prevu = st.session_state[key_freq]
+
+                # Couleur statut
+                if realise >= prevu:
+                    st_bg = "#f0fdf4"; st_border = "#86efac"; st_txt = "#166534"; st_icon = "✅"; st_label = "Complet"
+                elif realise > 0:
+                    pct = int(realise / prevu * 100)
+                    st_bg = "#fffbeb"; st_border = "#fcd34d"; st_txt = "#92400e"; st_icon = "⏳"; st_label = f"{pct}%"
+                else:
+                    st_bg = "#fef2f2"; st_border = "#fca5a5"; st_txt = "#991b1b"; st_icon = "🔴"; st_label = "0 / " + str(prevu)
+
+                total_prevu += prevu
+                total_realise += realise
+
+                type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
+                row_bg = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
+
+                col_info, col_freq = st.columns([5, 1])
+                with col_info:
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
+                      <div style="font-size:.9rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
+                      <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('type','—')}</div>
+                      <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{prevu}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#0f172a;text-align:center">{realise}</div>
+                      <div style="background:{st_bg};border:1px solid {st_border};border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:{st_txt}">{st_icon} {st_label}</div>
+                    </div>""", unsafe_allow_html=True)
+                with col_freq:
+                    new_freq = st.number_input("Prév.", min_value=0, max_value=7, value=prevu, step=1,
+                        key=f"freq_input_{pt.get('id', pt_i)}", label_visibility="collapsed",
+                        help=f"Nombre de prélèvements prévus par semaine pour {pt['label']}")
+                    if new_freq != prevu:
+                        st.session_state[key_freq] = new_freq
+                        st.rerun()
+
+            # ── Pied de tableau total ─────────────────────────────────────────
+            taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
+            taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
+            st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center">
+              <div style="font-size:.9rem;font-weight:800;color:#fff">TOTAL SEMAINE</div>
+              <div></div><div></div>
+              <div style="font-size:1.1rem;font-weight:900;color:#93c5fd;text-align:center">{total_prevu}</div>
+              <div style="font-size:1.1rem;font-weight:900;color:#86efac;text-align:center">{total_realise}</div>
+              <div style="background:rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;text-align:center;font-size:.9rem;font-weight:800;color:{taux_col}">{taux}% réalisé</div>
+            </div>""", unsafe_allow_html=True)
+
+            st.divider()
+
+            # ── Répartition par préleveur ─────────────────────────────────────
+            st.markdown("#### 👤 Répartition par préleveur")
+            if not st.session_state.operators:
+                st.info("Aucun opérateur enregistré — ajoutez-en dans **Paramètres → Opérateurs**.")
+            else:
+                ops_cols = st.columns(min(len(st.session_state.operators), 4))
+                for oi, op in enumerate(st.session_state.operators):
+                    op_nom = op.get('nom', '?')
+                    op_actes = sum(1 for p in ch_j0 if (p.get('operateur') or '').startswith(op_nom.split()[0]))
+                    op_j2 = sum(1 for s in ch_j2 if True)  # lectures J2 non filtrées par opérateur
+                    with ops_cols[oi % len(ops_cols)]:
+                        charge_color = "#22c55e" if op_actes >= (total_prevu // max(nb_preleveurs, 1)) else "#f59e0b"
+                        st.markdown(f"""<div style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;height:100%">
+                          <div style="background:#2563eb;color:#fff;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;margin:0 auto 10px auto">{op_nom[0].upper()}</div>
+                          <div style="font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:4px">{op_nom}</div>
+                          <div style="font-size:.72rem;color:#64748b;margin-bottom:10px">{op.get('profession','')[:28]}</div>
+                          <div style="font-size:2rem;font-weight:900;color:{charge_color}">{op_actes}</div>
+                          <div style="font-size:.72rem;color:#64748b">prélèvement(s) réalisé(s)</div>
+                        </div>""", unsafe_allow_html=True)
+
+            st.divider()
+
+            # ── Répartition par jour de la semaine ────────────────────────────
+            st.markdown("#### 📅 Charge par jour ouvré")
+            JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
+            day_cols = st.columns(nb_jours if nb_jours > 0 else 1)
+            for di, wd in enumerate(ch_working_days):
+                dj0 = sum(1 for p in ch_j0 if datetime.fromisoformat(p['date']).date() == wd)
+                dj2 = sum(1 for s in ch_j2 if datetime.fromisoformat(s['due_date']).date() == wd)
+                dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
+                d_total = dj0 + dj2 + dj7
+                is_today_d = wd == _today_dt
+                bg = "#eff6ff" if is_today_d else "#f8fafc"
+                border = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
+                with day_cols[di]:
+                    st.markdown(f"""<div style="background:{bg};border:{border};border-radius:12px;padding:14px;text-align:center">
+                      <div style="font-size:.82rem;font-weight:800;color:{'#1e40af' if is_today_d else '#475569'}">{JOURS_FR2[wd.weekday()]}</div>
+                      <div style="font-size:.75rem;color:#94a3b8;margin-bottom:10px">{wd.strftime('%d/%m')}</div>
+                      <div style="font-size:2.2rem;font-weight:900;color:#0f172a">{d_total}</div>
+                      <div style="font-size:.7rem;color:#94a3b8;margin-top:4px">acte(s)</div>
+                      <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
+                        {'<div style="background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">🧪 '+str(dj0)+' J0</div>' if dj0 else ''}
+                        {'<div style="background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">📖 '+str(dj2)+' J2</div>' if dj2 else ''}
+                        {'<div style="background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">📗 '+str(dj7)+' J7</div>' if dj7 else ''}
+                        {'<div style="font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px">Rien de planifié</div>' if d_total == 0 else ''}
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
-        exp_week_label = st.selectbox("📆 Choisir la période", ["Semaine en cours", "4 semaines à venir", "Tout le planning (toutes les semaines)"], key="exp_scope")
-        exp_oper_filter = st.selectbox("Filtrer par opérateur (optionnel)", ["Tous les opérateurs"] + [o['nom'] for o in st.session_state.operators], key="exp_oper")
-
-        if st.button("📊 Générer le fichier Excel", use_container_width=True, key="gen_xlsx"):
+        exp_scope = st.selectbox("Période", ["Mois en cours", "4 semaines à venir", "Tout le planning"], key="exp_scope")
+        exp_oper_filter = st.selectbox("Filtrer par opérateur", ["Tous"] + [o['nom'] for o in st.session_state.operators], key="exp_oper")
+        only_working = st.checkbox("Inclure uniquement les jours ouvrés", value=True)
+        if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, GradientFill
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
             import io as _io
-
             wb = openpyxl.Workbook()
-
-            # ---- couleurs ----
-            C_BLUE_DARK  = "1E40AF"
-            C_BLUE_MID   = "2563EB"
-            C_BLUE_LIGHT = "DBEAFE"
-            C_PURPLE     = "7C3AED"
-            C_PURPLE_LIGHT = "F5F3FF"
-            C_YELLOW     = "D97706"
-            C_YELLOW_LIGHT = "FFFBEB"
-            C_TEAL       = "0369A1"
-            C_TEAL_LIGHT = "EFF6FF"
-            C_GREEN      = "16A34A"
-            C_RED        = "DC2626"
-            C_GREY       = "F8FAFC"
-            C_GREY_MID   = "E2E8F0"
-            C_WHITE      = "FFFFFF"
-            C_TEXT       = "0F172A"
-
-            thin = Side(style="thin", color=C_GREY_MID)
-            border_cell = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-            def hdr_font(size=11, bold=True, color=C_WHITE):
-                return Font(name="Arial", size=size, bold=bold, color=color)
-
-            def cell_font(size=10, bold=False, color=C_TEXT):
-                return Font(name="Arial", size=size, bold=bold, color=color)
-
-            def fill(hex_col):
-                return PatternFill("solid", fgColor=hex_col)
-
-            def center():
-                return Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-            def left():
-                return Alignment(horizontal="left", vertical="center", wrap_text=True)
-
-            # --- Determine date range ---
-            exp_today = datetime.today().date()
-            if exp_week_label == "Semaine en cours":
-                exp_start = exp_today - timedelta(days=exp_today.weekday())
-                exp_end = exp_start + timedelta(days=6)
-                exp_dates = [exp_start + timedelta(days=i) for i in range(7)]
-            elif exp_week_label == "4 semaines à venir":
-                exp_start = exp_today - timedelta(days=exp_today.weekday())
-                exp_end = exp_start + timedelta(weeks=4, days=6)
-                exp_dates = [exp_start + timedelta(days=i) for i in range(28)]
+            C_BLUE="1E40AF";C_BLUE2="2563EB";C_BLUE_L="DBEAFE"
+            C_PURPLE_L="F5F3FF";C_YELLOW_L="FFFBEB";C_TEAL_L="EFF6FF"
+            C_WHITE="FFFFFF";C_TEXT="0F172A";C_GREY="F8FAFC"
+            C_PURPLE="7C3AED";C_YELLOW="D97706";C_TEAL="0369A1"
+            C_GREEN="16A34A";C_RED="DC2626"
+            thin=Side(style="thin",color="E2E8F0")
+            border=Border(left=thin,right=thin,top=thin,bottom=thin)
+            def fill(h): return PatternFill("solid",fgColor=h)
+            def font(size=10,bold=False,color=C_TEXT): return Font(name="Arial",size=size,bold=bold,color=color)
+            def al_c(): return Alignment(horizontal="center",vertical="center",wrap_text=True)
+            def al_l(): return Alignment(horizontal="left",vertical="center",wrap_text=True)
+            exp_today=_today_dt
+            if exp_scope=="Mois en cours":
+                first=exp_today.replace(day=1)
+                last=exp_today.replace(day=cal_module.monthrange(exp_today.year,exp_today.month)[1])
+                exp_dates=[first+timedelta(days=i) for i in range((last-first).days+1)]
+            elif exp_scope=="4 semaines à venir":
+                ws=exp_today-timedelta(days=exp_today.weekday())
+                exp_dates=[ws+timedelta(days=i) for i in range(28)]
             else:
-                all_d = []
+                all_d=[]
                 for p in st.session_state.prelevements:
                     try: all_d.append(datetime.fromisoformat(p["date"]).date())
                     except: pass
@@ -1877,235 +2083,126 @@ elif active == "planning":
                     try: all_d.append(datetime.fromisoformat(s["due_date"]).date())
                     except: pass
                 if all_d:
-                    exp_start = min(all_d)
-                    exp_end = max(all_d)
-                    exp_dates = [exp_start + timedelta(days=i) for i in range((exp_end - exp_start).days + 1)]
+                    exp_dates=[min(all_d)+timedelta(days=i) for i in range((max(all_d)-min(all_d)).days+1)]
                 else:
-                    exp_start = exp_today
-                    exp_end = exp_today + timedelta(days=6)
-                    exp_dates = [exp_start + timedelta(days=i) for i in range(7)]
-
-            # ---- SHEET 1 : Vue chronologique ----
-            ws1 = wb.active
-            ws1.title = "Planning chronologique"
-            ws1.sheet_view.showGridLines = False
-
-            # Titre
-            ws1.merge_cells("A1:G1")
-            ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
-            ws1["A1"].font = Font(name="Arial", size=14, bold=True, color=C_WHITE)
-            ws1["A1"].fill = fill(C_BLUE_DARK)
-            ws1["A1"].alignment = center()
-            ws1.row_dimensions[1].height = 30
-
-            ws1.merge_cells("A2:G2")
-            ws1["A2"] = f"Généré le {exp_today.strftime('%d/%m/%Y')} — Période : {exp_start.strftime('%d/%m/%Y')} au {exp_end.strftime('%d/%m/%Y')}"
-            ws1["A2"].font = Font(name="Arial", size=9, color="475569")
-            ws1["A2"].fill = fill(C_BLUE_LIGHT)
-            ws1["A2"].alignment = center()
-            ws1.row_dimensions[2].height = 18
-
-            # En-têtes colonnes
-            headers = ["Date", "Jour", "Type d'activité", "Point de prélèvement", "Classe", "Gélose", "Opérateur", "Statut"]
-            col_widths = [14, 12, 22, 30, 10, 30, 25, 14]
-            hdr_fills = [C_BLUE_MID]*8
-
-            for col_i, (h, w) in enumerate(zip(headers, col_widths), start=1):
-                c = ws1.cell(row=4, column=col_i, value=h)
-                c.font = hdr_font(10)
-                c.fill = fill(C_BLUE_MID)
-                c.alignment = center()
-                c.border = border_cell
-                ws1.column_dimensions[get_column_letter(col_i)].width = w
-
-            ws1.row_dimensions[4].height = 22
-            ws1.freeze_panes = "A5"
-
-            row = 5
-            JOURS_FR_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-
+                    exp_dates=[exp_today+timedelta(days=i) for i in range(7)]
+            if only_working:
+                exp_dates=[d for d in exp_dates if is_working_day(d)]
+            ws1=wb.active;ws1.title="Planning";ws1.sheet_view.showGridLines=False
+            ws1.merge_cells("A1:H1");ws1["A1"]="PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
+            ws1["A1"].font=Font(name="Arial",size=14,bold=True,color=C_WHITE)
+            ws1["A1"].fill=fill(C_BLUE);ws1["A1"].alignment=al_c();ws1.row_dimensions[1].height=30
+            ws1.merge_cells("A2:H2")
+            ws1["A2"]=f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement" if only_working else f"Généré le {exp_today.strftime('%d/%m/%Y')}"
+            ws1["A2"].font=Font(name="Arial",size=9,color="475569");ws1["A2"].fill=fill(C_BLUE_L);ws1["A2"].alignment=al_c();ws1.row_dimensions[2].height=18
+            headers=["Date","Jour","Férié","Type","Point de prélèvement","Classe","Gélose","Opérateur","Statut"]
+            col_widths=[14,12,10,22,32,10,28,25,14]
+            for ci,(h,w) in enumerate(zip(headers,col_widths),start=1):
+                c=ws1.cell(row=4,column=ci,value=h)
+                c.font=Font(name="Arial",size=10,bold=True,color=C_WHITE)
+                c.fill=fill(C_BLUE2);c.alignment=al_c();c.border=border
+                ws1.column_dimensions[get_column_letter(ci)].width=w
+            ws1.row_dimensions[4].height=22;ws1.freeze_panes="A5"
+            JOURS_XL=["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+            row=5
             for d in exp_dates:
-                jour_nom_xl = JOURS_FR_XL[d.weekday()]
-                is_wk = d.weekday() >= 5
-                day_bg = "FEF9C3" if is_wk else C_WHITE
-
-                # Prélèvements
-                day_prelevs = [p for p in st.session_state.prelevements
-                    if p.get('date') and datetime.fromisoformat(p['date']).date() == d
-                    and not p.get('archived', False)
-                    and (exp_oper_filter == "Tous les opérateurs" or p.get('operateur','').startswith(exp_oper_filter))]
-                # J2
-                day_j2 = [s for s in st.session_state.schedules
-                    if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date() == d
-                    and (exp_oper_filter == "Tous les opérateurs" or
-                         next((p for p in st.session_state.prelevements if p['id']==s['sample_id'] and p.get('operateur','').startswith(exp_oper_filter)), None) is not None)]
-                # J7
-                day_j7 = [s for s in st.session_state.schedules
-                    if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date() == d
-                    and (exp_oper_filter == "Tous les opérateurs" or
-                         next((p for p in st.session_state.prelevements if p['id']==s['sample_id'] and p.get('operateur','').startswith(exp_oper_filter)), None) is not None)]
-
-                if not day_prelevs and not day_j2 and not day_j7:
-                    continue
-
+                holidays_d=get_holidays_cached(d.year)
+                is_h=d in holidays_d
+                day_prelevs=[p for p in st.session_state.prelevements
+                    if p.get('date') and datetime.fromisoformat(p['date']).date()==d and not p.get('archived',False)
+                    and (exp_oper_filter=="Tous" or p.get('operateur','').startswith(exp_oper_filter))]
+                day_j2=[s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date()==d]
+                day_j7=[s for s in st.session_state.schedules if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date()==d]
+                if not day_prelevs and not day_j2 and not day_j7: continue
                 for p in day_prelevs:
-                    row_data = [d.strftime('%d/%m/%Y'), jour_nom_xl, "Prélèvement", p['label'], p.get('room_class','—'), p.get('gelose','—'), p.get('operateur','—'), "🧪 À réaliser"]
-                    for col_i, val in enumerate(row_data, start=1):
-                        c = ws1.cell(row=row, column=col_i, value=val)
-                        c.font = cell_font(color=C_TEXT if col_i > 1 else C_TEXT, bold=(col_i==4))
-                        c.fill = fill(C_PURPLE_LIGHT)
-                        c.alignment = left()
-                        c.border = border_cell
-                    ws1.cell(row=row, column=3).font = Font(name="Arial", size=10, bold=True, color=C_PURPLE)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
-
+                    rd=[d.strftime('%d/%m/%Y'),JOURS_XL[d.weekday()],"Oui" if is_h else "","Prélèvement J0",p['label'],p.get('room_class','—'),p.get('gelose','—'),p.get('operateur','—'),"🧪 À réaliser"]
+                    for ci,val in enumerate(rd,1):
+                        c=ws1.cell(row=row,column=ci,value=val);c.fill=fill(C_PURPLE_L);c.alignment=al_l();c.border=border;c.font=font()
+                    ws1.cell(row=row,column=4).font=Font(name="Arial",size=10,bold=True,color=C_PURPLE)
+                    ws1.row_dimensions[row].height=18;row+=1
                 for sch in day_j2:
-                    samp_xl = next((p for p in st.session_state.prelevements if p['id']==sch['sample_id']), None)
-                    is_done = sch['status']=='done'
-                    status_txt = "✅ Faite" if is_done else "⏳ À faire"
-                    row_data = [d.strftime('%d/%m/%Y'), jour_nom_xl, "Lecture J2", sch['label'], samp_xl.get('room_class','—') if samp_xl else '—', samp_xl.get('gelose','—') if samp_xl else '—', samp_xl.get('operateur','—') if samp_xl else '—', status_txt]
-                    for col_i, val in enumerate(row_data, start=1):
-                        c = ws1.cell(row=row, column=col_i, value=val)
-                        c.fill = fill(C_YELLOW_LIGHT)
-                        c.alignment = left()
-                        c.border = border_cell
-                        c.font = cell_font()
-                    ws1.cell(row=row, column=3).font = Font(name="Arial", size=10, bold=True, color=C_YELLOW)
-                    ws1.cell(row=row, column=8).font = Font(name="Arial", size=10, bold=True, color=C_GREEN if is_done else C_YELLOW)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
-
+                    samp=next((p for p in st.session_state.prelevements if p['id']==sch['sample_id']),None)
+                    is_done=sch['status']=='done';rd=[d.strftime('%d/%m/%Y'),JOURS_XL[d.weekday()],"Oui" if is_h else "","Lecture J2",sch['label'],samp.get('room_class','—') if samp else '—',samp.get('gelose','—') if samp else '—',samp.get('operateur','—') if samp else '—',"✅ Faite" if is_done else "⏳ À faire"]
+                    for ci,val in enumerate(rd,1):
+                        c=ws1.cell(row=row,column=ci,value=val);c.fill=fill(C_YELLOW_L);c.alignment=al_l();c.border=border;c.font=font()
+                    ws1.cell(row=row,column=4).font=Font(name="Arial",size=10,bold=True,color=C_YELLOW)
+                    ws1.cell(row=row,column=9).font=Font(name="Arial",size=10,bold=True,color=C_GREEN if is_done else C_YELLOW)
+                    ws1.row_dimensions[row].height=18;row+=1
                 for sch in day_j7:
-                    samp_xl = next((p for p in st.session_state.prelevements if p['id']==sch['sample_id']), None)
-                    is_done = sch['status']=='done'
-                    status_txt = "✅ Faite" if is_done else "⏳ À faire"
-                    row_data = [d.strftime('%d/%m/%Y'), jour_nom_xl, "Lecture J7", sch['label'], samp_xl.get('room_class','—') if samp_xl else '—', samp_xl.get('gelose','—') if samp_xl else '—', samp_xl.get('operateur','—') if samp_xl else '—', status_txt]
-                    for col_i, val in enumerate(row_data, start=1):
-                        c = ws1.cell(row=row, column=col_i, value=val)
-                        c.fill = fill(C_TEAL_LIGHT)
-                        c.alignment = left()
-                        c.border = border_cell
-                        c.font = cell_font()
-                    ws1.cell(row=row, column=3).font = Font(name="Arial", size=10, bold=True, color=C_TEAL)
-                    ws1.cell(row=row, column=8).font = Font(name="Arial", size=10, bold=True, color=C_GREEN if is_done else C_TEAL)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
+                    samp=next((p for p in st.session_state.prelevements if p['id']==sch['sample_id']),None)
+                    is_done=sch['status']=='done';rd=[d.strftime('%d/%m/%Y'),JOURS_XL[d.weekday()],"Oui" if is_h else "","Lecture J7",sch['label'],samp.get('room_class','—') if samp else '—',samp.get('gelose','—') if samp else '—',samp.get('operateur','—') if samp else '—',"✅ Faite" if is_done else "⏳ À faire"]
+                    for ci,val in enumerate(rd,1):
+                        c=ws1.cell(row=row,column=ci,value=val);c.fill=fill(C_TEAL_L);c.alignment=al_l();c.border=border;c.font=font()
+                    ws1.cell(row=row,column=4).font=Font(name="Arial",size=10,bold=True,color=C_TEAL)
+                    ws1.cell(row=row,column=9).font=Font(name="Arial",size=10,bold=True,color=C_GREEN if is_done else C_TEAL)
+                    ws1.row_dimensions[row].height=18;row+=1
+            buf=_io.BytesIO();wb.save(buf);buf.seek(0)
+            fname=f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
+            st.download_button("⬇️ Télécharger le planning Excel",data=buf.getvalue(),file_name=fname,mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
+            st.success(f"✅ Fichier **{fname}** généré avec jours ouvrés uniquement")
 
-            # Total row
-            ws1.cell(row=row, column=1, value=f"TOTAL LIGNES : {row - 5}").font = Font(name="Arial", size=9, bold=True, color="64748B")
 
-            # ---- SHEET 2 : Vue par opérateur ----
-            ws2 = wb.create_sheet("Par opérateur")
-            ws2.sheet_view.showGridLines = False
-            ws2.merge_cells("A1:F1")
-            ws2["A1"] = "PLANNING PAR OPÉRATEUR"
-            ws2["A1"].font = Font(name="Arial", size=13, bold=True, color=C_WHITE)
-            ws2["A1"].fill = fill(C_BLUE_DARK)
-            ws2["A1"].alignment = center()
-            ws2.row_dimensions[1].height = 28
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4 : PLAN URC
+# ═══════════════════════════════════════════════════════════════════════════════
+elif active == "plan":
+    st.markdown("#### 🗺️ Plan URC interactif — placement des prélèvements")
+    uploaded = st.file_uploader("Uploader le plan URC (PNG, JPG ou PDF)", type=["png","jpg","jpeg","pdf"], key="plan_upload_main")
+    if uploaded:
+        raw = uploaded.read()
+        if uploaded.type == "application/pdf":
+            pdf_b64 = base64.b64encode(raw).decode()
+            surv_points = [{"label": r["prelevement"], "germ": r["germ_match"], "ufc": r["ufc"], "date": r["date"], "status": r["status"]} for r in st.session_state.surveillance]
+            surv_json = json.dumps(surv_points, ensure_ascii=False)
+            pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
+            st.info("Plan PDF chargé — utilisez l'interface ci-dessous pour placer les points.")
+        else:
+            img_data = base64.b64encode(raw).decode()
+            st.session_state.map_image = f"data:{uploaded.type};base64,{img_data}"
 
-            col_w2 = [25, 14, 12, 22, 30, 30]
-            hdrs2 = ["Opérateur", "Date", "Jour", "Type", "Point", "Gélose"]
-            for ci, (h, w) in enumerate(zip(hdrs2, col_w2), start=1):
-                c = ws2.cell(row=3, column=ci, value=h)
-                c.font = hdr_font(10)
-                c.fill = fill(C_BLUE_MID)
-                c.alignment = center()
-                c.border = border_cell
-                ws2.column_dimensions[get_column_letter(ci)].width = w
-            ws2.row_dimensions[3].height = 20
-            ws2.freeze_panes = "A4"
+    if st.session_state.map_image and (not uploaded or uploaded.type != "application/pdf"):
+        surv_points = [{"label": r["prelevement"], "germ": r["germ_match"], "ufc": r["ufc"], "date": r["date"], "status": r["status"]} for r in st.session_state.surveillance]
+        surv_json = json.dumps(surv_points, ensure_ascii=False)
+        pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
+        map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:80vh;display:flex;flex-direction:column}}
+.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}}
+.toolbar select,.toolbar input,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
+.toolbar button{{cursor:pointer}}.toolbar button:hover,.toolbar button.active{{background:#2563eb;color:#fff}}
+.map-container{{flex:1;overflow:auto;position:relative}}.map-inner{{position:relative;display:inline-block;min-width:100%;min-height:100%}}
+#planImg{{max-width:100%;display:block}}
+.point{{position:absolute;width:24px;height:24px;border-radius:50%;border:2px solid white;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;box-shadow:0 0 10px rgba(0,0,0,.6);transition:transform .2s;z-index:10}}
+.point:hover{{transform:translate(-50%,-50%) scale(1.5)}}.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#0f172a}}
+.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:.72rem;pointer-events:none;z-index:1000;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
+.tooltip.visible{{display:block}}
+</style></head><body>
+<div class="toolbar">
+  <input id="ptLabel" placeholder="Nom du point" style="width:130px">
+  <select id="ptSurv" style="width:200px"><option value="">-- Lier à un prélèvement --</option>{''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}</select>
+  <button id="addBtn" onclick="toggleAddMode()">📍 Placer un point</button>
+  <button onclick="clearLast()">↩️ Annuler dernier</button>
+  <button onclick="clearAll()">🗑️ Tout effacer</button>
+  <span style="font-size:.65rem;color:#94a3b8">✅OK 🟡Alerte 🔴Action</span>
+</div>
+<div class="map-container" id="mapContainer"><div class="map-inner" id="mapInner"><img id="planImg" src="{st.session_state.map_image}" draggable="false"><div id="tooltip" class="tooltip"></div></div></div>
+<script>
+let addMode=false;let points={pts_json};const survData={surv_json};
+function toggleAddMode(){{addMode=!addMode;const btn=document.getElementById('addBtn');btn.classList.toggle('active',addMode);btn.textContent=addMode?'✋ Annuler':'📍 Placer un point';document.getElementById('mapContainer').style.cursor=addMode?'crosshair':'default';}}
+function renderPoints(){{document.querySelectorAll('.point').forEach(p=>p.remove());const img=document.getElementById('planImg');if(!img)return;const inner=document.getElementById('mapInner');points.forEach((pt,i)=>{{const surv=survData.find(s=>s.label===(pt.survLabel||pt.label));const status=surv?surv.status:'none';const div=document.createElement('div');div.className=`point ${{status}}`;div.style.left=pt.x+'%';div.style.top=pt.y+'%';div.textContent=i+1;div.addEventListener('mouseenter',e=>showTip(e,pt,surv));div.addEventListener('mouseleave',hideTip);inner.appendChild(div);}});}}
+function showTip(e,pt,surv){{const t=document.getElementById('tooltip');t.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${{pt.label}}</div>`+(surv?`<div>Germe : <i>${{surv.germ}}</i></div><div>UFC : <b>${{surv.ufc}}</b></div><div>Date : ${{surv.date}}</div>`:'<div>Non lié</div>');t.style.left=(e.clientX+15)+'px';t.style.top=(e.clientY-10)+'px';t.classList.add('visible');}}
+function hideTip(){{document.getElementById('tooltip').classList.remove('visible');}}
+function clearLast(){{if(points.length>0){{points.pop();renderPoints();}}}}
+function clearAll(){{if(confirm('Effacer tous les points ?')){{points=[];renderPoints();}}}}
+document.getElementById('mapInner').addEventListener('click',function(e){{if(!addMode)return;const img=document.getElementById('planImg');if(!img)return;const rect=img.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;const x=((e.clientX-rect.left)/rect.width*100);const y=((e.clientY-rect.top)/rect.height*100);const label=document.getElementById('ptLabel').value||`Point ${{points.length+1}}`;const survLabel=document.getElementById('ptSurv').value||null;points.push({{x,y,label,survLabel}});renderPoints();toggleAddMode();}});
+const img=document.getElementById('planImg');if(img)img.addEventListener('load',renderPoints);else renderPoints();
+</script></body></html>"""
+        st.components.v1.html(map_html, height=650, scrolling=False)
+    elif not uploaded:
+        st.markdown('''<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;padding:48px;text-align:center;color:#0f172a"><div style="font-size:2rem;margin-bottom:8px">🗺️</div><div>Uploadez un plan URC (PNG/JPG/PDF)</div></div>''', unsafe_allow_html=True)
 
-            # Collect all activities
-            all_acts = []
-            for p in st.session_state.prelevements:
-                if not p.get('archived', False) and p.get('date'):
-                    try:
-                        d = datetime.fromisoformat(p['date']).date()
-                        if exp_start <= d <= exp_end:
-                            all_acts.append((p.get('operateur','—'), d, "Prélèvement", p['label'], p.get('gelose','—')))
-                    except: pass
-            for sch in st.session_state.schedules:
-                try:
-                    d = datetime.fromisoformat(sch['due_date']).date()
-                    if exp_start <= d <= exp_end:
-                        samp_xl2 = next((p for p in st.session_state.prelevements if p['id']==sch['sample_id']), None)
-                        oper_xl2 = samp_xl2.get('operateur','—') if samp_xl2 else '—'
-                        gelose_xl2 = samp_xl2.get('gelose','—') if samp_xl2 else '—'
-                        all_acts.append((oper_xl2, d, f"Lecture {sch['when']}", sch['label'], gelose_xl2))
-                except: pass
 
-            all_acts.sort(key=lambda x: (x[0], x[1]))
-            JOURS_FR_XL2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
-            r2 = 4
-            type_fills = {"Prélèvement": C_PURPLE_LIGHT, "Lecture J2": C_YELLOW_LIGHT, "Lecture J7": C_TEAL_LIGHT}
-            type_fonts = {"Prélèvement": C_PURPLE, "Lecture J2": C_YELLOW, "Lecture J7": C_TEAL}
-
-            for oper_x, d_x, type_x, label_x, gelose_x in all_acts:
-                bg_x = type_fills.get(type_x, C_WHITE)
-                row_data2 = [oper_x, d_x.strftime('%d/%m/%Y'), JOURS_FR_XL2[d_x.weekday()], type_x, label_x, gelose_x]
-                for ci, val in enumerate(row_data2, start=1):
-                    c = ws2.cell(row=r2, column=ci, value=val)
-                    c.fill = fill(bg_x)
-                    c.alignment = left()
-                    c.border = border_cell
-                    c.font = cell_font(bold=(ci==1))
-                ws2.cell(row=r2, column=4).font = Font(name="Arial", size=10, bold=True, color=type_fonts.get(type_x, C_TEXT))
-                ws2.row_dimensions[r2].height = 17
-                r2 += 1
-
-            # ---- SHEET 3 : Légende ----
-            ws3 = wb.create_sheet("Légende")
-            ws3.sheet_view.showGridLines = False
-            ws3["A1"] = "LÉGENDE & GUIDE"
-            ws3["A1"].font = Font(name="Arial", size=13, bold=True, color=C_WHITE)
-            ws3["A1"].fill = fill(C_BLUE_DARK)
-            ws3.merge_cells("A1:C1")
-            ws3["A1"].alignment = center()
-            ws3.row_dimensions[1].height = 26
-            ws3.column_dimensions["A"].width = 30
-            ws3.column_dimensions["B"].width = 20
-            ws3.column_dimensions["C"].width = 40
-
-            legend_rows = [
-                ("Type d'entrée", "Couleur de fond", "Description"),
-                ("Prélèvement", "Violet clair", "Prélèvement microbiologique à réaliser"),
-                ("Lecture J2", "Jaune clair", "Lecture de la gélose à J+2 après prélèvement"),
-                ("Lecture J7", "Bleu clair", "Lecture de la gélose à J+7 après prélèvement"),
-                ("", "", ""),
-                ("Statut", "", ""),
-                ("✅ Faite", "", "Lecture validée dans l'application"),
-                ("⏳ À faire", "", "Lecture planifiée, non encore traitée"),
-                ("⚠️ En retard", "", "Date de lecture dépassée sans validation"),
-            ]
-            leg_fills = [C_BLUE_MID, C_PURPLE_LIGHT, C_YELLOW_LIGHT, C_TEAL_LIGHT, C_WHITE, C_WHITE, C_WHITE, C_WHITE, C_WHITE]
-            leg_fonts = [C_WHITE, C_PURPLE, C_YELLOW, C_TEAL, C_TEXT, C_TEXT, C_GREEN, "475569", C_RED]
-
-            for lr_i, (lr_a, lr_b, lr_c) in enumerate(legend_rows, start=2):
-                for ci, val in enumerate([lr_a, lr_b, lr_c], start=1):
-                    c = ws3.cell(row=lr_i, column=ci, value=val)
-                    c.fill = fill(leg_fills[lr_i-2])
-                    c.alignment = left()
-                    c.border = border_cell
-                    c.font = Font(name="Arial", size=10, bold=(lr_i==2 or lr_a in ["Statut","Type d'entrée"]), color=leg_fonts[lr_i-2])
-                ws3.row_dimensions[lr_i].height = 18
-
-            # Save to buffer
-            buf = _io.BytesIO()
-            wb.save(buf)
-            buf.seek(0)
-            filename = f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
-            st.download_button(
-                label="⬇️ Télécharger le planning Excel",
-                data=buf.getvalue(),
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-            st.success(f"✅ Fichier **{filename}** généré — 3 feuilles : Vue chronologique, Par opérateur, Légende")
-
-# TAB 4 : HISTORIQUE
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "historique":
     st.markdown("### 📋 Historique de surveillance")
@@ -2121,52 +2218,210 @@ elif active == "historique":
                 st.session_state.surveillance = []
                 if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
                 st.rerun()
-        total = len(st.session_state.surveillance)
-        alerts = sum(1 for r in st.session_state.surveillance if r["status"]=="alert")
-        actions = sum(1 for r in st.session_state.surveillance if r["status"]=="action")
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("Total", total); c2.metric("✅ Conformes", total-alerts-actions)
-        c3.metric("⚠️ Alertes", alerts); c4.metric("🚨 Actions", actions)
+
+        surv = st.session_state.surveillance
+        total = len(surv)
+        alerts = sum(1 for r in surv if r["status"] == "alert")
+        actions = sum(1 for r in surv if r["status"] == "action")
+        conformes = total - alerts - actions
+        positives = sum(1 for r in surv if r.get("germ_match", "") not in ("Négatif", "", "—") and int(r.get("ufc", 0)) > 0)
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("📋 Total", total)
+        c2.metric("✅ Conformes", conformes)
+        c3.metric("⚠️ Alertes", alerts)
+        c4.metric("🚨 Actions", actions)
+        c5.metric("🦠 Géloses positives", positives)
+
         st.divider()
-        for r in reversed(st.session_state.surveillance):
-            sc = "#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
-            ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
-            with st.expander(f"{ic} {r['date']} — {r['prelevement']} — {r['germ_match']} — {r['ufc']} UFC/m³"):
-                c1,c2,c3,c4 = st.columns([3,3,3,1])
-                c1.markdown(f"**Germe saisi :** {r['germ_saisi']}")
-                c1.markdown(f"**Correspondance :** {r['germ_match']} ({r['match_score']})")
-                c2.markdown(f"**UFC/m³ :** {r['ufc']}")
-                c2.markdown(f"**Seuil alerte :** ≥{r['alert_threshold']} | **Seuil action :** ≥{r['action_threshold']}")
-                c3.markdown(f"**Opérateur :** {r.get('operateur','N/A')}")
-                c3.markdown(f"**Remarque :** {r.get('remarque','—')}")
-                with c4:
-                    real_i = st.session_state.surveillance.index(r)
-                    if st.button("🗑️", key=f"del_surv_{real_i}", help="Supprimer"):
-                        st.session_state.surveillance.pop(real_i)
-                        save_surveillance(st.session_state.surveillance)
-                        st.rerun()
+
+        # ── ONGLETS STATISTIQUES + LISTE ─────────────────────────────────────
+        hist_tab_stats_pts, hist_tab_stats_germs, hist_tab_liste = st.tabs([
+            "📍 Stats par point de prélèvement",
+            "🦠 Stats par germe",
+            "📋 Liste des entrées"
+        ])
+
+        # ─────────────────────────────────────────────────────────────────────
+        # ONGLET 1 : STATISTIQUES PAR POINT DE PRÉLÈVEMENT
+        # ─────────────────────────────────────────────────────────────────────
+        with hist_tab_stats_pts:
+            st.markdown("#### 📍 Résultats par point de prélèvement")
+            st.markdown("""<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+              Statistiques agrégées sur l'ensemble de l'historique — positif = au moins une colonie détectée (UFC > 0).
+            </div>""", unsafe_allow_html=True)
+
+            # Construire les stats par point
+            from collections import defaultdict
+            pts_stats = defaultdict(lambda: {"total": 0, "positives": 0, "negatives": 0, "germes": defaultdict(int), "ufc_list": []})
+            for r in surv:
+                pt = r.get("prelevement", "Inconnu") or "Inconnu"
+                pts_stats[pt]["total"] += 1
+                ufc = int(r.get("ufc", 0))
+                germ = r.get("germ_match", "Négatif") or "Négatif"
+                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                    pts_stats[pt]["positives"] += 1
+                    pts_stats[pt]["germes"][germ] += 1
+                    pts_stats[pt]["ufc_list"].append(ufc)
+                else:
+                    pts_stats[pt]["negatives"] += 1
+
+            if not pts_stats:
+                st.info("Aucune donnée disponible.")
+            else:
+                # En-tête tableau
+                st.markdown("""<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 0.8fr 1fr 2fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px">
+                  <div style="font-size:.75rem;font-weight:800;color:#fff">Point de prélèvement</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Total</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">✅ Négatif</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">🦠 Positif</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Taux positif</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff">Germes détectés</div>
+                </div>""", unsafe_allow_html=True)
+
+                for pi, (pt_name, st_data) in enumerate(sorted(pts_stats.items())):
+                    t = st_data["total"]
+                    pos = st_data["positives"]
+                    neg = st_data["negatives"]
+                    taux = (pos / t * 100) if t > 0 else 0
+                    taux_col = "#ef4444" if taux >= 50 else "#f59e0b" if taux > 0 else "#22c55e"
+                    germes_txt = ", ".join(f"{g} ({n}x)" for g, n in sorted(st_data["germes"].items(), key=lambda x: -x[1])[:4])
+                    if not germes_txt:
+                        germes_txt = "— aucun germe"
+                    row_bg = "#f8fafc" if pi % 2 == 0 else "#ffffff"
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 0.8fr 1fr 2fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:10px 16px;align-items:center">
+                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">📍 {pt_name}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{t}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#22c55e;text-align:center">{neg}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#ef4444;text-align:center">{pos}</div>
+                      <div style="text-align:center"><span style="background:{taux_col}22;color:{taux_col};border:1px solid {taux_col}55;border-radius:8px;padding:3px 10px;font-size:.82rem;font-weight:700">{taux:.0f}%</span></div>
+                      <div style="font-size:.72rem;color:#475569;font-style:italic">{germes_txt}</div>
+                    </div>""", unsafe_allow_html=True)
+
+                    # Détail des germes pour ce point si positives > 0
+                    if pos > 0 and st_data["germes"]:
+                        germe_details = "".join(
+                            f'<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:600;margin-right:4px">🦠 {g} × {n}</span>'
+                            for g, n in sorted(st_data["germes"].items(), key=lambda x: -x[1])
+                        )
+                        st.markdown(f'<div style="background:#fef2f2;border:1px solid #fca5a5;border-top:none;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:6px 16px 6px 32px;display:flex;flex-wrap:wrap;gap:4px">{germe_details}</div>', unsafe_allow_html=True)
+
+                st.markdown('<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:10px 16px"><div style="font-size:.82rem;font-weight:800;color:#94a3b8">Total : ' + str(total) + ' entrées — ' + str(positives) + ' géloses positives</div></div>', unsafe_allow_html=True)
+
+        # ─────────────────────────────────────────────────────────────────────
+        # ONGLET 2 : STATISTIQUES PAR GERME
+        # ─────────────────────────────────────────────────────────────────────
+        with hist_tab_stats_germs:
+            st.markdown("#### 🦠 Statistiques par germe identifié")
+            st.markdown("""<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#991b1b">
+              Les pourcentages sont calculés par rapport au nombre total de <strong>géloses positives</strong> (UFC > 0). Les résultats négatifs sont exclus.
+            </div>""", unsafe_allow_html=True)
+
+            from collections import defaultdict
+            germe_stats = defaultdict(lambda: {"count": 0, "points": defaultdict(int), "ufc_list": []})
+            for r in surv:
+                ufc = int(r.get("ufc", 0))
+                germ = r.get("germ_match", "") or ""
+                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                    pt = r.get("prelevement", "Inconnu") or "Inconnu"
+                    germe_stats[germ]["count"] += 1
+                    germe_stats[germ]["points"][pt] += 1
+                    germe_stats[germ]["ufc_list"].append(ufc)
+
+            if not germe_stats:
+                st.info("Aucun germe positif dans l'historique.")
+            else:
+                total_positives_for_pct = positives if positives > 0 else 1
+
+                # Trier par fréquence décroissante
+                sorted_germes = sorted(germe_stats.items(), key=lambda x: -x[1]["count"])
+
+                # En-tête
+                st.markdown("""<div style="display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:6px;background:#7c3aed;border-radius:10px 10px 0 0;padding:12px 16px">
+                  <div style="font-size:.75rem;font-weight:800;color:#fff">Germe identifié</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Nb cas</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">% des positifs</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">UFC moy.</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#fff">Points concernés</div>
+                </div>""", unsafe_allow_html=True)
+
+                for gi, (germ_name, g_data) in enumerate(sorted_germes):
+                    cnt = g_data["count"]
+                    pct = cnt / total_positives_for_pct * 100
+                    ufc_avg = sum(g_data["ufc_list"]) / len(g_data["ufc_list"]) if g_data["ufc_list"] else 0
+                    pts_list = ", ".join(f"{pt} ({n}x)" for pt, n in sorted(g_data["points"].items(), key=lambda x: -x[1])[:3])
+                    row_bg = "#f5f3ff" if gi % 2 == 0 else "#ffffff"
+
+                    # Barre de progression proportionnelle
+                    bar_w = int(pct)
+                    bar_color = "#ef4444" if pct >= 30 else "#f59e0b" if pct >= 10 else "#7c3aed"
+
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:10px 16px;align-items:center">
+                      <div>
+                        <div style="font-size:.88rem;font-weight:700;color:#1e293b;font-style:italic">🦠 {germ_name}</div>
+                        <div style="background:#e2e8f0;border-radius:4px;height:5px;margin-top:4px;overflow:hidden">
+                          <div style="background:{bar_color};width:{bar_w}%;height:100%;border-radius:4px"></div>
+                        </div>
+                      </div>
+                      <div style="font-size:1.1rem;font-weight:900;color:#7c3aed;text-align:center">{cnt}</div>
+                      <div style="text-align:center"><span style="background:{bar_color}22;color:{bar_color};border:1px solid {bar_color}55;border-radius:8px;padding:3px 10px;font-size:.82rem;font-weight:700">{pct:.1f}%</span></div>
+                      <div style="font-size:.9rem;font-weight:700;color:#0f172a;text-align:center">{ufc_avg:.0f}</div>
+                      <div style="font-size:.72rem;color:#475569;font-style:italic">{pts_list}</div>
+                    </div>""", unsafe_allow_html=True)
+
+                st.markdown(f'<div style="background:#4c1d95;border-radius:0 0 10px 10px;padding:10px 16px"><div style="font-size:.82rem;font-weight:800;color:#c4b5fd">{len(sorted_germes)} germe(s) différent(s) identifié(s) sur {total_positives_for_pct} gélose(s) positive(s)</div></div>', unsafe_allow_html=True)
+
+                # Résumé visuel top germes
+                if sorted_germes:
+                    st.markdown("##### 🏆 Top germes les plus fréquents")
+                    top_cols = st.columns(min(len(sorted_germes), 5))
+                    for ti, (germ_name, g_data) in enumerate(sorted_germes[:5]):
+                        pct = g_data["count"] / total_positives_for_pct * 100
+                        bar_c = "#ef4444" if pct >= 30 else "#f59e0b" if pct >= 10 else "#7c3aed"
+                        with top_cols[ti]:
+                            st.markdown(f"""<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center">
+                              <div style="font-size:1.8rem;font-weight:900;color:{bar_c}">{pct:.0f}%</div>
+                              <div style="font-size:.65rem;font-style:italic;color:#1e293b;margin:4px 0;font-weight:700;min-height:32px">{germ_name[:35]}</div>
+                              <div style="font-size:.7rem;color:#64748b">{g_data['count']} cas</div>
+                            </div>""", unsafe_allow_html=True)
+
+        # ─────────────────────────────────────────────────────────────────────
+        # ONGLET 3 : LISTE DES ENTRÉES
+        # ─────────────────────────────────────────────────────────────────────
+        with hist_tab_liste:
+            st.markdown("#### 📋 Toutes les entrées")
+            for r in reversed(surv):
+                sc = "#ef4444" if r["status"] == "action" else "#f59e0b" if r["status"] == "alert" else "#22c55e"
+                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
+                with st.expander(f"{ic} {r['date']} — {r['prelevement']} — {r['germ_match']} — {r['ufc']} UFC/m³"):
+                    c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
+                    c1.markdown(f"**Germe saisi :** {r['germ_saisi']}\n\n**Correspondance :** {r['germ_match']} ({r['match_score']})")
+                    c2.markdown(f"**UFC/m³ :** {r['ufc']}\n\n**Seuil alerte :** ≥{r['alert_threshold']} | **Seuil action :** ≥{r['action_threshold']}")
+                    c3.markdown(f"**Opérateur :** {r.get('operateur', 'N/A')}\n\n**Remarque :** {r.get('remarque', '—')}")
+                    with c4:
+                        real_i = surv.index(r)
+                        if st.button("🗑️", key=f"del_surv_{real_i}"):
+                            st.session_state.surveillance.pop(real_i)
+                            save_surveillance(st.session_state.surveillance)
+                            st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
 
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 : PARAMÈTRES & SEUILS
+# TAB 6 : PARAMÈTRES
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "parametres":
     st.markdown("### ⚙️ Paramètres — Seuils & Mesures correctives")
 
-    subtab_seuils, subtab_mesures, subtab_points, subtab_operateurs = st.tabs(["📏 Seuils par criticité", "📋 Mesures correctives par origine", "📍 Points de prélèvement", "👤 Opérateurs"])
+    subtab_seuils, subtab_mesures, subtab_points, subtab_operateurs, subtab_backup, subtab_supabase = st.tabs([
+        "📏 Seuils", "📋 Mesures correctives", "📍 Points de prélèvement", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
+    ])
 
-    # ── SEUILS ────────────────────────────────────────────────────────────────
     with subtab_seuils:
         st.markdown("Configurez les seuils d'alerte et d'action **par niveau de criticité**.")
         thresholds = st.session_state.thresholds
-        risk_info = [
-            (5, "🔴 Criticité 5 — Critique",  "#ef4444"),
-            (4, "🟠 Criticité 4 — Majeur",    "#f97316"),
-            (3, "🟡 Criticité 3 — Important", "#f59e0b"),
-            (2, "🟢 Criticité 2 — Modéré",    "#84cc16"),
-            (1, "🟢 Criticité 1 — Limité",    "#22c55e"),
-        ]
+        risk_info = [(5,"🔴 Criticité 5 — Critique","#ef4444"),(4,"🟠 Criticité 4 — Majeur","#f97316"),(3,"🟡 Criticité 3 — Important","#f59e0b"),(2,"🟢 Criticité 2 — Modéré","#84cc16"),(1,"🟢 Criticité 1 — Limité","#22c55e")]
         new_thresholds = {}
         for risk, title, color in risk_info:
             th = thresholds.get(risk, DEFAULT_THRESHOLDS[risk])
@@ -2176,13 +2431,10 @@ elif active == "parametres":
               <div style="font-size:.65rem;color:#0f172a;margin-top:2px">{germs_list[:150]}{'...' if len(germs_list)>150 else ''}</div>
             </div>""", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            with c1:
-                new_alert = st.number_input("⚠️ Seuil d'alerte (UFC/m³)", min_value=0, value=int(th.get("alert",10)), key=f"alert_{risk}")
-            with c2:
-                new_action = st.number_input("🚨 Seuil d'action (UFC/m³)", min_value=0, value=int(th.get("action",50)), key=f"action_{risk}")
+            with c1: new_alert = st.number_input("⚠️ Seuil alerte (UFC/m³)", min_value=0, value=int(th.get("alert",10)), key=f"alert_{risk}")
+            with c2: new_action = st.number_input("🚨 Seuil action (UFC/m³)", min_value=0, value=int(th.get("action",50)), key=f"action_{risk}")
             new_thresholds[risk] = {"alert": new_alert, "action": new_action}
             st.divider()
-
         cs, cr = st.columns(2)
         with cs:
             if st.button("💾 Sauvegarder les seuils", use_container_width=True):
@@ -2190,402 +2442,314 @@ elif active == "parametres":
                 save_thresholds_and_measures(new_thresholds, st.session_state.measures)
                 st.success("✅ Seuils sauvegardés !")
         with cr:
-            if st.button("↩️ Réinitialiser les seuils", use_container_width=True):
+            if st.button("↩️ Réinitialiser", use_container_width=True):
                 st.session_state.thresholds = {k: dict(v) for k, v in DEFAULT_THRESHOLDS.items()}
                 save_thresholds_and_measures(st.session_state.thresholds, st.session_state.measures)
-                st.success("✅ Seuils réinitialisés.")
-                st.rerun()
+                st.success("✅ Seuils réinitialisés."); st.rerun()
 
-    # ── MESURES CORRECTIVES ───────────────────────────────────────────────────
     with subtab_mesures:
-        st.markdown("Gérez les **mesures correctives** applicables lors d'un dépassement de seuil.")
         om = st.session_state.origin_measures
-        scope_options = ["all"] + list(dict.fromkeys(ALL_ORIGINS))
-        scope_labels = {"all": "🌐 Toutes les origines", "Air": "💨 Air",
-            "Humidité": "💧 Humidité", "Flore fécale": "🦠 Flore fécale",
-            "Oropharynx / Gouttelettes": "😷 Oropharynx / Gouttelettes",
-            "Peau / Muqueuses": "🖐️ Peau / Muqueuses", "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
-            "Sol / Carton / Surface sèche": "📦 Sol / Carton / Surface sèche",
-        }
-        type_labels = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
-        type_colors = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
-        risk_labels_filter = {"all": "🌐 Toutes criticités", "1": "🟢 C.1", "2": "🟢 C.2", "3": "🟡 C.3", "4": "🟠 C.4", "5": "🔴 C.5"}
-
-        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 1.5, 1.5, 1])
+        scope_labels = {"all":"🌐 Toutes","Air":"💨 Air","Humidité":"💧 Humidité","Flore fécale":"🦠 Flore fécale","Oropharynx / Gouttelettes":"😷 Oropharynx","Peau / Muqueuses":"🖐️ Peau / Muqueuses","Peau / Muqueuse":"🖐️ Peau / Muqueuse","Sol / Carton / Surface sèche":"📦 Sol / Surface sèche"}
+        type_labels = {"alert":"⚠️ Alerte","action":"🚨 Action","both":"⚠️🚨 Alerte & Action"}
+        type_colors = {"alert":"#f59e0b","action":"#ef4444","both":"#818cf8"}
+        col_f1, col_f2, col_f3, col_f4 = st.columns([2,1.5,1.5,1])
         with col_f1:
-            filter_scope = st.selectbox("Filtrer par origine", ["Tout afficher"] + list(scope_labels.values()), key="filter_scope", label_visibility="collapsed")
+            filter_scope = st.selectbox("Origine", ["Tout afficher"]+list(scope_labels.values()), label_visibility="collapsed", key="filter_scope")
         with col_f2:
-            filter_risk_lbl = st.selectbox("Filtrer par criticité", list(risk_labels_filter.values()), key="filter_risk", label_visibility="collapsed")
-            filter_risk_map = {v: k for k, v in risk_labels_filter.items()}
-            active_risk_filter = filter_risk_map.get(filter_risk_lbl, "all")
+            filter_risk_lbl = st.selectbox("Criticité", ["🌐 Tout","🟢 1","🟢 2","🟡 3","🟠 4","🔴 5"], label_visibility="collapsed", key="filter_risk")
         with col_f3:
-            filter_type = st.selectbox("Type", ["Alerte & Action", "⚠️ Alerte seulement", "🚨 Action seulement"], key="filter_type", label_visibility="collapsed")
+            filter_type = st.selectbox("Type", ["Tout","⚠️ Alerte","🚨 Action"], label_visibility="collapsed", key="filter_type")
         with col_f4:
-            if st.button("➕ Nouvelle mesure", use_container_width=True):
-                st.session_state.show_new_measure = True
-
+            if st.button("➕ Nouvelle", use_container_width=True): st.session_state.show_new_measure = True
         scope_filter_map = {v: k for k, v in scope_labels.items()}
-        active_scope_filter = scope_filter_map.get(filter_scope, None)
-        active_type_filter = None if filter_type == "Alerte & Action" else ("alert" if "Alerte" in filter_type else "action")
-
-        st.divider()
+        active_scope = scope_filter_map.get(filter_scope, None) if filter_scope != "Tout afficher" else None
+        active_risk = filter_risk_lbl.split()[-1] if filter_risk_lbl != "🌐 Tout" else None
+        active_type = ("alert" if "Alerte" in filter_type else "action") if filter_type != "Tout" else None
 
         if st.session_state.get("show_new_measure", False):
             with st.container():
-                st.markdown("#### ➕ Nouvelle mesure corrective")
-                nmc1, nmc2, nmc3, nmc4 = st.columns([3, 2, 1.5, 1.5])
-                with nmc1:
-                    nm_text = st.text_input("Texte de la mesure *", key="nm_text")
+                st.markdown("#### ➕ Nouvelle mesure")
+                nmc1, nmc2, nmc3, nmc4 = st.columns([3,2,1.5,1.5])
+                with nmc1: nm_text = st.text_input("Texte *", key="nm_text")
                 with nmc2:
                     nm_scope_label = st.selectbox("Origine", list(scope_labels.values()), key="nm_scope")
                     nm_scope = scope_filter_map.get(nm_scope_label, "all")
                 with nmc3:
                     risk_opts_nm = {"all":"🌐 Toutes","1":"🟢 1","2":"🟢 2","3":"🟡 3","4":"🟠 4","5":"🔴 5","[3,4,5]":"3-4-5","[4,5]":"4-5","[1,2,3]":"1-2-3"}
                     nm_risk_lbl = st.selectbox("Criticité", list(risk_opts_nm.values()), key="nm_risk")
-                    nm_risk_key = {v: k for k, v in risk_opts_nm.items()}.get(nm_risk_lbl, "all")
-                    if nm_risk_key == "all": nm_risk = "all"
-                    elif nm_risk_key.startswith("["): nm_risk = json.loads(nm_risk_key)
-                    else: nm_risk = int(nm_risk_key)
+                    nm_risk_key = {v:k for k,v in risk_opts_nm.items()}.get(nm_risk_lbl,"all")
+                    nm_risk = "all" if nm_risk_key=="all" else json.loads(nm_risk_key) if nm_risk_key.startswith("[") else int(nm_risk_key)
                 with nmc4:
                     nm_type_label = st.selectbox("Type", list(type_labels.values()), key="nm_type")
-                    nm_type = {v: k for k, v in type_labels.items()}.get(nm_type_label, "alert")
+                    nm_type = {v:k for k,v in type_labels.items()}.get(nm_type_label,"alert")
                 nb1, nb2 = st.columns(2)
                 with nb1:
-                    if st.button("✅ Ajouter la mesure", use_container_width=True, key="nm_submit"):
+                    if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
                         if nm_text.strip():
-                            new_id = f"m{len(om)+1:03d}_custom"
-                            om.append({"id": new_id, "text": nm_text.strip(), "scope": nm_scope, "risk": nm_risk, "type": nm_type})
-                            save_origin_measures(om)
-                            st.session_state.origin_measures = om
-                            st.session_state.show_new_measure = False
-                            st.success("✅ Mesure ajoutée !")
-                            st.rerun()
-                        else:
-                            st.error("Le texte est obligatoire.")
+                            om.append({"id":f"m{len(om)+1:03d}_custom","text":nm_text.strip(),"scope":nm_scope,"risk":nm_risk,"type":nm_type})
+                            save_origin_measures(om); st.session_state.origin_measures=om; st.session_state.show_new_measure=False; st.rerun()
                 with nb2:
                     if st.button("Annuler", use_container_width=True, key="nm_cancel"):
-                        st.session_state.show_new_measure = False
-                        st.rerun()
+                        st.session_state.show_new_measure=False; st.rerun()
 
         def passes_filter(m):
-            if active_scope_filter and active_scope_filter != "Tout afficher":
-                if m["scope"] != active_scope_filter:
-                    return False
-            if active_type_filter:
-                if m["type"] != active_type_filter and m["type"] != "both":
-                    return False
-            if active_risk_filter != "all":
-                mr = m.get("risk", "all")
+            if active_scope and m["scope"] != active_scope: return False
+            if active_type and m["type"] != active_type and m["type"] != "both": return False
+            if active_risk:
+                mr = m.get("risk","all")
                 if mr != "all":
                     if isinstance(mr, list):
-                        if int(active_risk_filter) not in mr:
-                            return False
+                        if int(active_risk) not in mr: return False
                     else:
-                        if str(mr) != active_risk_filter:
-                            return False
+                        if str(mr) != active_risk: return False
             return True
 
-        filtered_measures = [m for m in om if passes_filter(m)]
-        from collections import OrderedDict
-        groups = OrderedDict()
-        for sc in (["all"] + list(dict.fromkeys(ALL_ORIGINS))):
-            grp = [m for m in filtered_measures if m["scope"] == sc]
-            if grp:
-                groups[sc] = grp
-
-        if not filtered_measures:
-            st.info("Aucune mesure ne correspond aux filtres sélectionnés.")
-        else:
-            for scope_key, group_measures in groups.items():
-                scope_lbl = scope_labels.get(scope_key, scope_key)
-                st.markdown(f"""<div style="background:#f8fafc;border-left:3px solid #38bdf8;border-radius:0 8px 8px 0;padding:8px 14px;margin:12px 0 6px 0">
-                  <span style="font-size:.78rem;font-weight:700;color:#38bdf8">{scope_lbl}</span>
-                  <span style="font-size:.62rem;color:#0f172a;margin-left:8px">{len(group_measures)} mesure(s)</span>
-                </div>""", unsafe_allow_html=True)
-
-                for mi, m in enumerate(group_measures):
-                    real_idx = om.index(m)
-                    tcol = type_colors.get(m["type"], "#0f172a")
-                    tlbl = type_labels.get(m["type"], m["type"])
-
-                    if st.session_state.get(f"edit_m_{real_idx}", False):
-                        with st.container():
-                            ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
-                            with ec1:
-                                edit_text = st.text_input("Texte", value=m["text"], key=f"et_{real_idx}")
-                            with ec2:
-                                cur_scope_lbl = scope_labels.get(m["scope"], m["scope"])
-                                cur_scope_idx = list(scope_labels.values()).index(cur_scope_lbl) if cur_scope_lbl in scope_labels.values() else 0
-                                edit_scope_lbl = st.selectbox("Origine", list(scope_labels.values()), index=cur_scope_idx, key=f"es_{real_idx}")
-                                edit_scope = scope_filter_map.get(edit_scope_lbl, "all")
-                            with ec3:
-                                risk_opts_e = {"all":"🌐 Toutes","1":"🟢 1","2":"🟢 2","3":"🟡 3","4":"🟠 4","5":"🔴 5","[3,4,5]":"3-4-5","[4,5]":"4-5","[1,2,3]":"1-2-3"}
-                                cur_mr = m.get("risk","all")
-                                if cur_mr == "all": cur_rk = "all"
-                                elif isinstance(cur_mr, list): cur_rk = str(cur_mr).replace(" ","")
-                                else: cur_rk = str(cur_mr)
-                                cur_r_lbl = risk_opts_e.get(cur_rk, "🌐 Toutes")
-                                cur_r_idx = list(risk_opts_e.values()).index(cur_r_lbl) if cur_r_lbl in risk_opts_e.values() else 0
-                                edit_risk_lbl = st.selectbox("Criticité", list(risk_opts_e.values()), index=cur_r_idx, key=f"er_{real_idx}")
-                                edit_risk_key = {v: k for k, v in risk_opts_e.items()}.get(edit_risk_lbl, "all")
-                                if edit_risk_key == "all": edit_risk = "all"
-                                elif edit_risk_key.startswith("["): edit_risk = json.loads(edit_risk_key)
-                                else: edit_risk = int(edit_risk_key)
-                            with ec4:
-                                cur_type_lbl = type_labels.get(m["type"], m["type"])
-                                cur_type_idx = list(type_labels.values()).index(cur_type_lbl) if cur_type_lbl in type_labels.values() else 0
-                                edit_type_lbl = st.selectbox("Type", list(type_labels.values()), index=cur_type_idx, key=f"ety_{real_idx}")
-                                edit_type = {v: k for k, v in type_labels.items()}.get(edit_type_lbl, "alert")
-                            eb1, eb2 = st.columns(2)
-                            with eb1:
-                                if st.button("✅ Valider", use_container_width=True, key=f"ev_{real_idx}"):
-                                    om[real_idx] = {**m, "text": edit_text, "scope": edit_scope, "risk": edit_risk, "type": edit_type}
-                                    save_origin_measures(om)
-                                    st.session_state.origin_measures = om
-                                    st.session_state[f"edit_m_{real_idx}"] = False
-                                    st.rerun()
-                            with eb2:
-                                if st.button("Annuler", use_container_width=True, key=f"ec_{real_idx}"):
-                                    st.session_state[f"edit_m_{real_idx}"] = False
-                                    st.rerun()
-                    else:
-                        mr = m.get("risk", "all")
-                        if mr == "all": risk_badge = "🌐"
-                        elif isinstance(mr, list):
-                            rcols = {1:"#22c55e",2:"#84cc16",3:"#f59e0b",4:"#f97316",5:"#ef4444"}
-                            risk_badge = " ".join(f'<span style="color:{rcols.get(r,"#0f172a")};font-weight:700">{r}</span>' for r in mr)
-                        else: risk_badge = str(mr)
-                        row_c1, row_c2, row_c3, row_c4, row_c5 = st.columns([4.5, 1.2, 1.5, 0.8, 0.8])
-                        with row_c1:
-                            st.markdown(f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m["text"]}</div>', unsafe_allow_html=True)
-                        with row_c2:
-                            st.markdown(f'<div style="padding:6px 0;font-size:.63rem;color:#0f172a;text-align:center">Nv.{risk_badge}</div>', unsafe_allow_html=True)
-                        with row_c3:
-                            st.markdown(f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};font-weight:600;text-align:center">{tlbl}</div>', unsafe_allow_html=True)
-                        with row_c4:
-                            if st.button("✏️", key=f"edit_btn_{real_idx}"):
-                                st.session_state[f"edit_m_{real_idx}"] = True
-                                st.rerun()
-                        with row_c5:
-                            if st.button("🗑️", key=f"del_m_{real_idx}"):
-                                om.pop(real_idx)
-                                save_origin_measures(om)
-                                st.session_state.origin_measures = om
-                                st.rerun()
+        for m in [m for m in om if passes_filter(m)]:
+            real_idx = om.index(m)
+            tcol = type_colors.get(m["type"],"#0f172a"); tlbl = type_labels.get(m["type"],m["type"])
+            row_c1, row_c2, row_c3, row_c4, row_c5 = st.columns([4.5,1.2,1.5,0.8,0.8])
+            with row_c1: st.markdown(f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m["text"]}</div>', unsafe_allow_html=True)
+            with row_c3: st.markdown(f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};font-weight:600;text-align:center">{tlbl}</div>', unsafe_allow_html=True)
+            with row_c4:
+                if st.button("✏️", key=f"edit_btn_{real_idx}"): st.session_state[f"edit_m_{real_idx}"]=True; st.rerun()
+            with row_c5:
+                if st.button("🗑️", key=f"del_m_{real_idx}"): om.pop(real_idx); save_origin_measures(om); st.session_state.origin_measures=om; st.rerun()
 
         st.divider()
         col_sr, col_def = st.columns(2)
         with col_sr:
-            if st.button("💾 Sauvegarder les mesures", use_container_width=True):
-                save_origin_measures(om)
-                st.success("✅ Mesures sauvegardées !")
+            if st.button("💾 Sauvegarder", use_container_width=True): save_origin_measures(om); st.success("✅ Sauvegardé !")
         with col_def:
-            if st.button("↩️ Réinitialiser les mesures par défaut", use_container_width=True):
-                st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
-                save_origin_measures(st.session_state.origin_measures)
-                st.success("✅ Mesures réinitialisées.")
-                st.rerun()
+            if st.button("↩️ Réinitialiser", use_container_width=True):
+                st.session_state.origin_measures=[dict(m) for m in DEFAULT_ORIGIN_MEASURES]; save_origin_measures(st.session_state.origin_measures); st.rerun()
 
-    # ── POINTS DE PRÉLÈVEMENT — TYPE: Air / Surface + Gélose ─────────────────
     with subtab_points:
-        st.markdown("Gérez les points de prélèvement — définissez le nom, le type, la classe et la gélose utilisée.")
-
+        st.markdown("Gérez les points de prélèvement.")
         if not st.session_state.points:
-            st.info("Aucun point défini pour le moment.")
+            st.info("Aucun point défini.")
         else:
             for i, pt in enumerate(list(st.session_state.points)):
-                gelose = pt.get('gelose', '—')
-                pt_type = pt.get('type', '—')
-                pt_class = pt.get('room_class', '—')
-                type_icon = "💨" if pt_type == "Air" else "🧴"
-                c1, c2, c3 = st.columns([5, 1, 1])
+                pt_type = pt.get('type','—'); type_icon = "💨" if pt_type=="Air" else "🧴"
+                c1, c2, c3 = st.columns([5,1,1])
                 with c1:
                     st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;display:flex;gap:16px;align-items:center">
                       <span style="font-weight:700;font-size:.85rem;color:#1e293b">{type_icon} {pt['label']}</span>
                       <span style="background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:.65rem;font-weight:600">{pt_type}</span>
-                      <span style="background:#f8fafc;color:#475569;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #e2e8f0">Classe : {pt_class}</span>
-                      <span style="background:#f0fdf4;color:#166534;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #86efac">🧫 {gelose}</span>
+                      <span style="background:#f8fafc;color:#475569;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #e2e8f0">Classe : {pt.get('room_class','—')}</span>
+                      <span style="background:#f0fdf4;color:#166534;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #86efac">🧫 {pt.get('gelose','—')}</span>
                     </div>""", unsafe_allow_html=True)
                 with c2:
-                    if st.button("✏️", key=f"edit_pt_{i}"):
-                        st.session_state._edit_point = i
-                        st.rerun()
+                    if st.button("✏️", key=f"edit_pt_{i}"): st.session_state._edit_point=i; st.rerun()
                 with c3:
-                    if st.button("🗑️", key=f"del_pt_{i}"):
-                        st.session_state.points.pop(i)
-                        save_points(st.session_state.points)
-                        st.success("Point supprimé")
-                        st.rerun()
-
+                    if st.button("🗑️", key=f"del_pt_{i}"): st.session_state.points.pop(i); save_points(st.session_state.points); st.rerun()
         st.divider()
-
         if st.session_state.get('_edit_point') is not None:
-            idx = st.session_state._edit_point
-            pt = st.session_state.points[idx]
-            st.markdown(f"### ✏️ Modifier le point — {pt['label']}")
-            ec1, ec2, ec3, ec4 = st.columns([3, 2, 2, 2])
-            with ec1:
-                new_label = st.text_input("Nom du point", value=pt['label'], key="pt_edit_label")
-            with ec2:
-                new_type = st.selectbox("Type de prélèvement", ["Air", "Surface"], index=["Air", "Surface"].index(pt.get('type', 'Air')) if pt.get('type', 'Air') in ["Air", "Surface"] else 0, key="pt_edit_type")
-            with ec3:
-                new_room = st.text_input("Classe de salle", value=pt.get('room_class', ''), key="pt_edit_room", placeholder="Ex: ISO 5, Classe D...")
+            idx = st.session_state._edit_point; pt = st.session_state.points[idx]
+            st.markdown(f"### ✏️ Modifier — {pt['label']}")
+            ec1, ec2, ec3, ec4 = st.columns([3,2,2,2])
+            with ec1: new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
+            with ec2: new_type = st.selectbox("Type", ["Air","Surface"], index=["Air","Surface"].index(pt.get('type','Air')) if pt.get('type','Air') in ["Air","Surface"] else 0, key="pt_edit_type")
+            with ec3: new_room = st.text_input("Classe", value=pt.get('room_class',''), key="pt_edit_room", placeholder="Ex: ISO 5")
             with ec4:
-                # Gélose selon le type
-                if new_type == "Air":
-                    gelose_opts = ["Gélose de sédimentation", "Gélose TSA (sédimentation)", "Gélose Columbia (sédimentation)", "Autre"]
-                else:
-                    gelose_opts = ["Gélose contact (RODAC)", "Gélose contact TSA", "Gélose contact Columbia", "Ecouvillonnage", "Autre"]
-                cur_gelose = pt.get('gelose', gelose_opts[0])
-                if cur_gelose in gelose_opts:
-                    gelose_idx = gelose_opts.index(cur_gelose)
-                else:
-                    gelose_opts.append(cur_gelose)
-                    gelose_idx = len(gelose_opts) - 1
-                new_gelose = st.selectbox("Gélose", gelose_opts, index=gelose_idx, key="pt_edit_gelose")
-
-            if st.button("✅ Enregistrer les modifications", key="pt_save_edit"):
-                st.session_state.points[idx] = {
-                    "id": pt.get('id', f"p{idx+1}"),
-                    "label": new_label,
-                    "type": new_type,
-                    "room_class": new_room,
-                    "gelose": new_gelose
-                }
-                save_points(st.session_state.points)
-                st.session_state._edit_point = None
-                st.success("✅ Point mis à jour")
-                st.rerun()
-            if st.button("Annuler", key="pt_cancel_edit"):
-                st.session_state._edit_point = None
-                st.rerun()
+                gelose_opts = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if new_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
+                cur_g = pt.get('gelose',gelose_opts[0]); g_idx = gelose_opts.index(cur_g) if cur_g in gelose_opts else 0
+                new_gelose = st.selectbox("Gélose", gelose_opts, index=g_idx, key="pt_edit_gelose")
+            if st.button("✅ Enregistrer", key="pt_save_edit"):
+                st.session_state.points[idx] = {"id":pt.get('id',f"p{idx+1}"),"label":new_label,"type":new_type,"room_class":new_room,"gelose":new_gelose}
+                save_points(st.session_state.points); st.session_state._edit_point=None; st.success("✅ Point mis à jour"); st.rerun()
+            if st.button("Annuler", key="pt_cancel_edit"): st.session_state._edit_point=None; st.rerun()
         else:
-            st.markdown("### ➕ Ajouter un point de prélèvement")
-            np_col1, np_col2, np_col3, np_col4 = st.columns([3, 2, 2, 2])
-            with np_col1:
-                np_label = st.text_input("Nom du point *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
-            with np_col2:
-                np_type = st.selectbox("Type de prélèvement", ["Air", "Surface"], key="np_type")
-            with np_col3:
-                np_room = st.text_input("Classe de salle", placeholder="Ex: ISO 5, Classe D", key="np_room")
+            st.markdown("### ➕ Ajouter un point")
+            np_col1, np_col2, np_col3, np_col4 = st.columns([3,2,2,2])
+            with np_col1: np_label = st.text_input("Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
+            with np_col2: np_type = st.selectbox("Type", ["Air","Surface"], key="np_type")
+            with np_col3: np_room = st.text_input("Classe", placeholder="Ex: ISO 5", key="np_room")
             with np_col4:
-                if np_type == "Air":
-                    gelose_opts_new = ["Gélose de sédimentation", "Gélose TSA (sédimentation)", "Gélose Columbia (sédimentation)", "Autre"]
-                else:
-                    gelose_opts_new = ["Gélose contact (RODAC)", "Gélose contact TSA", "Gélose contact Columbia", "Ecouvillonnage", "Autre"]
+                gelose_opts_new = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if np_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
                 np_gelose = st.selectbox("Gélose", gelose_opts_new, key="np_gelose")
-
-            if st.button("➕ Ajouter le point", key="np_add"):
-                if not np_label.strip():
-                    st.error("Le nom du point est requis")
+            if st.button("➕ Ajouter", key="np_add"):
+                if not np_label.strip(): st.error("Le nom est requis")
                 else:
                     nid = f"p{len(st.session_state.points)+1}_{int(datetime.now().timestamp())}"
-                    st.session_state.points.append({
-                        "id": nid,
-                        "label": np_label.strip(),
-                        "type": np_type,
-                        "room_class": np_room.strip(),
-                        "gelose": np_gelose
-                    })
-                    save_points(st.session_state.points)
-                    st.success(f"✅ Point **{np_label}** ajouté ({np_type} — {np_gelose})")
-                    st.rerun()
+                    st.session_state.points.append({"id":nid,"label":np_label.strip(),"type":np_type,"room_class":np_room.strip(),"gelose":np_gelose})
+                    save_points(st.session_state.points); st.success(f"✅ Point **{np_label}** ajouté"); st.rerun()
 
-    # ── OPÉRATEURS ────────────────────────────────────────────────────────────
     with subtab_operateurs:
-        st.markdown("Gérez la liste des opérateurs habilités à réaliser les prélèvements microbiologiques.")
-
         ops = st.session_state.operators
-
-        if not ops:
-            st.info("Aucun opérateur enregistré. Ajoutez-en ci-dessous.")
+        if not ops: st.info("Aucun opérateur enregistré.")
         else:
-            st.markdown(f"""<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 16px;margin-bottom:16px">
-              <span style="font-size:.75rem;color:#0369a1;font-weight:700">👥 {len(ops)} opérateur(s) enregistré(s)</span>
-            </div>""", unsafe_allow_html=True)
-
+            st.markdown(f'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 16px;margin-bottom:16px"><span style="font-size:.75rem;color:#0369a1;font-weight:700">👥 {len(ops)} opérateur(s)</span></div>', unsafe_allow_html=True)
             for i, op in enumerate(ops):
-                nom = op.get('nom', '—')
-                profession = op.get('profession', '—')
-                oc1, oc2, oc3 = st.columns([5, 1, 1])
+                nom = op.get('nom','—'); profession = op.get('profession','—')
+                oc1, oc2, oc3 = st.columns([5,1,1])
                 with oc1:
                     st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;display:flex;gap:16px;align-items:center">
                       <div style="background:#2563eb;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0">{nom[0].upper() if nom else '?'}</div>
-                      <div>
-                        <div style="font-weight:700;font-size:.9rem;color:#0f172a">{nom}</div>
-                        <div style="font-size:.72rem;color:#475569;margin-top:2px">👔 {profession}</div>
-                      </div>
+                      <div><div style="font-weight:700;font-size:.9rem;color:#0f172a">{nom}</div><div style="font-size:.72rem;color:#475569;margin-top:2px">👔 {profession}</div></div>
                     </div>""", unsafe_allow_html=True)
                 with oc2:
-                    if st.button("✏️", key=f"edit_op_{i}"):
-                        st.session_state._edit_operator = i
-                        st.rerun()
+                    if st.button("✏️", key=f"edit_op_{i}"): st.session_state._edit_operator=i; st.rerun()
                 with oc3:
                     if st.button("🗑️", key=f"del_op_{i}"):
-                        ops.pop(i)
-                        save_operators(ops)
-                        st.session_state.operators = ops
-                        st.success("Opérateur supprimé.")
-                        st.rerun()
-
+                        ops.pop(i); save_operators(ops); st.session_state.operators=ops; st.rerun()
         st.divider()
-
-        # Edit operator
         if st.session_state.get('_edit_operator') is not None:
-            idx = st.session_state._edit_operator
-            op = st.session_state.operators[idx]
-            st.markdown(f"### ✏️ Modifier l'opérateur — {op.get('nom','')}")
+            idx = st.session_state._edit_operator; op = st.session_state.operators[idx]
+            st.markdown(f"### ✏️ Modifier — {op.get('nom','')}")
             ec1, ec2 = st.columns(2)
-            with ec1:
-                edit_nom = st.text_input("Nom complet *", value=op.get('nom',''), key="op_edit_nom")
+            with ec1: edit_nom = st.text_input("Nom *", value=op.get('nom',''), key="op_edit_nom")
             with ec2:
-                profession_opts = [
-                    "Préparateur en pharmacie hospitalière",
-                    "Pharmacien",
-                    "Interne de pharmacie",
-                ]
-                cur_prof = op.get('profession', '')
-                if cur_prof not in profession_opts:
-                    profession_opts.append(cur_prof)
-                prof_idx = profession_opts.index(cur_prof) if cur_prof in profession_opts else 0
-                edit_prof = st.selectbox("Profession / Fonction *", profession_opts, index=prof_idx, key="op_edit_prof")
-
+                p_opts = ["Préparateur en pharmacie hospitalière","Pharmacien","Interne de pharmacie"]
+                cur_p = op.get('profession',''); p_idx = p_opts.index(cur_p) if cur_p in p_opts else 0
+                edit_prof = st.selectbox("Profession *", p_opts, index=p_idx, key="op_edit_prof")
             eb1, eb2 = st.columns(2)
             with eb1:
-                if st.button("✅ Enregistrer les modifications", use_container_width=True, key="op_save_edit"):
+                if st.button("✅ Enregistrer", use_container_width=True, key="op_save_edit"):
                     if edit_nom.strip():
-                        st.session_state.operators[idx] = {"nom": edit_nom.strip(), "profession": edit_prof}
-                        save_operators(st.session_state.operators)
-                        st.session_state._edit_operator = None
-                        st.success("✅ Opérateur mis à jour")
-                        st.rerun()
-                    else:
-                        st.error("Le nom est obligatoire.")
+                        st.session_state.operators[idx]={"nom":edit_nom.strip(),"profession":edit_prof}; save_operators(st.session_state.operators); st.session_state._edit_operator=None; st.success("✅ Mis à jour"); st.rerun()
+                    else: st.error("Le nom est obligatoire.")
             with eb2:
-                if st.button("Annuler", use_container_width=True, key="op_cancel_edit"):
-                    st.session_state._edit_operator = None
-                    st.rerun()
+                if st.button("Annuler", use_container_width=True, key="op_cancel_edit"): st.session_state._edit_operator=None; st.rerun()
         else:
-            # Add new operator
             st.markdown("### ➕ Ajouter un opérateur")
             nc1, nc2 = st.columns(2)
-            with nc1:
-                new_nom = st.text_input("Nom complet *", placeholder="Ex: Marie Dupont", key="op_new_nom")
+            with nc1: new_nom = st.text_input("Nom *", placeholder="Ex: Marie Dupont", key="op_new_nom")
             with nc2:
-                profession_opts_new = [
-                    "Préparateur en pharmacie hospitalière",
-                    "Pharmacien",
-                    "Interne de pharmacie",
-                ]
-                new_prof = st.selectbox("Profession / Fonction *", profession_opts_new, key="op_new_prof")
-
-            if st.button("➕ Ajouter l'opérateur", key="op_add"):
-                if not new_nom.strip():
-                    st.error("Le nom est obligatoire.")
-                elif any(o['nom'].lower() == new_nom.strip().lower() for o in st.session_state.operators):
-                    st.error("Un opérateur avec ce nom existe déjà.")
+                p_opts_new = ["Préparateur en pharmacie hospitalière","Pharmacien","Interne de pharmacie"]
+                new_prof = st.selectbox("Profession *", p_opts_new, key="op_new_prof")
+            if st.button("➕ Ajouter", key="op_add"):
+                if not new_nom.strip(): st.error("Le nom est obligatoire.")
+                elif any(o['nom'].lower()==new_nom.strip().lower() for o in st.session_state.operators): st.error("Cet opérateur existe déjà.")
                 else:
-                    st.session_state.operators.append({"nom": new_nom.strip(), "profession": new_prof})
+                    st.session_state.operators.append({"nom":new_nom.strip(),"profession":new_prof}); save_operators(st.session_state.operators); st.success(f"✅ **{new_nom}** ajouté"); st.rerun()
+
+    with subtab_backup:
+        st.markdown("### 💾 Sauvegarde & Restauration des données")
+        supa_connected = get_supabase_client() is not None
+        if supa_connected:
+            st.success("✅ **Supabase actif** — vos données sont automatiquement persistantes dans le cloud.")
+        else:
+            st.warning("⚠️ **Supabase non configuré** — sans base de données cloud, vos données ne survivent pas à un redémarrage du serveur.")
+        st.markdown("""<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:16px 20px;margin:12px 0">
+          <div style="font-weight:800;color:#92400e;font-size:.95rem;margin-bottom:8px">📋 Pourquoi sauvegarder ?</div>
+          <div style="font-size:.82rem;color:#78350f;line-height:1.8">
+            Chaque modification du code provoque un redémarrage. Sans Supabase, toutes les données locales sont <strong>effacées</strong>.<br>
+            ✅ <strong>Solution 1</strong> : configurer Supabase (onglet ☁️).<br>
+            ✅ <strong>Solution 2</strong> : exporter avant chaque update, réimporter après.
+          </div>
+        </div>""", unsafe_allow_html=True)
+        st.divider()
+        st.markdown("#### ⬇️ Exporter toutes les données")
+        backup_data = export_all_data()
+        backup_json = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        backup_filename = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+        b_col1.metric("🦠 Germes", len(backup_data["germs"]))
+        b_col2.metric("🧪 Prélèvements", len(backup_data["prelevements"]))
+        b_col3.metric("📅 Lectures planif.", len(backup_data["schedules"]))
+        b_col4.metric("📋 Historique", len(backup_data["surveillance"]))
+        st.download_button(
+            label=f"⬇️ Télécharger la sauvegarde ({len(backup_json)//1024 + 1} Ko)",
+            data=backup_json, file_name=backup_filename, mime="application/json",
+            use_container_width=True, key="main_export_btn"
+        )
+        st.divider()
+        st.markdown("#### ⬆️ Restaurer depuis une sauvegarde")
+        st.markdown("""<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px">
+          <span style="color:#dc2626;font-weight:700;font-size:.82rem">⚠️ La restauration remplace TOUTES les données actuelles sans possibilité d'annulation.</span>
+        </div>""", unsafe_allow_html=True)
+        uploaded_backup = st.file_uploader("Choisir un fichier de sauvegarde (.json)", type=["json"], key="backup_uploader")
+        if uploaded_backup is not None:
+            try:
+                backup_content = json.loads(uploaded_backup.read().decode("utf-8"))
+                meta = backup_content.get("_meta", {})
+                st.markdown(f"""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin-bottom:12px">
+                  <div style="font-weight:700;color:#166534;font-size:.85rem;margin-bottom:8px">📁 Contenu du fichier détecté</div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:.75rem;color:#0f172a">
+                    <div>🦠 Germes : <strong>{len(backup_content.get("germs",[]))}</strong></div>
+                    <div>🧪 Prélèvements : <strong>{len(backup_content.get("prelevements",[]))}</strong></div>
+                    <div>📅 Lectures : <strong>{len(backup_content.get("schedules",[]))}</strong></div>
+                    <div>👤 Opérateurs : <strong>{len(backup_content.get("operators",[]))}</strong></div>
+                    <div>📍 Points : <strong>{len(backup_content.get("points",[]))}</strong></div>
+                    <div>📋 Historique : <strong>{len(backup_content.get("surveillance",[]))}</strong></div>
+                  </div>
+                  <div style="font-size:.68rem;color:#475569;margin-top:8px">Exporté le : {meta.get("exported_at","—")[:19].replace("T"," ")} | Version : {meta.get("version","?")}</div>
+                </div>""", unsafe_allow_html=True)
+                if st.session_state.get("confirm_restore", False):
+                    st.error("🚨 Dernière confirmation : toutes les données actuelles seront remplacées.")
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        if st.button("✅ OUI — Restaurer maintenant", use_container_width=True, key="confirm_restore_yes"):
+                            ok, msg = import_all_data(backup_content)
+                            st.session_state.confirm_restore = False
+                            if ok: st.success(f"✅ {msg}"); st.rerun()
+                            else: st.error(msg)
+                    with r_col2:
+                        if st.button("❌ Annuler", use_container_width=True, key="confirm_restore_no"):
+                            st.session_state.confirm_restore = False; st.rerun()
+                else:
+                    if st.button("⬆️ Restaurer ces données", use_container_width=True, key="restore_btn"):
+                        st.session_state.confirm_restore = True; st.rerun()
+            except json.JSONDecodeError:
+                st.error("❌ Fichier JSON invalide.")
+            except Exception as e:
+                st.error(f"❌ Erreur : {e}")
+
+    with subtab_supabase:
+        st.markdown("### ☁️ Configuration Supabase")
+        supa_ok = get_supabase_client() is not None
+        if supa_ok:
+            st.success("✅ **Supabase connecté** — toutes les modifications sont synchronisées en temps réel.")
+        else:
+            st.error("🔴 **Supabase non connecté** — les données sont sauvegardées en local uniquement.")
+        st.markdown("""<div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px">
+          <div style="font-size:.95rem;font-weight:700;color:#0f172a;margin-bottom:12px">📋 Comment configurer Supabase</div>
+          <div style="font-size:.82rem;color:#1e293b;line-height:1.8">
+            <strong>1.</strong> Créez un compte sur <strong>supabase.com</strong><br>
+            <strong>2.</strong> Créez un nouveau projet<br>
+            <strong>3.</strong> Dans l'éditeur SQL, exécutez le code ci-dessous<br>
+          </div>
+        </div>""", unsafe_allow_html=True)
+        st.code("""CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE app_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON app_state FOR ALL USING (true) WITH CHECK (true);""", language="sql")
+        st.markdown("""<div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px">
+          <div style="font-size:.82rem;color:#1e293b;line-height:1.8">
+            <strong>4.</strong> Dans <em>Project Settings → API</em>, copiez :<br>
+            &nbsp;&nbsp;• <strong>Project URL</strong> → <code>SUPABASE_URL</code><br>
+            &nbsp;&nbsp;• <strong>anon/public key</strong> → <code>SUPABASE_KEY</code><br>
+          </div>
+        </div>""", unsafe_allow_html=True)
+        st.code("""SUPABASE_URL = "https://xxxxx.supabase.co"
+SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
+        if supa_ok:
+            st.divider()
+            st.markdown("### 🔄 Actions Supabase")
+            col_sync1, col_sync2 = st.columns(2)
+            with col_sync1:
+                if st.button("🔄 Forcer la synchronisation", use_container_width=True):
+                    save_germs(st.session_state.germs)
+                    save_prelevements(st.session_state.prelevements)
+                    save_schedules(st.session_state.schedules)
+                    save_surveillance(st.session_state.surveillance)
+                    save_points(st.session_state.points)
                     save_operators(st.session_state.operators)
-                    st.success(f"✅ Opérateur **{new_nom}** ajouté ({new_prof})")
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    save_origin_measures(st.session_state.origin_measures)
+                    st.success("✅ Toutes les données synchronisées avec Supabase !")
+            with col_sync2:
+                if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
+                    st.session_state.germs = load_germs()
+                    st.session_state.prelevements = load_prelevements()
+                    st.session_state.schedules = load_schedules()
+                    st.session_state.surveillance = load_surveillance()
+                    st.session_state.points = load_points()
+                    st.session_state.operators = load_operators()
+                    st.session_state.pending_identifications = load_pending_identifications()
+                    st.session_state.origin_measures = load_origin_measures()
+                    st.success("✅ Données rechargées depuis Supabase !")
                     st.rerun()
