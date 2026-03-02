@@ -333,15 +333,6 @@ def _supa_get(key):
     return None
 
 def load_germs():
-    """Charge les germes et synchronise TOUJOURS depuis DEFAULT_GERMS.
-    
-    Logique de fusion :
-    - Pour chaque germe de DEFAULT_GERMS → ses champs officiels (path, risk, pathotype,
-      surfa, apa, notes, comment) sont TOUJOURS mis à jour depuis le code.
-    - Les germes ajoutés par l'utilisateur (non présents dans DEFAULT_GERMS) sont conservés.
-    - Les germes de DEFAULT_GERMS absents des données sauvegardées sont réintégrés.
-    - L'ordre : germes DEFAULT en premier, puis germes custom.
-    """
     defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
     saved = []
 
@@ -363,11 +354,9 @@ def load_germs():
     merged = []
     synced_count = 0
 
-    # 1. Parcourir DEFAULT_GERMS dans l'ordre — toujours en premier dans la liste
     for dflt in DEFAULT_GERMS:
         name = dflt["name"]
         if name in saved_by_name:
-            # Germe existant : on écrase les champs officiels depuis le code
             g = dict(saved_by_name[name])
             old_risk = g.get("risk")
             for field in ["path", "risk", "pathotype", "surfa", "apa", "notes", "comment"]:
@@ -375,12 +364,10 @@ def load_germs():
             if old_risk != dflt["risk"]:
                 synced_count += 1
         else:
-            # Germe absent → on l'ajoute depuis les defaults
             g = dict(dflt)
             synced_count += 1
         merged.append(g)
 
-    # 2. Conserver les germes custom (non présents dans DEFAULT_GERMS) à la fin
     for g in saved:
         name = g.get("name", "")
         if name and name not in defaults_by_name:
@@ -586,9 +573,7 @@ def import_all_data(data: dict):
             if key not in data:
                 return False, f"Clé manquante dans le fichier : '{key}'"
         st.session_state.germs                   = [dict(g) for g in data["germs"]]
-        # Resynchroniser depuis DEFAULT_GERMS après import
         _germs_sync, _ = load_germs()
-        # Garder les germes custom de l'import qui ne sont pas dans defaults
         _default_names = {d["name"] for d in DEFAULT_GERMS}
         _custom = [g for g in st.session_state.germs if g.get("name") not in _default_names]
         st.session_state.germs = _germs_sync + [g for g in _custom if g.get("name") not in {x["name"] for x in _germs_sync}]
@@ -648,7 +633,6 @@ if "germs" not in st.session_state:
     _germs, _synced = load_germs()
     st.session_state.germs = _germs
     st.session_state.germs_synced_count = _synced
-    # Sauvegarder immédiatement après sync
     if _synced > 0:
         save_germs(st.session_state.germs)
 if "thresholds" not in st.session_state:
@@ -750,7 +734,6 @@ st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimio
 # TAB 1 : LOGIGRAMME
 # ═══════════════════════════════════════════════════════════════════════════════
 if active == "logigramme":
-    # ── Bannière de synchronisation au démarrage ──────────────────────────────
     _synced = st.session_state.get("germs_synced_count", 0)
     _total_default = len(DEFAULT_GERMS)
     _total_germs = len(st.session_state.germs)
@@ -873,9 +856,6 @@ if active == "logigramme":
     default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
     thresholds_json = json.dumps({str(k): v for k, v in st.session_state.thresholds.items()})
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # LOGIGRAMME HTML — BUG CORRIGÉ : cur=c est maintenant DANS le forEach
-    # ─────────────────────────────────────────────────────────────────────────
     tree_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -941,7 +921,6 @@ const DEFAULT_NAMES=new Set({default_names_json});
 const NODE_W=190,NODE_H=28,H_GAP=28,V_GAP=10;
 const LEVEL_COLS=["#38bdf8","#818cf8","#fb923c","#34d399","#a3e635"];
 
-// ✅ BUG CORRIGÉ : cur=c est maintenant DANS le forEach (portée correcte)
 function buildTree(){{
   const root={{name:"Germes",children:[]}};
   GERMS.forEach(g=>{{
@@ -953,7 +932,7 @@ function buildTree(){{
         if(!cur.children)cur.children=[];
         cur.children.push(c);
       }}
-      cur=c;  // ← déplacé ICI, à l'intérieur du forEach
+      cur=c;
     }});
   }});
   function clean(n){{
@@ -1051,7 +1030,6 @@ function renderList(filter=''){{
   const filtered=GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase()));
   countEl.textContent=filter?`${{filtered.length}} / ${{GERMS.length}} germe(s)`:`${{GERMS.length}} germe(s) — cliquez pour détails`;
 
-  // Grouper par catégorie (path[3])
   const groups={{}};
   filtered.forEach(g=>{{
     const cat=(g.path&&g.path[3])||'Autres';
@@ -1060,9 +1038,7 @@ function renderList(filter=''){{
   }});
 
   Object.keys(groups).sort().forEach(cat=>{{
-    // En-tête de groupe
     const header=document.createElement('div');
-    header.style.cssText='';
     header.className='group-header';
     header.textContent=cat;
     list.appendChild(header);
@@ -1479,28 +1455,14 @@ elif active == "planning":
         cal_month = st.session_state.cal_month
         holidays_this_month = get_holidays_cached(cal_year)
 
-        # ── Générer le planning prévisionnel DÉTERMINISTE (même algo que Charge hebdo)
-        def get_working_days_in_range(d_start, d_end):
-            hols = get_holidays_cached(d_start.year) | get_holidays_cached(d_end.year)
-            days = []
-            cur = d_start
-            while cur <= d_end:
-                if cur.weekday() < 5 and cur not in hols:
-                    days.append(cur)
-                cur += timedelta(days=1)
-            return days
-
-        # Calculer le planning pour chaque semaine du mois affiché
         import calendar as _cal3
         _, n_days_m = _cal3.monthrange(cal_year, cal_month)
         month_start = date_type(cal_year, cal_month, 1)
         month_end = date_type(cal_year, cal_month, n_days_m)
 
-        # Récupérer toutes les semaines du mois
         from collections import defaultdict as _dd
-        planned_j0 = _dd(list)  # date -> [labels]
+        planned_j0 = _dd(list)
 
-        # Même algo aléatoire-par-semaine que Charge hebdo
         import random as _rnd2
         cur_monday = month_start - timedelta(days=month_start.weekday())
         hols_cal = get_holidays_cached(cal_year)
@@ -1513,7 +1475,6 @@ elif active == "planning":
                 _yn = cur_monday.isocalendar()[0]
                 _rng_cal = _rnd2.Random(_yn * 100 + _wn)
 
-                # Construire toutes les tâches de la semaine (même logique que charge hebdo)
                 def _frc(rc):
                     rc = (rc or '').strip().upper()
                     if 'A' in rc: return 20
@@ -1548,8 +1509,6 @@ elif active == "planning":
                     charge_cal[wd_cible] += 1
             cur_monday += timedelta(weeks=1)
 
-        # J2/J7 : UNIQUEMENT depuis les prélèvements réels (Identification & Surveillance)
-        # Pas de J2/J7 prévisionnels dans le calendrier
         def get_day_activities(d):
             j0r = [p for p in st.session_state.prelevements if p.get('date') and datetime.fromisoformat(p['date']).date()==d and not p.get('archived',False)]
             j2r = [s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date()==d]
@@ -1573,8 +1532,6 @@ elif active == "planning":
             '</div>'
         )
 
-        # ── Grille calendrier mensuelle ───────────────────────────────────────
-        # État pour le jour sélectionné (détail au clic)
         if 'cal_selected_day' not in st.session_state:
             st.session_state.cal_selected_day = None
 
@@ -1599,24 +1556,20 @@ elif active == "planning":
                 op = "0.65" if is_past and not is_today else "1"
 
                 b = ""
-                # Réels J0 (plein violet)
                 if j0r:
                     b += '<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0r)) + ' J0</div>'
-                # J2 réels depuis schedules
                 for s in j2r:
                     done = s['status'] == 'done'
                     late = not done and d < _today_dt
                     sc = "#22c55e" if done else ("#ef4444" if late else "#d97706")
                     si = "✅" if done else ("⚠️" if late else "📖")
                     b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J2</div>'
-                # J7 réels depuis schedules
                 for s in j7r:
                     done = s['status'] == 'done'
                     late = not done and d < _today_dt
                     sc = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
                     si = "✅" if done else ("⚠️" if late else "📗")
                     b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J7</div>'
-                # Prévisionnels (tiretés) si pas de réel
                 if not j0r and j0p and not is_non_working:
                     b += '<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0p)) + ' prévu</div>'
 
@@ -1626,7 +1579,6 @@ elif active == "planning":
                 elif is_weekend:
                     hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
 
-                has_content = bool(j0r or j2r or j7r or (j0p and not is_non_working))
                 day_has_content[d] = {"j0r": j0r, "j2r": j2r, "j7r": j7r, "j0p": j0p}
 
                 grid += '<div style="background:' + bg + ';border:' + bdr + ';border-radius:8px;padding:6px;min-height:90px;opacity:' + op + ';display:flex;flex-direction:column"><div style="font-weight:800;font-size:.9rem;color:' + dnc + ';margin-bottom:2px">' + str(day_num) + '</div>' + hlbl + b + '</div>'
@@ -1635,7 +1587,6 @@ elif active == "planning":
         st.markdown(legend, unsafe_allow_html=True)
         st.markdown(hdr + grid, unsafe_allow_html=True)
 
-        # ── Détail du jour sélectionné ────────────────────────────────────────
         st.markdown("---")
         st.markdown("**💡 Détail par jour** — sélectionnez un jour ci-dessous pour voir le détail des prélèvements :")
         import calendar as _cal2
