@@ -1501,7 +1501,14 @@ elif active == "planning":
                         taches_cal.append({"label": pt['label']})
 
                 _rng_cal.shuffle(taches_cal)
+
+                # ── Appliquer le plafond hebdomadaire si défini ───────────────────────
+                _nb_max_cal = st.session_state.get("ch_nb_prelev_max", 0)
+                if _nb_max_cal > 0 and len(taches_cal) > _nb_max_cal:
+                    taches_cal = taches_cal[:_nb_max_cal]
+
                 charge_cal = {wd: 0 for wd in wd_week}
+                
                 for t in taches_cal:
                     wd_cible = min(wd_week, key=lambda d: charge_cal[d])
                     if month_start <= wd_cible <= month_end:
@@ -1572,7 +1579,8 @@ elif active == "planning":
                     b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J7</div>'
                 if not j0r and j0p and not is_non_working:
                     b += '<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0p)) + ' prévu</div>'
-
+                if "ch_nb_prelev_max" not in st.session_state:
+                    st.session_state.ch_nb_prelev_max = 0
                 hlbl = ""
                 if is_holiday and not is_weekend:
                     hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
