@@ -1479,7 +1479,7 @@ elif active == "planning":
     JOURS_FR_COURT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
     JOURS_FR = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    plan_tab_view, plan_tab_list, plan_tab_edit, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📋 Vue liste", "✏️ Modifier", "📊 Charge hebdo", "📥 Export Excel"])
+    plan_tab_view, plan_tab_list, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📋 Vue liste", "📊 Charge hebdo", "📥 Export Excel"])
 
     with plan_tab_view:
         nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
@@ -1715,131 +1715,6 @@ elif active == "planning":
               <div style="font-size:.95rem;color:#475569;font-weight:600">Aucune activité cette semaine</div>
             </div>""", unsafe_allow_html=True)
 
-    with plan_tab_edit:
-        st.markdown("""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;margin-bottom:16px">
-          <span style="color:#166534;font-weight:700;font-size:.85rem">✏️ Mode édition</span>
-        </div>""", unsafe_allow_html=True)
-        edit_sub1, edit_sub2 = st.tabs(["Prélèvements", "Lectures J2/J7"])
-        with edit_sub1:
-            st.markdown("##### 🧪 Prélèvements actifs")
-            active_prelevs = [p for p in st.session_state.prelevements if not p.get('archived', False)]
-            if not active_prelevs:
-                st.info("Aucun prélèvement actif.")
-            else:
-                for pe_i, pe in enumerate(active_prelevs):
-                    real_pe_i = st.session_state.prelevements.index(pe)
-                    pe_col1, pe_col2 = st.columns([5, 1])
-                    with pe_col1:
-                        st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
-                          <span style="font-weight:700;color:#0f172a">{pe['label']}</span>
-                          <span style="background:#7c3aed;color:#fff;font-size:.6rem;padding:2px 8px;border-radius:5px">{pe.get('type','—')}</span>
-                          <span style="color:#475569;font-size:.75rem">Classe {pe.get('room_class','—')}</span>
-                          <span style="color:#475569;font-size:.75rem">🧫 {pe.get('gelose','—')}</span>
-                          <span style="color:#475569;font-size:.75rem">📅 {pe.get('date','—')}</span>
-                        </div>""", unsafe_allow_html=True)
-                    with pe_col2:
-                        if st.button("✏️ Éditer", key=f"edit_pe_{real_pe_i}", use_container_width=True):
-                            st.session_state[f"editing_pe_{real_pe_i}"] = True
-                            st.rerun()
-                    if st.session_state.get(f"editing_pe_{real_pe_i}", False):
-                        ep1, ep2, ep3 = st.columns([3, 2, 2])
-                        with ep1:
-                            new_label_pe = st.text_input("Nom / Point", value=pe['label'], key=f"ep_label_{real_pe_i}")
-                        with ep2:
-                            oper_list_pe = [o['nom'] for o in st.session_state.operators]
-                            cur_oper = pe.get('operateur','')
-                            oper_opts = ['— Sélectionner —'] + oper_list_pe
-                            oper_idx = next((i+1 for i,o in enumerate(oper_list_pe) if o == cur_oper), 0)
-                            new_oper_pe = st.selectbox("Opérateur", oper_opts, index=oper_idx, key=f"ep_oper_{real_pe_i}")
-                        with ep3:
-                            new_date_pe = st.date_input("Date prél.", value=datetime.fromisoformat(pe['date']).date() if pe.get('date') else datetime.today().date(), key=f"ep_date_{real_pe_i}")
-                        epc1, epc2 = st.columns(2)
-                        with epc1:
-                            if st.button("✅ Enregistrer", key=f"ep_save_{real_pe_i}", use_container_width=True):
-                                st.session_state.prelevements[real_pe_i]['label'] = new_label_pe
-                                st.session_state.prelevements[real_pe_i]['operateur'] = new_oper_pe if new_oper_pe != '— Sélectionner —' else cur_oper
-                                st.session_state.prelevements[real_pe_i]['date'] = str(new_date_pe)
-                                new_j2 = next_working_day_offset(new_date_pe, 2)
-                                new_j7 = next_working_day_offset(new_date_pe, 5)
-                                for sch in st.session_state.schedules:
-                                    if sch['sample_id'] == pe['id']:
-                                        sch['due_date'] = new_j2.isoformat() if sch['when'] == 'J2' else new_j7.isoformat()
-                                save_prelevements(st.session_state.prelevements)
-                                save_schedules(st.session_state.schedules)
-                                st.session_state[f"editing_pe_{real_pe_i}"] = False
-                                st.success(f"✅ Mis à jour — J2: {new_j2.strftime('%d/%m/%Y')} | J7: {new_j7.strftime('%d/%m/%Y')} (jours ouvrés)")
-                                st.rerun()
-                        with epc2:
-                            if st.button("Annuler", key=f"ep_cancel_{real_pe_i}", use_container_width=True):
-                                st.session_state[f"editing_pe_{real_pe_i}"] = False
-                                st.rerun()
-            st.divider()
-            st.markdown("##### ➕ Ajouter un prélèvement")
-            if st.session_state.points:
-                ap1, ap2, ap3 = st.columns([3, 2, 2])
-                with ap1:
-                    ap_labels = [f"{pt['label']} — {pt.get('type','?')}" for pt in st.session_state.points]
-                    ap_sel = st.selectbox("Point", range(len(ap_labels)), format_func=lambda i: ap_labels[i], key="ap_point_sel")
-                    ap_point = st.session_state.points[ap_sel]
-                with ap2:
-                    oper_list_ap = [o['nom'] for o in st.session_state.operators]
-                    ap_oper = st.selectbox("Opérateur", ['— Sélectionner —'] + oper_list_ap, key="ap_oper_sel")
-                with ap3:
-                    ap_date = st.date_input("Date", value=datetime.today().date(), key="ap_date_sel")
-                if st.button("➕ Ajouter", use_container_width=True, key="ap_add_btn"):
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    j2_d_new = next_working_day_offset(ap_date, 2)
-                    j7_d_new = next_working_day_offset(ap_date, 5)
-                    new_pe = {"id": pid, "label": ap_point['label'], "type": ap_point.get('type'), "gelose": ap_point.get('gelose','—'), "room_class": ap_point.get('room_class'), "operateur": ap_oper if ap_oper != '— Sélectionner —' else '', "date": str(ap_date), "archived": False}
-                    st.session_state.prelevements.append(new_pe)
-                    st.session_state.schedules.append({"id": f"sch_{pid}_J2", "sample_id": pid, "label": ap_point['label'], "due_date": j2_d_new.isoformat(), "when": "J2", "status": "pending"})
-                    st.session_state.schedules.append({"id": f"sch_{pid}_J7", "sample_id": pid, "label": ap_point['label'], "due_date": j7_d_new.isoformat(), "when": "J7", "status": "pending"})
-                    save_prelevements(st.session_state.prelevements)
-                    save_schedules(st.session_state.schedules)
-                    st.success(f"✅ Ajouté — J2 le {j2_d_new.strftime('%d/%m/%Y')} | J7 le {j7_d_new.strftime('%d/%m/%Y')} (jours ouvrés)")
-                    st.rerun()
-        with edit_sub2:
-            pending_schs = [s for s in st.session_state.schedules if s['status'] == 'pending']
-            if not pending_schs:
-                st.info("Aucune lecture en attente.")
-            else:
-                for sh_i, sh in enumerate(pending_schs):
-                    real_sh_i = st.session_state.schedules.index(sh)
-                    sh_date = datetime.fromisoformat(sh['due_date']).date()
-                    is_sh_overdue = sh_date < _today_dt
-                    badge_col = "#d97706" if sh['when']=='J2' else "#0369a1"
-                    sh_col1, sh_col2, sh_col3 = st.columns([5, 1, 1])
-                    with sh_col1:
-                        overdue_badge = ' <span style="background:#ef4444;color:#fff;font-size:.55rem;padding:1px 6px;border-radius:6px">EN RETARD</span>' if is_sh_overdue else ''
-                        st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
-                          <span style="background:{badge_col};color:#fff;font-size:.6rem;padding:2px 8px;border-radius:5px;font-weight:700">{sh['when']}</span>
-                          <span style="font-weight:700;color:#0f172a;font-size:.82rem">{sh['label']}</span>
-                          <span style="color:#475569;font-size:.75rem">📅 {sh_date.strftime('%d/%m/%Y')}</span>
-                          {overdue_badge}
-                        </div>""", unsafe_allow_html=True)
-                    with sh_col2:
-                        if st.button("✏️", key=f"edit_sh_{real_sh_i}", use_container_width=True):
-                            st.session_state[f"editing_sh_{real_sh_i}"] = True
-                            st.rerun()
-                    with sh_col3:
-                        if st.button("🗑️", key=f"del_sh_edit_{real_sh_i}", use_container_width=True):
-                            st.session_state.schedules.pop(real_sh_i)
-                            save_schedules(st.session_state.schedules)
-                            st.rerun()
-                    if st.session_state.get(f"editing_sh_{real_sh_i}", False):
-                        new_sh_date = st.date_input("Nouvelle date", value=sh_date, key=f"sh_date_{real_sh_i}")
-                        sc1, sc2 = st.columns(2)
-                        with sc1:
-                            if st.button("✅ Enregistrer", key=f"sh_save_{real_sh_i}", use_container_width=True):
-                                st.session_state.schedules[real_sh_i]['due_date'] = new_sh_date.isoformat()
-                                save_schedules(st.session_state.schedules)
-                                st.session_state[f"editing_sh_{real_sh_i}"] = False
-                                st.rerun()
-                        with sc2:
-                            if st.button("Annuler", key=f"sh_cancel_{real_sh_i}", use_container_width=True):
-                                st.session_state[f"editing_sh_{real_sh_i}"] = False
-                                st.rerun()
-
     with plan_tab_charge:
         st.markdown("### 📊 Charge hebdomadaire — Préleveurs & Points")
 
@@ -1940,27 +1815,22 @@ elif active == "planning":
             total_realise = 0
 
             for pt_i, pt in enumerate(st.session_state.points):
-                key_freq = f"ch_freq_{pt.get('id', pt_i)}"
-                # Fréquence depuis le point (persistante) ou fallback session_state
+                # Fréquence depuis le point (persistante) ou fallback
                 pt_freq_stored = pt.get('frequency', None)
                 pt_freq_unit = pt.get('frequency_unit', '/ semaine')
                 # Convertir en hebdomadaire (5 jours ouvrés)
                 if pt_freq_stored is not None:
                     if pt_freq_unit == '/ jour':
-                        default_freq = int(pt_freq_stored) * 5  # 5 jours ouvrés/semaine
+                        prevu = int(pt_freq_stored) * nb_jours  # adapté aux jours ouvrés réels
                     elif pt_freq_unit == '/ mois':
-                        default_freq = max(1, round(pt_freq_stored / 4))
+                        prevu = max(1, round(pt_freq_stored / 4))
                     else:
-                        default_freq = int(pt_freq_stored)
+                        prevu = int(pt_freq_stored)
                 else:
-                    default_freq = 2 if pt.get('type') == 'Air' else 1
+                    prevu = 2 if pt.get('type') == 'Air' else 1
 
                 # Prélèvements réalisés sur ce point cette semaine
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
-                # Fréquence configurée (stockée en session pour override temporaire)
-                if key_freq not in st.session_state:
-                    st.session_state[key_freq] = default_freq
-                prevu = st.session_state[key_freq]
 
                 # Couleur statut
                 if realise >= prevu:
@@ -1980,9 +1850,7 @@ elif active == "planning":
                 risk_colors_pl = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
                 risk_col_pl = risk_colors_pl.get(risk_val, "#94a3b8")
 
-                col_info, col_freq = st.columns([5, 1])
-                with col_info:
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
+                st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
                       <div style="font-size:.9rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
                       <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('type','—')}</div>
                       <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
@@ -1991,13 +1859,6 @@ elif active == "planning":
                       <div style="font-size:1rem;font-weight:800;color:#0f172a;text-align:center">{realise}</div>
                       <div style="background:{st_bg};border:1px solid {st_border};border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:{st_txt}">{st_icon} {st_label}</div>
                     </div>""", unsafe_allow_html=True)
-                with col_freq:
-                    new_freq = st.number_input("Prév.", min_value=0, max_value=7, value=prevu, step=1,
-                        key=f"freq_input_{pt.get('id', pt_i)}", label_visibility="collapsed",
-                        help=f"Nombre de prélèvements prévus par semaine pour {pt['label']}")
-                    if new_freq != prevu:
-                        st.session_state[key_freq] = new_freq
-                        st.rerun()
 
             # ── Pied de tableau total ─────────────────────────────────────────
             taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
@@ -2252,9 +2113,10 @@ elif active == "historique":
         st.divider()
 
         # ── ONGLETS STATISTIQUES + LISTE ─────────────────────────────────────
-        hist_tab_stats_pts, hist_tab_stats_germs, hist_tab_liste = st.tabs([
+        hist_tab_stats_pts, hist_tab_stats_germs, hist_tab_preleveurs, hist_tab_liste = st.tabs([
             "📍 Stats par point de prélèvement",
             "🦠 Stats par germe",
+            "👤 Répartition par préleveur",
             "📋 Liste des entrées"
         ])
 
@@ -2402,7 +2264,92 @@ elif active == "historique":
                             </div>""", unsafe_allow_html=True)
 
         # ─────────────────────────────────────────────────────────────────────
-        # ONGLET 3 : LISTE DES ENTRÉES
+        # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
+        # ─────────────────────────────────────────────────────────────────────
+        with hist_tab_preleveurs:
+            st.markdown("#### 👤 Répartition par préleveur — historique global")
+            from collections import defaultdict
+
+            # Construire stats par préleveur depuis l'historique
+            prev_stats = defaultdict(lambda: {"total": 0, "positives": 0, "negatives": 0,
+                                               "alertes": 0, "actions": 0, "germes": defaultdict(int)})
+            for r in surv:
+                op = r.get("operateur", "") or "Non renseigné"
+                if not op.strip(): op = "Non renseigné"
+                prev_stats[op]["total"] += 1
+                ufc = int(r.get("ufc", 0))
+                status = r.get("status", "ok")
+                germ = r.get("germ_match", "") or ""
+                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                    prev_stats[op]["positives"] += 1
+                    prev_stats[op]["germes"][germ] += 1
+                else:
+                    prev_stats[op]["negatives"] += 1
+                if status == "alert": prev_stats[op]["alertes"] += 1
+                elif status == "action": prev_stats[op]["actions"] += 1
+
+            if not prev_stats:
+                st.info("Aucune donnée préleveur dans l'historique.")
+            else:
+                # Cartes synthèse par préleveur
+                op_list = sorted(prev_stats.items(), key=lambda x: -x[1]["total"])
+                card_cols = st.columns(min(len(op_list), 4))
+                for ci, (op_name, op_data) in enumerate(op_list):
+                    t = op_data["total"]
+                    pos = op_data["positives"]
+                    taux_pos = pos / t * 100 if t > 0 else 0
+                    taux_col = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
+                    initiale = op_name[0].upper() if op_name and op_name != "Non renseigné" else "?"
+                    with card_cols[ci % len(card_cols)]:
+                        st.markdown(f"""<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;padding:18px 14px;text-align:center;margin-bottom:12px">
+                          <div style="background:#2563eb;color:#fff;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.2rem;margin:0 auto 10px auto">{initiale}</div>
+                          <div style="font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px">{op_name}</div>
+                          <div style="font-size:2rem;font-weight:900;color:#1e40af">{t}</div>
+                          <div style="font-size:.68rem;color:#64748b;margin-bottom:10px">résultat(s) enregistré(s)</div>
+                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+                            <div style="background:#f0fdf4;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#22c55e">{op_data['negatives']}</div><div style="font-size:.6rem;color:#166534">✅ Négatifs</div></div>
+                            <div style="background:#fef2f2;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#ef4444">{pos}</div><div style="font-size:.6rem;color:#991b1b">🦠 Positifs</div></div>
+                            <div style="background:#fffbeb;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#f59e0b">{op_data['alertes']}</div><div style="font-size:.6rem;color:#92400e">⚠️ Alertes</div></div>
+                            <div style="background:#fef2f2;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#dc2626">{op_data['actions']}</div><div style="font-size:.6rem;color:#991b1b">🚨 Actions</div></div>
+                          </div>
+                          <div style="margin-top:10px;background:{taux_col}22;border:1px solid {taux_col}55;border-radius:8px;padding:5px">
+                            <div style="font-size:.8rem;font-weight:800;color:{taux_col}">{taux_pos:.0f}% de positifs</div>
+                          </div>
+                        </div>""", unsafe_allow_html=True)
+
+                st.divider()
+                # Tableau détaillé
+                st.markdown("##### 📊 Détail par préleveur")
+                st.markdown("""<div style="display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
+                  <div style="font-size:.72rem;font-weight:800;color:#fff">Préleveur</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Total</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">✅ Nég.</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">🦠 Pos.</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">⚠️ Alerte</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">🚨 Action</div>
+                  <div style="font-size:.72rem;font-weight:800;color:#fff">Germes fréquents</div>
+                </div>""", unsafe_allow_html=True)
+                for ri, (op_name, op_data) in enumerate(op_list):
+                    t = op_data["total"]
+                    pos = op_data["positives"]
+                    taux_pos = pos / t * 100 if t > 0 else 0
+                    taux_col = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
+                    germes_top = ", ".join(f"{g} ({n}x)" for g, n in sorted(op_data["germes"].items(), key=lambda x: -x[1])[:3])
+                    if not germes_top: germes_top = "— aucun"
+                    row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center">
+                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">👤 {op_name}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{t}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#22c55e;text-align:center">{op_data['negatives']}</div>
+                      <div style="text-align:center"><span style="background:{taux_col}22;color:{taux_col};border:1px solid {taux_col}55;border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700">{pos}</span></div>
+                      <div style="font-size:1rem;font-weight:800;color:#f59e0b;text-align:center">{op_data['alertes']}</div>
+                      <div style="font-size:1rem;font-weight:800;color:#ef4444;text-align:center">{op_data['actions']}</div>
+                      <div style="font-size:.72rem;color:#475569;font-style:italic">{germes_top}</div>
+                    </div>""", unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px"><div style="font-size:.78rem;font-weight:700;color:#94a3b8">{len(op_list)} préleveur(s) — {total} résultats au total</div></div>', unsafe_allow_html=True)
+
+        # ─────────────────────────────────────────────────────────────────────
+        # ONGLET 4 : LISTE DES ENTRÉES
         # ─────────────────────────────────────────────────────────────────────
         with hist_tab_liste:
             st.markdown("#### 📋 Toutes les entrées")
