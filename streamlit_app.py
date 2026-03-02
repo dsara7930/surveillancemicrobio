@@ -1873,28 +1873,6 @@ elif active == "planning":
 
             st.divider()
 
-            # ── Répartition par préleveur ─────────────────────────────────────
-            st.markdown("#### 👤 Répartition par préleveur")
-            if not st.session_state.operators:
-                st.info("Aucun opérateur enregistré — ajoutez-en dans **Paramètres → Opérateurs**.")
-            else:
-                ops_cols = st.columns(min(len(st.session_state.operators), 4))
-                for oi, op in enumerate(st.session_state.operators):
-                    op_nom = op.get('nom', '?')
-                    op_actes = sum(1 for p in ch_j0 if (p.get('operateur') or '').startswith(op_nom.split()[0]))
-                    op_j2 = sum(1 for s in ch_j2 if True)  # lectures J2 non filtrées par opérateur
-                    with ops_cols[oi % len(ops_cols)]:
-                        charge_color = "#22c55e" if op_actes >= (total_prevu // max(nb_preleveurs, 1)) else "#f59e0b"
-                        st.markdown(f"""<div style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;height:100%">
-                          <div style="background:#2563eb;color:#fff;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;margin:0 auto 10px auto">{op_nom[0].upper()}</div>
-                          <div style="font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:4px">{op_nom}</div>
-                          <div style="font-size:.72rem;color:#64748b;margin-bottom:10px">{op.get('profession','')[:28]}</div>
-                          <div style="font-size:2rem;font-weight:900;color:{charge_color}">{op_actes}</div>
-                          <div style="font-size:.72rem;color:#64748b">prélèvement(s) réalisé(s)</div>
-                        </div>""", unsafe_allow_html=True)
-
-            st.divider()
-
             # ── Répartition par jour de la semaine ────────────────────────────
             st.markdown("#### 📅 Charge par jour ouvré")
             JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
