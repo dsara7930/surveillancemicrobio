@@ -1570,19 +1570,19 @@ elif active == "planning":
                 badges = ""
                 if j0:
                     j0_title = j0[0].get('label','') if j0 else ''
-                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;cursor:default" title="{j0_title}">🧪 {len(j0)} J0</div>'
+                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{len(j0)} J0 🧪</div>'
                 for s in j2:
                     is_done = s['status'] == 'done'
                     is_late = not is_done and d < _today_dt
                     s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706")
                     s_icon = "✅" if is_done else ("⚠️" if is_late else "📖")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J2</div>'
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{s_icon} J2</div>'
                 for s in j7:
                     is_done = s['status'] == 'done'
                     is_late = not is_done and d < _today_dt
                     s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1")
                     s_icon = "✅" if is_done else ("⚠️" if is_late else "📗")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J7</div>'
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{s_icon} J7</div>'
                 holiday_lbl = ""
                 if is_holiday and not is_weekend:
                     holiday_lbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
@@ -1883,21 +1883,31 @@ elif active == "planning":
                 dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
                 d_total = dj0 + dj2 + dj7
                 is_today_d = wd == _today_dt
-                bg = "#eff6ff" if is_today_d else "#f8fafc"
-                border = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
                 with day_cols[di]:
-                    st.markdown(f"""<div style="background:{bg};border:{border};border-radius:12px;padding:14px;text-align:center">
-                      <div style="font-size:.82rem;font-weight:800;color:{'#1e40af' if is_today_d else '#475569'}">{JOURS_FR2[wd.weekday()]}</div>
-                      <div style="font-size:.75rem;color:#94a3b8;margin-bottom:10px">{wd.strftime('%d/%m')}</div>
-                      <div style="font-size:2.2rem;font-weight:900;color:#0f172a">{d_total}</div>
-                      <div style="font-size:.7rem;color:#94a3b8;margin-top:4px">acte(s)</div>
-                      <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
-                        {'<div style="background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">🧪 '+str(dj0)+' J0</div>' if dj0 else ''}
-                        {'<div style="background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">📖 '+str(dj2)+' J2</div>' if dj2 else ''}
-                        {'<div style="background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700">📗 '+str(dj7)+' J7</div>' if dj7 else ''}
-                        {'<div style="font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px">Rien de planifié</div>' if d_total == 0 else ''}
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+                    # Construire la carte entièrement en Python, sans HTML imbriqué dans f-string
+                    bg_d        = "#eff6ff" if is_today_d else "#f8fafc"
+                    border_d    = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
+                    jour_color  = "#1e40af" if is_today_d else "#475569"
+                    inner_html  = ""
+                    if dj0:
+                        inner_html += "<div style='background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>🧪 " + str(dj0) + " J0</div>"
+                    if dj2:
+                        inner_html += "<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📖 " + str(dj2) + " J2</div>"
+                    if dj7:
+                        inner_html += "<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📗 " + str(dj7) + " J7</div>"
+                    if d_total == 0:
+                        inner_html += "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien de planifié</div>"
+                    card = (
+                        "<div style='background:" + bg_d + ";border:" + border_d + ";border-radius:12px;padding:14px;text-align:center'>"
+                        "<div style='font-size:.82rem;font-weight:800;color:" + jour_color + "'>" + JOURS_FR2[wd.weekday()] + "</div>"
+                        "<div style='font-size:.75rem;color:#94a3b8;margin-bottom:10px'>" + wd.strftime('%d/%m') + "</div>"
+                        "<div style='font-size:2.2rem;font-weight:900;color:#0f172a'>" + str(d_total) + "</div>"
+                        "<div style='font-size:.7rem;color:#94a3b8;margin-top:4px'>acte(s)</div>"
+                        "<div style='margin-top:10px;display:flex;flex-direction:column;gap:4px'>"
+                        + inner_html +
+                        "</div></div>"
+                    )
+                    st.markdown(card, unsafe_allow_html=True)
 
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
