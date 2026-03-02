@@ -1754,6 +1754,44 @@ elif active == "planning":
             if st.button("🔄", use_container_width=True, key="ch_refresh", help="Recalculer la charge"):
                 st.rerun()
 
+        # ── Quota hebdomadaire global ─────────────────────────────────────────
+        st.markdown(
+            "<div style='background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;padding:14px 20px;margin:10px 0 4px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap'>"
+            "<div style='font-size:.95rem;font-weight:800;color:#fff'>🎯 Quota max de prélèvements / semaine</div>"
+            "<div style='font-size:.75rem;color:#94a3b8'>Laissez à 0 pour utiliser la fréquence de chaque point</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+        quota_col1, quota_col2 = st.columns([1, 3])
+        with quota_col1:
+            ch_quota = st.number_input(
+                "Quota max prélèv./semaine", min_value=0, max_value=500, value=0, step=5,
+                key="ch_quota_max",
+                label_visibility="collapsed",
+                help="0 = pas de limite, chaque point respecte sa propre fréquence"
+            )
+        with quota_col2:
+            if ch_quota > 0:
+                nb_pts = len(st.session_state.points)
+                if nb_pts > 0:
+                    par_pt = ch_quota / nb_pts
+                    st.markdown(
+                        "<div style='background:#1e40af15;border:1px solid #3b82f644;border-radius:8px;padding:10px 14px;margin-top:2px;display:flex;gap:16px;align-items:center;flex-wrap:wrap'>"
+                        "<span style='font-size:.82rem;color:#1e40af;font-weight:700'>📍 " + str(nb_pts) + " points</span>"
+                        "<span style='font-size:.82rem;color:#475569'>→</span>"
+                        "<span style='font-size:.82rem;font-weight:700;color:#0f172a'>≈ " + str(round(par_pt, 1)) + " prélévement(s) / point / semaine</span>"
+                        "<span style='font-size:.75rem;color:#94a3b8'>(quota réparti équitablement entre les points)</span>"
+                        "</div>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.markdown(
+                    "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-top:2px'>"
+                    "<span style='font-size:.78rem;color:#94a3b8;font-style:italic'>Pas de quota — chaque point suit sa fréquence configurée ou sa classe de salle (A=20/sem, D=10/sem)</span>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+
         ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
         ch_sel_we = ch_sel_ws + timedelta(days=6)
         ch_holidays = get_holidays_cached(ch_sel_ws.year)
@@ -1835,15 +1873,18 @@ elif active == "planning":
             total_prevu = 0
             total_realise = 0
 
+            nb_pts_total = max(1, len(st.session_state.points))
             for pt_i, pt in enumerate(st.session_state.points):
                 pt_id = pt.get('id', str(pt_i))
-                # Clé session pour stocker la valeur modifiée
-                sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
+                # Clé inclut le quota pour forcer recalcul si quota change
+                sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}_{ch_quota}"
 
-                # Valeur par défaut : fréquence du point ou classe
+                # Valeur par défaut : quota réparti > fréquence du point > classe
                 pt_freq = pt.get('frequency', None)
                 pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                if pt_freq is not None and int(pt_freq) > 0:
+                if ch_quota > 0:
+                    default_prevu = max(1, round(ch_quota / nb_pts_total))
+                elif pt_freq is not None and int(pt_freq) > 0:
                     if pt_freq_unit == '/ jour':
                         default_prevu = int(pt_freq) * nb_jours
                     elif pt_freq_unit == '/ mois':
@@ -1853,7 +1894,6 @@ elif active == "planning":
                 else:
                     default_prevu = _freq_classe(pt.get('room_class', ''))
 
-                # Initialiser la session si pas encore définie pour cette semaine
                 if sess_key not in st.session_state:
                     st.session_state[sess_key] = default_prevu
 
@@ -1944,7 +1984,7 @@ elif active == "planning":
                 taches_all = []
                 for pt in st.session_state.points:
                     pt_id = pt.get('id', '')
-                    _sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
+                    _sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}_{ch_quota}"
                     # Récupérer la valeur modifiée dans le tableau si elle existe
                     if _sess_key in st.session_state:
                         nb_fois = int(st.session_state[_sess_key])
