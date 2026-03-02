@@ -1485,135 +1485,144 @@ elif active == "planning":
         nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
         with nav_c1:
             if st.button("◀◀", use_container_width=True, key="cal_prev_year"):
-                st.session_state.cal_year -= 1
-                st.rerun()
+                st.session_state.cal_year -= 1; st.rerun()
         with nav_c2:
             if st.button("◀", use_container_width=True, key="cal_prev_month"):
-                if st.session_state.cal_month == 1:
-                    st.session_state.cal_month = 12
-                    st.session_state.cal_year -= 1
-                else:
-                    st.session_state.cal_month -= 1
+                if st.session_state.cal_month == 1: st.session_state.cal_month = 12; st.session_state.cal_year -= 1
+                else: st.session_state.cal_month -= 1
                 st.rerun()
         with nav_c3:
-            st.markdown(f"""<div style="text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem">
-              📅 {MOIS_FR[st.session_state.cal_month]} {st.session_state.cal_year}
-            </div>""", unsafe_allow_html=True)
+            st.markdown("<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>📅 " + MOIS_FR[st.session_state.cal_month] + " " + str(st.session_state.cal_year) + "</div>", unsafe_allow_html=True)
         with nav_c4:
             if st.button("▶", use_container_width=True, key="cal_next_month"):
-                if st.session_state.cal_month == 12:
-                    st.session_state.cal_month = 1
-                    st.session_state.cal_year += 1
-                else:
-                    st.session_state.cal_month += 1
+                if st.session_state.cal_month == 12: st.session_state.cal_month = 1; st.session_state.cal_year += 1
+                else: st.session_state.cal_month += 1
                 st.rerun()
         with nav_c5:
             if st.button("▶▶", use_container_width=True, key="cal_next_year"):
-                st.session_state.cal_year += 1
-                st.rerun()
+                st.session_state.cal_year += 1; st.rerun()
 
         if st.button("📍 Aujourd'hui", key="cal_today"):
-            st.session_state.cal_year = _today_dt.year
-            st.session_state.cal_month = _today_dt.month
-            st.rerun()
+            st.session_state.cal_year = _today_dt.year; st.session_state.cal_month = _today_dt.month; st.rerun()
 
         cal_year = st.session_state.cal_year
         cal_month = st.session_state.cal_month
         holidays_this_month = get_holidays_cached(cal_year)
 
+        # ── Générer les prélèvements prévisionnels depuis les points ─────────
+        def get_working_days_of_month(year, month):
+            import calendar as _cal
+            _, n = _cal.monthrange(year, month)
+            hols = get_holidays_cached(year)
+            return [date_type(year, month, d) for d in range(1, n+1)
+                    if date_type(year, month, d).weekday() < 5 and date_type(year, month, d) not in hols]
+
+        def generate_planned_days(pt, year, month):
+            freq = int(pt.get('frequency', 1))
+            unit = pt.get('frequency_unit', '/ semaine')
+            wdays = get_working_days_of_month(year, month)
+            if not wdays: return []
+            if unit == '/ jour':
+                return wdays
+            elif unit == '/ semaine':
+                from collections import defaultdict
+                weeks = defaultdict(list)
+                for d in wdays:
+                    weeks[d.isocalendar()[1]].append(d)
+                result = []
+                for wk_days in weeks.values():
+                    step = max(1, len(wk_days) // max(1, freq))
+                    result.extend([wk_days[i] for i in range(0, len(wk_days), step)][:freq])
+                return sorted(set(result))
+            elif unit == '/ mois':
+                step = max(1, len(wdays) // max(1, freq))
+                return [wdays[i] for i in range(0, len(wdays), step)][:freq]
+            return []
+
+        planned_j0 = {}
+        planned_j2 = {}
+        planned_j7 = {}
+        for pt in st.session_state.points:
+            for d0 in generate_planned_days(pt, cal_year, cal_month):
+                planned_j0.setdefault(d0, []).append(pt['label'])
+                planned_j2[next_working_day_offset(d0, 2)] = planned_j2.get(next_working_day_offset(d0, 2), 0) + 1
+                planned_j7[next_working_day_offset(d0, 5)] = planned_j7.get(next_working_day_offset(d0, 5), 0) + 1
+
         def get_day_activities(d):
-            j0 = [p for p in st.session_state.prelevements
-                  if p.get('date') and datetime.fromisoformat(p['date']).date() == d and not p.get('archived', False)]
-            j2 = [s for s in st.session_state.schedules
-                  if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
-            j7 = [s for s in st.session_state.schedules
-                  if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
-            return j0, j2, j7
+            j0r = [p for p in st.session_state.prelevements if p.get('date') and datetime.fromisoformat(p['date']).date()==d and not p.get('archived',False)]
+            j2r = [s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date()==d]
+            j7r = [s for s in st.session_state.schedules if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date()==d]
+            return j0r, j2r, j7r, planned_j0.get(d,[]), planned_j2.get(d,0), planned_j7.get(d,0)
 
         cal_weeks = cal_module.monthcalendar(cal_year, cal_month)
 
-        header_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">'
+        hdr = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">'
         for i, jour in enumerate(JOURS_FR_COURT):
-            col_color = "#ef4444" if i >= 5 else "#1e40af"
-            header_html += f'<div style="text-align:center;padding:8px 4px;font-weight:800;font-size:.78rem;color:{col_color};border-radius:6px;background:#eff6ff">{jour}</div>'
-        header_html += '</div>'
+            cc = "#ef4444" if i >= 5 else "#1e40af"
+            hdr += '<div style="text-align:center;padding:8px 4px;font-weight:800;font-size:.78rem;color:' + cc + ';border-radius:6px;background:#eff6ff">' + jour + '</div>'
+        hdr += '</div>'
 
-        legend_html = """<div style="display:flex;gap:14px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px">
-          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#7c3aed"></div><span style="font-size:.72rem;color:#1e293b">Prélèvement J0</span></div>
-          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#d97706"></div><span style="font-size:.72rem;color:#1e293b">Lecture J2</span></div>
-          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#0369a1"></div><span style="font-size:.72rem;color:#1e293b">Lecture J7</span></div>
-          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#e2e8f0;border:1px solid #cbd5e1"></div><span style="font-size:.72rem;color:#94a3b8">Weekend / Férié</span></div>
-          <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#dbeafe;border:2px solid #2563eb"></div><span style="font-size:.72rem;color:#1e293b">Aujourd'hui</span></div>
-        </div>"""
+        legend = (
+            '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px">'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#7c3aed"></div><span style="font-size:.68rem;color:#1e293b">Prélèv. réel</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div><span style="font-size:.68rem;color:#1e293b">J2 réel</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div><span style="font-size:.68rem;color:#1e293b">J7 réel</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #7c3aed"></div><span style="font-size:.68rem;color:#7c3aed">Prélèv. prévu</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #d97706"></div><span style="font-size:.68rem;color:#d97706">J2 prévu</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #0369a1"></div><span style="font-size:.68rem;color:#0369a1">J7 prévu</span></div>'
+            '</div>'
+        )
 
-        grid_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'
+        grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'
         for week in cal_weeks:
             for day_idx, day_num in enumerate(week):
                 is_weekend = day_idx >= 5
                 if day_num == 0:
-                    grid_html += '<div style="background:#f8fafc;border-radius:8px;min-height:100px"></div>'
+                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:100px"></div>'
                     continue
                 d = date_type(cal_year, cal_month, day_num)
                 is_today = d == _today_dt
                 is_holiday = d in holidays_this_month
                 is_non_working = is_weekend or is_holiday
                 is_past = d < _today_dt
-                j0, j2, j7 = get_day_activities(d)
-                if is_today:
-                    bg = "#dbeafe"; border = "2px solid #2563eb"
-                elif is_non_working:
-                    bg = "#f1f5f9"; border = "1px solid #e2e8f0"
-                else:
-                    bg = "#ffffff"; border = "1px solid #e2e8f0"
-                day_num_color = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
-                opacity = "0.6" if is_past and not is_today else "1"
-                badges = ""
-                if j0:
-                    j0_title = j0[0].get('label','') if j0 else ''
-                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;cursor:default" title="{j0_title}">🧪 {len(j0)} J0</div>'
-                for s in j2:
-                    is_done = s['status'] == 'done'
-                    is_late = not is_done and d < _today_dt
-                    s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706")
-                    s_icon = "✅" if is_done else ("⚠️" if is_late else "📖")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J2</div>'
-                for s in j7:
-                    is_done = s['status'] == 'done'
-                    is_late = not is_done and d < _today_dt
-                    s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1")
-                    s_icon = "✅" if is_done else ("⚠️" if is_late else "📗")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J7</div>'
-                holiday_lbl = ""
-                if is_holiday and not is_weekend:
-                    holiday_lbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
-                elif is_weekend:
-                    holiday_lbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
-                grid_html += f"""<div style="background:{bg};border:{border};border-radius:8px;padding:6px;min-height:100px;opacity:{opacity};display:flex;flex-direction:column">
-                  <div style="font-weight:800;font-size:.9rem;color:{day_num_color};margin-bottom:2px">{day_num}</div>
-                  {holiday_lbl}{badges}
-                </div>"""
-        grid_html += '</div>'
+                j0r, j2r, j7r, j0p, j2p, j7p = get_day_activities(d)
 
-        st.markdown(legend_html, unsafe_allow_html=True)
-        st.markdown(header_html + grid_html, unsafe_allow_html=True)
+                bg = "#dbeafe" if is_today else ("#f1f5f9" if is_non_working else "#ffffff")
+                bdr = "2px solid #2563eb" if is_today else "1px solid #e2e8f0"
+                dnc = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
+                op = "0.65" if is_past and not is_today else "1"
 
-        st.divider()
-        st.markdown("#### 📊 Bilan du mois")
-        from datetime import date as dt_date
-        first_day = dt_date(cal_year, cal_month, 1)
-        last_day = dt_date(cal_year, cal_month, cal_module.monthrange(cal_year, cal_month)[1])
-        month_prelevs = [p for p in st.session_state.prelevements
-            if p.get('date') and first_day <= datetime.fromisoformat(p['date']).date() <= last_day and not p.get('archived', False)]
-        month_j2 = [s for s in st.session_state.schedules if s['when']=='J2' and first_day <= datetime.fromisoformat(s['due_date']).date() <= last_day]
-        month_j7 = [s for s in st.session_state.schedules if s['when']=='J7' and first_day <= datetime.fromisoformat(s['due_date']).date() <= last_day]
-        j2_done = sum(1 for s in month_j2 if s['status']=='done')
-        j7_done = sum(1 for s in month_j7 if s['status']=='done')
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        mc1.metric("🧪 Prélèvements", len(month_prelevs))
-        mc2.metric("📖 Lectures J2", f"{j2_done}/{len(month_j2)}", delta=f"{len(month_j2)-j2_done} restantes" if month_j2 else None, delta_color="inverse")
-        mc3.metric("📗 Lectures J7", f"{j7_done}/{len(month_j7)}", delta=f"{len(month_j7)-j7_done} restantes" if month_j7 else None, delta_color="inverse")
-        mc4.metric("⏳ Total en attente", sum(1 for s in st.session_state.schedules if s['status']=='pending'))
+                b = ""
+                # Réels (fond plein)
+                if j0r:
+                    b += '<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0r)) + ' J0</div>'
+                for s in j2r:
+                    done=s['status']=='done'; late=not done and d<_today_dt
+                    sc="#22c55e" if done else ("#ef4444" if late else "#d97706")
+                    si="✅" if done else ("⚠️" if late else "📖")
+                    b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J2</div>'
+                for s in j7r:
+                    done=s['status']=='done'; late=not done and d<_today_dt
+                    sc="#22c55e" if done else ("#ef4444" if late else "#0369a1")
+                    si="✅" if done else ("⚠️" if late else "📗")
+                    b += '<div style="background:' + sc + ';color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">' + si + ' J7</div>'
+                # Prévisionnels (tiretés) uniquement si pas de réel
+                if not j0r and j0p and not is_non_working:
+                    b += '<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0p)) + ' prévu</div>'
+                if not j2r and j2p:
+                    b += '<div style="border:1.5px dashed #d97706;color:#d97706;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📖 ' + str(j2p) + ' J2</div>'
+                if not j7r and j7p:
+                    b += '<div style="border:1.5px dashed #0369a1;color:#0369a1;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📗 ' + str(j7p) + ' J7</div>'
 
+                hlbl = ""
+                if is_holiday and not is_weekend: hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
+                elif is_weekend: hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
+
+                grid += '<div style="background:' + bg + ';border:' + bdr + ';border-radius:8px;padding:6px;min-height:100px;opacity:' + op + ';display:flex;flex-direction:column"><div style="font-weight:800;font-size:.9rem;color:' + dnc + ';margin-bottom:2px">' + str(day_num) + '</div>' + hlbl + b + '</div>'
+        grid += '</div>'
+
+        st.markdown(legend, unsafe_allow_html=True)
+        st.markdown(hdr + grid, unsafe_allow_html=True)
     with plan_tab_list:
         def get_week_start(d):
             return d - timedelta(days=d.weekday())
