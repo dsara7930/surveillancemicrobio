@@ -821,7 +821,7 @@ if active == "logigramme":
             st.session_state.show_add = not st.session_state.show_add
             st.session_state.edit_idx = None
     with col_btn2:
-        if st.button("💾 Sauvegarder", use_container_width=True):
+        if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
             save_germs(st.session_state.germs)
             st.success("✅ Germes sauvegardés !")
 
@@ -2518,9 +2518,9 @@ elif active == "parametres":
         st.divider()
         col_sr, col_def = st.columns(2)
         with col_sr:
-            if st.button("💾 Sauvegarder", use_container_width=True): save_origin_measures(om); st.success("✅ Sauvegardé !")
+            if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"): save_origin_measures(om); st.success("✅ Sauvegardé !")
         with col_def:
-            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures"):
+            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures_v2"):
                 st.session_state.origin_measures=[dict(m) for m in DEFAULT_ORIGIN_MEASURES]; save_origin_measures(st.session_state.origin_measures); st.rerun()
 
     with subtab_points:
