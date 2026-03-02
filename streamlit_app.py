@@ -1926,10 +1926,11 @@ elif active == "planning":
             st.info("Aucun point de prélèvement défini. Créez-en dans **Paramètres → Points de prélèvement**.")
         else:
             # En-tête tableau
-            st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px;margin-bottom:0">
+            st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px;margin-bottom:0">
               <div style="font-size:.78rem;font-weight:800;color:#fff">Point de prélèvement</div>
               <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Type</div>
               <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Classe</div>
+              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Risque</div>
               <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Prévu/sem.</div>
               <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Réalisé</div>
               <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Statut</div>
@@ -1940,12 +1941,21 @@ elif active == "planning":
 
             for pt_i, pt in enumerate(st.session_state.points):
                 key_freq = f"ch_freq_{pt.get('id', pt_i)}"
-                # Fréquence par défaut selon le type
-                default_freq = 2 if pt.get('type') == 'Air' else 1
+                # Fréquence depuis le point (persistante) ou fallback session_state
+                pt_freq_stored = pt.get('frequency', None)
+                pt_freq_unit = pt.get('frequency_unit', '/ semaine')
+                # Convertir fréquence mensuelle en hebdomadaire (approximation)
+                if pt_freq_stored is not None:
+                    if pt_freq_unit == '/ mois':
+                        default_freq = max(1, round(pt_freq_stored / 4))
+                    else:
+                        default_freq = int(pt_freq_stored)
+                else:
+                    default_freq = 2 if pt.get('type') == 'Air' else 1
 
                 # Prélèvements réalisés sur ce point cette semaine
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
-                # Fréquence configurée (stockée en session)
+                # Fréquence configurée (stockée en session pour override temporaire)
                 if key_freq not in st.session_state:
                     st.session_state[key_freq] = default_freq
                 prevu = st.session_state[key_freq]
@@ -1964,13 +1974,17 @@ elif active == "planning":
 
                 type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
                 row_bg = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
+                risk_val = str(pt.get('risk_level', '—'))
+                risk_colors_pl = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+                risk_col_pl = risk_colors_pl.get(risk_val, "#94a3b8")
 
                 col_info, col_freq = st.columns([5, 1])
                 with col_info:
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
                       <div style="font-size:.9rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
                       <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('type','—')}</div>
                       <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
+                      <div style="text-align:center"><span style="background:{risk_col_pl}22;color:{risk_col_pl};border:1px solid {risk_col_pl}55;border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700">Nv.{risk_val}</span></div>
                       <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{prevu}</div>
                       <div style="font-size:1rem;font-weight:800;color:#0f172a;text-align:center">{realise}</div>
                       <div style="background:{st_bg};border:1px solid {st_border};border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:{st_txt}">{st_icon} {st_label}</div>
@@ -1986,9 +2000,9 @@ elif active == "planning":
             # ── Pied de tableau total ─────────────────────────────────────────
             taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
             taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
-            st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 1.2fr 1.2fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center">
+            st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center">
               <div style="font-size:.9rem;font-weight:800;color:#fff">TOTAL SEMAINE</div>
-              <div></div><div></div>
+              <div></div><div></div><div></div>
               <div style="font-size:1.1rem;font-weight:900;color:#93c5fd;text-align:center">{total_prevu}</div>
               <div style="font-size:1.1rem;font-weight:900;color:#86efac;text-align:center">{total_realise}</div>
               <div style="background:rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;text-align:center;font-size:.9rem;font-weight:800;color:{taux_col}">{taux}% réalisé</div>
@@ -2525,54 +2539,119 @@ elif active == "parametres":
 
     with subtab_points:
         st.markdown("Gérez les points de prélèvement.")
+
+        # ── Constantes niveau de risque ───────────────────────────────────────
+        PT_RISK_OPTS = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Majeur", "5 — Critique"]
+        PT_RISK_COLORS = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+        PT_FREQ_UNIT_OPTS = ["/ semaine", "/ mois"]
+
         if not st.session_state.points:
             st.info("Aucun point défini.")
         else:
+            # En-tête tableau
+            st.markdown("""<div style="display:grid;grid-template-columns:2.2fr 0.9fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.5fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
+              <div style="font-size:.72rem;font-weight:800;color:#fff">Point</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Type</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Classe</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Gélose</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Risque</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Fréquence</div>
+              <div></div><div></div>
+            </div>""", unsafe_allow_html=True)
+
             for i, pt in enumerate(list(st.session_state.points)):
-                pt_type = pt.get('type','—'); type_icon = "💨" if pt_type=="Air" else "🧴"
-                c1, c2, c3 = st.columns([5,1,1])
+                pt_type = pt.get('type','—')
+                type_icon = "💨" if pt_type == "Air" else "🧴"
+                risk_val = str(pt.get('risk_level', '—'))
+                risk_col = PT_RISK_COLORS.get(risk_val, "#94a3b8")
+                freq = pt.get('frequency', 1)
+                freq_unit = pt.get('frequency_unit', '/ semaine')
+                freq_short = f"{freq}×{' sem.' if 'sem' in freq_unit else ' mois'}"
+                row_bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
+                c1, c2 = st.columns([8, 1])
                 with c1:
-                    st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;display:flex;gap:16px;align-items:center">
-                      <span style="font-weight:700;font-size:.85rem;color:#1e293b">{type_icon} {pt['label']}</span>
-                      <span style="background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:.65rem;font-weight:600">{pt_type}</span>
-                      <span style="background:#f8fafc;color:#475569;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #e2e8f0">Classe : {pt.get('room_class','—')}</span>
-                      <span style="background:#f0fdf4;color:#166534;border-radius:6px;padding:2px 8px;font-size:.65rem;border:1px solid #86efac">🧫 {pt.get('gelose','—')}</span>
+                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 0.9fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.5fr;gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center">
+                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
+                      <div style="font-size:.75rem;color:#475569;text-align:center">{pt_type}</div>
+                      <div style="font-size:.75rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
+                      <div style="font-size:.72rem;color:#1d4ed8;text-align:center">🧫 {pt.get('gelose','—')[:18]}</div>
+                      <div style="text-align:center"><span style="background:{risk_col}22;color:{risk_col};border:1px solid {risk_col}55;border-radius:6px;padding:2px 7px;font-size:.72rem;font-weight:700">Nv.{risk_val}</span></div>
+                      <div style="text-align:center"><span style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:2px 8px;font-size:.75rem;font-weight:700">🔁 {freq_short}</span></div>
                     </div>""", unsafe_allow_html=True)
                 with c2:
-                    if st.button("✏️", key=f"edit_pt_{i}"): st.session_state._edit_point=i; st.rerun()
-                with c3:
-                    if st.button("🗑️", key=f"del_pt_{i}"): st.session_state.points.pop(i); save_points(st.session_state.points); st.rerun()
+                    btn_e, btn_d = st.columns(2)
+                    with btn_e:
+                        if st.button("✏️", key=f"edit_pt_{i}"): st.session_state._edit_point=i; st.rerun()
+                    with btn_d:
+                        if st.button("🗑️", key=f"del_pt_{i}"): st.session_state.points.pop(i); save_points(st.session_state.points); st.rerun()
+
+            st.markdown('<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px;margin-bottom:16px"><div style="font-size:.78rem;font-weight:700;color:#94a3b8">' + str(len(st.session_state.points)) + ' point(s) de prélèvement</div></div>', unsafe_allow_html=True)
+
         st.divider()
         if st.session_state.get('_edit_point') is not None:
             idx = st.session_state._edit_point; pt = st.session_state.points[idx]
             st.markdown(f"### ✏️ Modifier — {pt['label']}")
-            ec1, ec2, ec3, ec4 = st.columns([3,2,2,2])
-            with ec1: new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
-            with ec2: new_type = st.selectbox("Type", ["Air","Surface"], index=["Air","Surface"].index(pt.get('type','Air')) if pt.get('type','Air') in ["Air","Surface"] else 0, key="pt_edit_type")
-            with ec3: new_room = st.text_input("Classe", value=pt.get('room_class',''), key="pt_edit_room", placeholder="Ex: ISO 5")
-            with ec4:
+            er1, er2, er3, er4 = st.columns([3,2,2,2])
+            with er1: new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
+            with er2: new_type = st.selectbox("Type", ["Air","Surface"], index=["Air","Surface"].index(pt.get('type','Air')) if pt.get('type','Air') in ["Air","Surface"] else 0, key="pt_edit_type")
+            with er3: new_room = st.text_input("Classe", value=pt.get('room_class',''), key="pt_edit_room", placeholder="Ex: ISO 5")
+            with er4:
                 gelose_opts = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if new_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
                 cur_g = pt.get('gelose',gelose_opts[0]); g_idx = gelose_opts.index(cur_g) if cur_g in gelose_opts else 0
                 new_gelose = st.selectbox("Gélose", gelose_opts, index=g_idx, key="pt_edit_gelose")
-            if st.button("✅ Enregistrer", key="pt_save_edit"):
-                st.session_state.points[idx] = {"id":pt.get('id',f"p{idx+1}"),"label":new_label,"type":new_type,"room_class":new_room,"gelose":new_gelose}
-                save_points(st.session_state.points); st.session_state._edit_point=None; st.success("✅ Point mis à jour"); st.rerun()
-            if st.button("Annuler", key="pt_cancel_edit"): st.session_state._edit_point=None; st.rerun()
+            er5, er6, er7 = st.columns([2, 1, 2])
+            with er5:
+                cur_risk_str = str(pt.get('risk_level','1'))
+                cur_risk_opt = next((o for o in PT_RISK_OPTS if o.startswith(cur_risk_str)), PT_RISK_OPTS[0])
+                new_risk_opt = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS, index=PT_RISK_OPTS.index(cur_risk_opt), key="pt_edit_risk")
+                new_risk = int(new_risk_opt[0])
+            with er6:
+                new_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31, value=int(pt.get('frequency', 1)), step=1, key="pt_edit_freq")
+            with er7:
+                cur_unit = pt.get('frequency_unit','/ semaine')
+                unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 0
+                new_freq_unit = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
+            eb1, eb2 = st.columns(2)
+            with eb1:
+                if st.button("✅ Enregistrer", key="pt_save_edit"):
+                    st.session_state.points[idx] = {
+                        "id": pt.get('id', f"p{idx+1}"),
+                        "label": new_label, "type": new_type,
+                        "room_class": new_room, "gelose": new_gelose,
+                        "risk_level": new_risk,
+                        "frequency": new_freq, "frequency_unit": new_freq_unit
+                    }
+                    save_points(st.session_state.points); st.session_state._edit_point=None; st.success("✅ Point mis à jour"); st.rerun()
+            with eb2:
+                if st.button("Annuler", key="pt_cancel_edit"): st.session_state._edit_point=None; st.rerun()
         else:
             st.markdown("### ➕ Ajouter un point")
-            np_col1, np_col2, np_col3, np_col4 = st.columns([3,2,2,2])
-            with np_col1: np_label = st.text_input("Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
-            with np_col2: np_type = st.selectbox("Type", ["Air","Surface"], key="np_type")
-            with np_col3: np_room = st.text_input("Classe", placeholder="Ex: ISO 5", key="np_room")
-            with np_col4:
+            np_r1, np_r2, np_r3, np_r4 = st.columns([3,2,2,2])
+            with np_r1: np_label = st.text_input("Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
+            with np_r2: np_type = st.selectbox("Type", ["Air","Surface"], key="np_type")
+            with np_r3: np_room = st.text_input("Classe", placeholder="Ex: ISO 5", key="np_room")
+            with np_r4:
                 gelose_opts_new = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if np_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
                 np_gelose = st.selectbox("Gélose", gelose_opts_new, key="np_gelose")
+            np_r5, np_r6, np_r7 = st.columns([2, 1, 2])
+            with np_r5:
+                np_risk_opt = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS, index=0, key="np_risk")
+                np_risk = int(np_risk_opt[0])
+            with np_r6:
+                np_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31, value=1, step=1, key="np_freq")
+            with np_r7:
+                np_freq_unit = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
             if st.button("➕ Ajouter", key="np_add"):
                 if not np_label.strip(): st.error("Le nom est requis")
                 else:
                     nid = f"p{len(st.session_state.points)+1}_{int(datetime.now().timestamp())}"
-                    st.session_state.points.append({"id":nid,"label":np_label.strip(),"type":np_type,"room_class":np_room.strip(),"gelose":np_gelose})
-                    save_points(st.session_state.points); st.success(f"✅ Point **{np_label}** ajouté"); st.rerun()
+                    st.session_state.points.append({
+                        "id": nid, "label": np_label.strip(), "type": np_type,
+                        "room_class": np_room.strip(), "gelose": np_gelose,
+                        "risk_level": np_risk,
+                        "frequency": np_freq, "frequency_unit": np_freq_unit
+                    })
+                    save_points(st.session_state.points); st.success(f"✅ Point **{np_label}** ajouté (Nv.{np_risk} — {np_freq}×{np_freq_unit})"); st.rerun()
 
     with subtab_operateurs:
         ops = st.session_state.operators
