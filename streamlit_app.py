@@ -1944,9 +1944,11 @@ elif active == "planning":
                 # Fréquence depuis le point (persistante) ou fallback session_state
                 pt_freq_stored = pt.get('frequency', None)
                 pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                # Convertir fréquence mensuelle en hebdomadaire (approximation)
+                # Convertir en hebdomadaire (5 jours ouvrés)
                 if pt_freq_stored is not None:
-                    if pt_freq_unit == '/ mois':
+                    if pt_freq_unit == '/ jour':
+                        default_freq = int(pt_freq_stored) * 5  # 5 jours ouvrés/semaine
+                    elif pt_freq_unit == '/ mois':
                         default_freq = max(1, round(pt_freq_stored / 4))
                     else:
                         default_freq = int(pt_freq_stored)
@@ -2543,7 +2545,7 @@ elif active == "parametres":
         # ── Constantes niveau de risque ───────────────────────────────────────
         PT_RISK_OPTS = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Majeur", "5 — Critique"]
         PT_RISK_COLORS = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-        PT_FREQ_UNIT_OPTS = ["/ semaine", "/ mois"]
+        PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
         if not st.session_state.points:
             st.info("Aucun point défini.")
@@ -2566,7 +2568,7 @@ elif active == "parametres":
                 risk_col = PT_RISK_COLORS.get(risk_val, "#94a3b8")
                 freq = pt.get('frequency', 1)
                 freq_unit = pt.get('frequency_unit', '/ semaine')
-                freq_short = f"{freq}×{' sem.' if 'sem' in freq_unit else ' mois'}"
+                freq_short = f"{freq}×{' jour' if 'jour' in freq_unit else ' sem.' if 'sem' in freq_unit else ' mois'}"
                 row_bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
                 c1, c2 = st.columns([8, 1])
                 with c1:
