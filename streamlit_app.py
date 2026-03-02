@@ -1509,50 +1509,74 @@ elif active == "planning":
         cal_month = st.session_state.cal_month
         holidays_this_month = get_holidays_cached(cal_year)
 
-        # ── Générer les prélèvements prévisionnels depuis les points ─────────
-        def get_working_days_of_month(year, month):
-            import calendar as _cal
-            _, n = _cal.monthrange(year, month)
-            hols = get_holidays_cached(year)
-            return [date_type(year, month, d) for d in range(1, n+1)
-                    if date_type(year, month, d).weekday() < 5 and date_type(year, month, d) not in hols]
+        # ── Générer le planning prévisionnel DÉTERMINISTE (même algo que Charge hebdo)
+        def get_working_days_in_range(d_start, d_end):
+            hols = get_holidays_cached(d_start.year) | get_holidays_cached(d_end.year)
+            days = []
+            cur = d_start
+            while cur <= d_end:
+                if cur.weekday() < 5 and cur not in hols:
+                    days.append(cur)
+                cur += timedelta(days=1)
+            return days
 
-        def generate_planned_days(pt, year, month):
-            freq = int(pt.get('frequency', 1))
-            unit = pt.get('frequency_unit', '/ semaine')
-            wdays = get_working_days_of_month(year, month)
-            if not wdays: return []
-            if unit == '/ jour':
-                return wdays
-            elif unit == '/ semaine':
-                from collections import defaultdict
-                weeks = defaultdict(list)
-                for d in wdays:
-                    weeks[d.isocalendar()[1]].append(d)
-                result = []
-                for wk_days in weeks.values():
-                    step = max(1, len(wk_days) // max(1, freq))
-                    result.extend([wk_days[i] for i in range(0, len(wk_days), step)][:freq])
-                return sorted(set(result))
-            elif unit == '/ mois':
-                step = max(1, len(wdays) // max(1, freq))
-                return [wdays[i] for i in range(0, len(wdays), step)][:freq]
-            return []
+        # Calculer le planning pour chaque semaine du mois affiché
+        import calendar as _cal3
+        _, n_days_m = _cal3.monthrange(cal_year, cal_month)
+        month_start = date_type(cal_year, cal_month, 1)
+        month_end = date_type(cal_year, cal_month, n_days_m)
 
-        planned_j0 = {}
-        planned_j2 = {}
-        planned_j7 = {}
-        for pt in st.session_state.points:
-            for d0 in generate_planned_days(pt, cal_year, cal_month):
-                planned_j0.setdefault(d0, []).append(pt['label'])
-                planned_j2[next_working_day_offset(d0, 2)] = planned_j2.get(next_working_day_offset(d0, 2), 0) + 1
-                planned_j7[next_working_day_offset(d0, 5)] = planned_j7.get(next_working_day_offset(d0, 5), 0) + 1
+        # Récupérer toutes les semaines du mois
+        from collections import defaultdict as _dd
+        planned_j0 = _dd(list)  # date -> [labels]
 
+        # Même algo aléatoire-par-semaine que Charge hebdo
+        import random as _rnd2
+        cur_monday = month_start - timedelta(days=month_start.weekday())
+        hols_cal = get_holidays_cached(cal_year)
+        while cur_monday <= month_end:
+            wd_week = [cur_monday + timedelta(days=i) for i in range(5)
+                       if (cur_monday + timedelta(days=i)) not in hols_cal]
+            nb_j = len(wd_week)
+            if nb_j > 0:
+                _wn = cur_monday.isocalendar()[1]
+                _yn = cur_monday.isocalendar()[0]
+                _rng_cal = _rnd2.Random(_yn * 100 + _wn)
+
+                # Construire toutes les tâches de la semaine
+                taches_cal = []
+                for pt in st.session_state.points:
+                    pt_freq = pt.get('frequency', 1)
+                    pt_freq_unit = pt.get('frequency_unit', '/ semaine')
+                    if pt_freq_unit == '/ jour':
+                        for wd in wd_week:
+                            if month_start <= wd <= month_end:
+                                for _ in range(int(pt_freq)):
+                                    planned_j0[wd].append(pt['label'])
+                        continue
+                    elif pt_freq_unit == '/ mois':
+                        nb_fois = max(1, round(int(pt_freq) / 4))
+                    else:
+                        nb_fois = int(pt_freq)
+                    for _ in range(nb_fois):
+                        taches_cal.append({"label": pt['label']})
+
+                _rng_cal.shuffle(taches_cal)
+                charge_cal = {wd: 0 for wd in wd_week}
+                for t in taches_cal:
+                    wd_cible = min(wd_week, key=lambda d: charge_cal[d])
+                    if month_start <= wd_cible <= month_end:
+                        planned_j0[wd_cible].append(t['label'])
+                    charge_cal[wd_cible] += 1
+            cur_monday += timedelta(weeks=1)
+
+        # J2/J7 : UNIQUEMENT depuis les prélèvements réels (Identification & Surveillance)
+        # Pas de J2/J7 prévisionnels dans le calendrier
         def get_day_activities(d):
             j0r = [p for p in st.session_state.prelevements if p.get('date') and datetime.fromisoformat(p['date']).date()==d and not p.get('archived',False)]
             j2r = [s for s in st.session_state.schedules if s['when']=='J2' and datetime.fromisoformat(s['due_date']).date()==d]
             j7r = [s for s in st.session_state.schedules if s['when']=='J7' and datetime.fromisoformat(s['due_date']).date()==d]
-            return j0r, j2r, j7r, planned_j0.get(d,[]), planned_j2.get(d,0), planned_j7.get(d,0)
+            return j0r, j2r, j7r, list(planned_j0.get(d,[]))
 
         cal_weeks = cal_module.monthcalendar(cal_year, cal_month)
 
@@ -1564,12 +1588,10 @@ elif active == "planning":
 
         legend = (
             '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px">'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #7c3aed"></div><span style="font-size:.68rem;color:#7c3aed">Prélèv. prévu (planning auto)</span></div>'
             '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#7c3aed"></div><span style="font-size:.68rem;color:#1e293b">Prélèv. réel</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div><span style="font-size:.68rem;color:#1e293b">J2 réel</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div><span style="font-size:.68rem;color:#1e293b">J7 réel</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #7c3aed"></div><span style="font-size:.68rem;color:#7c3aed">Prélèv. prévu</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #d97706"></div><span style="font-size:.68rem;color:#d97706">J2 prévu</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #0369a1"></div><span style="font-size:.68rem;color:#0369a1">J7 prévu</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div><span style="font-size:.68rem;color:#1e293b">J2 (depuis surveillance)</span></div>'
+            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div><span style="font-size:.68rem;color:#1e293b">J7 (depuis surveillance)</span></div>'
             '</div>'
         )
 
@@ -1591,7 +1613,7 @@ elif active == "planning":
                 is_holiday = d in holidays_this_month
                 is_non_working = is_weekend or is_holiday
                 is_past = d < _today_dt
-                j0r, j2r, j7r, j0p, j2p_count, j7p_count = get_day_activities(d)
+                j0r, j2r, j7r, j0p = get_day_activities(d)
 
                 bg = "#dbeafe" if is_today else ("#f1f5f9" if is_non_working else "#ffffff")
                 bdr = "2px solid #2563eb" if is_today else "1px solid #e2e8f0"
@@ -1619,10 +1641,6 @@ elif active == "planning":
                 # Prévisionnels (tiretés) si pas de réel
                 if not j0r and j0p and not is_non_working:
                     b += '<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 ' + str(len(j0p)) + ' prévu</div>'
-                if not j2r and j2p_count and not is_non_working:
-                    b += '<div style="border:1.5px dashed #d97706;color:#d97706;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📖 ' + str(j2p_count) + ' J2</div>'
-                if not j7r and j7p_count and not is_non_working:
-                    b += '<div style="border:1.5px dashed #0369a1;color:#0369a1;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">📗 ' + str(j7p_count) + ' J7</div>'
 
                 hlbl = ""
                 if is_holiday and not is_weekend:
@@ -1880,40 +1898,45 @@ elif active == "planning":
             if nb_jours == 0:
                 st.warning("Aucun jour ouvré cette semaine.")
             else:
-                # ── Algorithme de répartition ─────────────────────────────────
-                # 1. Construire la liste de toutes les tâches à planifier
-                taches = []
+                # ── Algorithme de répartition ALÉATOIRE PAR SEMAINE ──────────
+                # Seed = numéro de semaine ISO → change chaque semaine
+                # mais stable si on revient sur la même semaine
+                import random as _rnd
+                _week_num = ch_sel_ws.isocalendar()[1]
+                _year_num = ch_sel_ws.isocalendar()[0]
+                _rng = _rnd.Random(_year_num * 100 + _week_num)
+
+                # Construire toutes les tâches
+                taches_all = []
                 for pt in st.session_state.points:
                     pt_freq = pt.get('frequency', 1)
                     pt_freq_unit = pt.get('frequency_unit', '/ semaine')
                     if pt_freq_unit == '/ jour':
                         nb_fois = int(pt_freq) * nb_jours
                     elif pt_freq_unit == '/ mois':
-                        nb_fois = max(1, round(pt_freq / 4))
+                        nb_fois = max(1, round(int(pt_freq) / 4))
                     else:
                         nb_fois = int(pt_freq)
-                    risk = int(pt.get('risk_level', 1))
                     for _ in range(nb_fois):
-                        taches.append({
-                            "label": pt['label'],
-                            "type": pt.get('type','—'),
-                            "risk": risk,
-                        })
-                # 2. Trier par risque décroissant (points critiques prioritaires)
-                taches.sort(key=lambda x: -x['risk'])
+                        taches_all.append({"label": pt['label'], "type": pt.get('type','—'), "risk": int(pt.get('risk_level',1)), "freq_unit": pt_freq_unit})
 
-                # 3. Répartir sur les jours ouvrés en round-robin équilibré
-                #    en tenant compte du nb de préleveurs par jour
-                capacite_par_jour = nb_preleveurs  # tâches simultanées par jour
+                # Mélange aléatoire reproductible pour la semaine
+                _rng.shuffle(taches_all)
+
                 planning = {wd: [] for wd in ch_working_days}
-                # Compteur de charge par jour
                 charge_jour = {wd: 0 for wd in ch_working_days}
 
-                for tache in taches:
-                    # Choisir le jour avec le moins de charge
-                    jour_cible = min(ch_working_days, key=lambda d: charge_jour[d])
-                    planning[jour_cible].append(tache)
-                    charge_jour[jour_cible] += 1
+                for tache in taches_all:
+                    if tache["freq_unit"] == '/ jour':
+                        # Chaque jour ouvré (pas de shuffle pour / jour)
+                        for wd in ch_working_days:
+                            planning[wd].append(tache)
+                            charge_jour[wd] += 1
+                    else:
+                        # Assigner au jour le moins chargé (équilibrage)
+                        wd_cible = min(ch_working_days, key=lambda d: charge_jour[d])
+                        planning[wd_cible].append(tache)
+                        charge_jour[wd_cible] += 1
 
                 # 4. Calculer stats réelles sur la semaine
                 real_par_jour = {}
