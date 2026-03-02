@@ -2442,7 +2442,7 @@ elif active == "parametres":
                 save_thresholds_and_measures(new_thresholds, st.session_state.measures)
                 st.success("✅ Seuils sauvegardés !")
         with cr:
-            if st.button("↩️ Réinitialiser", use_container_width=True):
+            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_seuils"):
                 st.session_state.thresholds = {k: dict(v) for k, v in DEFAULT_THRESHOLDS.items()}
                 save_thresholds_and_measures(st.session_state.thresholds, st.session_state.measures)
                 st.success("✅ Seuils réinitialisés."); st.rerun()
@@ -2520,7 +2520,7 @@ elif active == "parametres":
         with col_sr:
             if st.button("💾 Sauvegarder", use_container_width=True): save_origin_measures(om); st.success("✅ Sauvegardé !")
         with col_def:
-            if st.button("↩️ Réinitialiser", use_container_width=True):
+            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures"):
                 st.session_state.origin_measures=[dict(m) for m in DEFAULT_ORIGIN_MEASURES]; save_origin_measures(st.session_state.origin_measures); st.rerun()
 
     with subtab_points:
