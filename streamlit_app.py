@@ -247,89 +247,59 @@ DEFAULT_ORIGIN_MEASURES = [
 ]
 
 DEFAULT_GERMS = [
-    # ── BACTÉRIES — HUMAINS — PEAU / MUQUEUSES ─────────────────────────────────
-    dict(name="Staphylococcus epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=3,pathotype="Pathogène opportuniste multirésistant (SCN)",surfa="Sensible",apa="Sensible",notes="Staphylocoque coagulase négatif (SCN)",comment="Principal contaminant cutané des ZAC — biofilm fréquent sur cathéters"),
-    dict(name="Staphylococcus aureus",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=4,pathotype="Pathogène primaire — SARM possible",surfa="Sensible",apa="Sensible",notes="SARM si résistant méticilline",comment="Portage nasal fréquent (20-30% population). SARM = problème majeur en milieu hospitalier"),
-    dict(name="Staphylococcus spp. (autres SCN)",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes="Staphylocoque coagulase négatif",comment=None),
-    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Flore cutanée commensale résiduelle — indicateur d'hygiène des mains insuffisante"),
-    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes="Anaérobie strict",comment="Bactérie anaérobie — indicateur de contamination par les follicules pileux / pores cutanés"),
-    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=1,pathotype="Commensal cutané — faible pouvoir pathogène",surfa="Sensible",apa="Sensible",notes=None,comment="Très fréquent dans l'air des ZAC — peu pathogène mais indicateur de contamination humaine"),
+    dict(name="Staphylococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
     dict(name="Dermabacter hominis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Brevibacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Odeur caractéristique de fromage — indicateur de présence cutanée"),
-    dict(name="Rothia spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Présent sur peau et muqueuses buccales"),
-    dict(name="Aerococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Gemella spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-
-    # ── BACTÉRIES — HUMAINS — OROPHARYNX / GOUTTELETTES ────────────────────────
-    dict(name="Streptococcus mitis / salivarius / sanguinis / anginosus",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Pathogène opportuniste (strepto alpha-hémolytique)",surfa="Sensible",apa="Sensible",notes=None,comment="Indicateur de parole ou d'absence de masque en ZAC"),
-    dict(name="Streptococcus pyogenes / agalactiae / pneumoniae",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène primaire (strepto beta-hémolytique)",surfa="Sensible",apa="Sensible",notes=None,comment="Pathogène communautaire — présence en ZAC signe un personnel symptomatique non évincé"),
-    dict(name="Neisseria spp.",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Commensal oropharyngé",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Haemophilus spp.",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Présence possible en cas d'infection ORL active du personnel"),
-
-    # ── BACTÉRIES — HUMAINS — FLORE FÉCALE ─────────────────────────────────────
-    dict(name="Escherichia coli",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant — BLSE/EPC possible",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Présence en ZAC = défaut majeur d'hygiène des mains. BLSE/EPC = alerte maximale"),
-    dict(name="Klebsiella pneumoniae",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant — BLSE/EPC possible",surfa="Sensible",apa="Sensible",notes=None,comment="Productrice fréquente de BLSE et carbapénémases (KPC, NDM, OXA-48)"),
-    dict(name="Klebsiella oxytoca",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Enterococcus faecalis / faecium",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste — ERV possible",surfa="Sensible",apa="Sensible",notes=None,comment="ERV (Entérocoque Résistant aux Glycopeptides) = risque nosocomial majeur"),
-    dict(name="Enterobacter cloacae / aerogenes",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant — céphalosporinase inductible",surfa="Sensible",apa="Sensible",notes=None,comment="Céphalosporinase de bas niveau inductible — attention aux traitements par C3G"),
-    dict(name="Citrobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Proteus mirabilis",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment="Uréase positif — indicateur de contamination fécale/urinaire"),
-    dict(name="Serratia marcescens",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Pigment rouge (prodigiosine) — bactérie redoutée en milieu hospitalier, biofilm persistant"),
-    dict(name="Morganella morganii",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-    dict(name="Hafnia spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
-
-    # ── BACTÉRIES — ENVIRONNEMENTAL — HUMIDITÉ ──────────────────────────────────
-    dict(name="Pseudomonas aeruginosa",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — BMR prioritaire",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Biofilm +++",comment="Pathogène redouté en oncohématologie. Biofilm résistant sur surfaces humides, robinets, éviers. EPC-PA émergent"),
-    dict(name="Pseudomonas spp. (autres)",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Acinetobacter baumannii",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — BMR prioritaire OMS",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Résistance extrême",comment="Survie prolongée sur surfaces sèches (jusqu'à plusieurs semaines). Résistance pan-antibiotique émergente"),
-    dict(name="Acinetobacter spp. (autres)",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
-    dict(name="Stenotrophomonas maltophilia",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant — résistance intrinsèque aux carbapénèmes",surfa="Risque de résistance (biofilm)",apa="Sensible",notes="Résistance carbapénèmes",comment="Résistance intrinsèque aux carbapénèmes et à de nombreux antibiotiques — réservoir eau et surfaces humides"),
-    dict(name="Burkholderia cepacia complex",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant — interdit en préparations",surfa="Risque de résistance (biofilm)",apa="Risque de résistance",notes="Résistance intrinsèque ++++",comment="Contaminant de solutions aqueuses et antiseptiques (chlorhexidine). Résistance quasi-totale. Redouté en mucoviscidose"),
-    dict(name="Ralstonia spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Risque modéré de résistance",notes=None,comment="Contaminant de l'eau purifiée et des solutions injectables — surveillance critique en URC"),
-    dict(name="Chryseobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment="Présent dans l'eau et environnements humides — résistance aux carbapénèmes"),
-    dict(name="Sphingomonas spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes=None,comment="Résistant à la chlorhexidine — contaminant eau purifiée"),
-    dict(name="Methylobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Colonie rose-rouge",comment="Colonie rose-rouge caractéristique — contaminant eau purifiée et condensats"),
-    dict(name="Mycobacterium fortuitum / chelonae / abscessus",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste — mycobactérie à croissance rapide",surfa="Risque de résistance",apa="Risque de résistance (spore)",notes="Mycobactérie à croissance rapide",comment="MCR (Mycobactérie à Croissance Rapide) — résistance aux désinfectants usuels. Réservoir : eau, sols, biofilm. Croissance 3-7 jours sur gélose"),
-
-    # ── BACTÉRIES — ENVIRONNEMENTAL — SOL / CARTON / SURFACE SÈCHE ─────────────
-    dict(name="Bacillus subtilis / licheniformis (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=4,pathotype="Pathogène opportuniste — spore résistante",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment="Spores résistantes à la chaleur sèche (160°C / 2h nécessaire), aux UV et à la plupart des désinfectants. Indicateur de dé-cartonnage insuffisant"),
-    dict(name="Bacillus cereus (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — toxines + spores résistantes",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — toxinogène",comment="Production de toxines thermostables. Spores extrêmement résistantes. Redouté en préparations injectables"),
-    dict(name="Bacillus anthracis (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — agent de bioterrorisme classe A",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — classe A",comment="Exceptionnel mais à signalement immédiat. Spores stabilisées des mois dans l'environnement"),
-    dict(name="Clostridium spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — spore anaérobie",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé — anaérobie",comment="C. difficile : colite pseudomembraneuse. Spores résistantes à l'alcool — décontamination au chlore uniquement"),
-    dict(name="Paenibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste — sporulé",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment="Sol et matières organiques — parfois confondu avec Bacillus à l'identification"),
-    dict(name="Brevibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste — sporulé",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
-
-    # ── CHAMPIGNONS — HUMAIN — PEAU / MUQUEUSE ──────────────────────────────────
-    dict(name="Candida albicans",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — levure pathogène primaire",surfa="Sensible",apa="Sensible",notes="Levure — dimorphique",comment="Dimorphique : levure à 37°C, filaments invasifs en conditions de stress. Commensal muqueux — candidémie redoutée en immunodépression"),
-    dict(name="Candida auris",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=5,pathotype="Pathogène opportuniste multirésistant — émergent pandémique",surfa="Risque de résistance",apa="Risque de résistance",notes="Levure — multirésistante émergente",comment="Levure émergente résistante aux 3 classes d'antifongiques. Persistance sur surfaces plusieurs semaines. Épidémies hospitalières mondiales"),
-    dict(name="Candida glabrata / Nakaseomyces glabrata",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — résistance azolés fréquente",surfa="Sensible",apa="Sensible",notes="Levure — résistance azolés",comment="Résistance intrinsèque réductrice aux azolés. Mortalité élevée en candidémie chez immunodéprimé"),
-    dict(name="Candida parapsilosis",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste — lié aux mains",surfa="Sensible",apa="Sensible",notes="Levure — transmission manuportée",comment="Transmission manuportée +++ — indicateur direct d'hygiène des mains. Biofilm sur cathéters"),
-    dict(name="Candida tropicalis",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes="Levure",comment=None),
-    dict(name="Candida krusei / Pichia kudriavzevii",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — résistance intrinsèque fluconazole",surfa="Sensible",apa="Sensible",notes="Levure — résistance fluconazole",comment="Résistance intrinsèque au fluconazole"),
-    dict(name="Trichosporon spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=4,pathotype="Pathogène opportuniste — levure filamenteuse",surfa="Risque de résistance",apa="Risque de résistance",notes="Levure filamenteuse",comment="Résistance aux échinocandines — mortalité élevée chez immunodéprimé profond"),
-    dict(name="Malassezia spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=2,pathotype="Commensal cutané — lipophile",surfa="Sensible",apa="Sensible",notes="Levure lipophile",comment="Indicateur de contamination cutanée — pousse sur milieu supplémenté en lipides"),
-
-    # ── CHAMPIGNONS — ENVIRONNEMENTAL — AIR ─────────────────────────────────────
-    dict(name="Aspergillus fumigatus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — aspergillose invasive mortelle",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-3 µm — thermophile",comment="Conidies de 2-3 µm — pénétration profonde dans les voies respiratoires. Aspergilllose invasive mortelle chez immunodéprimé. Résistance aux azolés émergente (TR34/L98H)"),
-    dict(name="Aspergillus niger",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies noires — productrices d'ochratoxine",comment="Conidies noires caractéristiques. Production possible d'ochratoxine A (mycotoxine). Indicateur de matériaux humides/cartons"),
-    dict(name="Aspergillus flavus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — producteurd'aflatoxine",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies vertes — aflatoxine",comment="Producteur d'aflatoxines B1 (cancérogène classe 1). 2ème cause d'aspergillose invasive après A. fumigatus"),
-    dict(name="Aspergillus terreus",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste — résistance amphotéricine B",surfa="Risque de résistance",apa="Risque de résistance",notes="Résistance AmB intrinsèque",comment="Résistance intrinsèque à l'amphotéricine B — options thérapeutiques très limitées"),
-    dict(name="Penicillium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies 2-5 µm",comment="Très fréquent dans l'air intérieur — indicateur de qualité de l'air et de l'intégrité des filtres HEPA"),
-    dict(name="Cladosporium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies en chaînes",comment="Moisissure aérienne très fréquente — indicateur d'infiltration d'air extérieur non filtré"),
-    dict(name="Alternaria spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies septées en massue",comment="Moisissure extérieure — indicateur de défaut de filtration ou d'étanchéité"),
-    dict(name="Curvularia spp.",path=["Germes","Champignons","Environnemental","Air"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes=None,comment="Moisissure mélanisée (phéohyphomycose) — traitement difficile"),
-
-    # ── CHAMPIGNONS — ENVIRONNEMENTAL — SOL / CARTON / SURFACE SÈCHE ───────────
-    dict(name="Fusarium solani / oxysporum",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes="Macroconidies falciformes",comment="2ème cause d'infection fongique invasive après Aspergillus. Résistance aux azolés et amphotéricine B. Macroconidies en forme de faucille"),
-    dict(name="Mucor / Rhizopus spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène primaire — mucormycose angioinvasive",surfa="Risque de résistance",apa="Risque de résistance",notes="Sporangiospores — angioinvasif",comment="Mucormycose angioinvasive (mortalité > 50%). Spores omniprésentes — cartons et substrats organiques. Résistance aux échinocandines et voriconazole"),
-    dict(name="Lichtheimia / Cunninghamella spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — mucorales",surfa="Risque de résistance",apa="Risque de résistance",notes="Mucorales",comment="Mucorales rares mais mortalité > 70% chez immunodéprimé"),
-    dict(name="Scedosporium / Lomentospora spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste — résistance étendue",surfa="Risque de résistance",apa="Risque de résistance",notes="Résistance étendue aux antifongiques",comment="Lomentospora prolificans : résistance pan-antifongique. Pronostic très sombre en immunodépression profonde"),
-    dict(name="Trichoderma spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque modéré de résistance",apa="Sensible",notes="Conidies vertes — parasites d'autres champignons",comment="Contaminant de végétaux et matières organiques — indicateur de mauvais dé-cartonnage"),
-    dict(name="Scopulariopsis spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=3,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes=None,comment="Résistance à l'amphotéricine B fréquente"),
-
-    # ── CHAMPIGNONS — ENVIRONNEMENTAL — HUMIDITÉ ────────────────────────────────
-    dict(name="Exophiala / Rhinocladiella spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste — champignon noir",surfa="Risque de résistance",apa="Risque de résistance",notes="Champignon mélanisé — chromomycose",comment="Champignons noirs (mélanisés) — résistance naturelle aux UV et désinfectants oxydants. Réservoir : eaux, drains, siphons"),
-    dict(name="Cladophialophora spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste — phéohyphomycose",surfa="Risque de résistance",apa="Risque de résistance",notes="Champignon mélanisé",comment="Phéohyphomycose cérébrale possible. Résistance liée à la mélanine pariétale"),
+    dict(name="Brevibacterium epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Streptococcus mitis/salivarius/sanguinis/anginosus",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Streptococcus pyogenes/agalactiae/pneumoniae",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Escherichia coli",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant (O157:H7 = pathogène primaire)",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Enterococcus spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Enterobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Citrobacter spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Klebsiella pneumoniae",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Proteus spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Morganella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Providencia spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Salmonella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Shigella spp.",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Yersinia enterocolitica",path=["Germes","Bactéries","Humains","Flore fécale"],risk=3,pathotype="Pathogène primaire",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Pseudomonas spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Acinetobacter spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Paenibacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
+    dict(name="Hafnia alvei",path=["Germes","Bactéries","Humains","Flore fécale"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Sphingomonas paucimobilis",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Sphingobium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Methylobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Caulobacter crescentus",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Mycobacterium non tuberculeux",path=["Germes","Bactéries","Environnemental","Humidité"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes=None,comment=None),
+    dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=4,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance (biofilm)",apa="Sensible",notes=None,comment=None),
+    dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Humidité"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Bacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
+    dict(name="Clostridium spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé",comment=None),
+    dict(name="Geobacillus stearothermophilus (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Non pathogène",surfa="Risque de résistance (spore)",apa="Risque de résistance (spore)",notes="Sporulé thermophile",comment=None),
+    dict(name="Arthrobacter spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Cellulomonas spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Curtobacterium spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Agrococcus spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Microbacterium spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Brevibacterium linens/casei",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=2,pathotype="Pathogène opportuniste",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Georgenia spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],risk=1,pathotype="Non pathogène",surfa="Sensible",apa="Sensible",notes=None,comment=None),
+    dict(name="Candida spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste multirésistant",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
+    dict(name="Trichosporon spp.",path=["Germes","Champignons","Humain","Peau / Muqueuse"],risk=3,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
+    dict(name="Rhodotorula spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=3,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Sensible",apa="Sensible",notes="Levure",comment="Levures = pas de production de spores"),
+    dict(name="Fusarium spp.",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste multirésistant",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-4um",comment="Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants"),
+    dict(name="Aureobasidium spp.",path=["Germes","Champignons","Environnemental","Humidité"],risk=4,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Sensible",notes="Blastospores + biofilm",comment="Production de blastospores (moins résistante aux agents oxydants et ne se dissémine pas dans l'air comme les conidies d'Aspergillus ou Fusarium) et production de biofilm"),
+    dict(name="Mucorales",path=["Germes","Champignons","Environnemental","Sol / Carton / Surface sèche"],risk=5,pathotype="Pathogène opportuniste résistant aux échinocandines",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Sporangiospores",comment="Production de sporangiospores (moins résistant aux agents oxydants que les conidies d'Aspergillus ou Fusarium)"),
+    dict(name="Alternaria spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies grandes",comment="Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistante à l'oxydation"),
+    dict(name="Aspergillus spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque de résistance",notes="Conidies 2-4um",comment="Production de spores (conidies) => dissémination dans l'air facilitée par petite taille (2-4 µm) + Résistance aux agents oxydants"),
+    dict(name="Cladosporium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Très rarement pathogène",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies grandes",comment="Production de spores (conidies) mais de plus grande taille, moins déshydratées et moins mélanisées => Moins résistante à l'oxydation"),
+    dict(name="Penicillium spp.",path=["Germes","Champignons","Environnemental","Air"],risk=5,pathotype="Pathogène opportuniste",surfa="Risque de résistance",apa="Risque modéré de résistance",notes="Conidies",comment="Production de spores (conidies) mais moins déshydratées et moins mélanisées que celles de Fusarium ou Aspergillus => Moins résistantes à l'oxydation"),
+    dict(name="Wallemia sebi",path=["Germes","Champignons","Environnemental","Air"],risk=4,pathotype="Très rarement pathogène",surfa="Risque de résistance",apa="Risque de résistance",notes="Arthroconidies",comment=None),
 ]
 
 # Nom court de référence pour chaque germe (pour la liste sidebar du logigramme)
@@ -1543,21 +1513,29 @@ elif active == "planning":
                 _yn = cur_monday.isocalendar()[0]
                 _rng_cal = _rnd2.Random(_yn * 100 + _wn)
 
-                # Construire toutes les tâches de la semaine
+                # Construire toutes les tâches de la semaine (même logique que charge hebdo)
+                def _frc(rc):
+                    rc = (rc or '').strip().upper()
+                    if 'A' in rc: return 20
+                    if 'D' in rc: return 10
+                    return 2
                 taches_cal = []
                 for pt in st.session_state.points:
-                    pt_freq = pt.get('frequency', 1)
+                    pt_freq = pt.get('frequency', None)
                     pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                    if pt_freq_unit == '/ jour':
+                    if pt_freq_unit == '/ jour' and pt_freq and int(pt_freq) > 0:
                         for wd in wd_week:
                             if month_start <= wd <= month_end:
                                 for _ in range(int(pt_freq)):
                                     planned_j0[wd].append(pt['label'])
                         continue
-                    elif pt_freq_unit == '/ mois':
-                        nb_fois = max(1, round(int(pt_freq) / 4))
+                    if pt_freq is not None and int(pt_freq) > 0:
+                        if pt_freq_unit == '/ mois':
+                            nb_fois = max(1, round(int(pt_freq) / 4))
+                        else:
+                            nb_fois = int(pt_freq)
                     else:
-                        nb_fois = int(pt_freq)
+                        nb_fois = _frc(pt.get('room_class', ''))
                     for _ in range(nb_fois):
                         taches_cal.append({"label": pt['label']})
 
@@ -1836,25 +1814,50 @@ elif active == "planning":
             st.info("Aucun point de prélèvement défini. Créez-en dans **Paramètres → Points de prélèvement**.")
         else:
             risk_colors_ch = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-            st.markdown("<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px'><div style='font-size:.78rem;font-weight:800;color:#fff'>Point</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Type</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Classe</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Risque</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Prévu/sem.</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Réalisé</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Statut</div></div>", unsafe_allow_html=True)
+
+            # ── Fréquence par défaut selon la classe ──────────────────────────
+            def _freq_classe(rc):
+                rc = (rc or '').strip().upper()
+                if 'A' in rc: return 20
+                if 'D' in rc: return 10
+                return 2
+
+            # ── En-tête tableau (6 col + 1 col number_input) ─────────────────
+            hdr_cols = st.columns([2.2, 1, 1, 0.7, 1.2, 1, 1.5])
+            hdr_labels = ["Point", "Type", "Classe", "Risque", "Prévu/sem. ✏️", "Réalisé", "Statut"]
+            hdr_colors = ["#1e40af"] * 7
+            for _hc, _hl in zip(hdr_cols, hdr_labels):
+                _hc.markdown(
+                    "<div style='background:#1e40af;border-radius:6px;padding:8px 10px;font-size:.72rem;font-weight:800;color:#fff;text-align:center'>" + _hl + "</div>",
+                    unsafe_allow_html=True
+                )
 
             total_prevu = 0
             total_realise = 0
 
             for pt_i, pt in enumerate(st.session_state.points):
-                # Fréquence auto depuis le point
+                pt_id = pt.get('id', str(pt_i))
+                # Clé session pour stocker la valeur modifiée
+                sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
+
+                # Valeur par défaut : fréquence du point ou classe
                 pt_freq = pt.get('frequency', None)
                 pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                if pt_freq is not None:
+                if pt_freq is not None and int(pt_freq) > 0:
                     if pt_freq_unit == '/ jour':
-                        prevu = int(pt_freq) * nb_jours
+                        default_prevu = int(pt_freq) * nb_jours
                     elif pt_freq_unit == '/ mois':
-                        prevu = max(1, round(pt_freq / 4))
+                        default_prevu = max(1, round(int(pt_freq) / 4))
                     else:
-                        prevu = int(pt_freq)
+                        default_prevu = int(pt_freq)
                 else:
-                    prevu = 2 if pt.get('type') == 'Air' else 1
+                    default_prevu = _freq_classe(pt.get('room_class', ''))
 
+                # Initialiser la session si pas encore définie pour cette semaine
+                if sess_key not in st.session_state:
+                    st.session_state[sess_key] = default_prevu
+
+                prevu = st.session_state[sess_key]
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
 
                 if realise >= prevu:
@@ -1873,22 +1876,52 @@ elif active == "planning":
                 risk_val = str(pt.get('risk_level','—'))
                 risk_col = risk_colors_ch.get(risk_val, "#94a3b8")
 
-                row = (
-                    "<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center'>"
-                    "<div style='font-size:.9rem;font-weight:700;color:#0f172a'>" + type_icon + " " + pt['label'] + "</div>"
-                    "<div style='font-size:.82rem;color:#475569;text-align:center'>" + pt.get('type','—') + "</div>"
-                    "<div style='font-size:.82rem;color:#475569;text-align:center'>" + pt.get('room_class','—') + "</div>"
-                    "<div style='text-align:center'><span style='background:" + risk_col + "22;color:" + risk_col + ";border:1px solid " + risk_col + "55;border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700'>Nv." + risk_val + "</span></div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(prevu) + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>" + str(realise) + "</div>"
-                    "<div style='background:" + st_bg + ";border:1px solid " + st_border + ";border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:" + st_txt + "'>" + st_icon + " " + st_label + "</div>"
-                    "</div>"
-                )
-                st.markdown(row, unsafe_allow_html=True)
+                row_cols = st.columns([2.2, 1, 1, 0.7, 1.2, 1, 1.5])
+                with row_cols[0]:
+                    st.markdown(
+                        "<div style='background:" + row_bg + ";border:1px solid #e2e8f0;border-radius:6px;padding:9px 12px;font-size:.88rem;font-weight:700;color:#0f172a'>" + type_icon + " " + pt['label'] + "</div>",
+                        unsafe_allow_html=True)
+                with row_cols[1]:
+                    st.markdown(
+                        "<div style='background:" + row_bg + ";border:1px solid #e2e8f0;border-radius:6px;padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>" + pt.get('type','—') + "</div>",
+                        unsafe_allow_html=True)
+                with row_cols[2]:
+                    st.markdown(
+                        "<div style='background:" + row_bg + ";border:1px solid #e2e8f0;border-radius:6px;padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>" + pt.get('room_class','—') + "</div>",
+                        unsafe_allow_html=True)
+                with row_cols[3]:
+                    st.markdown(
+                        "<div style='background:" + row_bg + ";border:1px solid #e2e8f0;border-radius:6px;padding:9px 12px;text-align:center'><span style='background:" + risk_col + "22;color:" + risk_col + ";border:1px solid " + risk_col + "55;border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700'>Nv." + risk_val + "</span></div>",
+                        unsafe_allow_html=True)
+                with row_cols[4]:
+                    new_val = st.number_input(
+                        "Prévu", min_value=0, max_value=50,
+                        value=prevu, step=1,
+                        key=sess_key,
+                        label_visibility="collapsed"
+                    )
+                with row_cols[5]:
+                    st.markdown(
+                        "<div style='background:" + row_bg + ";border:1px solid #e2e8f0;border-radius:6px;padding:9px 12px;font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>" + str(realise) + "</div>",
+                        unsafe_allow_html=True)
+                with row_cols[6]:
+                    st.markdown(
+                        "<div style='background:" + st_bg + ";border:1px solid " + st_border + ";border-radius:8px;padding:9px 12px;text-align:center;font-size:.82rem;font-weight:700;color:" + st_txt + "'>" + st_icon + " " + st_label + "</div>",
+                        unsafe_allow_html=True)
 
+            st.divider()
             taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
             taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
-            st.markdown("<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center'><div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div><div></div><div></div><div></div><div style='font-size:1.1rem;font-weight:900;color:#93c5fd;text-align:center'>" + str(total_prevu) + "</div><div style='font-size:1.1rem;font-weight:900;color:#86efac;text-align:center'>" + str(total_realise) + "</div><div style='background:rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;text-align:center;font-size:.9rem;font-weight:800;color:" + taux_col + "'>" + str(taux) + "% réalisé</div></div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='background:#1e293b;border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
+                "<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
+                "<div style='display:flex;gap:20px;align-items:center'>"
+                "<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div><div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>" + str(total_prevu) + "</div></div>"
+                "<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div><div style='font-size:1.4rem;font-weight:900;color:#86efac'>" + str(total_realise) + "</div></div>"
+                "<div style='background:rgba(255,255,255,.15);border-radius:8px;padding:8px 16px;font-size:1rem;font-weight:800;color:" + taux_col + "'>" + str(taux) + "% réalisé</div>"
+                "</div></div>",
+                unsafe_allow_html=True
+            )
 
             st.divider()
 
@@ -1906,19 +1939,32 @@ elif active == "planning":
                 _year_num = ch_sel_ws.isocalendar()[0]
                 _rng = _rnd.Random(_year_num * 100 + _week_num)
 
-                # Construire toutes les tâches
+                # ── Construire les tâches en utilisant les valeurs du tableau ──
+                # Priorité : valeur saisie dans le tableau (sess_key) > fréquence du point > classe
                 taches_all = []
                 for pt in st.session_state.points:
-                    pt_freq = pt.get('frequency', 1)
-                    pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                    if pt_freq_unit == '/ jour':
-                        nb_fois = int(pt_freq) * nb_jours
-                    elif pt_freq_unit == '/ mois':
-                        nb_fois = max(1, round(int(pt_freq) / 4))
+                    pt_id = pt.get('id', '')
+                    _sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
+                    # Récupérer la valeur modifiée dans le tableau si elle existe
+                    if _sess_key in st.session_state:
+                        nb_fois = int(st.session_state[_sess_key])
+                        pt_freq_unit = '/ semaine'
                     else:
-                        nb_fois = int(pt_freq)
+                        pt_freq = pt.get('frequency', None)
+                        pt_freq_unit = pt.get('frequency_unit', '/ semaine')
+                        if pt_freq is not None and int(pt_freq) > 0:
+                            if pt_freq_unit == '/ jour':
+                                nb_fois = int(pt_freq) * nb_jours
+                            elif pt_freq_unit == '/ mois':
+                                nb_fois = max(1, round(int(pt_freq) / 4))
+                            else:
+                                nb_fois = int(pt_freq)
+                        else:
+                            rc = (pt.get('room_class','') or '').strip().upper()
+                            nb_fois = 20 if 'A' in rc else (10 if 'D' in rc else 2)
+                            pt_freq_unit = '/ semaine'
                     for _ in range(nb_fois):
-                        taches_all.append({"label": pt['label'], "type": pt.get('type','—'), "risk": int(pt.get('risk_level',1)), "freq_unit": pt_freq_unit})
+                        taches_all.append({"label": pt['label'], "type": pt.get('type','—'), "risk": int(pt.get('risk_level',1)), "freq_unit": pt_freq_unit, "room_class": pt.get('room_class','—')})
 
                 # Mélange aléatoire reproductible pour la semaine
                 _rng.shuffle(taches_all)
