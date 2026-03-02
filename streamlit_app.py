@@ -1570,19 +1570,19 @@ elif active == "planning":
                 badges = ""
                 if j0:
                     j0_title = j0[0].get('label','') if j0 else ''
-                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{len(j0)} J0 🧪</div>'
+                    badges += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;cursor:default" title="{j0_title}">🧪 {len(j0)} J0</div>'
                 for s in j2:
                     is_done = s['status'] == 'done'
                     is_late = not is_done and d < _today_dt
                     s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#d97706")
                     s_icon = "✅" if is_done else ("⚠️" if is_late else "📖")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{s_icon} J2</div>'
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J2</div>'
                 for s in j7:
                     is_done = s['status'] == 'done'
                     is_late = not is_done and d < _today_dt
                     s_col = "#22c55e" if is_done else ("#ef4444" if is_late else "#0369a1")
                     s_icon = "✅" if is_done else ("⚠️" if is_late else "📗")
-                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{s_icon} J7</div>'
+                    badges += f'<div style="background:{s_col};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{s_icon} J7</div>'
                 holiday_lbl = ""
                 if is_holiday and not is_weekend:
                     holiday_lbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
@@ -1795,85 +1795,69 @@ elif active == "planning":
 
         st.divider()
 
-        # ── Configuration : nb prélèvements attendus par point ────────────────
+        # ── Points de prélèvement — charge par point ─────────────────────────
         st.markdown("#### 📍 Points de prélèvement — charge par point")
         if not st.session_state.points:
             st.info("Aucun point de prélèvement défini. Créez-en dans **Paramètres → Points de prélèvement**.")
         else:
-            # En-tête tableau
-            st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px;margin-bottom:0">
-              <div style="font-size:.78rem;font-weight:800;color:#fff">Point de prélèvement</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Type</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Classe</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Risque</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Prévu/sem.</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Réalisé</div>
-              <div style="font-size:.78rem;font-weight:800;color:#fff;text-align:center">Statut</div>
-            </div>""", unsafe_allow_html=True)
+            risk_colors_ch = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+            st.markdown("<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px'><div style='font-size:.78rem;font-weight:800;color:#fff'>Point</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Type</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Classe</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Risque</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Prévu/sem.</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Réalisé</div><div style='font-size:.78rem;font-weight:800;color:#fff;text-align:center'>Statut</div></div>", unsafe_allow_html=True)
 
             total_prevu = 0
             total_realise = 0
 
             for pt_i, pt in enumerate(st.session_state.points):
-                # Fréquence depuis le point (persistante) ou fallback
-                pt_freq_stored = pt.get('frequency', None)
+                # Fréquence auto depuis le point
+                pt_freq = pt.get('frequency', None)
                 pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                # Convertir en hebdomadaire (5 jours ouvrés)
-                if pt_freq_stored is not None:
+                if pt_freq is not None:
                     if pt_freq_unit == '/ jour':
-                        prevu = int(pt_freq_stored) * nb_jours  # adapté aux jours ouvrés réels
+                        prevu = int(pt_freq) * nb_jours
                     elif pt_freq_unit == '/ mois':
-                        prevu = max(1, round(pt_freq_stored / 4))
+                        prevu = max(1, round(pt_freq / 4))
                     else:
-                        prevu = int(pt_freq_stored)
+                        prevu = int(pt_freq)
                 else:
                     prevu = 2 if pt.get('type') == 'Air' else 1
 
-                # Prélèvements réalisés sur ce point cette semaine
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
 
-                # Couleur statut
                 if realise >= prevu:
-                    st_bg = "#f0fdf4"; st_border = "#86efac"; st_txt = "#166534"; st_icon = "✅"; st_label = "Complet"
+                    st_bg="#f0fdf4";st_border="#86efac";st_txt="#166534";st_icon="✅";st_label="Complet"
                 elif realise > 0:
-                    pct = int(realise / prevu * 100)
-                    st_bg = "#fffbeb"; st_border = "#fcd34d"; st_txt = "#92400e"; st_icon = "⏳"; st_label = f"{pct}%"
+                    pct=int(realise/prevu*100)
+                    st_bg="#fffbeb";st_border="#fcd34d";st_txt="#92400e";st_icon="⏳";st_label=str(pct)+"%"
                 else:
-                    st_bg = "#fef2f2"; st_border = "#fca5a5"; st_txt = "#991b1b"; st_icon = "🔴"; st_label = "0 / " + str(prevu)
+                    st_bg="#fef2f2";st_border="#fca5a5";st_txt="#991b1b";st_icon="🔴";st_label="0/"+str(prevu)
 
                 total_prevu += prevu
                 total_realise += realise
 
                 type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
                 row_bg = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
-                risk_val = str(pt.get('risk_level', '—'))
-                risk_colors_pl = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-                risk_col_pl = risk_colors_pl.get(risk_val, "#94a3b8")
+                risk_val = str(pt.get('risk_level','—'))
+                risk_col = risk_colors_ch.get(risk_val, "#94a3b8")
 
-                st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center">
-                      <div style="font-size:.9rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
-                      <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('type','—')}</div>
-                      <div style="font-size:.82rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
-                      <div style="text-align:center"><span style="background:{risk_col_pl}22;color:{risk_col_pl};border:1px solid {risk_col_pl}55;border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700">Nv.{risk_val}</span></div>
-                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{prevu}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#0f172a;text-align:center">{realise}</div>
-                      <div style="background:{st_bg};border:1px solid {st_border};border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:{st_txt}">{st_icon} {st_label}</div>
-                    </div>""", unsafe_allow_html=True)
+                row = (
+                    "<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:11px 16px;align-items:center'>"
+                    "<div style='font-size:.9rem;font-weight:700;color:#0f172a'>" + type_icon + " " + pt['label'] + "</div>"
+                    "<div style='font-size:.82rem;color:#475569;text-align:center'>" + pt.get('type','—') + "</div>"
+                    "<div style='font-size:.82rem;color:#475569;text-align:center'>" + pt.get('room_class','—') + "</div>"
+                    "<div style='text-align:center'><span style='background:" + risk_col + "22;color:" + risk_col + ";border:1px solid " + risk_col + "55;border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700'>Nv." + risk_val + "</span></div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(prevu) + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>" + str(realise) + "</div>"
+                    "<div style='background:" + st_bg + ";border:1px solid " + st_border + ";border-radius:8px;padding:4px 10px;text-align:center;font-size:.82rem;font-weight:700;color:" + st_txt + "'>" + st_icon + " " + st_label + "</div>"
+                    "</div>"
+                )
+                st.markdown(row, unsafe_allow_html=True)
 
-            # ── Pied de tableau total ─────────────────────────────────────────
             taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
             taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
-            st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center">
-              <div style="font-size:.9rem;font-weight:800;color:#fff">TOTAL SEMAINE</div>
-              <div></div><div></div><div></div>
-              <div style="font-size:1.1rem;font-weight:900;color:#93c5fd;text-align:center">{total_prevu}</div>
-              <div style="font-size:1.1rem;font-weight:900;color:#86efac;text-align:center">{total_realise}</div>
-              <div style="background:rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;text-align:center;font-size:.9rem;font-weight:800;color:{taux_col}">{taux}% réalisé</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown("<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr 0.7fr 1fr 1fr 1.5fr;gap:6px;background:#1e293b;border-radius:0 0 10px 10px;padding:12px 16px;align-items:center'><div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div><div></div><div></div><div></div><div style='font-size:1.1rem;font-weight:900;color:#93c5fd;text-align:center'>" + str(total_prevu) + "</div><div style='font-size:1.1rem;font-weight:900;color:#86efac;text-align:center'>" + str(total_realise) + "</div><div style='background:rgba(255,255,255,.1);border-radius:8px;padding:5px 10px;text-align:center;font-size:.9rem;font-weight:800;color:" + taux_col + "'>" + str(taux) + "% réalisé</div></div>", unsafe_allow_html=True)
 
             st.divider()
 
-            # ── Répartition par jour de la semaine ────────────────────────────
+            # ── Charge par jour ouvré ─────────────────────────────────────────
             st.markdown("#### 📅 Charge par jour ouvré")
             JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
             day_cols = st.columns(nb_jours if nb_jours > 0 else 1)
@@ -1883,30 +1867,24 @@ elif active == "planning":
                 dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
                 d_total = dj0 + dj2 + dj7
                 is_today_d = wd == _today_dt
+                bg_d = "#eff6ff" if is_today_d else "#f8fafc"
+                border_d = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
+                jour_col = "#1e40af" if is_today_d else "#475569"
+                inner = ""
+                if dj0: inner += "<div style='background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>🧪 " + str(dj0) + " J0</div>"
+                if dj2: inner += "<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📖 " + str(dj2) + " J2</div>"
+                if dj7: inner += "<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📗 " + str(dj7) + " J7</div>"
+                if d_total == 0: inner += "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien de planifié</div>"
+                card = (
+                    "<div style='background:" + bg_d + ";border:" + border_d + ";border-radius:12px;padding:14px;text-align:center'>"
+                    "<div style='font-size:.82rem;font-weight:800;color:" + jour_col + "'>" + JOURS_FR2[wd.weekday()] + "</div>"
+                    "<div style='font-size:.75rem;color:#94a3b8;margin-bottom:10px'>" + wd.strftime('%d/%m') + "</div>"
+                    "<div style='font-size:2.2rem;font-weight:900;color:#0f172a'>" + str(d_total) + "</div>"
+                    "<div style='font-size:.7rem;color:#94a3b8;margin-top:4px'>acte(s)</div>"
+                    "<div style='margin-top:10px;display:flex;flex-direction:column;gap:4px'>" + inner + "</div>"
+                    "</div>"
+                )
                 with day_cols[di]:
-                    # Construire la carte entièrement en Python, sans HTML imbriqué dans f-string
-                    bg_d        = "#eff6ff" if is_today_d else "#f8fafc"
-                    border_d    = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
-                    jour_color  = "#1e40af" if is_today_d else "#475569"
-                    inner_html  = ""
-                    if dj0:
-                        inner_html += "<div style='background:#7c3aed22;color:#7c3aed;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>🧪 " + str(dj0) + " J0</div>"
-                    if dj2:
-                        inner_html += "<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📖 " + str(dj2) + " J2</div>"
-                    if dj7:
-                        inner_html += "<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:3px 6px;font-size:.72rem;font-weight:700;margin-bottom:2px'>📗 " + str(dj7) + " J7</div>"
-                    if d_total == 0:
-                        inner_html += "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien de planifié</div>"
-                    card = (
-                        "<div style='background:" + bg_d + ";border:" + border_d + ";border-radius:12px;padding:14px;text-align:center'>"
-                        "<div style='font-size:.82rem;font-weight:800;color:" + jour_color + "'>" + JOURS_FR2[wd.weekday()] + "</div>"
-                        "<div style='font-size:.75rem;color:#94a3b8;margin-bottom:10px'>" + wd.strftime('%d/%m') + "</div>"
-                        "<div style='font-size:2.2rem;font-weight:900;color:#0f172a'>" + str(d_total) + "</div>"
-                        "<div style='font-size:.7rem;color:#94a3b8;margin-top:4px'>acte(s)</div>"
-                        "<div style='margin-top:10px;display:flex;flex-direction:column;gap:4px'>"
-                        + inner_html +
-                        "</div></div>"
-                    )
                     st.markdown(card, unsafe_allow_html=True)
 
     with plan_tab_export:
@@ -2071,293 +2049,142 @@ const img=document.getElementById('planImg');if(img)img.addEventListener('load',
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "historique":
     st.markdown("### 📋 Historique de surveillance")
-    if st.session_state.surveillance:
+    surv = st.session_state.surveillance
+    total = len(surv)
+
+    if surv:
         c_dl, c_cl = st.columns(2)
         with c_dl:
             csv_str = io.StringIO()
-            writer = csv.DictWriter(csv_str, fieldnames=st.session_state.surveillance[0].keys())
-            writer.writeheader(); writer.writerows(st.session_state.surveillance)
+            writer = csv.DictWriter(csv_str, fieldnames=surv[0].keys())
+            writer.writeheader(); writer.writerows(surv)
             st.download_button("⬇️ Télécharger CSV", csv_str.getvalue(), "surveillance.csv", "text/csv", use_container_width=True)
         with c_cl:
             if st.button("🗑️ Vider l'historique", use_container_width=True):
                 st.session_state.surveillance = []
                 if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
                 st.rerun()
-
-        surv = st.session_state.surveillance
-        total = len(surv)
-        alerts = sum(1 for r in surv if r["status"] == "alert")
-        actions = sum(1 for r in surv if r["status"] == "action")
-        conformes = total - alerts - actions
-        positives = sum(1 for r in surv if r.get("germ_match", "") not in ("Négatif", "", "—") and int(r.get("ufc", 0)) > 0)
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("📋 Total", total)
-        c2.metric("✅ Conformes", conformes)
-        c3.metric("⚠️ Alertes", alerts)
-        c4.metric("🚨 Actions", actions)
-        c5.metric("🦠 Géloses positives", positives)
-
+        alerts = sum(1 for r in surv if r["status"]=="alert")
+        actions = sum(1 for r in surv if r["status"]=="action")
+        c1,c2,c3,c4 = st.columns(4)
+        c1.metric("Total", total); c2.metric("✅ Conformes", total-alerts-actions); c3.metric("⚠️ Alertes", alerts); c4.metric("🚨 Actions", actions)
         st.divider()
 
-        # ── ONGLETS STATISTIQUES + LISTE ─────────────────────────────────────
-        hist_tab_stats_pts, hist_tab_stats_germs, hist_tab_preleveurs, hist_tab_liste = st.tabs([
-            "📍 Stats par point de prélèvement",
-            "🦠 Stats par germe",
-            "👤 Répartition par préleveur",
-            "📋 Liste des entrées"
+        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
+            "📍 Stats par point", "🦠 Stats par germe", "👤 Répartition par préleveur", "📋 Liste des entrées"
         ])
 
-        # ─────────────────────────────────────────────────────────────────────
-        # ONGLET 1 : STATISTIQUES PAR POINT DE PRÉLÈVEMENT
-        # ─────────────────────────────────────────────────────────────────────
-        with hist_tab_stats_pts:
-            st.markdown("#### 📍 Résultats par point de prélèvement")
-            st.markdown("""<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
-              Statistiques agrégées sur l'ensemble de l'historique — positif = au moins une colonie détectée (UFC > 0).
-            </div>""", unsafe_allow_html=True)
-
-            # Construire les stats par point
+        with hist_tab_pts:
             from collections import defaultdict
-            pts_stats = defaultdict(lambda: {"total": 0, "positives": 0, "negatives": 0, "germes": defaultdict(int), "ufc_list": []})
+            pts_stats = defaultdict(lambda: {"total":0,"positives":0,"negatives":0,"germes":defaultdict(int)})
             for r in surv:
-                pt = r.get("prelevement", "Inconnu") or "Inconnu"
+                pt = r.get("prelevement","—")
                 pts_stats[pt]["total"] += 1
-                ufc = int(r.get("ufc", 0))
-                germ = r.get("germ_match", "Négatif") or "Négatif"
-                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                ufc = int(r.get("ufc",0))
+                germ = r.get("germ_match","") or ""
+                if ufc > 0 and germ not in ("Négatif","—",""):
                     pts_stats[pt]["positives"] += 1
                     pts_stats[pt]["germes"][germ] += 1
-                    pts_stats[pt]["ufc_list"].append(ufc)
                 else:
                     pts_stats[pt]["negatives"] += 1
+            st.markdown("<div style='display:grid;grid-template-columns:2.5fr 0.7fr 0.7fr 0.7fr 1fr 2fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'><div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅ Nég.</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🦠 Pos.</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Taux +</div><div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div></div>", unsafe_allow_html=True)
+            for ri, (pt_name, pt_data) in enumerate(sorted(pts_stats.items(), key=lambda x: -x[1]["positives"])):
+                t = pt_data["total"]; pos = pt_data["positives"]
+                taux = pos/t*100 if t>0 else 0
+                tc = "#ef4444" if taux>=50 else "#f59e0b" if taux>0 else "#22c55e"
+                germes_str = ", ".join(g + "(" + str(n) + "x)" for g,n in sorted(pt_data["germes"].items(), key=lambda x:-x[1])[:3]) or "—"
+                row_bg = "#f8fafc" if ri%2==0 else "#ffffff"
+                row = ("<div style='display:grid;grid-template-columns:2.5fr 0.7fr 0.7fr 0.7fr 1fr 2fr;gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center'>"
+                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>📍 " + pt_name + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(pt_data["negatives"]) + "</div>"
+                    "<div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";border:1px solid " + tc + "55;border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div>"
+                    "<div style='font-size:.85rem;font-weight:700;color:" + tc + ";text-align:center'>" + str(round(taux,0)) + "%</div>"
+                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + germes_str + "</div>"
+                    "</div>")
+                st.markdown(row, unsafe_allow_html=True)
+            st.markdown("<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'><div style='font-size:.78rem;color:#94a3b8'>" + str(len(pts_stats)) + " point(s) — " + str(total) + " résultats</div></div>", unsafe_allow_html=True)
 
-            if not pts_stats:
-                st.info("Aucune donnée disponible.")
-            else:
-                # En-tête tableau
-                st.markdown("""<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 0.8fr 1fr 2fr;gap:6px;background:#1e40af;border-radius:10px 10px 0 0;padding:12px 16px">
-                  <div style="font-size:.75rem;font-weight:800;color:#fff">Point de prélèvement</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Total</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">✅ Négatif</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">🦠 Positif</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Taux positif</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff">Germes détectés</div>
-                </div>""", unsafe_allow_html=True)
-
-                for pi, (pt_name, st_data) in enumerate(sorted(pts_stats.items())):
-                    t = st_data["total"]
-                    pos = st_data["positives"]
-                    neg = st_data["negatives"]
-                    taux = (pos / t * 100) if t > 0 else 0
-                    taux_col = "#ef4444" if taux >= 50 else "#f59e0b" if taux > 0 else "#22c55e"
-                    germes_txt = ", ".join(f"{g} ({n}x)" for g, n in sorted(st_data["germes"].items(), key=lambda x: -x[1])[:4])
-                    if not germes_txt:
-                        germes_txt = "— aucun germe"
-                    row_bg = "#f8fafc" if pi % 2 == 0 else "#ffffff"
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 0.8fr 0.8fr 0.8fr 1fr 2fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:10px 16px;align-items:center">
-                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">📍 {pt_name}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{t}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#22c55e;text-align:center">{neg}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#ef4444;text-align:center">{pos}</div>
-                      <div style="text-align:center"><span style="background:{taux_col}22;color:{taux_col};border:1px solid {taux_col}55;border-radius:8px;padding:3px 10px;font-size:.82rem;font-weight:700">{taux:.0f}%</span></div>
-                      <div style="font-size:.72rem;color:#475569;font-style:italic">{germes_txt}</div>
-                    </div>""", unsafe_allow_html=True)
-
-                    # Détail des germes pour ce point si positives > 0
-                    if pos > 0 and st_data["germes"]:
-                        germe_details = "".join(
-                            f'<span style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:600;margin-right:4px">🦠 {g} × {n}</span>'
-                            for g, n in sorted(st_data["germes"].items(), key=lambda x: -x[1])
-                        )
-                        st.markdown(f'<div style="background:#fef2f2;border:1px solid #fca5a5;border-top:none;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:6px 16px 6px 32px;display:flex;flex-wrap:wrap;gap:4px">{germe_details}</div>', unsafe_allow_html=True)
-
-                st.markdown('<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:10px 16px"><div style="font-size:.82rem;font-weight:800;color:#94a3b8">Total : ' + str(total) + ' entrées — ' + str(positives) + ' géloses positives</div></div>', unsafe_allow_html=True)
-
-        # ─────────────────────────────────────────────────────────────────────
-        # ONGLET 2 : STATISTIQUES PAR GERME
-        # ─────────────────────────────────────────────────────────────────────
-        with hist_tab_stats_germs:
-            st.markdown("#### 🦠 Statistiques par germe identifié")
-            st.markdown("""<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#991b1b">
-              Les pourcentages sont calculés par rapport au nombre total de <strong>géloses positives</strong> (UFC > 0). Les résultats négatifs sont exclus.
-            </div>""", unsafe_allow_html=True)
-
+        with hist_tab_germs:
             from collections import defaultdict
-            germe_stats = defaultdict(lambda: {"count": 0, "points": defaultdict(int), "ufc_list": []})
+            germs_stats = defaultdict(lambda: {"count":0,"ufc_sum":0,"points":set()})
+            total_pos = 0
             for r in surv:
-                ufc = int(r.get("ufc", 0))
-                germ = r.get("germ_match", "") or ""
-                if ufc > 0 and germ not in ("Négatif", "—", ""):
-                    pt = r.get("prelevement", "Inconnu") or "Inconnu"
-                    germe_stats[germ]["count"] += 1
-                    germe_stats[germ]["points"][pt] += 1
-                    germe_stats[germ]["ufc_list"].append(ufc)
-
-            if not germe_stats:
+                germ = r.get("germ_match","") or ""
+                if germ in ("Négatif","—","") or int(r.get("ufc",0))==0: continue
+                total_pos += 1
+                germs_stats[germ]["count"] += 1
+                germs_stats[germ]["ufc_sum"] += int(r.get("ufc",0))
+                germs_stats[germ]["points"].add(r.get("prelevement","—"))
+            if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
             else:
-                total_positives_for_pct = positives if positives > 0 else 1
-
-                # Trier par fréquence décroissante
-                sorted_germes = sorted(germe_stats.items(), key=lambda x: -x[1]["count"])
-
-                # En-tête
-                st.markdown("""<div style="display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:6px;background:#7c3aed;border-radius:10px 10px 0 0;padding:12px 16px">
-                  <div style="font-size:.75rem;font-weight:800;color:#fff">Germe identifié</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">Nb cas</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">% des positifs</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff;text-align:center">UFC moy.</div>
-                  <div style="font-size:.75rem;font-weight:800;color:#fff">Points concernés</div>
-                </div>""", unsafe_allow_html=True)
-
-                for gi, (germ_name, g_data) in enumerate(sorted_germes):
-                    cnt = g_data["count"]
-                    pct = cnt / total_positives_for_pct * 100
-                    ufc_avg = sum(g_data["ufc_list"]) / len(g_data["ufc_list"]) if g_data["ufc_list"] else 0
-                    pts_list = ", ".join(f"{pt} ({n}x)" for pt, n in sorted(g_data["points"].items(), key=lambda x: -x[1])[:3])
-                    row_bg = "#f5f3ff" if gi % 2 == 0 else "#ffffff"
-
-                    # Barre de progression proportionnelle
+                st.markdown("<div style='display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'><div style='font-size:.72rem;font-weight:800;color:#fff'>Germe</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Cas</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>% des positifs</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Moy. UFC</div><div style='font-size:.72rem;font-weight:800;color:#fff'>Points touchés</div></div>", unsafe_allow_html=True)
+                for gi, (gname, gdata) in enumerate(sorted(germs_stats.items(), key=lambda x:-x[1]["count"])):
+                    pct = gdata["count"]/total_pos*100 if total_pos>0 else 0
+                    avg_ufc = gdata["ufc_sum"]/gdata["count"] if gdata["count"]>0 else 0
+                    pts_str = ", ".join(list(gdata["points"])[:3])
                     bar_w = int(pct)
-                    bar_color = "#ef4444" if pct >= 30 else "#f59e0b" if pct >= 10 else "#7c3aed"
+                    row_bg = "#f8fafc" if gi%2==0 else "#ffffff"
+                    row = ("<div style='display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center'>"
+                        "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>🦠 " + gname + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(gdata["count"]) + "</div>"
+                        "<div style='text-align:center'><div style='background:#e2e8f0;border-radius:4px;height:8px;margin-bottom:2px'><div style='background:#ef4444;border-radius:4px;height:8px;width:" + str(bar_w) + "%'></div></div><span style='font-size:.75rem;font-weight:700;color:#ef4444'>" + str(round(pct,1)) + "%</span></div>"
+                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>" + str(round(avg_ufc,0)) + "</div>"
+                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + pts_str + "</div>"
+                        "</div>")
+                    st.markdown(row, unsafe_allow_html=True)
+                st.markdown("<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'><div style='font-size:.78rem;color:#94a3b8'>" + str(len(germs_stats)) + " germe(s) distinct(s) — " + str(total_pos) + " positifs</div></div>", unsafe_allow_html=True)
 
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;gap:6px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:10px 16px;align-items:center">
-                      <div>
-                        <div style="font-size:.88rem;font-weight:700;color:#1e293b;font-style:italic">🦠 {germ_name}</div>
-                        <div style="background:#e2e8f0;border-radius:4px;height:5px;margin-top:4px;overflow:hidden">
-                          <div style="background:{bar_color};width:{bar_w}%;height:100%;border-radius:4px"></div>
-                        </div>
-                      </div>
-                      <div style="font-size:1.1rem;font-weight:900;color:#7c3aed;text-align:center">{cnt}</div>
-                      <div style="text-align:center"><span style="background:{bar_color}22;color:{bar_color};border:1px solid {bar_color}55;border-radius:8px;padding:3px 10px;font-size:.82rem;font-weight:700">{pct:.1f}%</span></div>
-                      <div style="font-size:.9rem;font-weight:700;color:#0f172a;text-align:center">{ufc_avg:.0f}</div>
-                      <div style="font-size:.72rem;color:#475569;font-style:italic">{pts_list}</div>
-                    </div>""", unsafe_allow_html=True)
-
-                st.markdown(f'<div style="background:#4c1d95;border-radius:0 0 10px 10px;padding:10px 16px"><div style="font-size:.82rem;font-weight:800;color:#c4b5fd">{len(sorted_germes)} germe(s) différent(s) identifié(s) sur {total_positives_for_pct} gélose(s) positive(s)</div></div>', unsafe_allow_html=True)
-
-                # Résumé visuel top germes
-                if sorted_germes:
-                    st.markdown("##### 🏆 Top germes les plus fréquents")
-                    top_cols = st.columns(min(len(sorted_germes), 5))
-                    for ti, (germ_name, g_data) in enumerate(sorted_germes[:5]):
-                        pct = g_data["count"] / total_positives_for_pct * 100
-                        bar_c = "#ef4444" if pct >= 30 else "#f59e0b" if pct >= 10 else "#7c3aed"
-                        with top_cols[ti]:
-                            st.markdown(f"""<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center">
-                              <div style="font-size:1.8rem;font-weight:900;color:{bar_c}">{pct:.0f}%</div>
-                              <div style="font-size:.65rem;font-style:italic;color:#1e293b;margin:4px 0;font-weight:700;min-height:32px">{germ_name[:35]}</div>
-                              <div style="font-size:.7rem;color:#64748b">{g_data['count']} cas</div>
-                            </div>""", unsafe_allow_html=True)
-
-        # ─────────────────────────────────────────────────────────────────────
-        # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
-        # ─────────────────────────────────────────────────────────────────────
-        with hist_tab_preleveurs:
-            st.markdown("#### 👤 Répartition par préleveur — historique global")
+        with hist_tab_prev:
             from collections import defaultdict
-
-            # Construire stats par préleveur depuis l'historique
-            prev_stats = defaultdict(lambda: {"total": 0, "positives": 0, "negatives": 0,
-                                               "alertes": 0, "actions": 0, "germes": defaultdict(int)})
+            prev_stats = defaultdict(lambda: {"total":0,"positives":0,"negatives":0,"alertes":0,"actions":0,"germes":defaultdict(int)})
             for r in surv:
-                op = r.get("operateur", "") or "Non renseigné"
-                if not op.strip(): op = "Non renseigné"
+                op = (r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
                 prev_stats[op]["total"] += 1
-                ufc = int(r.get("ufc", 0))
-                status = r.get("status", "ok")
-                germ = r.get("germ_match", "") or ""
-                if ufc > 0 and germ not in ("Négatif", "—", ""):
-                    prev_stats[op]["positives"] += 1
-                    prev_stats[op]["germes"][germ] += 1
+                ufc = int(r.get("ufc",0)); status = r.get("status","ok"); germ = r.get("germ_match","") or ""
+                if ufc>0 and germ not in ("Négatif","—",""):
+                    prev_stats[op]["positives"] += 1; prev_stats[op]["germes"][germ] += 1
                 else:
                     prev_stats[op]["negatives"] += 1
-                if status == "alert": prev_stats[op]["alertes"] += 1
-                elif status == "action": prev_stats[op]["actions"] += 1
+                if status=="alert": prev_stats[op]["alertes"] += 1
+                elif status=="action": prev_stats[op]["actions"] += 1
+            op_list = sorted(prev_stats.items(), key=lambda x:-x[1]["total"])
+            card_cols = st.columns(min(len(op_list),4))
+            for ci, (op_name, op_data) in enumerate(op_list):
+                t=op_data["total"]; pos=op_data["positives"]
+                taux_pos=pos/t*100 if t>0 else 0
+                tc="#ef4444" if taux_pos>=30 else "#f59e0b" if taux_pos>0 else "#22c55e"
+                ini=op_name[0].upper() if op_name!="Non renseigné" else "?"
+                with card_cols[ci%len(card_cols)]:
+                    st.markdown("<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;padding:18px 14px;text-align:center;margin-bottom:12px'><div style='background:#2563eb;color:#fff;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.2rem;margin:0 auto 10px auto'>" + ini + "</div><div style='font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px'>" + op_name + "</div><div style='font-size:2rem;font-weight:900;color:#1e40af'>" + str(t) + "</div><div style='font-size:.68rem;color:#64748b;margin-bottom:10px'>résultat(s)</div><div style='display:grid;grid-template-columns:1fr 1fr;gap:6px'><div style='background:#f0fdf4;border-radius:8px;padding:6px'><div style='font-size:1rem;font-weight:800;color:#22c55e'>" + str(op_data["negatives"]) + "</div><div style='font-size:.6rem;color:#166534'>✅ Nég.</div></div><div style='background:#fef2f2;border-radius:8px;padding:6px'><div style='font-size:1rem;font-weight:800;color:#ef4444'>" + str(pos) + "</div><div style='font-size:.6rem;color:#991b1b'>🦠 Pos.</div></div><div style='background:#fffbeb;border-radius:8px;padding:6px'><div style='font-size:1rem;font-weight:800;color:#f59e0b'>" + str(op_data["alertes"]) + "</div><div style='font-size:.6rem;color:#92400e'>⚠️ Alerte</div></div><div style='background:#fef2f2;border-radius:8px;padding:6px'><div style='font-size:1rem;font-weight:800;color:#dc2626'>" + str(op_data["actions"]) + "</div><div style='font-size:.6rem;color:#991b1b'>🚨 Action</div></div></div><div style='margin-top:10px;background:" + tc + "22;border:1px solid " + tc + "55;border-radius:8px;padding:5px'><div style='font-size:.8rem;font-weight:800;color:" + tc + "'>" + str(round(taux_pos,0)) + "% positifs</div></div></div>", unsafe_allow_html=True)
+            st.divider()
+            st.markdown("<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'><div style='font-size:.72rem;font-weight:800;color:#fff'>Préleveur</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🦠</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div><div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div><div style='font-size:.72rem;font-weight:800;color:#fff'>Germes fréquents</div></div>", unsafe_allow_html=True)
+            for ri, (op_name, op_data) in enumerate(op_list):
+                t=op_data["total"]; pos=op_data["positives"]
+                taux_pos=pos/t*100 if t>0 else 0
+                tc="#ef4444" if taux_pos>=30 else "#f59e0b" if taux_pos>0 else "#22c55e"
+                top_g=", ".join(g+"("+str(n)+"x)" for g,n in sorted(op_data["germes"].items(),key=lambda x:-x[1])[:3]) or "—"
+                row_bg="#f8fafc" if ri%2==0 else "#ffffff"
+                st.markdown("<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center'><div style='font-size:.88rem;font-weight:700;color:#0f172a'>👤 " + op_name + "</div><div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div><div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(op_data["negatives"]) + "</div><div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div><div style='font-size:1rem;font-weight:800;color:#f59e0b;text-align:center'>" + str(op_data["alertes"]) + "</div><div style='font-size:1rem;font-weight:800;color:#ef4444;text-align:center'>" + str(op_data["actions"]) + "</div><div style='font-size:.72rem;color:#475569;font-style:italic'>" + top_g + "</div></div>", unsafe_allow_html=True)
+            st.markdown("<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'><div style='font-size:.78rem;color:#94a3b8'>" + str(len(op_list)) + " préleveur(s)</div></div>", unsafe_allow_html=True)
 
-            if not prev_stats:
-                st.info("Aucune donnée préleveur dans l'historique.")
-            else:
-                # Cartes synthèse par préleveur
-                op_list = sorted(prev_stats.items(), key=lambda x: -x[1]["total"])
-                card_cols = st.columns(min(len(op_list), 4))
-                for ci, (op_name, op_data) in enumerate(op_list):
-                    t = op_data["total"]
-                    pos = op_data["positives"]
-                    taux_pos = pos / t * 100 if t > 0 else 0
-                    taux_col = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
-                    initiale = op_name[0].upper() if op_name and op_name != "Non renseigné" else "?"
-                    with card_cols[ci % len(card_cols)]:
-                        st.markdown(f"""<div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;padding:18px 14px;text-align:center;margin-bottom:12px">
-                          <div style="background:#2563eb;color:#fff;border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.2rem;margin:0 auto 10px auto">{initiale}</div>
-                          <div style="font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px">{op_name}</div>
-                          <div style="font-size:2rem;font-weight:900;color:#1e40af">{t}</div>
-                          <div style="font-size:.68rem;color:#64748b;margin-bottom:10px">résultat(s) enregistré(s)</div>
-                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
-                            <div style="background:#f0fdf4;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#22c55e">{op_data['negatives']}</div><div style="font-size:.6rem;color:#166534">✅ Négatifs</div></div>
-                            <div style="background:#fef2f2;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#ef4444">{pos}</div><div style="font-size:.6rem;color:#991b1b">🦠 Positifs</div></div>
-                            <div style="background:#fffbeb;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#f59e0b">{op_data['alertes']}</div><div style="font-size:.6rem;color:#92400e">⚠️ Alertes</div></div>
-                            <div style="background:#fef2f2;border-radius:8px;padding:6px"><div style="font-size:1rem;font-weight:800;color:#dc2626">{op_data['actions']}</div><div style="font-size:.6rem;color:#991b1b">🚨 Actions</div></div>
-                          </div>
-                          <div style="margin-top:10px;background:{taux_col}22;border:1px solid {taux_col}55;border-radius:8px;padding:5px">
-                            <div style="font-size:.8rem;font-weight:800;color:{taux_col}">{taux_pos:.0f}% de positifs</div>
-                          </div>
-                        </div>""", unsafe_allow_html=True)
-
-                st.divider()
-                # Tableau détaillé
-                st.markdown("##### 📊 Détail par préleveur")
-                st.markdown("""<div style="display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
-                  <div style="font-size:.72rem;font-weight:800;color:#fff">Préleveur</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Total</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">✅ Nég.</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">🦠 Pos.</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">⚠️ Alerte</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">🚨 Action</div>
-                  <div style="font-size:.72rem;font-weight:800;color:#fff">Germes fréquents</div>
-                </div>""", unsafe_allow_html=True)
-                for ri, (op_name, op_data) in enumerate(op_list):
-                    t = op_data["total"]
-                    pos = op_data["positives"]
-                    taux_pos = pos / t * 100 if t > 0 else 0
-                    taux_col = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
-                    germes_top = ", ".join(f"{g} ({n}x)" for g, n in sorted(op_data["germes"].items(), key=lambda x: -x[1])[:3])
-                    if not germes_top: germes_top = "— aucun"
-                    row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center">
-                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">👤 {op_name}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#1e40af;text-align:center">{t}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#22c55e;text-align:center">{op_data['negatives']}</div>
-                      <div style="text-align:center"><span style="background:{taux_col}22;color:{taux_col};border:1px solid {taux_col}55;border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700">{pos}</span></div>
-                      <div style="font-size:1rem;font-weight:800;color:#f59e0b;text-align:center">{op_data['alertes']}</div>
-                      <div style="font-size:1rem;font-weight:800;color:#ef4444;text-align:center">{op_data['actions']}</div>
-                      <div style="font-size:.72rem;color:#475569;font-style:italic">{germes_top}</div>
-                    </div>""", unsafe_allow_html=True)
-                st.markdown(f'<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px"><div style="font-size:.78rem;font-weight:700;color:#94a3b8">{len(op_list)} préleveur(s) — {total} résultats au total</div></div>', unsafe_allow_html=True)
-
-        # ─────────────────────────────────────────────────────────────────────
-        # ONGLET 4 : LISTE DES ENTRÉES
-        # ─────────────────────────────────────────────────────────────────────
         with hist_tab_liste:
-            st.markdown("#### 📋 Toutes les entrées")
             for r in reversed(surv):
-                sc = "#ef4444" if r["status"] == "action" else "#f59e0b" if r["status"] == "alert" else "#22c55e"
-                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
-                with st.expander(f"{ic} {r['date']} — {r['prelevement']} — {r['germ_match']} — {r['ufc']} UFC/m³"):
-                    c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
-                    c1.markdown(f"**Germe saisi :** {r['germ_saisi']}\n\n**Correspondance :** {r['germ_match']} ({r['match_score']})")
-                    c2.markdown(f"**UFC/m³ :** {r['ufc']}\n\n**Seuil alerte :** ≥{r['alert_threshold']} | **Seuil action :** ≥{r['action_threshold']}")
-                    c3.markdown(f"**Opérateur :** {r.get('operateur', 'N/A')}\n\n**Remarque :** {r.get('remarque', '—')}")
+                ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
+                with st.expander(ic + " " + r["date"] + " — " + r["prelevement"] + " — " + r["germ_match"] + " — " + str(r["ufc"]) + " UFC/m³"):
+                    c1,c2,c3,c4 = st.columns([3,3,3,1])
+                    c1.markdown("**Germe saisi :** " + r["germ_saisi"] + "\n\n**Correspondance :** " + r["germ_match"] + " (" + str(r["match_score"]) + ")")
+                    c2.markdown("**UFC/m³ :** " + str(r["ufc"]) + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"]) + " | **Seuil action :** ≥" + str(r["action_threshold"]))
+                    c3.markdown("**Opérateur :** " + str(r.get("operateur","N/A")) + "\n\n**Remarque :** " + str(r.get("remarque","—")))
                     with c4:
                         real_i = surv.index(r)
-                        if st.button("🗑️", key=f"del_surv_{real_i}"):
+                        if st.button("🗑️", key="del_surv_" + str(real_i)):
                             st.session_state.surveillance.pop(real_i)
                             save_surveillance(st.session_state.surveillance)
                             st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 6 : PARAMÈTRES
@@ -2471,21 +2298,17 @@ elif active == "parametres":
         with col_sr:
             if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"): save_origin_measures(om); st.success("✅ Sauvegardé !")
         with col_def:
-            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures_v2"):
+            if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures"):
                 st.session_state.origin_measures=[dict(m) for m in DEFAULT_ORIGIN_MEASURES]; save_origin_measures(st.session_state.origin_measures); st.rerun()
 
     with subtab_points:
         st.markdown("Gérez les points de prélèvement.")
-
-        # ── Constantes niveau de risque ───────────────────────────────────────
         PT_RISK_OPTS = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Majeur", "5 — Critique"]
         PT_RISK_COLORS = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
         PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
-
         if not st.session_state.points:
             st.info("Aucun point défini.")
         else:
-            # En-tête tableau
             st.markdown("""<div style="display:grid;grid-template-columns:2.2fr 0.9fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.5fr;gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
               <div style="font-size:.72rem;font-weight:800;color:#fff">Point</div>
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Type</div>
@@ -2495,35 +2318,36 @@ elif active == "parametres":
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Fréquence</div>
               <div></div><div></div>
             </div>""", unsafe_allow_html=True)
-
             for i, pt in enumerate(list(st.session_state.points)):
-                pt_type = pt.get('type','—')
-                type_icon = "💨" if pt_type == "Air" else "🧴"
-                risk_val = str(pt.get('risk_level', '—'))
+                pt_type = pt.get('type','—'); type_icon = "💨" if pt_type=="Air" else "🧴"
+                risk_val = str(pt.get('risk_level','—'))
                 risk_col = PT_RISK_COLORS.get(risk_val, "#94a3b8")
-                freq = pt.get('frequency', 1)
-                freq_unit = pt.get('frequency_unit', '/ semaine')
-                freq_short = f"{freq}×{' jour' if 'jour' in freq_unit else ' sem.' if 'sem' in freq_unit else ' mois'}"
+                freq = pt.get('frequency', 1); freq_unit = pt.get('frequency_unit','/ semaine')
+                freq_short = str(freq) + "x/" + ("j" if "jour" in freq_unit else "sem" if "sem" in freq_unit else "mois")
                 row_bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
                 c1, c2 = st.columns([8, 1])
                 with c1:
-                    st.markdown(f"""<div style="display:grid;grid-template-columns:2.2fr 0.9fr 0.9fr 0.9fr 0.7fr 1.1fr 0.5fr 0.5fr;gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center">
-                      <div style="font-size:.88rem;font-weight:700;color:#0f172a">{type_icon} {pt['label']}</div>
-                      <div style="font-size:.75rem;color:#475569;text-align:center">{pt_type}</div>
-                      <div style="font-size:.75rem;color:#475569;text-align:center">{pt.get('room_class','—')}</div>
-                      <div style="font-size:.72rem;color:#1d4ed8;text-align:center">🧫 {pt.get('gelose','—')[:18]}</div>
-                      <div style="text-align:center"><span style="background:{risk_col}22;color:{risk_col};border:1px solid {risk_col}55;border-radius:6px;padding:2px 7px;font-size:.72rem;font-weight:700">Nv.{risk_val}</span></div>
-                      <div style="text-align:center"><span style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:2px 8px;font-size:.75rem;font-weight:700">🔁 {freq_short}</span></div>
-                    </div>""", unsafe_allow_html=True)
+                    risk_badge = "<span style='background:" + risk_col + "22;color:" + risk_col + ";border:1px solid " + risk_col + "55;border-radius:6px;padding:2px 7px;font-size:.72rem;font-weight:700'>Nv." + risk_val + "</span>"
+                    freq_badge = "<span style='background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;border-radius:6px;padding:2px 8px;font-size:.75rem;font-weight:700'>🔁 " + freq_short + "</span>"
+                    gelose_short = pt.get('gelose','—')[:16]
+                    row_html = (
+                        "<div style='display:grid;grid-template-columns:2.2fr 0.9fr 0.9fr 0.9fr 0.7fr 1.1fr;gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;padding:9px 14px;align-items:center'>"
+                        "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>" + type_icon + " " + pt['label'] + "</div>"
+                        "<div style='font-size:.75rem;color:#475569;text-align:center'>" + pt_type + "</div>"
+                        "<div style='font-size:.75rem;color:#475569;text-align:center'>" + pt.get('room_class','—') + "</div>"
+                        "<div style='font-size:.72rem;color:#1d4ed8;text-align:center'>🧫 " + gelose_short + "</div>"
+                        "<div style='text-align:center'>" + risk_badge + "</div>"
+                        "<div style='text-align:center'>" + freq_badge + "</div>"
+                        "</div>"
+                    )
+                    st.markdown(row_html, unsafe_allow_html=True)
                 with c2:
                     btn_e, btn_d = st.columns(2)
                     with btn_e:
                         if st.button("✏️", key=f"edit_pt_{i}"): st.session_state._edit_point=i; st.rerun()
                     with btn_d:
                         if st.button("🗑️", key=f"del_pt_{i}"): st.session_state.points.pop(i); save_points(st.session_state.points); st.rerun()
-
-            st.markdown('<div style="background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px;margin-bottom:16px"><div style="font-size:.78rem;font-weight:700;color:#94a3b8">' + str(len(st.session_state.points)) + ' point(s) de prélèvement</div></div>', unsafe_allow_html=True)
-
+            st.markdown("<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px;margin-bottom:16px'><div style='font-size:.78rem;font-weight:700;color:#94a3b8'>" + str(len(st.session_state.points)) + " point(s)</div></div>", unsafe_allow_html=True)
         st.divider()
         if st.session_state.get('_edit_point') is not None:
             idx = st.session_state._edit_point; pt = st.session_state.points[idx]
@@ -2536,28 +2360,22 @@ elif active == "parametres":
                 gelose_opts = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if new_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
                 cur_g = pt.get('gelose',gelose_opts[0]); g_idx = gelose_opts.index(cur_g) if cur_g in gelose_opts else 0
                 new_gelose = st.selectbox("Gélose", gelose_opts, index=g_idx, key="pt_edit_gelose")
-            er5, er6, er7 = st.columns([2, 1, 2])
+            er5, er6, er7 = st.columns([2,1,2])
             with er5:
                 cur_risk_str = str(pt.get('risk_level','1'))
                 cur_risk_opt = next((o for o in PT_RISK_OPTS if o.startswith(cur_risk_str)), PT_RISK_OPTS[0])
                 new_risk_opt = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS, index=PT_RISK_OPTS.index(cur_risk_opt), key="pt_edit_risk")
                 new_risk = int(new_risk_opt[0])
             with er6:
-                new_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31, value=int(pt.get('frequency', 1)), step=1, key="pt_edit_freq")
+                new_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31, value=int(pt.get('frequency',1)), step=1, key="pt_edit_freq")
             with er7:
                 cur_unit = pt.get('frequency_unit','/ semaine')
-                unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 0
+                unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 1
                 new_freq_unit = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
             eb1, eb2 = st.columns(2)
             with eb1:
                 if st.button("✅ Enregistrer", key="pt_save_edit"):
-                    st.session_state.points[idx] = {
-                        "id": pt.get('id', f"p{idx+1}"),
-                        "label": new_label, "type": new_type,
-                        "room_class": new_room, "gelose": new_gelose,
-                        "risk_level": new_risk,
-                        "frequency": new_freq, "frequency_unit": new_freq_unit
-                    }
+                    st.session_state.points[idx] = {"id":pt.get('id',f"p{idx+1}"),"label":new_label,"type":new_type,"room_class":new_room,"gelose":new_gelose,"risk_level":new_risk,"frequency":new_freq,"frequency_unit":new_freq_unit}
                     save_points(st.session_state.points); st.session_state._edit_point=None; st.success("✅ Point mis à jour"); st.rerun()
             with eb2:
                 if st.button("Annuler", key="pt_cancel_edit"): st.session_state._edit_point=None; st.rerun()
@@ -2570,7 +2388,7 @@ elif active == "parametres":
             with np_r4:
                 gelose_opts_new = ["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"] if np_type=="Air" else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"]
                 np_gelose = st.selectbox("Gélose", gelose_opts_new, key="np_gelose")
-            np_r5, np_r6, np_r7 = st.columns([2, 1, 2])
+            np_r5, np_r6, np_r7 = st.columns([2,1,2])
             with np_r5:
                 np_risk_opt = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS, index=0, key="np_risk")
                 np_risk = int(np_risk_opt[0])
@@ -2582,13 +2400,8 @@ elif active == "parametres":
                 if not np_label.strip(): st.error("Le nom est requis")
                 else:
                     nid = f"p{len(st.session_state.points)+1}_{int(datetime.now().timestamp())}"
-                    st.session_state.points.append({
-                        "id": nid, "label": np_label.strip(), "type": np_type,
-                        "room_class": np_room.strip(), "gelose": np_gelose,
-                        "risk_level": np_risk,
-                        "frequency": np_freq, "frequency_unit": np_freq_unit
-                    })
-                    save_points(st.session_state.points); st.success(f"✅ Point **{np_label}** ajouté (Nv.{np_risk} — {np_freq}×{np_freq_unit})"); st.rerun()
+                    st.session_state.points.append({"id":nid,"label":np_label.strip(),"type":np_type,"room_class":np_room.strip(),"gelose":np_gelose,"risk_level":np_risk,"frequency":np_freq,"frequency_unit":np_freq_unit})
+                    save_points(st.session_state.points); st.success(f"✅ Point **{np_label}** ajouté"); st.rerun()
 
     with subtab_operateurs:
         ops = st.session_state.operators
