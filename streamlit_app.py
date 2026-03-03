@@ -2222,27 +2222,49 @@ elif active == "planning":
                 _yn  = ch_sel_ws.isocalendar()[0]
                 _rng = _rnd.Random(_yn * 100 + _wn)
 
-                taches_all = []
-                for pt in st.session_state.points:
-                    rc_pt  = (pt.get('room_class') or '').strip()
-                    co_val = st.session_state.get(class_override_key, {}).get(rc_pt, 0)
-                    co     = int(co_val) if co_val and int(co_val) > 0 else None
-                    nb_fois, _, _ = _get_prevu_semaine(pt, ch_sel_ws, nb_jours, co)
-                    for _ in range(nb_fois):
-                        taches_all.append({
-                            "label":      pt['label'],
-                            "type":       pt.get('type', '—'),
-                            "risk":       int(pt.get('risk_level', 1)),
-                            "room_class": rc_pt,
-                        })
-
-                _rng.shuffle(taches_all)
-                if nb_prelevements_max > 0 and len(taches_all) > nb_prelevements_max:
-                    taches_all = taches_all[:nb_prelevements_max]
-
                 planning    = {wd: [] for wd in ch_working_days}
                 charge_jour = {wd: 0  for wd in ch_working_days}
-                for t in taches_all:
+
+                # ── Passe 1 : points journaliers → 1 occurrence épinglée sur CHAQUE jour ouvré ──
+                # Garantit qu'un point / jour apparaît exactement une fois par jour,
+                # sans passer par l'équilibrage de charge.
+                taches_a_repartir = []
+                for pt in st.session_state.points:
+                    rc_pt     = (pt.get('room_class') or '').strip()
+                    co_val    = st.session_state.get(class_override_key, {}).get(rc_pt, 0)
+                    co        = int(co_val) if co_val and int(co_val) > 0 else None
+                    freq_unit = pt.get('frequency_unit', '/ semaine')
+                    freq_raw  = pt.get('frequency')
+                    tache     = {
+                        "label":      pt['label'],
+                        "type":       pt.get('type', '—'),
+                        "risk":       int(pt.get('risk_level', 1)),
+                        "room_class": rc_pt,
+                    }
+                    # Journalier sans override de classe → épinglé sur chaque jour
+                    is_daily = (
+                        freq_unit == '/ jour'
+                        and co is None
+                        and freq_raw is not None
+                        and int(freq_raw or 0) > 0
+                    )
+                    if is_daily:
+                        for wd in ch_working_days:
+                            planning[wd].append(tache)
+                            charge_jour[wd] += 1
+                    else:
+                        nb_fois, _, _ = _get_prevu_semaine(pt, ch_sel_ws, nb_jours, co)
+                        for _ in range(nb_fois):
+                            taches_a_repartir.append(tache)
+
+                # ── Passe 2 : tous les autres → répartition équilibrée ──
+                _rng.shuffle(taches_a_repartir)
+                if nb_prelevements_max > 0:
+                    deja  = sum(len(v) for v in planning.values())
+                    reste = max(0, nb_prelevements_max - deja)
+                    taches_a_repartir = taches_a_repartir[:reste]
+
+                for t in taches_a_repartir:
                     wd_cible = min(ch_working_days, key=lambda d: charge_jour[d])
                     planning[wd_cible].append(t)
                     charge_jour[wd_cible] += 1
