@@ -1652,7 +1652,7 @@ if active == "surveillance":
 
                         W_ETQ  = 5    * rl_cm
                         H_ETQ  = 4   * rl_cm
-                        N_COLS = 3
+                        N_COLS = 4
                         GAP    = 0.35 * rl_cm
                         MARGIN = 1    * rl_cm
 
