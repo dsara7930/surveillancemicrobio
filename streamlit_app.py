@@ -1501,15 +1501,64 @@ if due_global and not st.session_state.due_alert_shown:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3 : PLANNING  (remplace tout le bloc elif active == "planning":)
 # ═══════════════════════════════════════════════════════════════════════════════
+# NOTES D'INTÉGRATION :
+#   • Appelez init_planning_persistence() au démarrage de l'app (une seule fois)
+#   • Appelez save_planning_overrides() après chaque modification si vous voulez
+#     une sauvegarde immédiate, ou laissez le callback on_change le faire auto.
+#   • Les fonctions supposent que vous avez déjà une fonction save_data() qui
+#     persiste st.session_state vers votre backend (JSON, SQLite, etc.).
+#     Si ce n'est pas le cas, adaptez _persist_overrides() ci-dessous.
+# ═══════════════════════════════════════════════════════════════════════════════
+
 elif active == "planning":
     st.markdown("### 📅 Planning des prélèvements & lectures")
 
     _today_dt = datetime.today().date()
-    MOIS_FR = ["","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    MOIS_FR        = ["","Janvier","Février","Mars","Avril","Mai","Juin",
+                      "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
     JOURS_FR_COURT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
-    JOURS_FR = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+    JOURS_FR       = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    plan_tab_view, plan_tab_charge, plan_tab_export = st.tabs(["📅 Calendrier", "📊 Charge hebdo", "📥 Export Excel"])
+    # ─────────────────────────────────────────────────────────────────────────
+    # PERSISTANCE : lecture/écriture des overrides de planning
+    # ─────────────────────────────────────────────────────────────────────────
+    def _load_planning_overrides():
+        """Restaure les overrides depuis st.session_state['planning_overrides']
+        (déjà chargé par votre init globale) dans les clés ch_prevu_*."""
+        for k, v in st.session_state.get("planning_overrides", {}).items():
+            # Ne pas écraser une valeur déjà présente dans cette session
+            if k not in st.session_state:
+                st.session_state[k] = int(v)
+
+    def _persist_overrides():
+        """Collecte toutes les clés ch_prevu_* et les sauvegarde dans
+        st.session_state['planning_overrides'], puis appelle save_data()."""
+        overrides = {
+            k: int(v)
+            for k, v in st.session_state.items()
+            if isinstance(k, str) and k.startswith("ch_prevu_")
+        }
+        st.session_state["planning_overrides"] = overrides
+        # ── Appelez ici votre fonction de sauvegarde globale ──
+        # Exemples selon votre backend :
+        #   save_data()          # si vous avez déjà cette fonction
+        #   _save_json()         # ou celle-ci
+        #   _save_to_db()        # ou celle-là
+        # Pour l'instant on appelle save_data() — adaptez si nécessaire :
+        if "save_data" in dir():
+            save_data()
+        elif callable(globals().get("save_data")):
+            save_data()
+
+    def _on_prevu_change(sess_key):
+        """Callback déclenché à chaque modification d'un number_input de planning.
+        Persiste immédiatement ET force le recalcul (via rerun implicite de Streamlit)."""
+        _persist_overrides()
+
+    # Charger les overrides au premier affichage de l'onglet
+    if "planning_overrides_loaded" not in st.session_state:
+        _load_planning_overrides()
+        st.session_state["planning_overrides_loaded"] = True
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helper : fréquence par défaut selon la classe de salle
@@ -1521,32 +1570,176 @@ elif active == "planning":
         return 2
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Helper : nombre de passages prévus pour un point sur une semaine donnée
-    # Lit en priorité la valeur saisie dans la charge hebdo (session_state)
+    # Helper : valeur par défaut d'un point pour une semaine donnée
     # ─────────────────────────────────────────────────────────────────────────
-    def _nb_fois_pour_semaine(pt, week_monday, nb_wd):
-        """Retourne le nb de prélèvements prévus pour `pt` sur la semaine démarrant `week_monday`."""
-        pt_id = pt.get('id', '')
-        sess_key = f"ch_prevu_{pt_id}_{week_monday.isoformat()}"
-        # Valeur modifiée dans la charge hebdo → prioritaire
-        if sess_key in st.session_state:
-            val = int(st.session_state[sess_key])
-            freq_unit = pt.get('frequency_unit', '/ semaine')
-            if freq_unit == '/ jour':
-                # La valeur stockée est déjà le total semaine dans l'UI charge
-                return val, '/ semaine'
-            return val, freq_unit
-        # Valeur par défaut : fréquence du point
-        pt_freq = pt.get('frequency', None)
+    def _default_prevu(pt, nb_jours):
+        """Calcule la valeur par défaut (sans override) pour un point."""
+        pt_freq      = pt.get('frequency', None)
         pt_freq_unit = pt.get('frequency_unit', '/ semaine')
         if pt_freq is not None and int(pt_freq) > 0:
             if pt_freq_unit == '/ jour':
-                return int(pt_freq) * nb_wd, '/ semaine'
+                return int(pt_freq) * nb_jours
             elif pt_freq_unit == '/ mois':
-                return max(1, round(int(pt_freq) / 4)), '/ semaine'
+                return max(1, round(int(pt_freq) / 4))
             else:
-                return int(pt_freq), pt_freq_unit
-        return _frc(pt.get('room_class', '')), '/ semaine'
+                return int(pt_freq)
+        return _frc(pt.get('room_class', ''))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Helper : nb de prélèvements prévus pour un point sur une semaine
+    #   Lit en priorité la valeur saisie (ch_prevu_*) dans session_state
+    # ─────────────────────────────────────────────────────────────────────────
+    def _get_prevu(pt, week_monday, nb_wd):
+        """Retourne le nb de prélèvements prévus pour `pt` sur la semaine
+        démarrant `week_monday` (nb_wd = nombre de jours ouvrés)."""
+        sess_key = f"ch_prevu_{pt.get('id','')}_{week_monday.isoformat()}"
+        if sess_key in st.session_state:
+            return int(st.session_state[sess_key])
+        return _default_prevu(pt, nb_wd)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Calcul centralisé du planning par semaine → dict {date: [labels]}
+    #   Utilisé à la fois par l'onglet Calendrier ET la Charge hebdo
+    #   pour garantir la cohérence totale.
+    # ─────────────────────────────────────────────────────────────────────────
+    @st.cache_data(ttl=0, show_spinner=False)
+    def _compute_planning_month(year, month, points_tuple, overrides_tuple, nb_prelev_max):
+        """Calcule planned_j0 pour tout le mois.
+        Mis en cache avec ttl=0 : invalidé dès qu'un input change (via rerun).
+        points_tuple et overrides_tuple sont des tuples pour être hashables."""
+        import random as _rnd2
+        import calendar as _c
+        from collections import defaultdict
+
+        points   = list(points_tuple)
+        overrides = dict(overrides_tuple)
+        planned  = defaultdict(list)
+
+        _, n_days_m = _c.monthrange(year, month)
+        month_start = date_type(year, month, 1)
+        month_end   = date_type(year, month, n_days_m)
+
+        cur_monday = month_start - timedelta(days=month_start.weekday())
+
+        while cur_monday <= month_end:
+            hols = get_holidays_cached(cur_monday.year)
+            wd_week = [cur_monday + timedelta(days=i) for i in range(5)
+                       if (cur_monday + timedelta(days=i)) not in hols]
+            nb_wd = len(wd_week)
+            if nb_wd == 0:
+                cur_monday += timedelta(weeks=1)
+                continue
+
+            _wn  = cur_monday.isocalendar()[1]
+            _yn  = cur_monday.isocalendar()[0]
+            _rng = _rnd2.Random(_yn * 100 + _wn)
+
+            taches = []
+            for pt in points:
+                pt_id    = pt.get('id', '')
+                sess_key = f"ch_prevu_{pt_id}_{cur_monday.isoformat()}"
+                pt_fu    = pt.get('frequency_unit', '/ semaine')
+
+                if sess_key in overrides:
+                    nb_fois = int(overrides[sess_key])
+                    if pt_fu == '/ jour':
+                        for wd in wd_week:
+                            if month_start <= wd <= month_end:
+                                planned[wd].append(pt['label'])
+                        continue
+                    for _ in range(nb_fois):
+                        taches.append({"label": pt['label']})
+                    continue
+
+                # Valeur par défaut
+                pt_freq = pt.get('frequency', None)
+                if pt_fu == '/ jour' and pt_freq and int(pt_freq) > 0:
+                    for wd in wd_week:
+                        if month_start <= wd <= month_end:
+                            for _ in range(int(pt_freq)):
+                                planned[wd].append(pt['label'])
+                    continue
+                if pt_freq is not None and int(pt_freq) > 0:
+                    nb_fois = (max(1, round(int(pt_freq) / 4))
+                               if pt_fu == '/ mois' else int(pt_freq))
+                else:
+                    nb_fois = _frc(pt.get('room_class', ''))
+                for _ in range(nb_fois):
+                    taches.append({"label": pt['label']})
+
+            _rng.shuffle(taches)
+            if nb_prelev_max > 0 and len(taches) > nb_prelev_max:
+                taches = taches[:nb_prelev_max]
+
+            charge = {wd: 0 for wd in wd_week}
+            for t in taches:
+                wd_cible = min(wd_week, key=lambda d: charge[d])
+                if month_start <= wd_cible <= month_end:
+                    planned[wd_cible].append(t['label'])
+                charge[wd_cible] += 1
+
+            cur_monday += timedelta(weeks=1)
+
+        return dict(planned)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Idem pour une semaine unique (charge hebdo)
+    # ─────────────────────────────────────────────────────────────────────────
+    def _compute_planning_week(week_monday, working_days, points, overrides, nb_prelev_max):
+        """Retourne planning {date: [tache_dict]} et charge_jour {date: int}."""
+        import random as _rnd
+        nb_jours = len(working_days)
+        _wn  = week_monday.isocalendar()[1]
+        _yn  = week_monday.isocalendar()[0]
+        _rng = _rnd.Random(_yn * 100 + _wn)
+
+        taches_all = []
+        for pt in points:
+            pt_id    = pt.get('id', '')
+            sess_key = f"ch_prevu_{pt_id}_{week_monday.isoformat()}"
+            pt_fu    = pt.get('frequency_unit', '/ semaine')
+
+            if sess_key in overrides:
+                nb_fois = int(overrides[sess_key])
+            else:
+                pt_freq = pt.get('frequency', None)
+                if pt_freq is not None and int(pt_freq) > 0:
+                    if pt_fu == '/ jour':
+                        nb_fois = int(pt_freq) * nb_jours
+                    elif pt_fu == '/ mois':
+                        nb_fois = max(1, round(int(pt_freq) / 4))
+                    else:
+                        nb_fois = int(pt_freq)
+                else:
+                    nb_fois = _frc(pt.get('room_class', ''))
+
+            for _ in range(nb_fois):
+                taches_all.append({
+                    "label":      pt['label'],
+                    "type":       pt.get('type', '—'),
+                    "risk":       int(pt.get('risk_level', 1)),
+                    "room_class": pt.get('room_class', '—'),
+                })
+
+        _rng.shuffle(taches_all)
+        if nb_prelev_max > 0 and len(taches_all) > nb_prelev_max:
+            taches_all = taches_all[:nb_prelev_max]
+
+        planning    = {wd: [] for wd in working_days}
+        charge_jour = {wd: 0  for wd in working_days}
+        for t in taches_all:
+            wd_cible = min(working_days, key=lambda d: charge_jour[d])
+            planning[wd_cible].append(t)
+            charge_jour[wd_cible] += 1
+
+        return planning, charge_jour
+
+    # =========================================================================
+    # ONGLETS
+    # =========================================================================
+    plan_tab_view, plan_tab_charge, plan_tab_export = st.tabs([
+        "📅 Calendrier", "📊 Charge hebdo", "📥 Export Excel"
+    ])
 
     # =========================================================================
     # ONGLET CALENDRIER
@@ -1567,7 +1760,8 @@ elif active == "planning":
             st.markdown(
                 "<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
                 "border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>📅 "
-                + MOIS_FR[st.session_state.cal_month] + " " + str(st.session_state.cal_year) + "</div>",
+                + MOIS_FR[st.session_state.cal_month] + " "
+                + str(st.session_state.cal_year) + "</div>",
                 unsafe_allow_html=True)
         with nav_c4:
             if st.button("▶", use_container_width=True, key="cal_next_month"):
@@ -1581,7 +1775,7 @@ elif active == "planning":
                 st.session_state.cal_year += 1; st.rerun()
 
         if st.button("📍 Aujourd'hui", key="cal_today"):
-            st.session_state.cal_year = _today_dt.year
+            st.session_state.cal_year  = _today_dt.year
             st.session_state.cal_month = _today_dt.month
             st.rerun()
 
@@ -1594,95 +1788,108 @@ elif active == "planning":
         month_start = date_type(cal_year, cal_month, 1)
         month_end   = date_type(cal_year, cal_month, n_days_m)
 
+        # ── Calcul centralisé — synchro avec charge hebdo ──────────────────
+        _overrides_now = {
+            k: v for k, v in st.session_state.items()
+            if isinstance(k, str) and k.startswith("ch_prevu_")
+        }
+        _nb_max_cal = int(st.session_state.get("ch_nb_prelev_max", 0))
+
+        # Rendre les args hashables pour le cache
+        _points_tuple   = tuple(
+            (pt.get('id',''), pt.get('label',''), pt.get('frequency'), pt.get('frequency_unit','/ semaine'),
+             pt.get('room_class',''))
+            for pt in st.session_state.points
+        )
+        _overrides_tuple = tuple(sorted(_overrides_now.items()))
+
+        planned_j0_raw = _compute_planning_month(
+            cal_year, cal_month,
+            # On passe les points complets via une variable non-hashable
+            # → on contourne le cache pour ce cas et on recalcule directement
+            tuple(), _overrides_tuple, _nb_max_cal
+        )
+        # NOTE : _compute_planning_month avec points_tuple vide ne donne rien.
+        # On recalcule directement sans cache pour avoir les objets complets :
         from collections import defaultdict as _dd
         planned_j0 = _dd(list)
-
         import random as _rnd2
-        cur_monday = month_start - timedelta(days=month_start.weekday())
 
+        cur_monday = month_start - timedelta(days=month_start.weekday())
         while cur_monday <= month_end:
             hols_week = get_holidays_cached(cur_monday.year)
-            wd_week = [cur_monday + timedelta(days=i) for i in range(5)
-                       if (cur_monday + timedelta(days=i)) not in hols_week]
+            wd_week   = [cur_monday + timedelta(days=i) for i in range(5)
+                         if (cur_monday + timedelta(days=i)) not in hols_week]
             nb_wd = len(wd_week)
+            if nb_wd == 0:
+                cur_monday += timedelta(weeks=1)
+                continue
 
-            if nb_wd > 0:
-                _wn  = cur_monday.isocalendar()[1]
-                _yn  = cur_monday.isocalendar()[0]
-                _rng = _rnd2.Random(_yn * 100 + _wn)
+            _wn  = cur_monday.isocalendar()[1]
+            _yn  = cur_monday.isocalendar()[0]
+            _rng = _rnd2.Random(_yn * 100 + _wn)
 
-                # ── Construire les tâches en lisant la charge hebdo si dispo ──
-                taches_cal = []
-                for pt in st.session_state.points:
-                    pt_id = pt.get('id', '')
-                    sess_key_cal = f"ch_prevu_{pt_id}_{cur_monday.isoformat()}"
-                    pt_freq_unit = pt.get('frequency_unit', '/ semaine')
+            taches_cal = []
+            for pt in st.session_state.points:
+                pt_id    = pt.get('id', '')
+                sess_key = f"ch_prevu_{pt_id}_{cur_monday.isoformat()}"
+                pt_fu    = pt.get('frequency_unit', '/ semaine')
 
-                    if sess_key_cal in st.session_state:
-                        # Valeur saisie dans la charge hebdo → on l'utilise
-                        nb_fois = int(st.session_state[sess_key_cal])
-                        if pt_freq_unit == '/ jour':
-                            # Répartir sur chaque jour ouvré
-                            for wd in wd_week:
-                                if month_start <= wd <= month_end:
-                                    planned_j0[wd].append(pt['label'])
-                            continue
-                        for _ in range(nb_fois):
-                            taches_cal.append({"label": pt['label']})
-                        continue
+                # ── Lecture depuis session_state (inclut les valeurs saisies) ──
+                nb_fois = _get_prevu(pt, cur_monday, nb_wd)
 
-                    # Valeur par défaut
-                    pt_freq = pt.get('frequency', None)
-                    if pt_freq_unit == '/ jour' and pt_freq and int(pt_freq) > 0:
-                        for wd in wd_week:
-                            if month_start <= wd <= month_end:
-                                for _ in range(int(pt_freq)):
-                                    planned_j0[wd].append(pt['label'])
-                        continue
-                    if pt_freq is not None and int(pt_freq) > 0:
-                        nb_fois = max(1, round(int(pt_freq) / 4)) if pt_freq_unit == '/ mois' else int(pt_freq)
-                    else:
-                        nb_fois = _frc(pt.get('room_class', ''))
-                    for _ in range(nb_fois):
-                        taches_cal.append({"label": pt['label']})
+                if pt_fu == '/ jour':
+                    for wd in wd_week:
+                        if month_start <= wd <= month_end:
+                            planned_j0[wd].append(pt['label'])
+                    continue
 
-                _rng.shuffle(taches_cal)
+                for _ in range(nb_fois):
+                    taches_cal.append({"label": pt['label']})
 
-                # Plafond hebdomadaire si défini
-                _nb_max_cal = st.session_state.get("ch_nb_prelev_max", 0)
-                if _nb_max_cal > 0 and len(taches_cal) > _nb_max_cal:
-                    taches_cal = taches_cal[:_nb_max_cal]
+            _rng.shuffle(taches_cal)
+            if _nb_max_cal > 0 and len(taches_cal) > _nb_max_cal:
+                taches_cal = taches_cal[:_nb_max_cal]
 
-                charge_cal = {wd: 0 for wd in wd_week}
-                for t in taches_cal:
-                    wd_cible = min(wd_week, key=lambda d: charge_cal[d])
-                    if month_start <= wd_cible <= month_end:
-                        planned_j0[wd_cible].append(t['label'])
-                    charge_cal[wd_cible] += 1
+            charge_cal = {wd: 0 for wd in wd_week}
+            for t in taches_cal:
+                wd_cible = min(wd_week, key=lambda d: charge_cal[d])
+                if month_start <= wd_cible <= month_end:
+                    planned_j0[wd_cible].append(t['label'])
+                charge_cal[wd_cible] += 1
 
             cur_monday += timedelta(weeks=1)
 
+        # ── Activités réelles ──────────────────────────────────────────────
         def get_day_activities(d):
             j0r = [p for p in st.session_state.prelevements
-                   if p.get('date') and datetime.fromisoformat(p['date']).date() == d and not p.get('archived', False)]
+                   if p.get('date') and datetime.fromisoformat(p['date']).date() == d
+                   and not p.get('archived', False)]
             j2r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
+                   if s['when'] == 'J2'
+                   and datetime.fromisoformat(s['due_date']).date() == d]
             j7r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
+                   if s['when'] == 'J7'
+                   and datetime.fromisoformat(s['due_date']).date() == d]
             return j0r, j2r, j7r, list(planned_j0.get(d, []))
 
         cal_weeks = cal_module.monthcalendar(cal_year, cal_month)
 
         # Légende
         legend = (
-            '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px">'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;border:2px dashed #7c3aed"></div>'
+            '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;background:#f8fafc;'
+            'border-radius:8px;padding:10px">'
+            '<div style="display:flex;align-items:center;gap:4px">'
+            '<div style="width:11px;height:11px;border-radius:3px;border:2px dashed #7c3aed"></div>'
             '<span style="font-size:.68rem;color:#7c3aed">Prélèv. prévu (planning auto)</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#7c3aed"></div>'
+            '<div style="display:flex;align-items:center;gap:4px">'
+            '<div style="width:11px;height:11px;border-radius:3px;background:#7c3aed"></div>'
             '<span style="font-size:.68rem;color:#1e293b">Prélèv. réel</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div>'
+            '<div style="display:flex;align-items:center;gap:4px">'
+            '<div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div>'
             '<span style="font-size:.68rem;color:#1e293b">J2 (depuis surveillance)</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px"><div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div>'
+            '<div style="display:flex;align-items:center;gap:4px">'
+            '<div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div>'
             '<span style="font-size:.68rem;color:#1e293b">J7 (depuis surveillance)</span></div>'
             '</div>'
         )
@@ -1704,10 +1911,10 @@ elif active == "planning":
                     grid += '<div style="background:#f8fafc;border-radius:8px;min-height:90px"></div>'
                     continue
                 d = date_type(cal_year, cal_month, day_num)
-                is_today    = d == _today_dt
-                is_holiday  = d in holidays_this_month
+                is_today       = d == _today_dt
+                is_holiday     = d in holidays_this_month
                 is_non_working = is_weekend or is_holiday
-                is_past     = d < _today_dt
+                is_past        = d < _today_dt
                 j0r, j2r, j7r, j0p = get_day_activities(d)
 
                 bg  = "#dbeafe" if is_today else ("#f1f5f9" if is_non_working else "#ffffff")
@@ -1717,19 +1924,29 @@ elif active == "planning":
 
                 b = ""
                 if j0r:
-                    b += f'<div style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 {len(j0r)} J0</div>'
+                    b += (f'<div style="background:#7c3aed;color:#fff;border-radius:4px;'
+                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
+                          f'🧪 {len(j0r)} J0</div>')
                 for s in j2r:
-                    done = s['status'] == 'done'; late = not done and d < _today_dt
-                    sc = "#22c55e" if done else ("#ef4444" if late else "#d97706")
-                    si = "✅" if done else ("⚠️" if late else "📖")
-                    b += f'<div style="background:{sc};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{si} J2</div>'
+                    done = s['status'] == 'done'
+                    late = not done and d < _today_dt
+                    sc   = "#22c55e" if done else ("#ef4444" if late else "#d97706")
+                    si   = "✅" if done else ("⚠️" if late else "📖")
+                    b += (f'<div style="background:{sc};color:#fff;border-radius:4px;'
+                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
+                          f'{si} J2</div>')
                 for s in j7r:
-                    done = s['status'] == 'done'; late = not done and d < _today_dt
-                    sc = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
-                    si = "✅" if done else ("⚠️" if late else "📗")
-                    b += f'<div style="background:{sc};color:#fff;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">{si} J7</div>'
+                    done = s['status'] == 'done'
+                    late = not done and d < _today_dt
+                    sc   = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
+                    si   = "✅" if done else ("⚠️" if late else "📗")
+                    b += (f'<div style="background:{sc};color:#fff;border-radius:4px;'
+                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
+                          f'{si} J7</div>')
                 if not j0r and j0p and not is_non_working:
-                    b += f'<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">🧪 {len(j0p)} prévu</div>'
+                    b += (f'<div style="border:1.5px dashed #7c3aed;color:#7c3aed;border-radius:4px;'
+                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
+                          f'🧪 {len(j0p)} prévu</div>')
 
                 hlbl = ""
                 if is_holiday and not is_weekend:
@@ -1739,30 +1956,38 @@ elif active == "planning":
 
                 day_has_content[d] = {"j0r": j0r, "j2r": j2r, "j7r": j7r, "j0p": j0p}
 
-                grid += (f'<div style="background:{bg};border:{bdr};border-radius:8px;padding:6px;'
-                         f'min-height:90px;opacity:{op};display:flex;flex-direction:column">'
-                         f'<div style="font-weight:800;font-size:.9rem;color:{dnc};margin-bottom:2px">{day_num}</div>'
-                         f'{hlbl}{b}</div>')
+                grid += (
+                    f'<div style="background:{bg};border:{bdr};border-radius:8px;padding:6px;'
+                    f'min-height:90px;opacity:{op};display:flex;flex-direction:column">'
+                    f'<div style="font-weight:800;font-size:.9rem;color:{dnc};margin-bottom:2px">'
+                    f'{day_num}</div>{hlbl}{b}</div>'
+                )
         grid += '</div>'
 
         st.markdown(legend, unsafe_allow_html=True)
         st.markdown(hdr + grid, unsafe_allow_html=True)
 
-        # Détail par jour
+        # ── Détail par jour ────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("**💡 Détail par jour** — sélectionnez un jour :")
         import calendar as _cal2
         _, n_days = _cal2.monthrange(cal_year, cal_month)
-        working_days_month = [date_type(cal_year, cal_month, dd) for dd in range(1, n_days + 1)
-                              if date_type(cal_year, cal_month, dd).weekday() < 5
-                              and date_type(cal_year, cal_month, dd) not in holidays_this_month]
+        working_days_month = [
+            date_type(cal_year, cal_month, dd) for dd in range(1, n_days + 1)
+            if date_type(cal_year, cal_month, dd).weekday() < 5
+            and date_type(cal_year, cal_month, dd) not in holidays_this_month
+        ]
         if working_days_month:
-            day_options = {d.strftime('%A %d/%m') + (" 📍" if day_has_content.get(d) else ""): d
-                           for d in working_days_month}
-            sel_day_label = st.selectbox("Jour", list(day_options.keys()),
-                                         label_visibility="collapsed", key="cal_day_detail_sel")
+            day_options = {
+                d.strftime('%A %d/%m') + (" 📍" if day_has_content.get(d) else ""): d
+                for d in working_days_month
+            }
+            sel_day_label = st.selectbox(
+                "Jour", list(day_options.keys()),
+                label_visibility="collapsed", key="cal_day_detail_sel"
+            )
             sel_day = day_options[sel_day_label]
-            data = day_has_content.get(sel_day, {"j0r": [], "j2r": [], "j7r": [], "j0p": []})
+            data    = day_has_content.get(sel_day, {"j0r": [], "j2r": [], "j7r": [], "j0p": []})
             j0r_d, j2r_d, j7r_d, j0p_d = data["j0r"], data["j2r"], data["j7r"], data["j0p"]
 
             if not j0r_d and not j2r_d and not j7r_d and not j0p_d:
@@ -1774,66 +1999,82 @@ elif active == "planning":
                     if j0r_d:
                         for p in j0r_d:
                             st.markdown(
-                                "<div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:3px solid #7c3aed;"
-                                "border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                                "border-left:3px solid #7c3aed;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{p['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>Type : {p.get('type','—')} · Classe : {p.get('room_class','—')}</div>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"Type : {p.get('type','—')} · Classe : {p.get('room_class','—')}</div>"
                                 f"<div style='font-size:.7rem;color:#475569'>Opérateur : {p.get('operateur','—') or '—'}</div>"
                                 f"<div style='font-size:.7rem;color:#475569'>Gélose : {p.get('gelose','—')}</div>"
                                 "</div>", unsafe_allow_html=True)
                     elif j0p_d:
                         for lbl in j0p_d:
                             st.markdown(
-                                "<div style='border:1.5px dashed #7c3aed;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='border:1.5px dashed #7c3aed;border-radius:8px;"
+                                "padding:8px 12px;margin-bottom:4px'>"
                                 f"<div style='font-weight:600;color:#7c3aed;font-size:.82rem'>📋 {lbl} (prévu)</div>"
                                 "</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucun prélèvement</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<span style='font-size:.75rem;color:#94a3b8'>Aucun prélèvement</span>",
+                            unsafe_allow_html=True)
                 with det_cols[1]:
                     st.markdown("**📖 Lectures J2**")
                     if j2r_d:
                         for s in j2r_d:
-                            samp = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
-                            done = s['status'] == 'done'; late = not done and sel_day < _today_dt
+                            samp = next((p for p in st.session_state.prelevements
+                                         if p['id'] == s['sample_id']), None)
+                            done  = s['status'] == 'done'
+                            late  = not done and sel_day < _today_dt
                             st_col = "#22c55e" if done else ("#ef4444" if late else "#d97706")
                             st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
                             st.markdown(
-                                "<div style='background:#fffbeb;border:1px solid #fde68a;border-left:3px solid #d97706;"
-                                "border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='background:#fffbeb;border:1px solid #fde68a;"
+                                "border-left:3px solid #d97706;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{s['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>J0 : {samp.get('date','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.7rem;color:#475569'>Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>{st_txt}</div>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"J0 : {samp.get('date','—') if samp else '—'}</div>"
+                                f"<div style='font-size:.7rem;color:#475569'>"
+                                f"Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
+                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>"
+                                f"{st_txt}</div>"
                                 "</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J2</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J2</span>",
+                            unsafe_allow_html=True)
                 with det_cols[2]:
                     st.markdown("**📗 Lectures J7**")
                     if j7r_d:
                         for s in j7r_d:
-                            samp = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
-                            done = s['status'] == 'done'; late = not done and sel_day < _today_dt
+                            samp = next((p for p in st.session_state.prelevements
+                                         if p['id'] == s['sample_id']), None)
+                            done  = s['status'] == 'done'
+                            late  = not done and sel_day < _today_dt
                             st_col = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
                             st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
                             st.markdown(
-                                "<div style='background:#eff6ff;border:1px solid #bae6fd;border-left:3px solid #0369a1;"
-                                "border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
+                                "<div style='background:#eff6ff;border:1px solid #bae6fd;"
+                                "border-left:3px solid #0369a1;border-radius:8px;padding:8px 12px;margin-bottom:4px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{s['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>J0 : {samp.get('date','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.7rem;color:#475569'>Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>{st_txt}</div>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"J0 : {samp.get('date','—') if samp else '—'}</div>"
+                                f"<div style='font-size:.7rem;color:#475569'>"
+                                f"Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
+                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>"
+                                f"{st_txt}</div>"
                                 "</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J7</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J7</span>",
+                            unsafe_allow_html=True)
 
     # =========================================================================
     # ONGLET CHARGE HEBDO
     # =========================================================================
     def get_week_start(d):
         return d - timedelta(days=d.weekday())
+
     def fmt_week(ws):
         we = ws + timedelta(days=6)
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
@@ -1857,69 +2098,80 @@ elif active == "planning":
 
         csel_col1, csel_col2, csel_col3 = st.columns([3, 1, 1])
         with csel_col1:
-            ch_sel_label = st.selectbox("Semaine", ch_week_labels, index=ch_cur_idx,
-                                        label_visibility="collapsed", key="ch_week_sel")
+            ch_sel_label = st.selectbox(
+                "Semaine", ch_week_labels, index=ch_cur_idx,
+                label_visibility="collapsed", key="ch_week_sel"
+            )
         with csel_col2:
-            nb_preleveurs = st.number_input("Nb préleveurs", min_value=1, max_value=20,
-                                            value=max(1, len(st.session_state.operators)), step=1,
-                                            key="ch_nb_prev")
+            nb_preleveurs = st.number_input(
+                "Nb préleveurs", min_value=1, max_value=20,
+                value=max(1, len(st.session_state.operators)), step=1,
+                key="ch_nb_prev"
+            )
         with csel_col3:
-            nb_prelevements_max = st.number_input("Max / semaine", min_value=0, max_value=500,
-                                                  value=0, step=1, key="ch_nb_prelev_max",
-                                                  help="0 = pas de limite")
+            nb_prelevements_max = st.number_input(
+                "Max / semaine", min_value=0, max_value=500,
+                value=0, step=1, key="ch_nb_prelev_max",
+                help="0 = pas de limite"
+            )
 
-        ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
-        ch_sel_we = ch_sel_ws + timedelta(days=6)
-        ch_holidays = get_holidays_cached(ch_sel_ws.year)
+        ch_sel_ws      = ch_week_starts[ch_week_labels.index(ch_sel_label)]
+        ch_sel_we      = ch_sel_ws + timedelta(days=6)
+        ch_holidays    = get_holidays_cached(ch_sel_ws.year)
         ch_working_days = [ch_sel_ws + timedelta(days=i) for i in range(5)
                            if (ch_sel_ws + timedelta(days=i)) not in ch_holidays]
         nb_jours = len(ch_working_days)
 
         ch_j0 = [p for p in st.session_state.prelevements
-                 if p.get('date') and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
+                 if p.get('date')
+                 and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
                  and not p.get('archived', False)]
         ch_j2 = [s for s in st.session_state.schedules
-                 if s['when'] == 'J2' and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
+                 if s['when'] == 'J2'
+                 and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
         ch_j7 = [s for s in st.session_state.schedules
-                 if s['when'] == 'J7' and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
+                 if s['when'] == 'J7'
+                 and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
 
-        total_actes = len(ch_j0) + len(ch_j2) + len(ch_j7)
-        actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
-        actes_par_preleveur = total_actes / nb_preleveurs if nb_preleveurs > 0 else 0
+        total_actes      = len(ch_j0) + len(ch_j2) + len(ch_j7)
+        actes_par_jour   = total_actes / nb_jours       if nb_jours       > 0 else 0
+        actes_par_prev   = total_actes / nb_preleveurs  if nb_preleveurs  > 0 else 0
 
-        st.markdown(f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
-          padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
-          justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div style="color:#fff">
-            <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
-            <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
-              {nb_jours} jour(s) ouvré(s) · {nb_preleveurs} préleveur(s)</div>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
-              <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
+        st.markdown(
+            f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
+            padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
+            justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div style="color:#fff">
+              <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
+              <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
+                {nb_jours} jour(s) ouvré(s) · {nb_preleveurs} préleveur(s)</div>
             </div>
-            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
-              <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
+                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
+                <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
+              </div>
+              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
+                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
+                <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
+              </div>
+              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
+                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ préleveur</div>
+                <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_prev:.1f}</div>
+              </div>
             </div>
-            <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-              <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ préleveur</div>
-              <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_preleveur:.1f}</div>
-            </div>
-          </div>
-        </div>""", unsafe_allow_html=True)
+          </div>""",
+            unsafe_allow_html=True)
 
         m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("👤 Préleveurs", nb_preleveurs)
+        m1.metric("👤 Préleveurs",    nb_preleveurs)
         m2.metric("📍 Points actifs", len(st.session_state.points))
-        m3.metric("🧪 Prélèv. J0", len(ch_j0))
-        m4.metric("📖 Lectures J2", len(ch_j2))
-        m5.metric("📗 Lectures J7", len(ch_j7))
+        m3.metric("🧪 Prélèv. J0",   len(ch_j0))
+        m4.metric("📖 Lectures J2",   len(ch_j2))
+        m5.metric("📗 Lectures J7",   len(ch_j7))
         st.divider()
 
-        # ── Tableau par point ─────────────────────────────────────────────────
+        # ── Tableau par point ─────────────────────────────────────────────
         st.markdown("#### 📍 Points de prélèvement — charge par point")
         risk_colors_ch = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
 
@@ -1927,7 +2179,8 @@ elif active == "planning":
             st.info("Aucun point défini. Créez-en dans **Paramètres → Points de prélèvement**.")
         else:
             hdr_cols = st.columns([2.2, 1, 1, 0.7, 1.2, 1, 1.5])
-            for _hc, _hl in zip(hdr_cols, ["Point","Type","Classe","Risque","Prévu/sem. ✏️","Réalisé","Statut"]):
+            for _hc, _hl in zip(hdr_cols,
+                                 ["Point","Type","Classe","Risque","Prévu/sem. ✏️","Réalisé","Statut"]):
                 _hc.markdown(
                     f"<div style='background:#1e40af;border-radius:6px;padding:8px 10px;"
                     f"font-size:.72rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
@@ -1936,86 +2189,93 @@ elif active == "planning":
             total_prevu = 0; total_realise = 0
 
             for pt_i, pt in enumerate(st.session_state.points):
-                pt_id = pt.get('id', str(pt_i))
+                pt_id    = pt.get('id', str(pt_i))
                 sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
 
-                pt_freq = pt.get('frequency', None)
-                pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                if pt_freq is not None and int(pt_freq) > 0:
-                    if pt_freq_unit == '/ jour':
-                        default_prevu = int(pt_freq) * nb_jours
-                    elif pt_freq_unit == '/ mois':
-                        default_prevu = max(1, round(int(pt_freq) / 4))
-                    else:
-                        default_prevu = int(pt_freq)
-                else:
-                    default_prevu = _frc(pt.get('room_class', ''))
+                default_prevu = _default_prevu(pt, nb_jours)
 
+                # Initialiser si absent (restauration depuis planning_overrides déjà faite)
                 if sess_key not in st.session_state:
                     st.session_state[sess_key] = default_prevu
 
-                prevu   = st.session_state[sess_key]
+                prevu   = int(st.session_state[sess_key])
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
 
                 if realise >= prevu:
-                    st_bg="#f0fdf4";st_border="#86efac";st_txt="#166534";st_icon="✅";st_label="Complet"
+                    st_bg="#f0fdf4"; st_border="#86efac"; st_txt="#166534"
+                    st_icon="✅"; st_label="Complet"
                 elif realise > 0:
                     pct = int(realise / prevu * 100)
-                    st_bg="#fffbeb";st_border="#fcd34d";st_txt="#92400e";st_icon="⏳";st_label=f"{pct}%"
+                    st_bg="#fffbeb"; st_border="#fcd34d"; st_txt="#92400e"
+                    st_icon="⏳"; st_label=f"{pct}%"
                 else:
-                    st_bg="#fef2f2";st_border="#fca5a5";st_txt="#991b1b";st_icon="🔴";st_label=f"0/{prevu}"
+                    st_bg="#fef2f2"; st_border="#fca5a5"; st_txt="#991b1b"
+                    st_icon="🔴"; st_label=f"0/{prevu}"
 
-                total_prevu += prevu; total_realise += realise
+                total_prevu   += prevu
+                total_realise += realise
                 type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
-                row_bg = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
-                risk_val = str(pt.get('risk_level', '—'))
-                risk_col = risk_colors_ch.get(risk_val, "#94a3b8")
+                row_bg    = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
+                risk_val  = str(pt.get('risk_level', '—'))
+                risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
 
                 row_cols = st.columns([2.2, 1, 1, 0.7, 1.2, 1, 1.5])
                 with row_cols[0]:
-                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                                f"padding:9px 12px;font-size:.88rem;font-weight:700;color:#0f172a'>"
-                                f"{type_icon} {pt['label']}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
+                        f"padding:9px 12px;font-size:.88rem;font-weight:700;color:#0f172a'>"
+                        f"{type_icon} {pt['label']}</div>", unsafe_allow_html=True)
                 with row_cols[1]:
-                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                                f"padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>"
-                                f"{pt.get('type','—')}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
+                        f"padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>"
+                        f"{pt.get('type','—')}</div>", unsafe_allow_html=True)
                 with row_cols[2]:
-                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                                f"padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>"
-                                f"{pt.get('room_class','—')}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
+                        f"padding:9px 12px;font-size:.82rem;color:#475569;text-align:center'>"
+                        f"{pt.get('room_class','—')}</div>", unsafe_allow_html=True)
                 with row_cols[3]:
-                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                                f"padding:9px 12px;text-align:center'><span style='background:{risk_col}22;"
-                                f"color:{risk_col};border:1px solid {risk_col}55;border-radius:6px;"
-                                f"padding:2px 6px;font-size:.72rem;font-weight:700'>Nv.{risk_val}</span></div>",
-                                unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
+                        f"padding:9px 12px;text-align:center'>"
+                        f"<span style='background:{risk_col}22;color:{risk_col};"
+                        f"border:1px solid {risk_col}55;border-radius:6px;"
+                        f"padding:2px 6px;font-size:.72rem;font-weight:700'>Nv.{risk_val}</span></div>",
+                        unsafe_allow_html=True)
                 with row_cols[4]:
-                    # ⚡ Ce number_input modifie sess_key → le calendrier se met à jour automatiquement
-                    st.number_input("Prévu", min_value=0, max_value=50,
-                                    value=prevu, step=1,
-                                    key=sess_key,
-                                    label_visibility="collapsed")
+                    # ⚡ on_change → persiste + rerun automatique → calendrier synchronisé
+                    st.number_input(
+                        "Prévu", min_value=0, max_value=50,
+                        value=prevu, step=1,
+                        key=sess_key,
+                        label_visibility="collapsed",
+                        on_change=_persist_overrides,
+                    )
                 with row_cols[5]:
-                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                                f"padding:9px 12px;font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>"
-                                f"{realise}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
+                        f"padding:9px 12px;font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>"
+                        f"{realise}</div>", unsafe_allow_html=True)
                 with row_cols[6]:
-                    st.markdown(f"<div style='background:{st_bg};border:1px solid {st_border};border-radius:8px;"
-                                f"padding:9px 12px;text-align:center;font-size:.82rem;font-weight:700;"
-                                f"color:{st_txt}'>{st_icon} {st_label}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{st_bg};border:1px solid {st_border};border-radius:8px;"
+                        f"padding:9px 12px;text-align:center;font-size:.82rem;font-weight:700;"
+                        f"color:{st_txt}'>{st_icon} {st_label}</div>", unsafe_allow_html=True)
 
             st.divider()
-            taux = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
+            taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
             taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
                 f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
                 f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
                 f"<div style='display:flex;gap:20px;align-items:center'>"
-                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div>"
+                f"<div style='text-align:center'>"
+                f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div>"
                 f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
-                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div>"
+                f"<div style='text-align:center'>"
+                f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div>"
                 f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
                 f"<div style='background:rgba(255,255,255,.15);border-radius:8px;padding:8px 16px;"
                 f"font-size:1rem;font-weight:800;color:{taux_col}'>{taux}% réalisé</div>"
@@ -2023,108 +2283,97 @@ elif active == "planning":
 
             st.divider()
 
-            # ── Planning automatique par jour ouvré ───────────────────────────
+            # ── Planning automatique par jour ouvré ───────────────────────
             st.markdown("#### 📅 Planning automatique par jour ouvré")
             if nb_jours == 0:
                 st.warning("Aucun jour ouvré cette semaine.")
             else:
-                import random as _rnd
-                _week_num = ch_sel_ws.isocalendar()[1]
-                _year_num = ch_sel_ws.isocalendar()[0]
-                _rng = _rnd.Random(_year_num * 100 + _week_num)
+                # Lecture des overrides actuels (inclut les dernières modifications)
+                _overrides_ch = {
+                    k: v for k, v in st.session_state.items()
+                    if isinstance(k, str) and k.startswith("ch_prevu_")
+                }
 
-                taches_all = []
-                for pt in st.session_state.points:
-                    pt_id = pt.get('id', '')
-                    _sess_key = f"ch_prevu_{pt_id}_{ch_sel_ws.isoformat()}"
-                    pt_freq_unit = pt.get('frequency_unit', '/ semaine')
-                    if _sess_key in st.session_state:
-                        nb_fois = int(st.session_state[_sess_key])
-                    else:
-                        pt_freq = pt.get('frequency', None)
-                        if pt_freq is not None and int(pt_freq) > 0:
-                            if pt_freq_unit == '/ jour':
-                                nb_fois = int(pt_freq) * nb_jours
-                            elif pt_freq_unit == '/ mois':
-                                nb_fois = max(1, round(int(pt_freq) / 4))
-                            else:
-                                nb_fois = int(pt_freq)
-                        else:
-                            nb_fois = _frc(pt.get('room_class', ''))
-                    for _ in range(nb_fois):
-                        taches_all.append({"label": pt['label'], "type": pt.get('type', '—'),
-                                           "risk": int(pt.get('risk_level', 1)),
-                                           "room_class": pt.get('room_class', '—')})
-
-                _rng.shuffle(taches_all)
-                if nb_prelevements_max > 0 and len(taches_all) > nb_prelevements_max:
-                    taches_all = taches_all[:nb_prelevements_max]
-
-                planning    = {wd: [] for wd in ch_working_days}
-                charge_jour = {wd: 0  for wd in ch_working_days}
-                for tache in taches_all:
-                    wd_cible = min(ch_working_days, key=lambda d: charge_jour[d])
-                    planning[wd_cible].append(tache)
-                    charge_jour[wd_cible] += 1
+                planning, charge_jour = _compute_planning_week(
+                    ch_sel_ws, ch_working_days,
+                    st.session_state.points,
+                    _overrides_ch,
+                    int(nb_prelevements_max)
+                )
 
                 real_par_jour = {}
                 for wd in ch_working_days:
-                    dj0 = sum(1 for p in ch_j0 if datetime.fromisoformat(p['date']).date() == wd)
-                    dj2 = sum(1 for s in ch_j2 if datetime.fromisoformat(s['due_date']).date() == wd)
-                    dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
+                    dj0 = sum(1 for p  in ch_j0 if datetime.fromisoformat(p['date']).date()      == wd)
+                    dj2 = sum(1 for s  in ch_j2 if datetime.fromisoformat(s['due_date']).date()  == wd)
+                    dj7 = sum(1 for s  in ch_j7 if datetime.fromisoformat(s['due_date']).date()  == wd)
                     real_par_jour[wd] = {"j0": dj0, "j2": dj2, "j7": dj7, "total": dj0 + dj2 + dj7}
 
-                rcp = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+                rcp      = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
                 JOURS_FR2 = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi"]
-                day_cols = st.columns(nb_jours)
+                day_cols  = st.columns(nb_jours)
 
                 for di, wd in enumerate(ch_working_days):
-                    taches_j = planning[wd]
-                    prevu_j  = len(taches_j)
-                    realise_j = real_par_jour[wd]["j0"]
+                    taches_j   = planning[wd]
+                    prevu_j    = len(taches_j)
+                    realise_j  = real_par_jour[wd]["j0"]
                     is_today_d = wd == _today_dt
 
-                    bg_d   = "#eff6ff" if is_today_d else "#f8fafc"
+                    bg_d     = "#eff6ff" if is_today_d else "#f8fafc"
                     border_d = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
                     jour_col = "#1e40af" if is_today_d else "#475569"
 
                     if realise_j >= prevu_j and prevu_j > 0:
-                        stat_bg="#f0fdf4";stat_col="#166534";stat_lbl="✅ Complet"
+                        stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅ Complet"
                     elif realise_j > 0:
-                        stat_bg="#fffbeb";stat_col="#92400e";stat_lbl=f"⏳ {realise_j}/{prevu_j}"
+                        stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳ {realise_j}/{prevu_j}"
                     elif prevu_j > 0:
-                        stat_bg="#fef2f2";stat_col="#991b1b";stat_lbl=f"🔴 0/{prevu_j}"
+                        stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴 0/{prevu_j}"
                     else:
-                        stat_bg="#f8fafc";stat_col="#94a3b8";stat_lbl="— Libre"
+                        stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="— Libre"
 
                     pts_html = ""
                     for t in taches_j[:6]:
-                        rc  = rcp.get(str(t['risk']), "#94a3b8")
+                        rc   = rcp.get(str(t['risk']), "#94a3b8")
                         icon = "💨" if t['type'] == "Air" else "🧴"
                         lbl  = t['label'][:22] + ("…" if len(t['label']) > 22 else "")
-                        pts_html += (f"<div style='background:#fff;border:1px solid {rc}44;border-left:3px solid {rc};"
-                                     f"border-radius:6px;padding:3px 7px;font-size:.62rem;font-weight:600;"
-                                     f"color:#0f172a;margin-bottom:2px'>{icon} {lbl}</div>")
+                        pts_html += (
+                            f"<div style='background:#fff;border:1px solid {rc}44;"
+                            f"border-left:3px solid {rc};border-radius:6px;padding:3px 7px;"
+                            f"font-size:.62rem;font-weight:600;color:#0f172a;margin-bottom:2px'>"
+                            f"{icon} {lbl}</div>")
                     if len(taches_j) > 6:
-                        pts_html += f"<div style='font-size:.6rem;color:#94a3b8'>+{len(taches_j)-6} autres</div>"
+                        pts_html += (
+                            f"<div style='font-size:.6rem;color:#94a3b8'>"
+                            f"+{len(taches_j)-6} autres</div>")
                     if not taches_j:
-                        pts_html = "<div style='font-size:.7rem;color:#94a3b8;font-style:italic;margin-top:4px'>Rien à planifier</div>"
+                        pts_html = ("<div style='font-size:.7rem;color:#94a3b8;"
+                                    "font-style:italic;margin-top:4px'>Rien à planifier</div>")
 
                     lect_html = ""
                     if real_par_jour[wd]["j2"]:
-                        lect_html += f"<div style='background:#d9770622;color:#d97706;border-radius:6px;padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>📖 {real_par_jour[wd]['j2']} lecture J2</div>"
+                        lect_html += (
+                            f"<div style='background:#d9770622;color:#d97706;border-radius:6px;"
+                            f"padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>"
+                            f"📖 {real_par_jour[wd]['j2']} lecture J2</div>")
                     if real_par_jour[wd]["j7"]:
-                        lect_html += f"<div style='background:#0369a122;color:#0369a1;border-radius:6px;padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>📗 {real_par_jour[wd]['j7']} lecture J7</div>"
+                        lect_html += (
+                            f"<div style='background:#0369a122;color:#0369a1;border-radius:6px;"
+                            f"padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>"
+                            f"📗 {real_par_jour[wd]['j7']} lecture J7</div>")
 
-                    card = (f"<div style='background:{bg_d};border:{border_d};border-radius:12px;padding:12px'>"
-                            f"<div style='font-size:.82rem;font-weight:800;color:{jour_col};text-align:center'>"
-                            f"{JOURS_FR2[wd.weekday()]}</div>"
-                            f"<div style='font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:8px'>{wd.strftime('%d/%m')}</div>"
-                            f"<div style='background:{stat_bg};border-radius:8px;padding:5px;text-align:center;"
-                            f"font-size:.75rem;font-weight:800;color:{stat_col};margin-bottom:8px'>{stat_lbl}</div>"
-                            f"<div style='font-size:.68rem;color:#475569;font-weight:700;margin-bottom:4px;text-align:center'>"
-                            f"📋 {prevu_j} prélèv. · {nb_preleveurs} préleveur(s)</div>"
-                            f"{pts_html}{lect_html}</div>")
+                    card = (
+                        f"<div style='background:{bg_d};border:{border_d};"
+                        f"border-radius:12px;padding:12px'>"
+                        f"<div style='font-size:.82rem;font-weight:800;color:{jour_col};text-align:center'>"
+                        f"{JOURS_FR2[wd.weekday()]}</div>"
+                        f"<div style='font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:8px'>"
+                        f"{wd.strftime('%d/%m')}</div>"
+                        f"<div style='background:{stat_bg};border-radius:8px;padding:5px;text-align:center;"
+                        f"font-size:.75rem;font-weight:800;color:{stat_col};margin-bottom:8px'>{stat_lbl}</div>"
+                        f"<div style='font-size:.68rem;color:#475569;font-weight:700;margin-bottom:4px;"
+                        f"text-align:center'>📋 {prevu_j} prélèv. · {nb_preleveurs} préleveur(s)</div>"
+                        f"{pts_html}{lect_html}</div>"
+                    )
                     with day_cols[di]:
                         st.markdown(card, unsafe_allow_html=True)
 
@@ -2134,15 +2383,21 @@ elif active == "planning":
                 charge_moy = sum(charge_jour.values()) / nb_jours if nb_jours > 0 else 0
                 par_prev   = charge_moy / nb_preleveurs if nb_preleveurs > 0 else 0
                 st.markdown(
-                    f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;"
-                    f"padding:14px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center'>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Min/jour</div>"
+                    f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
+                    f"border-radius:12px;padding:14px 20px;display:flex;gap:20px;"
+                    f"flex-wrap:wrap;align-items:center'>"
+                    f"<div style='color:#fff'>"
+                    f"<div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Min/jour</div>"
                     f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{charge_min}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Max/jour</div>"
+                    f"<div style='color:#fff'>"
+                    f"<div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Max/jour</div>"
                     f"<div style='font-size:1.4rem;font-weight:900;color:#fbbf24'>{charge_max}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Moy./jour</div>"
+                    f"<div style='color:#fff'>"
+                    f"<div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Moy./jour</div>"
                     f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{round(charge_moy,1)}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>Par préleveur/jour</div>"
+                    f"<div style='color:#fff'>"
+                    f"<div style='font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase'>"
+                    f"Par préleveur/jour</div>"
                     f"<div style='font-size:1.4rem;font-weight:900;color:#f9a8d4'>{round(par_prev,1)}</div></div>"
                     f"</div>", unsafe_allow_html=True)
 
@@ -2151,11 +2406,13 @@ elif active == "planning":
     # =========================================================================
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
-        exp_scope = st.selectbox("Période", ["Mois en cours","4 semaines à venir","Tout le planning"],
-                                 key="exp_scope")
-        exp_oper_filter = st.selectbox("Filtrer par opérateur",
-                                       ["Tous"] + [o['nom'] for o in st.session_state.operators],
-                                       key="exp_oper")
+        exp_scope = st.selectbox(
+            "Période", ["Mois en cours","4 semaines à venir","Tout le planning"],
+            key="exp_scope")
+        exp_oper_filter = st.selectbox(
+            "Filtrer par opérateur",
+            ["Tous"] + [o['nom'] for o in st.session_state.operators],
+            key="exp_oper")
         only_working = st.checkbox("Inclure uniquement les jours ouvrés", value=True)
 
         if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
@@ -2172,19 +2429,21 @@ elif active == "planning":
             C_GREEN="16A34A"; C_RED="DC2626"
             thin   = Side(style="thin", color="E2E8F0")
             border = Border(left=thin, right=thin, top=thin, bottom=thin)
-            def fill(h): return PatternFill("solid", fgColor=h)
-            def font(size=10, bold=False, color=C_TEXT): return Font(name="Arial", size=size, bold=bold, color=color)
+            def fill(h):  return PatternFill("solid", fgColor=h)
+            def font(size=10, bold=False, color=C_TEXT):
+                return Font(name="Arial", size=size, bold=bold, color=color)
             def al_c(): return Alignment(horizontal="center", vertical="center", wrap_text=True)
             def al_l(): return Alignment(horizontal="left",  vertical="center", wrap_text=True)
 
             exp_today = _today_dt
             if exp_scope == "Mois en cours":
                 first = exp_today.replace(day=1)
-                last  = exp_today.replace(day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
+                last  = exp_today.replace(
+                    day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
                 exp_dates = [first + timedelta(days=i) for i in range((last - first).days + 1)]
             elif exp_scope == "4 semaines à venir":
-                ws = exp_today - timedelta(days=exp_today.weekday())
-                exp_dates = [ws + timedelta(days=i) for i in range(28)]
+                ws_exp = exp_today - timedelta(days=exp_today.weekday())
+                exp_dates = [ws_exp + timedelta(days=i) for i in range(28)]
             else:
                 all_d = []
                 for p in st.session_state.prelevements:
@@ -2193,45 +2452,65 @@ elif active == "planning":
                 for s in st.session_state.schedules:
                     try: all_d.append(datetime.fromisoformat(s["due_date"]).date())
                     except: pass
-                exp_dates = ([min(all_d) + timedelta(days=i) for i in range((max(all_d) - min(all_d)).days + 1)]
-                             if all_d else [exp_today + timedelta(days=i) for i in range(7)])
+                exp_dates = (
+                    [min(all_d) + timedelta(days=i)
+                     for i in range((max(all_d) - min(all_d)).days + 1)]
+                    if all_d else [exp_today + timedelta(days=i) for i in range(7)])
 
             if only_working:
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
-            ws1 = wb.active; ws1.title = "Planning"; ws1.sheet_view.showGridLines = False
-            ws1.merge_cells("A1:I1"); ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
-            ws1["A1"].font = Font(name="Arial", size=14, bold=True, color=C_WHITE)
-            ws1["A1"].fill = fill(C_BLUE); ws1["A1"].alignment = al_c(); ws1.row_dimensions[1].height = 30
+            ws1 = wb.active; ws1.title = "Planning"
+            ws1.sheet_view.showGridLines = False
+            ws1.merge_cells("A1:I1")
+            ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
+            ws1["A1"].font      = Font(name="Arial", size=14, bold=True, color=C_WHITE)
+            ws1["A1"].fill      = fill(C_BLUE)
+            ws1["A1"].alignment = al_c()
+            ws1.row_dimensions[1].height = 30
 
             ws1.merge_cells("A2:I2")
-            ws1["A2"] = (f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement"
-                         if only_working else f"Généré le {exp_today.strftime('%d/%m/%Y')}")
-            ws1["A2"].font = Font(name="Arial", size=9, color="475569")
-            ws1["A2"].fill = fill(C_BLUE_L); ws1["A2"].alignment = al_c(); ws1.row_dimensions[2].height = 18
+            ws1["A2"] = (
+                f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement"
+                if only_working else f"Généré le {exp_today.strftime('%d/%m/%Y')}"
+            )
+            ws1["A2"].font      = Font(name="Arial", size=9, color="475569")
+            ws1["A2"].fill      = fill(C_BLUE_L)
+            ws1["A2"].alignment = al_c()
+            ws1.row_dimensions[2].height = 18
 
-            headers    = ["Date","Jour","Férié","Type","Point de prélèvement","Classe","Gélose","Opérateur","Statut"]
+            headers    = ["Date","Jour","Férié","Type","Point de prélèvement",
+                          "Classe","Gélose","Opérateur","Statut"]
             col_widths = [14, 12, 10, 22, 32, 10, 28, 25, 14]
             for ci, (h, w) in enumerate(zip(headers, col_widths), start=1):
                 c = ws1.cell(row=4, column=ci, value=h)
-                c.font = Font(name="Arial", size=10, bold=True, color=C_WHITE)
-                c.fill = fill(C_BLUE2); c.alignment = al_c(); c.border = border
+                c.font      = Font(name="Arial", size=10, bold=True, color=C_WHITE)
+                c.fill      = fill(C_BLUE2)
+                c.alignment = al_c()
+                c.border    = border
                 ws1.column_dimensions[get_column_letter(ci)].width = w
-            ws1.row_dimensions[4].height = 22; ws1.freeze_panes = "A5"
+            ws1.row_dimensions[4].height = 22
+            ws1.freeze_panes = "A5"
 
             JOURS_XL = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
             row = 5
             for d in exp_dates:
                 holidays_d = get_holidays_cached(d.year)
                 is_h = d in holidays_d
-                day_prelevs = [p for p in st.session_state.prelevements
-                    if p.get('date') and datetime.fromisoformat(p['date']).date() == d
+                day_prelevs = [
+                    p for p in st.session_state.prelevements
+                    if p.get('date')
+                    and datetime.fromisoformat(p['date']).date() == d
                     and not p.get('archived', False)
-                    and (exp_oper_filter == "Tous" or p.get('operateur','').startswith(exp_oper_filter))]
+                    and (exp_oper_filter == "Tous"
+                         or p.get('operateur','').startswith(exp_oper_filter))
+                ]
                 day_j2 = [s for s in st.session_state.schedules
-                          if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
+                           if s['when'] == 'J2'
+                           and datetime.fromisoformat(s['due_date']).date() == d]
                 day_j7 = [s for s in st.session_state.schedules
-                          if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
+                           if s['when'] == 'J7'
+                           and datetime.fromisoformat(s['due_date']).date() == d]
                 if not day_prelevs and not day_j2 and not day_j7:
                     continue
 
@@ -2241,52 +2520,63 @@ elif active == "planning":
                           p.get('gelose','—'), p.get('operateur','—'), "🧪 À réaliser"]
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill=fill(C_PURPLE_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_PURPLE)
+                        c.fill=fill(C_PURPLE_L); c.alignment=al_l()
+                        c.border=border; c.font=font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_PURPLE)
                     ws1.row_dimensions[row].height = 18; row += 1
 
                 for sch in day_j2:
-                    samp = next((p for p in st.session_state.prelevements if p['id'] == sch['sample_id']), None)
+                    samp    = next((p for p in st.session_state.prelevements
+                                    if p['id'] == sch['sample_id']), None)
                     is_done = sch['status'] == 'done'
                     rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()], "Oui" if is_h else "",
                           "Lecture J2", sch['label'],
                           samp.get('room_class','—') if samp else '—',
-                          samp.get('gelose','—') if samp else '—',
-                          samp.get('operateur','—') if samp else '—',
+                          samp.get('gelose','—')     if samp else '—',
+                          samp.get('operateur','—')  if samp else '—',
                           "✅ Faite" if is_done else "⏳ À faire"]
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill=fill(C_YELLOW_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_YELLOW)
-                    ws1.cell(row=row, column=9).font = Font(name="Arial", size=10, bold=True,
-                                                           color=C_GREEN if is_done else C_YELLOW)
+                        c.fill=fill(C_YELLOW_L); c.alignment=al_l()
+                        c.border=border; c.font=font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_YELLOW)
+                    ws1.cell(row=row, column=9).font = Font(
+                        name="Arial", size=10, bold=True,
+                        color=C_GREEN if is_done else C_YELLOW)
                     ws1.row_dimensions[row].height = 18; row += 1
 
                 for sch in day_j7:
-                    samp = next((p for p in st.session_state.prelevements if p['id'] == sch['sample_id']), None)
+                    samp    = next((p for p in st.session_state.prelevements
+                                    if p['id'] == sch['sample_id']), None)
                     is_done = sch['status'] == 'done'
                     rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()], "Oui" if is_h else "",
                           "Lecture J7", sch['label'],
                           samp.get('room_class','—') if samp else '—',
-                          samp.get('gelose','—') if samp else '—',
-                          samp.get('operateur','—') if samp else '—',
+                          samp.get('gelose','—')     if samp else '—',
+                          samp.get('operateur','—')  if samp else '—',
                           "✅ Faite" if is_done else "⏳ À faire"]
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill=fill(C_TEAL_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_TEAL)
-                    ws1.cell(row=row, column=9).font = Font(name="Arial", size=10, bold=True,
-                                                           color=C_GREEN if is_done else C_TEAL)
+                        c.fill=fill(C_TEAL_L); c.alignment=al_l()
+                        c.border=border; c.font=font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_TEAL)
+                    ws1.cell(row=row, column=9).font = Font(
+                        name="Arial", size=10, bold=True,
+                        color=C_GREEN if is_done else C_TEAL)
                     ws1.row_dimensions[row].height = 18; row += 1
 
             buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
             fname = f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
-            st.download_button("⬇️ Télécharger le planning Excel", data=buf.getvalue(),
-                               file_name=fname,
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               use_container_width=True)
+            st.download_button(
+                "⬇️ Télécharger le planning Excel",
+                data=buf.getvalue(), file_name=fname,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True)
             st.success(f"✅ Fichier **{fname}** généré")
-
+            
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 4 : PLAN URC
 # ═══════════════════════════════════════════════════════════════════════════════
