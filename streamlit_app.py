@@ -564,7 +564,9 @@ def export_all_data():
         "pending_identifications":  st.session_state.pending_identifications,
         "archived_samples":         st.session_state.archived_samples,
         "surveillance":             st.session_state.surveillance,
+        "planning_overrides": st.session_state.get("planning_overrides", {}),
     }
+    
 
 def import_all_data(data: dict):
     try:
@@ -675,7 +677,9 @@ if "cal_year" not in st.session_state:
     st.session_state.cal_year = datetime.today().year
 if "cal_month" not in st.session_state:
     st.session_state.cal_month = datetime.today().month
-
+if "planning_overrides" not in st.session_state:
+    raw = _supa_get('planning_overrides')
+    st.session_state["planning_overrides"] = json.loads(raw) if raw else {}
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<p style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;font-weight:700">NAVIGATION</p>', unsafe_allow_html=True)
