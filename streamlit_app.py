@@ -1141,286 +1141,577 @@ renderList();
 elif active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    with st.expander("🧪 Nouveau prélèvement", expanded=False):
-        if not st.session_state.points:
-            st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement** pour en créer.")
-        else:
-            p_col1, p_col2, p_col3 = st.columns([3,2,1])
-            with p_col1:
-                point_labels = [f"{pt['label']} — {pt.get('type','?')} — {pt.get('room_class','?')}" for pt in st.session_state.points]
-                sel_idx = st.selectbox("Point de prélèvement", list(range(len(point_labels))), format_func=lambda i: point_labels[i], key="new_prelev_point")
-                selected_point = st.session_state.points[sel_idx]
-                pt_type = selected_point.get('type', '—')
-                pt_class = selected_point.get('room_class', '—')
-                pt_gelose = selected_point.get('gelose', '—')
-                type_icon = "💨" if pt_type == "Air" else "🧴"
-                st.markdown(f"""<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
-                  <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div></div>
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_class}</div></div>
-                    <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;grid-column:1/-1"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div></div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-            with p_col2:
-                oper_list = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
-                if oper_list:
-                    oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
-                    p_oper = oper_sel if oper_sel != "— Sélectionner —" else ""
-                else:
-                    st.info("Aucun opérateur — ajoutez-en dans Paramètres")
-                    p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
-                p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
-                j2_date_calc = next_working_day_offset(p_date, 2)
-                j7_date_calc = next_working_day_offset(p_date, 5)
-                st.markdown(f"""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                  📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
-                  📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
-                </div>""", unsafe_allow_html=True)
-            with p_col3:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    sample = {
-                        "id": pid,
-                        "label": selected_point['label'],
-                        "type": selected_point.get('type'),
-                        "gelose": selected_point.get('gelose', '—'),
-                        "room_class": selected_point.get('room_class'),
-                        "operateur": p_oper,
-                        "date": str(p_date),
-                        "archived": False
-                    }
-                    st.session_state.prelevements.append(sample)
-                    save_prelevements(st.session_state.prelevements)
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J2",
-                        "sample_id": pid,
-                        "label": sample['label'],
-                        "due_date": j2_date_calc.isoformat(),
-                        "when": "J2",
-                        "status": "pending"
-                    })
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J7",
-                        "sample_id": pid,
-                        "label": sample['label'],
-                        "due_date": j7_date_calc.isoformat(),
-                        "when": "J7",
-                        "status": "pending"
-                    })
-                    save_schedules(st.session_state.schedules)
-                    st.success(f"✅ **{sample['label']}** enregistré ! J2 → {j2_date_calc.strftime('%d/%m/%Y')} | J7 → {j7_date_calc.strftime('%d/%m/%Y')} (jours ouvrés)")
-                    st.rerun()
+    # ── Tabs internes ──────────────────────────────────────────────────────────
+    tab_surv, tab_etiq = st.tabs(["🔬 Surveillance", "🏷️ Étiquettes"])
 
-    st.divider()
-    st.markdown("#### 📅 Lectures en attente")
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ONGLET SURVEILLANCE (contenu original)
+    # ═══════════════════════════════════════════════════════════════════════════
+    with tab_surv:
 
-    pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
-    overdue = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() <= today]
-    upcoming = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() > today]
+        with st.expander("🧪 Nouveau prélèvement", expanded=False):
+            if not st.session_state.points:
+                st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement** pour en créer.")
+            else:
+                p_col1, p_col2, p_col3 = st.columns([3,2,1])
+                with p_col1:
+                    point_labels = [f"{pt['label']} — {pt.get('type','?')} — {pt.get('room_class','?')}" for pt in st.session_state.points]
+                    sel_idx = st.selectbox("Point de prélèvement", list(range(len(point_labels))), format_func=lambda i: point_labels[i], key="new_prelev_point")
+                    selected_point = st.session_state.points[sel_idx]
+                    pt_type = selected_point.get('type', '—')
+                    pt_class = selected_point.get('room_class', '—')
+                    pt_gelose = selected_point.get('gelose', '—')
+                    type_icon = "💨" if pt_type == "Air" else "🧴"
+                    st.markdown(f"""<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
+                      <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                        <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div></div>
+                        <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_class}</div></div>
+                        <div style="background:#ffffff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;grid-column:1/-1"><div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div></div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+                with p_col2:
+                    oper_list = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
+                    if oper_list:
+                        oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
+                        p_oper = oper_sel if oper_sel != "— Sélectionner —" else ""
+                    else:
+                        st.info("Aucun opérateur — ajoutez-en dans Paramètres")
+                        p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
+                    p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
+                    j2_date_calc = next_working_day_offset(p_date, 2)
+                    j7_date_calc = next_working_day_offset(p_date, 5)
+                    st.markdown(f"""<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+                      📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
+                      📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
+                    </div>""", unsafe_allow_html=True)
+                with p_col3:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
+                        pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                        sample = {
+                            "id": pid,
+                            "label": selected_point['label'],
+                            "type": selected_point.get('type'),
+                            "gelose": selected_point.get('gelose', '—'),
+                            "room_class": selected_point.get('room_class'),
+                            "operateur": p_oper,
+                            "date": str(p_date),
+                            "archived": False
+                        }
+                        st.session_state.prelevements.append(sample)
+                        save_prelevements(st.session_state.prelevements)
+                        st.session_state.schedules.append({
+                            "id": f"sch_{pid}_J2",
+                            "sample_id": pid,
+                            "label": sample['label'],
+                            "due_date": j2_date_calc.isoformat(),
+                            "when": "J2",
+                            "status": "pending"
+                        })
+                        st.session_state.schedules.append({
+                            "id": f"sch_{pid}_J7",
+                            "sample_id": pid,
+                            "label": sample['label'],
+                            "due_date": j7_date_calc.isoformat(),
+                            "when": "J7",
+                            "status": "pending"
+                        })
+                        save_schedules(st.session_state.schedules)
+                        st.success(f"✅ **{sample['label']}** enregistré ! J2 → {j2_date_calc.strftime('%d/%m/%Y')} | J7 → {j7_date_calc.strftime('%d/%m/%Y')} (jours ouvrés)")
+                        st.rerun()
 
-    if overdue:
-        st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">🔔 {len(overdue)} lecture(s) due(s) — à traiter dès que possible</span></div>', unsafe_allow_html=True)
-    if upcoming:
-        st.markdown(f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">📆 {len(upcoming)} lecture(s) à venir</span></div>', unsafe_allow_html=True)
-    if not pending_schedules:
-        st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
+        st.divider()
+        st.markdown("#### 📅 Lectures en attente")
 
-    def should_show_schedule(s, all_schedules):
-        if s['when'] == 'J2': return True
-        if s['when'] == 'J7':
-            j2 = next((x for x in all_schedules if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
-        return True
+        pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
+        overdue = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() > today]
 
-    all_to_show = [s for s in (overdue + upcoming) if should_show_schedule(s, st.session_state.schedules)]
-    for s in all_to_show:
-        sched_date = datetime.fromisoformat(s["due_date"]).date()
-        is_overdue = sched_date <= today
-        border_col = "#ef4444" if is_overdue else "#3b82f6"
-        bg_col = "#fef2f2" if is_overdue else "#eff6ff"
-        badge_col = "#dc2626" if is_overdue else "#1d4ed8"
-        status_txt = "EN RETARD" if is_overdue else f"dans {(sched_date - today).days}j"
-        sample = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
-        pt_type = sample.get('type', '?') if sample else '?'
-        pt_gelose = sample.get('gelose', '?') if sample else '?'
-        pt_class = sample.get('room_class', '?') if sample else '?'
-        pt_oper = sample.get('operateur', '?') if sample else '?'
+        if overdue:
+            st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">🔔 {len(overdue)} lecture(s) due(s) — à traiter dès que possible</span></div>', unsafe_allow_html=True)
+        if upcoming:
+            st.markdown(f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">📆 {len(upcoming)} lecture(s) à venir</span></div>', unsafe_allow_html=True)
+        if not pending_schedules:
+            st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
 
-        with st.container():
-            st.markdown(f"""<div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;padding:14px 16px;margin-bottom:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div><span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
-                  <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
-                  <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
-                </div>
-                <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div></div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div></div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div></div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div></div>
-              </div>
-            </div>""", unsafe_allow_html=True)
-            btn_cols = st.columns([3, 1])
-            with btn_cols[0]:
-                if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
-                    st.session_state.current_process = s['id']
-                    st.rerun()
-            with btn_cols[1]:
-                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
-                    sample_id = s.get('sample_id')
-                    st.session_state.schedules = [x for x in st.session_state.schedules if x['sample_id'] != sample_id]
-                    save_schedules(st.session_state.schedules)
-                    st.session_state.prelevements = [p for p in st.session_state.prelevements if p['id'] != sample_id]
-                    save_prelevements(st.session_state.prelevements)
-                    st.success("Prélèvement et lectures associées supprimés.")
-                    st.rerun()
+        def should_show_schedule(s, all_schedules):
+            if s['when'] == 'J2': return True
+            if s['when'] == 'J7':
+                j2 = next((x for x in all_schedules if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
+                return j2 is None or j2['status'] == 'done'
+            return True
 
-    if st.session_state.current_process:
-        proc_id = st.session_state.current_process
-        proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
-        if proc:
-            sample = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+        all_to_show = [s for s in (overdue + upcoming) if should_show_schedule(s, st.session_state.schedules)]
+        for s in all_to_show:
+            sched_date = datetime.fromisoformat(s["due_date"]).date()
+            is_overdue = sched_date <= today
+            border_col = "#ef4444" if is_overdue else "#3b82f6"
+            bg_col = "#fef2f2" if is_overdue else "#eff6ff"
+            badge_col = "#dc2626" if is_overdue else "#1d4ed8"
+            status_txt = "EN RETARD" if is_overdue else f"dans {(sched_date - today).days}j"
+            sample = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
             pt_type = sample.get('type', '?') if sample else '?'
             pt_gelose = sample.get('gelose', '?') if sample else '?'
             pt_class = sample.get('room_class', '?') if sample else '?'
             pt_oper = sample.get('operateur', '?') if sample else '?'
-            pt_date = sample.get('date', '?') if sample else '?'
 
-            st.markdown("---")
-            st.markdown(f"""<div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;padding:16px;margin-bottom:16px">
-              <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">🔬 Traitement lecture — <span style="font-style:italic">{proc['label']}</span>
-                <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div></div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div></div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_class}</div></div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
-                <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
-              </div>
-            </div>""", unsafe_allow_html=True)
+            with st.container():
+                st.markdown(f"""<div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;padding:14px 16px;margin-bottom:8px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                    <div><span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                      <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
+                      <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
+                    </div>
+                    <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div></div>
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div></div>
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div></div>
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+                btn_cols = st.columns([3, 1])
+                with btn_cols[0]:
+                    if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
+                        st.session_state.current_process = s['id']
+                        st.rerun()
+                with btn_cols[1]:
+                    if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
+                        sample_id = s.get('sample_id')
+                        st.session_state.schedules = [x for x in st.session_state.schedules if x['sample_id'] != sample_id]
+                        save_schedules(st.session_state.schedules)
+                        st.session_state.prelevements = [p for p in st.session_state.prelevements if p['id'] != sample_id]
+                        save_prelevements(st.session_state.prelevements)
+                        st.success("Prélèvement et lectures associées supprimés.")
+                        st.rerun()
 
-            lc1, lc2 = st.columns([2, 2])
-            with lc1:
-                res = st.radio("Résultat", ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"], index=0, key=f"res_{proc_id}")
-            with lc2:
-                if "Positif" in res:
-                    ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
-                else:
-                    ncol = 0
+        if st.session_state.current_process:
+            proc_id = st.session_state.current_process
+            proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
+            if proc:
+                sample = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+                pt_type = sample.get('type', '?') if sample else '?'
+                pt_gelose = sample.get('gelose', '?') if sample else '?'
+                pt_class = sample.get('room_class', '?') if sample else '?'
+                pt_oper = sample.get('operateur', '?') if sample else '?'
+                pt_date = sample.get('date', '?') if sample else '?'
 
-            btn_col1, btn_col2 = st.columns([2, 2])
-            with btn_col1:
-                if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
-                    proc['status'] = 'done'
-                    save_schedules(st.session_state.schedules)
-                    if "Négatif" in res:
-                        j7_sch = next((x for x in st.session_state.schedules if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
-                        if proc['when'] == 'J7' or (proc['when'] == 'J2' and not j7_sch):
-                            if sample:
-                                sample['archived'] = True
-                                st.session_state.archived_samples.append(sample)
-                                save_archived_samples(st.session_state.archived_samples)
-                                save_prelevements(st.session_state.prelevements)
-                            st.success("✅ Lecture négative — prélèvement archivé.")
-                        else:
-                            st.success(f"✅ Lecture J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
-                        hist = {"date": str(today), "prelevement": proc['label'], "sample_id": proc.get('sample_id',''),
-                            "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
-                            "ufc": 0, "risk": 0, "alert_threshold": "—", "action_threshold": "—",
-                            "status": "ok", "operateur": pt_oper, "remarque": f"Lecture {proc['when']} négative"}
-                        st.session_state.surveillance.append(hist)
-                        save_surveillance(st.session_state.surveillance)
+                st.markdown("---")
+                st.markdown(f"""<div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;padding:16px;margin-bottom:16px">
+                  <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">🔬 Traitement lecture — <span style="font-style:italic">{proc['label']}</span>
+                    <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div></div>
+                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div></div>
+                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_class}</div></div>
+                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
+                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+                lc1, lc2 = st.columns([2, 2])
+                with lc1:
+                    res = st.radio("Résultat", ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"], index=0, key=f"res_{proc_id}")
+                with lc2:
+                    if "Positif" in res:
+                        ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
                     else:
-                        entry = {"sample_id": proc['sample_id'], "label": proc['label'], "when": proc['when'], "colonies": int(ncol), "date": str(today), "status": "pending"}
-                        st.session_state.pending_identifications.append(entry)
-                        save_pending_identifications(st.session_state.pending_identifications)
-                        st.success(f"🔴 {proc['when']} positive ({ncol} UFC) — identification requise ci-dessous.")
-                    st.session_state.current_process = None
-                    st.rerun()
-            with btn_col2:
-                if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
-                    st.session_state.current_process = None
-                    st.rerun()
+                        ncol = 0
 
-    pending_ids = [p for p in st.session_state.pending_identifications if p.get('status') == 'pending']
-    if pending_ids:
-        st.markdown("---")
-        st.markdown("#### 🔴 Identifications en attente")
-        for pi_idx, pi in enumerate(pending_ids):
-            real_pi_idx = st.session_state.pending_identifications.index(pi)
-            sample = next((p for p in st.session_state.prelevements if p['id'] == pi['sample_id']), None)
-            pt_gelose = sample.get('gelose', '?') if sample else '?'
-            pt_oper = sample.get('operateur', '?') if sample else '?'
-            with st.expander(f"🔴 {pi['label']} — {pi['when']} — {pi['colonies']} UFC — {pi['date']}", expanded=True):
-                id_col1, id_col2 = st.columns([3, 1])
-                with id_col1:
-                    germ_input = st.text_input("Germe identifié *", placeholder="Ex: Pseudomonas aeruginosa", key=f"germ_id_{real_pi_idx}")
-                    remarque = st.text_area("Remarque", height=60, key=f"rem_id_{real_pi_idx}")
-                with id_col2:
-                    date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{real_pi_idx}")
-                idc1, idc2, idc3 = st.columns([2, 2, 1])
-                with idc1:
-                    if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{real_pi_idx}"):
-                        if germ_input.strip():
-                            match, score = find_germ_match(germ_input, st.session_state.germs)
-                            if match and score > 0.4:
-                                risk = match["risk"]
-                                th = get_thresholds_for_risk(risk, st.session_state.thresholds)
-                                ufc = pi['colonies']
-                                status = "action" if ufc >= th["action"] else "alert" if ufc >= th["alert"] else "ok"
-                                record = {"date": str(date_id), "prelevement": pi['label'], "sample_id": pi.get('sample_id',''),
-                                    "germ_saisi": germ_input, "germ_match": match["name"], "match_score": f"{int(score*100)}%",
-                                    "ufc": ufc, "risk": risk, "alert_threshold": th["alert"], "action_threshold": th["action"],
-                                    "status": status, "operateur": pt_oper, "remarque": remarque}
-                                st.session_state.surveillance.append(record)
-                                save_surveillance(st.session_state.surveillance)
-                                st.session_state.pending_identifications[real_pi_idx]['status'] = 'done'
-                                save_pending_identifications(st.session_state.pending_identifications)
-                                status_txt = "🚨 Action requise" if status == "action" else "⚠️ Alerte" if status == "alert" else "✅ Conforme"
-                                st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — {status_txt}")
-                                st.rerun()
+                btn_col1, btn_col2 = st.columns([2, 2])
+                with btn_col1:
+                    if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
+                        proc['status'] = 'done'
+                        save_schedules(st.session_state.schedules)
+                        if "Négatif" in res:
+                            j7_sch = next((x for x in st.session_state.schedules if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
+                            if proc['when'] == 'J7' or (proc['when'] == 'J2' and not j7_sch):
+                                if sample:
+                                    sample['archived'] = True
+                                    st.session_state.archived_samples.append(sample)
+                                    save_archived_samples(st.session_state.archived_samples)
+                                    save_prelevements(st.session_state.prelevements)
+                                st.success("✅ Lecture négative — prélèvement archivé.")
                             else:
-                                st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
+                                st.success(f"✅ Lecture J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
+                            hist = {"date": str(today), "prelevement": proc['label'], "sample_id": proc.get('sample_id',''),
+                                "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
+                                "ufc": 0, "risk": 0, "alert_threshold": "—", "action_threshold": "—",
+                                "status": "ok", "operateur": pt_oper, "remarque": f"Lecture {proc['when']} négative"}
+                            st.session_state.surveillance.append(hist)
+                            save_surveillance(st.session_state.surveillance)
                         else:
-                            st.error("Le nom du germe est obligatoire.")
-                with idc2:
-                    if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{real_pi_idx}"):
-                        matching_sch = next((x for x in st.session_state.schedules if x['sample_id'] == pi['sample_id'] and x['when'] == pi['when'] and x['status'] == 'done'), None)
-                        if matching_sch:
-                            matching_sch['status'] = 'pending'
-                            save_schedules(st.session_state.schedules)
-                        st.session_state.pending_identifications.pop(real_pi_idx)
-                        save_pending_identifications(st.session_state.pending_identifications)
+                            entry = {"sample_id": proc['sample_id'], "label": proc['label'], "when": proc['when'], "colonies": int(ncol), "date": str(today), "status": "pending"}
+                            st.session_state.pending_identifications.append(entry)
+                            save_pending_identifications(st.session_state.pending_identifications)
+                            st.success(f"🔴 {proc['when']} positive ({ncol} UFC) — identification requise ci-dessous.")
+                        st.session_state.current_process = None
                         st.rerun()
-                with idc3:
-                    if st.button("🗑️", use_container_width=True, key=f"del_id_{real_pi_idx}"):
-                        st.session_state.pending_identifications.pop(real_pi_idx)
-                        save_pending_identifications(st.session_state.pending_identifications)
+                with btn_col2:
+                    if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
+                        st.session_state.current_process = None
                         st.rerun()
 
-    if st.session_state.surveillance:
+        pending_ids = [p for p in st.session_state.pending_identifications if p.get('status') == 'pending']
+        if pending_ids:
+            st.markdown("---")
+            st.markdown("#### 🔴 Identifications en attente")
+            for pi_idx, pi in enumerate(pending_ids):
+                real_pi_idx = st.session_state.pending_identifications.index(pi)
+                sample = next((p for p in st.session_state.prelevements if p['id'] == pi['sample_id']), None)
+                pt_gelose = sample.get('gelose', '?') if sample else '?'
+                pt_oper = sample.get('operateur', '?') if sample else '?'
+                with st.expander(f"🔴 {pi['label']} — {pi['when']} — {pi['colonies']} UFC — {pi['date']}", expanded=True):
+                    id_col1, id_col2 = st.columns([3, 1])
+                    with id_col1:
+                        germ_input = st.text_input("Germe identifié *", placeholder="Ex: Pseudomonas aeruginosa", key=f"germ_id_{real_pi_idx}")
+                        remarque = st.text_area("Remarque", height=60, key=f"rem_id_{real_pi_idx}")
+                    with id_col2:
+                        date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{real_pi_idx}")
+                    idc1, idc2, idc3 = st.columns([2, 2, 1])
+                    with idc1:
+                        if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{real_pi_idx}"):
+                            if germ_input.strip():
+                                match, score = find_germ_match(germ_input, st.session_state.germs)
+                                if match and score > 0.4:
+                                    risk = match["risk"]
+                                    th = get_thresholds_for_risk(risk, st.session_state.thresholds)
+                                    ufc = pi['colonies']
+                                    status = "action" if ufc >= th["action"] else "alert" if ufc >= th["alert"] else "ok"
+                                    record = {"date": str(date_id), "prelevement": pi['label'], "sample_id": pi.get('sample_id',''),
+                                        "germ_saisi": germ_input, "germ_match": match["name"], "match_score": f"{int(score*100)}%",
+                                        "ufc": ufc, "risk": risk, "alert_threshold": th["alert"], "action_threshold": th["action"],
+                                        "status": status, "operateur": pt_oper, "remarque": remarque}
+                                    st.session_state.surveillance.append(record)
+                                    save_surveillance(st.session_state.surveillance)
+                                    st.session_state.pending_identifications[real_pi_idx]['status'] = 'done'
+                                    save_pending_identifications(st.session_state.pending_identifications)
+                                    status_txt = "🚨 Action requise" if status == "action" else "⚠️ Alerte" if status == "alert" else "✅ Conforme"
+                                    st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — {status_txt}")
+                                    st.rerun()
+                                else:
+                                    st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
+                            else:
+                                st.error("Le nom du germe est obligatoire.")
+                    with idc2:
+                        if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{real_pi_idx}"):
+                            matching_sch = next((x for x in st.session_state.schedules if x['sample_id'] == pi['sample_id'] and x['when'] == pi['when'] and x['status'] == 'done'), None)
+                            if matching_sch:
+                                matching_sch['status'] = 'pending'
+                                save_schedules(st.session_state.schedules)
+                            st.session_state.pending_identifications.pop(real_pi_idx)
+                            save_pending_identifications(st.session_state.pending_identifications)
+                            st.rerun()
+                    with idc3:
+                        if st.button("🗑️", use_container_width=True, key=f"del_id_{real_pi_idx}"):
+                            st.session_state.pending_identifications.pop(real_pi_idx)
+                            save_pending_identifications(st.session_state.pending_identifications)
+                            st.rerun()
+
+        if st.session_state.surveillance:
+            st.markdown("---")
+            st.markdown("### 📋 Derniers résultats")
+            for r in list(reversed(st.session_state.surveillance[-10:])):
+                sc = "#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
+                ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
+                ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
+                st.markdown(f"""<div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
+                  <span style="font-size:1.1rem">{ic}</span>
+                  <div style="flex:1"><div style="font-size:.78rem;color:#1e293b;font-weight:600">{r['prelevement']} — <span style="font-style:italic">{r['germ_match']}</span></div>
+                  <div style="font-size:.68rem;color:#0f172a">{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div></div>
+                  <span style="font-size:.7rem;color:{sc};font-weight:700">{ufc_display}</span>
+                </div>""", unsafe_allow_html=True)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # ONGLET ÉTIQUETTES — Identification & Surveillance
+    # Dépendance : pip install reportlab
+    # ═══════════════════════════════════════════════════════════════════════════
+    with tab_etiq:
+
+        st.markdown("### 🏷️ Étiquettes de prélèvement")
+
+        import io as _io
+
+        _today_etiq = datetime.today().date()
+
+        # ── Données ────────────────────────────────────────────────────────────
+        all_prevs = [p for p in st.session_state.prelevements if not p.get("archived", False)]
+
+        if not all_prevs:
+            st.info("Aucun prélèvement enregistré. Créez-en d'abord dans **Nouveau prélèvement**.")
+            st.stop()
+
+        # ── Filtres ────────────────────────────────────────────────────────────
+        with st.expander("🔍 Filtres", expanded=True):
+            fc1, fc2, fc3 = st.columns(3)
+
+            with fc1:
+                dates_dispo = sorted(
+                    {datetime.fromisoformat(p["date"]).date()
+                     for p in all_prevs if p.get("date")},
+                    reverse=True)
+                sel_dates = st.multiselect(
+                    "Date(s)",
+                    dates_dispo,
+                    default=[dates_dispo[0]] if dates_dispo else [],
+                    format_func=lambda d: d.strftime("%d/%m/%Y"),
+                    key="etiq_dates")
+
+            with fc2:
+                sel_points = st.multiselect(
+                    "Point(s) de prélèvement",
+                    sorted({p.get("label", "") for p in all_prevs if p.get("label")}),
+                    key="etiq_points")
+
+            with fc3:
+                sel_opers = st.multiselect(
+                    "Opérateur(s)",
+                    sorted({p.get("operateur", "") for p in all_prevs if p.get("operateur")}),
+                    key="etiq_opers")
+
+        # Application des filtres
+        filtered = all_prevs
+        if sel_dates:
+            filtered = [p for p in filtered
+                        if p.get("date")
+                        and datetime.fromisoformat(p["date"]).date() in sel_dates]
+        if sel_points:
+            filtered = [p for p in filtered if p.get("label") in sel_points]
+        if sel_opers:
+            filtered = [p for p in filtered if p.get("operateur") in sel_opers]
+
+        n_sel = len(filtered)
+
+        if n_sel == 0:
+            st.warning("Aucun prélèvement ne correspond aux filtres.")
+            st.stop()
+
+        # Compteur résumé
+        st.markdown(
+            f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
+            f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;margin-bottom:8px'>"
+            f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer</div>",
+            unsafe_allow_html=True)
+
+        # ── Prévisualisation (grille 4 colonnes) ───────────────────────────────
+        st.markdown("#### 👁️ Prévisualisation")
+
+        RISK_COLORS = {
+            "1": "#22c55e", "2": "#84cc16",
+            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+        }
+
+        def _preview_card(p: dict) -> str:
+            """Carte HTML aperçu 5×4 cm."""
+            risk  = str(p.get("risk_level", ""))
+            rcol  = RISK_COLORS.get(risk, "#6366f1")
+            label = p.get("label", "—")
+            oper  = p.get("operateur", "—") or "—"
+            date_s = ""
+            if p.get("date"):
+                try:    date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
+                except: date_s = str(p["date"])
+
+            risk_band = (
+                f"<div style='position:absolute;top:0;right:0;bottom:0;width:7px;"
+                f"background:{rcol};border-radius:0 6px 6px 0'>"
+                f"<div style='writing-mode:vertical-rl;font-size:5.5pt;font-weight:900;"
+                f"color:#fff;padding:4px 0;text-align:center;height:100%'>"
+                f"{'Nv.' + risk if risk else ''}</div></div>")
+
+            return (
+                f"<div style='position:relative;width:5cm;height:4cm;"
+                f"border:1.5px solid {rcol};border-radius:8px;"
+                f"padding:8px 14px 6px 8px;box-sizing:border-box;"
+                f"background:#ffffff;font-family:Arial,Helvetica,sans-serif;"
+                f"display:flex;flex-direction:column;overflow:hidden;"
+                f"box-shadow:0 2px 8px rgba(0,0,0,.08)'>"
+                f"{risk_band}"
+                f"<div style='font-size:9pt;font-weight:900;color:#0f172a;"
+                f"border-bottom:1.5px solid {rcol}33;padding-bottom:4px;margin-bottom:5px;"
+                f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                f"max-width:calc(5cm - 24px)'>{label}</div>"
+                f"<div style='display:flex;align-items:center;gap:5px;margin-bottom:4px'>"
+                f"<span style='font-size:6.5pt;color:#64748b;font-weight:600;"
+                f"min-width:36px'>📅 Date</span>"
+                f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span>"
+                f"</div>"
+                f"<div style='display:flex;align-items:center;gap:5px'>"
+                f"<span style='font-size:6.5pt;color:#64748b;font-weight:600;"
+                f"min-width:36px'>👤 Opér.</span>"
+                f"<span style='font-size:7.5pt;font-weight:700;color:#0f172a;"
+                f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                f"max-width:calc(5cm - 70px)'>{oper}</span>"
+                f"</div>"
+                f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
+                f"text-align:right;padding-top:4px'>URC — MicroSurveillance</div>"
+                f"</div>"
+            )
+
+        preview_max = min(n_sel, 8)
+        p_cols = st.columns(4)
+        for idx, p in enumerate(filtered[:preview_max]):
+            with p_cols[idx % 4]:
+                st.markdown(_preview_card(p), unsafe_allow_html=True)
+                st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
+
+        if n_sel > preview_max:
+            st.caption(f"Prévisualisation limitée aux {preview_max} premières — "
+                       f"toutes les {n_sel} figureront dans le PDF.")
+
+        # ── Génération PDF ─────────────────────────────────────────────────────
         st.markdown("---")
-        st.markdown("### 📋 Derniers résultats")
-        for r in list(reversed(st.session_state.surveillance[-10:])):
-            sc = "#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
-            ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
-            ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
-            st.markdown(f"""<div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
-              <span style="font-size:1.1rem">{ic}</span>
-              <div style="flex:1"><div style="font-size:.78rem;color:#1e293b;font-weight:600">{r['prelevement']} — <span style="font-style:italic">{r['germ_match']}</span></div>
-              <div style="font-size:.68rem;color:#0f172a">{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div></div>
-              <span style="font-size:.7rem;color:{sc};font-weight:700">{ufc_display}</span>
-            </div>""", unsafe_allow_html=True)
+
+        if st.button(
+            f"📄 Générer le PDF — {n_sel} étiquette{'s' if n_sel > 1 else ''}",
+            use_container_width=True,
+            key="etiq_gen_pdf",
+            type="primary"
+        ):
+            try:
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units     import cm  as rl_cm
+                from reportlab.lib           import colors as rlc
+                from reportlab.platypus      import (
+                    SimpleDocTemplate, Table, TableStyle,
+                    Paragraph, HRFlowable, Spacer)
+                from reportlab.lib.styles    import ParagraphStyle
+                from reportlab.lib.enums     import TA_RIGHT, TA_CENTER
+
+                W_ETQ   = 5   * rl_cm
+                H_ETQ   = 4   * rl_cm
+                N_COLS  = 4
+                GAP     = 0.35 * rl_cm
+                MARGIN  = 1   * rl_cm
+
+                buf = _io.BytesIO()
+                doc = SimpleDocTemplate(
+                    buf, pagesize=A4,
+                    leftMargin=MARGIN, rightMargin=MARGIN,
+                    topMargin=MARGIN,  bottomMargin=MARGIN,
+                    title=f"Étiquettes prélèvements {_today_etiq.strftime('%d/%m/%Y')}")
+
+                RISK_RL = {k: rlc.HexColor(v) for k, v in RISK_COLORS.items()}
+
+                s_titre    = ParagraphStyle("etiq_titre", fontName="Helvetica-Bold", fontSize=8.5, leading=11, spaceAfter=3)
+                s_lbl      = ParagraphStyle("etiq_lbl",   fontName="Helvetica",      fontSize=6,   leading=7,  textColor=rlc.HexColor("#64748b"))
+                s_val      = ParagraphStyle("etiq_val",   fontName="Helvetica-Bold", fontSize=8,   leading=10, textColor=rlc.HexColor("#0f172a"))
+                s_date     = ParagraphStyle("etiq_date",  fontName="Helvetica-Bold", fontSize=9,   leading=11, textColor=rlc.HexColor("#1e40af"))
+                s_logo     = ParagraphStyle("etiq_logo",  fontName="Helvetica",      fontSize=5,   leading=6,  textColor=rlc.HexColor("#94a3b8"), alignment=TA_RIGHT)
+                s_page_hdr = ParagraphStyle("page_hdr",   fontName="Helvetica-Bold", fontSize=9,   textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+
+                def _build_cell(p_data: dict):
+                    risk_v  = str(p_data.get("risk_level", ""))
+                    rcol_v  = RISK_RL.get(risk_v, rlc.HexColor("#6366f1"))
+                    label_v = p_data.get("label", "—")
+                    oper_v  = p_data.get("operateur", "—") or "—"
+                    date_v  = ""
+                    if p_data.get("date"):
+                        try:    date_v = datetime.fromisoformat(p_data["date"]).strftime("%d/%m/%Y")
+                        except: date_v = str(p_data["date"])
+
+                    inner_data = [
+                        [Paragraph(label_v, s_titre)],
+                        [HRFlowable(width=W_ETQ - 0.8*rl_cm, thickness=0.8, color=rcol_v, spaceAfter=3)],
+                        [Paragraph("📅 Date prélèvement", s_lbl)],
+                        [Paragraph(date_v or "—", s_date)],
+                        [Paragraph("👤 Opérateur", s_lbl)],
+                        [Paragraph(oper_v, s_val)],
+                        [Paragraph("URC — MicroSurveillance", s_logo)],
+                    ]
+                    inner_tbl = Table(inner_data, colWidths=[W_ETQ - 0.8*rl_cm])
+                    inner_tbl.setStyle(TableStyle([
+                        ("LEFTPADDING",   (0,0),(-1,-1), 0),
+                        ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+                        ("TOPPADDING",    (0,0),(-1,-1), 0),
+                        ("BOTTOMPADDING", (0,0),(-1,-1), 2),
+                        ("TOPPADDING",    (0,-1),(0,-1), 6),
+                    ]))
+                    outer = Table([[inner_tbl]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+                    outer.setStyle(TableStyle([
+                        ("BOX",            (0,0),(0,0), 1.5, rcol_v),
+                        ("ROUNDEDCORNERS", (0,0),(0,0), [6]),
+                        ("LINEAFTER",      (0,0),(0,0), 7,   rcol_v),
+                        ("LEFTPADDING",    (0,0),(0,0), 7),
+                        ("RIGHTPADDING",   (0,0),(0,0), 14),
+                        ("TOPPADDING",     (0,0),(0,0), 7),
+                        ("BOTTOMPADDING",  (0,0),(0,0), 5),
+                        ("VALIGN",         (0,0),(0,0), "TOP"),
+                        ("BACKGROUND",     (0,0),(0,0), rlc.white),
+                    ]))
+                    return outer
+
+                rows = []
+                row_buf = []
+                for p_item in filtered:
+                    row_buf.append(_build_cell(p_item))
+                    if len(row_buf) == N_COLS:
+                        rows.append(row_buf)
+                        row_buf = []
+                if row_buf:
+                    while len(row_buf) < N_COLS:
+                        row_buf.append("")
+                    rows.append(row_buf)
+
+                main_table = Table(
+                    rows,
+                    colWidths=[W_ETQ] * N_COLS,
+                    rowHeights=[H_ETQ] * len(rows))
+                main_table.setStyle(TableStyle([
+                    ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
+                    ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
+                    ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
+                    ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
+                    ("VALIGN",        (0,0),(-1,-1), "TOP"),
+                ]))
+
+                hdr = Paragraph(
+                    f"Étiquettes prélèvements — "
+                    f"Imprimé le {_today_etiq.strftime('%d/%m/%Y')} — "
+                    f"{n_sel} étiquette{'s' if n_sel > 1 else ''}",
+                    s_page_hdr)
+
+                doc.build([hdr, main_table])
+                buf.seek(0)
+
+                fname = f"etiquettes_{_today_etiq.strftime('%Y%m%d')}.pdf"
+                st.download_button(
+                    label=f"⬇️ Télécharger {fname}",
+                    data=buf.getvalue(),
+                    file_name=fname,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="etiq_dl_btn")
+
+                st.markdown(
+                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                    f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
+                    f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
+                    f"✅ PDF généré avec succès</div>"
+                    f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
+                    f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
+                    f"{N_COLS} colonnes · Format A4 · "
+                    f"Taille étiquette 5 × 4 cm</div>"
+                    f"</div>",
+                    unsafe_allow_html=True)
+
+            except ImportError:
+                st.error(
+                    "❌ **ReportLab** n'est pas installé.\n\n"
+                    "Lancez dans votre terminal : `pip install reportlab`\n\n"
+                    "puis relancez l'application.")
+            except Exception as _e:
+                st.error(f"Erreur lors de la génération PDF : {_e}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# POPUP MODAL — à placer juste AVANT st.markdown('🦠 MicroSurveillance URC')
-# Remplace l'ancien bloc "if due_global and not st.session_state.due_alert_shown"
+# POPUP MODALE — lectures en attente
+# ⚠️  À placer juste AVANT st.markdown('🦠 MicroSurveillance URC') dans app.py
 # ═══════════════════════════════════════════════════════════════════════════════
 
 today = datetime.today().date()
@@ -1449,8 +1740,6 @@ if due_global and not st.session_state.due_alert_shown:
         display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease">
       <div style="background:#fff;border-radius:16px;width:min(480px,92vw);
           box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden;animation:slideUp .25s ease">
-
-        <!-- Header rouge -->
         <div style="background:linear-gradient(135deg,#dc2626,#ef4444);padding:20px 24px;
             display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:14px">
@@ -1468,8 +1757,6 @@ if due_global and not st.session_state.due_alert_shown:
             style="background:rgba(255,255,255,.2);border:none;border-radius:50%;width:32px;height:32px;
             cursor:pointer;font-size:1.1rem;color:#fff;line-height:32px;text-align:center">✕</button>
         </div>
-
-        <!-- Compteur unique centré -->
         <div style="background:#fef2f2;padding:20px;text-align:center;border-bottom:1px solid #fee2e2">
           <div style="font-size:3.5rem;font-weight:900;color:#dc2626;line-height:1">{_nb}</div>
           <div style="font-size:.8rem;color:#991b1b;font-weight:700;text-transform:uppercase;
@@ -1477,13 +1764,9 @@ if due_global and not st.session_state.due_alert_shown:
             lecture{'s' if _nb > 1 else ''} en attente
           </div>
         </div>
-
-        <!-- Liste -->
         <div style="padding:14px 16px;max-height:200px;overflow-y:auto;background:#f8fafc">
           {_items_html}
         </div>
-
-        <!-- Bouton -->
         <div style="padding:14px 16px;background:#fff;border-top:1px solid #f1f5f9">
           <button onclick="document.getElementById('dueModal').style.display='none'"
             style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;
@@ -1500,7 +1783,6 @@ if due_global and not st.session_state.due_alert_shown:
     """
     st.components.v1.html(_popup, height=0, scrolling=False)
     st.session_state.due_alert_shown = True
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3 : PLANNING
