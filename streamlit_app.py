@@ -1650,9 +1650,9 @@ if active == "surveillance":
                         from reportlab.lib.styles    import ParagraphStyle
                         from reportlab.lib.enums     import TA_RIGHT
 
-                        W_ETQ  = 3    * rl_cm
-                        H_ETQ  = 2    * rl_cm
-                        N_COLS = 2
+                        W_ETQ  = 5    * rl_cm
+                        H_ETQ  = 4   * rl_cm
+                        N_COLS = 3
                         GAP    = 0.35 * rl_cm
                         MARGIN = 1    * rl_cm
 
