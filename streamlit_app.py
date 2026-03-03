@@ -2212,157 +2212,320 @@ elif active == "planning":
 
             st.divider()
 
-            # ── Planning automatique par jour ouvré ───────────────────────
-            st.markdown("#### 📅 Planning automatique par jour ouvré")
-            if nb_jours == 0:
-                st.warning("Aucun jour ouvré cette semaine.")
-            else:
-                import random as _rnd
-                _wn  = ch_sel_ws.isocalendar()[1]
-                _yn  = ch_sel_ws.isocalendar()[0]
-                _rng = _rnd.Random(_yn * 100 + _wn)
+            # ── Planning mensuel automatique — semaine par semaine ────
+            st.markdown("#### 📅 Planning automatique — vue mensuelle")
 
-                planning    = {wd: [] for wd in ch_working_days}
-                charge_jour = {wd: 0  for wd in ch_working_days}
+            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+            _pm_month = st.session_state.get("cal_month", _today_dt.month)
 
-                # ── Passe 1 : points journaliers → 1 occurrence épinglée sur CHAQUE jour ouvré ──
-                # Garantit qu'un point / jour apparaît exactement une fois par jour,
-                # sans passer par l'équilibrage de charge.
-                taches_a_repartir = []
-                for pt in st.session_state.points:
-                    rc_pt     = (pt.get('room_class') or '').strip()
-                    co_val    = st.session_state.get(class_override_key, {}).get(rc_pt, 0)
-                    co        = int(co_val) if co_val and int(co_val) > 0 else None
-                    freq_unit = pt.get('frequency_unit', '/ semaine')
-                    freq_raw  = pt.get('frequency')
-                    tache     = {
-                        "label":      pt['label'],
-                        "type":       pt.get('type', '—'),
-                        "risk":       int(pt.get('risk_level', 1)),
-                        "room_class": rc_pt,
-                    }
-                    # Journalier sans override de classe → épinglé sur chaque jour
-                    is_daily = (
-                        freq_unit == '/ jour'
-                        and co is None
-                        and freq_raw is not None
-                        and int(freq_raw or 0) > 0
-                    )
-                    if is_daily:
-                        for wd in ch_working_days:
-                            planning[wd].append(tache)
-                            charge_jour[wd] += 1
+            pm_nav1, pm_nav2, pm_nav3, pm_nav4, pm_nav5 = st.columns([1,1,3,1,1])
+            with pm_nav1:
+                if st.button("◄◄", key="pm_prev_year",  use_container_width=True):
+                    st.session_state.cal_year -= 1; st.rerun()
+            with pm_nav2:
+                if st.button("◄",  key="pm_prev_month", use_container_width=True):
+                    if st.session_state.cal_month == 1:
+                        st.session_state.cal_month = 12; st.session_state.cal_year -= 1
                     else:
-                        nb_fois, _, _ = _get_prevu_semaine(pt, ch_sel_ws, nb_jours, co)
-                        for _ in range(nb_fois):
-                            taches_a_repartir.append(tache)
+                        st.session_state.cal_month -= 1
+                    st.rerun()
+            with pm_nav3:
+                _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+                _pm_month = st.session_state.get("cal_month", _today_dt.month)
+                st.markdown(
+                    "<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
+                    "border-radius:10px;padding:8px;color:#fff;font-weight:800;font-size:1rem'>"
+                    + MOIS_FR[_pm_month] + " " + str(_pm_year) + "</div>",
+                    unsafe_allow_html=True)
+            with pm_nav4:
+                if st.button("►",  key="pm_next_month", use_container_width=True):
+                    if st.session_state.cal_month == 12:
+                        st.session_state.cal_month = 1; st.session_state.cal_year += 1
+                    else:
+                        st.session_state.cal_month += 1
+                    st.rerun()
+            with pm_nav5:
+                if st.button("►►", key="pm_next_year",  use_container_width=True):
+                    st.session_state.cal_year += 1; st.rerun()
+            if st.button("📍 Mois courant", key="pm_today"):
+                st.session_state.cal_year  = _today_dt.year
+                st.session_state.cal_month = _today_dt.month
+                st.rerun()
 
-                # ── Passe 2 : tous les autres → répartition équilibrée ──
-                _rng.shuffle(taches_a_repartir)
+            import calendar as _cal_pm
+            import random  as _rnd_pm
+
+            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+            _pm_month = st.session_state.get("cal_month", _today_dt.month)
+            _, _pm_ndays  = _cal_pm.monthrange(_pm_year, _pm_month)
+            _pm_start     = date_type(_pm_year, _pm_month, 1)
+            _pm_end       = date_type(_pm_year, _pm_month, _pm_ndays)
+            _pm_holidays  = get_holidays_cached(_pm_year)
+
+            _pm_mondays = []
+            _cur = _pm_start - timedelta(days=_pm_start.weekday())
+            while _cur <= _pm_end:
+                _pm_mondays.append(_cur)
+                _cur += timedelta(weeks=1)
+
+            if "pm_selected_day" not in st.session_state:
+                st.session_state["pm_selected_day"] = None
+
+            rcp_pm = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+
+            for week_idx, week_monday in enumerate(_pm_mondays):
+                _wd_week = [
+                    week_monday + timedelta(days=i)
+                    for i in range(5)
+                    if (week_monday + timedelta(days=i)) not in _pm_holidays
+                    and _pm_start <= (week_monday + timedelta(days=i)) <= _pm_end
+                ]
+                if not _wd_week:
+                    continue
+
+                nb_wd_week = len(_wd_week)
+                _plan_week   = {wd: [] for wd in _wd_week}
+                _charge_week = {wd: 0  for wd in _wd_week}
+                _to_repartir = []
+
+                for pt in st.session_state.points:
+                    rc_pt_pm  = (pt.get("room_class") or "").strip()
+                    co_val_pm = st.session_state.get(class_override_key, {}).get(rc_pt_pm, 0)
+                    co_pm     = int(co_val_pm) if co_val_pm and int(co_val_pm) > 0 else None
+                    fu_pm     = pt.get("frequency_unit", "/ semaine")
+                    fr_pm     = pt.get("frequency")
+                    tache_pm  = {
+                        "label":      pt["label"],
+                        "type":       pt.get("type", "—"),
+                        "risk":       int(pt.get("risk_level", 1)),
+                        "room_class": rc_pt_pm,
+                    }
+                    is_daily_pm = (
+                        fu_pm == "/ jour" and co_pm is None
+                        and fr_pm is not None and int(fr_pm or 0) > 0
+                    )
+                    if is_daily_pm:
+                        for wd in _wd_week:
+                            _plan_week[wd].append(tache_pm)
+                            _charge_week[wd] += 1
+                    else:
+                        nb_pm, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd_week, co_pm)
+                        for _ in range(nb_pm):
+                            _to_repartir.append(tache_pm)
+
+                _rng_pm = _rnd_pm.Random(_pm_year * 10000 + _pm_month * 100 + week_idx)
+                _rng_pm.shuffle(_to_repartir)
                 if nb_prelevements_max > 0:
-                    deja  = sum(len(v) for v in planning.values())
-                    reste = max(0, nb_prelevements_max - deja)
-                    taches_a_repartir = taches_a_repartir[:reste]
+                    _deja_pm  = sum(len(v) for v in _plan_week.values())
+                    _reste_pm = max(0, nb_prelevements_max - _deja_pm)
+                    _to_repartir = _to_repartir[:_reste_pm]
+                for t in _to_repartir:
+                    wd_c = min(_wd_week, key=lambda d: _charge_week[d])
+                    _plan_week[wd_c].append(t)
+                    _charge_week[wd_c] += 1
 
-                for t in taches_a_repartir:
-                    wd_cible = min(ch_working_days, key=lambda d: charge_jour[d])
-                    planning[wd_cible].append(t)
-                    charge_jour[wd_cible] += 1
+                _we_end    = week_monday + timedelta(days=6)
+                _total_sem = sum(len(v) for v in _plan_week.values())
+                st.markdown(
+                    f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
+                    f"display:flex;justify-content:space-between;align-items:center;"
+                    f"margin-top:14px;margin-bottom:6px'>"
+                    f"<span style='color:#fff;font-weight:800;font-size:.88rem'>"
+                    f"Semaine {week_monday.isocalendar()[1]} — "
+                    f"{week_monday.strftime('%d/%m')} → {_we_end.strftime('%d/%m')}</span>"
+                    f"<span style='background:rgba(255,255,255,.15);color:#93c5fd;"
+                    f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
+                    f"📋 {_total_sem} prélèv. planifiés</span>"
+                    f"</div>",
+                    unsafe_allow_html=True)
 
-                real_par_jour = {}
-                for wd in ch_working_days:
-                    dj0 = sum(1 for p in ch_j0 if datetime.fromisoformat(p['date']).date()     == wd)
-                    dj2 = sum(1 for s in ch_j2 if datetime.fromisoformat(s['due_date']).date() == wd)
-                    dj7 = sum(1 for s in ch_j7 if datetime.fromisoformat(s['due_date']).date() == wd)
-                    real_par_jour[wd] = {"j0": dj0, "j2": dj2, "j7": dj7}
-
-                rcp      = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-                day_cols = st.columns(nb_jours)
-
-                for di, wd in enumerate(ch_working_days):
-                    taches_j   = planning[wd]
+                _day_cols = st.columns(len(_wd_week))
+                for di, wd in enumerate(_wd_week):
+                    taches_j   = _plan_week[wd]
                     prevu_j    = len(taches_j)
-                    realise_j  = real_par_jour[wd]["j0"]
-                    is_today_d = wd == _today_dt
+                    is_today_d = (wd == _today_dt)
+                    is_past_d  = (wd < _today_dt)
+                    realise_j  = sum(
+                        1 for p in st.session_state.prelevements
+                        if p.get("date")
+                        and datetime.fromisoformat(p["date"]).date() == wd
+                        and not p.get("archived", False)
+                    )
+                    j2_j = [s for s in st.session_state.schedules
+                             if s["when"] == "J2"
+                             and datetime.fromisoformat(s["due_date"]).date() == wd]
+                    j7_j = [s for s in st.session_state.schedules
+                             if s["when"] == "J7"
+                             and datetime.fromisoformat(s["due_date"]).date() == wd]
 
-                    bg_d     = "#eff6ff" if is_today_d else "#f8fafc"
+                    bg_d     = "#dbeafe" if is_today_d else ("#f8fafc" if is_past_d else "#ffffff")
                     border_d = "2px solid #2563eb" if is_today_d else "1.5px solid #e2e8f0"
-                    jour_col = "#1e40af" if is_today_d else "#475569"
+                    jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_past_d else "#475569")
+                    op_d     = "0.7" if is_past_d and not is_today_d else "1"
 
                     if realise_j >= prevu_j and prevu_j > 0:
-                        stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅ Complet"
+                        stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅"
                     elif realise_j > 0:
-                        stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳ {realise_j}/{prevu_j}"
+                        stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳{realise_j}/{prevu_j}"
                     elif prevu_j > 0:
-                        stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴 0/{prevu_j}"
+                        stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴{prevu_j}"
                     else:
-                        stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="— Libre"
+                        stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="—"
 
                     pts_html = ""
-                    for t in taches_j[:6]:
-                        rc_t = rcp.get(str(t['risk']), "#94a3b8")
-                        icon = "💨" if t['type'] == "Air" else "🧴"
-                        lbl  = t['label'][:22] + ("…" if len(t['label']) > 22 else "")
+                    for t in taches_j[:5]:
+                        rc_t = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                        icon = "💨" if t["type"] == "Air" else "🧴"
+                        lbl  = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
                         pts_html += (
-                            f"<div style='background:#fff;border:1px solid {rc_t}44;"
-                            f"border-left:3px solid {rc_t};border-radius:6px;padding:3px 7px;"
-                            f"font-size:.62rem;font-weight:600;color:#0f172a;margin-bottom:2px'>"
+                            f"<div style='border-left:2px solid {rc_t};padding:1px 5px;"
+                            f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>"
                             f"{icon} {lbl}</div>")
-                    if len(taches_j) > 6:
-                        pts_html += f"<div style='font-size:.6rem;color:#94a3b8'>+{len(taches_j)-6} autres</div>"
-                    if not taches_j:
-                        pts_html = ("<div style='font-size:.7rem;color:#94a3b8;"
-                                    "font-style:italic;margin-top:4px'>Rien à planifier</div>")
+                    if len(taches_j) > 5:
+                        pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
 
                     lect_html = ""
-                    if real_par_jour[wd]["j2"]:
-                        lect_html += (
-                            f"<div style='background:#d9770622;color:#d97706;border-radius:6px;"
-                            f"padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>"
-                            f"📖 {real_par_jour[wd]['j2']} lecture J2</div>")
-                    if real_par_jour[wd]["j7"]:
-                        lect_html += (
-                            f"<div style='background:#0369a122;color:#0369a1;border-radius:6px;"
-                            f"padding:2px 6px;font-size:.65rem;font-weight:700;margin-top:3px'>"
-                            f"📗 {real_par_jour[wd]['j7']} lecture J7</div>")
+                    if j2_j:
+                        lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
+                    if j7_j:
+                        lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
 
-                    card = (
-                        f"<div style='background:{bg_d};border:{border_d};"
-                        f"border-radius:12px;padding:12px'>"
-                        f"<div style='font-size:.82rem;font-weight:800;color:{jour_col};text-align:center'>"
-                        f"{JOURS_FR_LONG[wd.weekday()]}</div>"
-                        f"<div style='font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:8px'>"
+                    is_selected = (st.session_state.get("pm_selected_day") == wd)
+                    sel_border  = "2.5px solid #7c3aed" if is_selected else border_d
+                    sel_bg      = "#faf5ff" if is_selected else bg_d
+
+                    card_html = (
+                        f"<div style='background:{sel_bg};border:{sel_border};border-radius:10px;"
+                        f"padding:8px 6px;opacity:{op_d};min-height:100px'>"
+                        f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
+                        f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
+                        f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:4px'>"
                         f"{wd.strftime('%d/%m')}</div>"
-                        f"<div style='background:{stat_bg};border-radius:8px;padding:5px;text-align:center;"
-                        f"font-size:.75rem;font-weight:800;color:{stat_col};margin-bottom:8px'>{stat_lbl}</div>"
-                        f"<div style='font-size:.68rem;color:#475569;font-weight:700;margin-bottom:4px;"
-                        f"text-align:center'>📋 {prevu_j} prélèv.</div>"
+                        f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
+                        f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
+                        f"margin-bottom:4px'>{stat_lbl}</div>"
                         f"{pts_html}{lect_html}</div>")
-                    with day_cols[di]:
-                        st.markdown(card, unsafe_allow_html=True)
 
-                st.divider()
-                charge_min = min(charge_jour.values()) if charge_jour else 0
-                charge_max = max(charge_jour.values()) if charge_jour else 0
-                charge_moy = sum(charge_jour.values()) / nb_jours if nb_jours > 0 else 0
-                par_prev   = charge_moy / nb_preleveurs if nb_preleveurs > 0 else 0
+                    with _day_cols[di]:
+                        st.markdown(card_html, unsafe_allow_html=True)
+                        btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                        if st.button(btn_lbl, key=f"pm_btn_{wd.isoformat()}", use_container_width=True):
+                            if is_selected:
+                                st.session_state["pm_selected_day"] = None
+                            else:
+                                st.session_state["pm_selected_day"] = wd
+                            st.rerun()
+
+            # Panel fixe bas de page: detail du jour selectionne
+            _sel = st.session_state.get("pm_selected_day")
+            if _sel:
+                import random as _rnd_fix
+                _sel_monday  = _sel - timedelta(days=_sel.weekday())
+                _wd_sel_week = [
+                    _sel_monday + timedelta(days=i)
+                    for i in range(5)
+                    if (_sel_monday + timedelta(days=i)) not in _pm_holidays
+                    and _pm_start <= (_sel_monday + timedelta(days=i)) <= _pm_end
+                ]
+                _plan_fix   = {wd: [] for wd in _wd_sel_week}
+                _charge_fix = {wd: 0  for wd in _wd_sel_week}
+                _torep_fix  = []
+                _wi_fix = _pm_mondays.index(_sel_monday) if _sel_monday in _pm_mondays else 0
+                for pt in st.session_state.points:
+                    _rc_f = (pt.get("room_class") or "").strip()
+                    _co_v = st.session_state.get(class_override_key, {}).get(_rc_f, 0)
+                    _co_f = int(_co_v) if _co_v and int(_co_v) > 0 else None
+                    _fu_f = pt.get("frequency_unit", "/ semaine")
+                    _fr_f = pt.get("frequency")
+                    _t_f  = {"label": pt["label"], "type": pt.get("type","—"),
+                             "risk": int(pt.get("risk_level",1)), "room_class": _rc_f}
+                    _is_d = (_fu_f == "/ jour" and _co_f is None
+                             and _fr_f is not None and int(_fr_f or 0) > 0)
+                    if _is_d:
+                        for wd in _wd_sel_week:
+                            _plan_fix[wd].append(_t_f); _charge_fix[wd] += 1
+                    else:
+                        _nb_f, _, _ = _get_prevu_semaine(pt, _sel_monday, len(_wd_sel_week), _co_f)
+                        for _ in range(_nb_f): _torep_fix.append(_t_f)
+                _rng_fix = _rnd_fix.Random(_pm_year * 10000 + _pm_month * 100 + _wi_fix)
+                _rng_fix.shuffle(_torep_fix)
+                for t in _torep_fix:
+                    _wdc = min(_wd_sel_week, key=lambda d: _charge_fix[d])
+                    _plan_fix[_wdc].append(t); _charge_fix[_wdc] += 1
+                taches_sel_list = _plan_fix.get(_sel, [])
+
+                j0r_sel = [p for p in st.session_state.prelevements
+                            if p.get("date") and not p.get("archived",False)
+                            and datetime.fromisoformat(p["date"]).date() == _sel]
+                j2r_sel = [s for s in st.session_state.schedules
+                            if s["when"]=="J2" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+                j7r_sel = [s for s in st.session_state.schedules
+                            if s["when"]=="J7" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+
+                _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+                _nb_t     = len(taches_sel_list)
+                _nb_j0    = len(j0r_sel)
+                _nb_j2    = len(j2r_sel)
+                _nb_j7    = len(j7r_sel)
+                rcp_fix   = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+
+                _cards = ""
+                for t in taches_sel_list:
+                    _c = rcp_fix.get(str(t["risk"]),"#94a3b8")
+                    _ic = "💨" if t["type"]=="Air" else "🧴"
+                    _dn = any(p.get("label")==t["label"] for p in j0r_sel)
+                    _bg = "#f0fdf4" if _dn else "#fff"
+                    _bd = "#86efac" if _dn else _c+"44"
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_bd};"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
+                               f"<div style=font-size:.63rem;color:#64748b>Cl. {t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
+                for s in j2r_sel:
+                    _dn = s["status"]=="done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
+                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📖 J2 — {s['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+                for s in j7r_sel:
+                    _dn = s["status"]=="done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
+                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📗 J7 — {s['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+                for p in j0r_sel:
+                    _cards += (f"<div style=background:#faf5ff;border:1px solid #e9d5ff;"
+                               f"border-left:3px solid #7c3aed;border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>🧪 {p['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:#64748b>{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>")
+                if not _cards:
+                    _cards = "<div style=color:#94a3b8;font-size:.82rem;padding:8px 0;align-self:center>Aucune activité ce jour.</div>"
+                _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
                 st.markdown(
-                    f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
-                    f"border-radius:12px;padding:14px 20px;display:flex;gap:20px;"
-                    f"flex-wrap:wrap;align-items:center'>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;"
-                    f"font-weight:700;text-transform:uppercase'>Min/jour</div>"
-                    f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{charge_min}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;"
-                    f"font-weight:700;text-transform:uppercase'>Max/jour</div>"
-                    f"<div style='font-size:1.4rem;font-weight:900;color:#fbbf24'>{charge_max}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;"
-                    f"font-weight:700;text-transform:uppercase'>Moy./jour</div>"
-                    f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{round(charge_moy,1)}</div></div>"
-                    f"<div style='color:#fff'><div style='font-size:.72rem;color:#94a3b8;"
-                    f"font-weight:700;text-transform:uppercase'>Par préleveur/jour</div>"
-                    f"<div style='font-size:1.4rem;font-weight:900;color:#f9a8d4'>{round(par_prev,1)}</div></div>"
-                    f"</div>", unsafe_allow_html=True)
+                    "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
+                    "background:linear-gradient(135deg,#0f172a,#1e293b);"
+                    "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
+                    "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
+                    "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
+                    f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
+                    f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
+                    "<span style='font-size:.7rem;color:#475569;font-style:italic'>Cliquez à nouveau sur le jour pour fermer</span>"
+                    "</div>"
+                    f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>{_cards}</div>"
+                    "</div>"
+                    "<div style='height:170px'></div>",
+                    unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════════
     # ONGLET EXPORT EXCEL
