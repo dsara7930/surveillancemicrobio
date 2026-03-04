@@ -1,1 +1,1 @@
-[{"id": "p1_1772551637", "label": "Sol", "type": "Surface", "room_class": "D", "gelose": "Gélose contact TSA", "risk_level": 1, "frequency": 1, "frequency_unit": "/ mois"}]
+[{"id": "p1_1772551637", "label": "Sol", "type": "Surface", "room_class": "D", "gelose": "Gélose contact TSA", "risk_level": 1, "frequency": 1, "frequency_unit": "/ mois"}, {"id": "p2_1772622933", "label": "Paillasse", "type": "Surface", "room_class": "A", "gelose": "Gélose contact TSA", "risk_level": 3, "frequency": 1, "frequency_unit": "/ jour"}]

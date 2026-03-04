@@ -792,407 +792,6 @@ st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimio
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1 : LOGIGRAMME
-# ═══════════════════════════════════════════════════════════════════════════════
-if active == "logigramme":
-    _synced = st.session_state.get("germs_synced_count", 0)
-    _total_default = len(DEFAULT_GERMS)
-    _total_germs = len(st.session_state.germs)
-    _custom_count = _total_germs - _total_default if _total_germs > _total_default else 0
-
-    st.markdown(f"""<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:12px;padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <span style="font-size:1.4rem">🦠</span>
-        <div>
-          <div style="font-weight:800;color:#1e40af;font-size:.88rem">Base de données germes — synchronisée</div>
-          <div style="font-size:.7rem;color:#3b82f6;margin-top:2px">
-            {_total_default} germes standards · {_custom_count} germe(s) personnalisé(s) · {_total_germs} au total
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <div style="background:#ffffff;border:1px solid #93c5fd;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;font-weight:700">Standard</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#1e40af">{_total_default}</div>
-        </div>
-        <div style="background:#ffffff;border:1px solid #86efac;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#166534;text-transform:uppercase;font-weight:700">Custom</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#166534">{_custom_count}</div>
-        </div>
-        <div style="background:#ffffff;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#92400e;text-transform:uppercase;font-weight:700">Total</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#92400e">{_total_germs}</div>
-        </div>
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-    if _synced > 0:
-        st.success(f"✅ Synchronisation : {_synced} germe(s) mis à jour / ajouté(s) depuis la base de référence du code.")
-
-    col_btn1, col_btn2 = st.columns([1,1])
-    with col_btn1:
-        if st.button("➕ Ajouter un germe", use_container_width=True):
-            st.session_state.show_add = not st.session_state.show_add
-            st.session_state.edit_idx = None
-    with col_btn2:
-        if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
-            save_germs(st.session_state.germs)
-            st.success("✅ Germes sauvegardés !")
-
-    def germ_form(existing=None, idx=None):
-        is_edit = existing is not None
-        with st.container():
-            st.markdown(f"### {'✏️ Modifier' if is_edit else '➕ Ajouter'} un germe")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                new_name = st.text_input("Nom du germe *", value=existing["name"] if is_edit else "", placeholder="Ex: Listeria spp.")
-                new_famille = st.selectbox("Famille *", ["Bactéries","Champignons"],
-                    index=["Bactéries","Champignons"].index(existing["path"][1]) if is_edit else 0)
-                new_origine = st.selectbox("Origine *", ["Humains / Humain","Environnemental"],
-                    index=0 if (not is_edit or existing["path"][2] in ["Humains","Humain"]) else 1)
-            with c2:
-                if new_famille == "Bactéries":
-                    cats = ["Peau / Muqueuses","Oropharynx / Gouttelettes","Flore fécale"] if "Humain" in new_origine else ["Humidité","Sol / Carton / Surface sèche"]
-                else:
-                    cats = ["Peau / Muqueuse"] if "Humain" in new_origine else ["Humidité","Sol / Carton / Surface sèche","Air"]
-                cur_cat = existing["path"][3] if is_edit and existing["path"][3] in cats else cats[0]
-                new_cat = st.selectbox("Catégorie *", cats, index=cats.index(cur_cat) if cur_cat in cats else 0)
-                new_pathotype = st.text_input("Type de pathogène", value=existing.get("pathotype","") if is_edit else "")
-                new_notes = st.text_area("📝 Notes", value=existing.get("notes","") or "" if is_edit else "", height=55)
-                new_comment = st.text_area("💬 Commentaire détaillé", value=existing.get("comment","") or "" if is_edit else "", height=55)
-            with c3:
-                risk_opts = ["1 — Limité","2 — Modéré","3 — Important","4 — Majeur","5 — Critique"]
-                new_risk_raw = st.selectbox("Criticité *", risk_opts, index=(existing["risk"]-1) if is_edit else 1)
-                risk_num = int(new_risk_raw[0])
-                th = get_thresholds_for_risk(risk_num, st.session_state.thresholds)
-                st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px">
-                    <div style="font-size:.62rem;color:#0f172a;margin-bottom:6px;letter-spacing:.1em">SEUILS AUTO (criticité {risk_num})</div>
-                    <div style="display:flex;gap:8px">
-                      <div style="flex:1;text-align:center;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:5px;font-size:.68rem;color:#b45309;font-weight:600">⚠️ Alerte<br>≥ {th['alert']} UFC</div>
-                      <div style="flex:1;text-align:center;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:5px;font-size:.68rem;color:#dc2626;font-weight:600">🚨 Action<br>≥ {th['action']} UFC</div>
-                    </div></div>""", unsafe_allow_html=True)
-                new_surfa = st.selectbox("Surfa'Safe *",
-                    ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"],
-                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"].index(existing["surfa"]) if is_edit and existing.get("surfa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"] else 0)
-                new_apa = st.selectbox("APA *",
-                    ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"],
-                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"].index(existing["apa"]) if is_edit and existing.get("apa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"] else 0)
-
-            cb1, cb2 = st.columns([1,1])
-            with cb1:
-                if st.button("✅ " + ("Modifier" if is_edit else "Ajouter"), use_container_width=True, key="form_submit"):
-                    if not new_name.strip():
-                        st.error("Le nom est obligatoire.")
-                        return
-                    origine_node = ("Humains" if new_famille=="Bactéries" else "Humain") if "Humain" in new_origine else "Environnemental"
-                    new_germ = dict(name=new_name.strip(), path=["Germes",new_famille,origine_node,new_cat],
-                        risk=risk_num, pathotype=new_pathotype or "Non défini",
-                        surfa=new_surfa, apa=new_apa,
-                        notes=new_notes.strip() or None, comment=new_comment.strip() or None)
-                    if is_edit:
-                        st.session_state.germs[idx] = new_germ
-                        st.session_state.edit_idx = None
-                    else:
-                        if any(g["name"].lower()==new_name.strip().lower() for g in st.session_state.germs):
-                            st.error("Ce germe existe déjà.")
-                            return
-                        st.session_state.germs.append(new_germ)
-                        st.session_state.show_add = False
-                    save_germs(st.session_state.germs)
-                    st.rerun()
-            with cb2:
-                if st.button("Annuler", use_container_width=True, key="form_cancel"):
-                    st.session_state.show_add = False
-                    st.session_state.edit_idx = None
-                    st.rerun()
-
-    if st.session_state.show_add and st.session_state.edit_idx is None:
-        germ_form()
-    if st.session_state.edit_idx is not None:
-        germ_form(existing=st.session_state.germs[st.session_state.edit_idx], idx=st.session_state.edit_idx)
-
-    st.divider()
-
-    germs_json = json.dumps(st.session_state.germs, ensure_ascii=False)
-    default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
-    thresholds_json = json.dumps({str(k): v for k, v in st.session_state.thresholds.items()})
-
-    tree_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:95vh;overflow:hidden}}
-.app{{display:flex;height:95vh}}
-.tree-wrap{{flex:1;overflow:auto;padding:8px;scrollbar-width:thin;scrollbar-color:#1e293b transparent}}
-svg{{min-width:900px;width:100%;height:100%}}
-.node rect{{fill:#ffffff;stroke:#e2e8f0;stroke-width:1.5;transition:all 0.2s;cursor:pointer}}
-.node.highlighted rect{{stroke-width:2.5;filter:drop-shadow(0 0 4px rgba(0,0,0,.15))}}
-.node text{{font-size:11px;fill:#0f172a;pointer-events:none;font-family:'Courier New',monospace}}
-.node.highlighted text{{fill:#0f172a;font-weight:600}}
-.link{{fill:none;stroke:#e2e8f0;stroke-width:1.5;transition:all 0.3s}}
-.link.highlighted{{stroke-width:2.5}}
-.right-panel{{width:480px;border-left:2px solid #e2e8f0;display:flex;flex-direction:column;background:#f1f5f9;flex-shrink:0}}
-.sbox{{padding:12px 14px;border-bottom:1px solid #e2e8f0}}
-.sbox input{{width:100%;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;color:#1e293b;font-size:.95rem;outline:none}}
-.sbox input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
-.germ-list{{flex:1;overflow-y:auto;padding:6px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}}
-.germ-item{{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .15s;font-size:.88rem;color:#0f172a;border:1px solid transparent;margin-bottom:3px;line-height:1.35}}
-.germ-item:hover{{background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,.08)}}
-.germ-item.active{{background:#ffffff;border-color:#2563eb;box-shadow:0 1px 6px rgba(37,99,235,.2)}}
-.risk-dot{{width:11px;height:11px;border-radius:50%;flex-shrink:0}}
-.germ-count{{font-size:.75rem;color:#64748b;padding:6px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-weight:600}}
-.group-header{{font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#475569;padding:10px 12px 4px 12px;background:#e2e8f0;margin:6px -6px 3px -6px;border-radius:4px}}
-.info-panel{{border-top:2px solid #e2e8f0;padding:16px;background:#ffffff;display:none;max-height:560px;overflow-y:auto}}
-.info-panel.visible{{display:block}}
-.info-name{{font-size:1rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:5px}}
-.info-path{{font-size:.72rem;color:#2563eb;opacity:.85;margin-bottom:9px;font-family:monospace}}
-.info-badge{{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;padding:4px 12px;border-radius:20px;border:1px solid;margin-bottom:11px;font-weight:600}}
-.info-lbl{{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:3px;margin-top:8px;font-weight:700}}
-.info-val{{font-size:.88rem;color:#1e293b;line-height:1.5}}
-.sens{{display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;border:1px solid #e2e8f0;font-size:.85rem;margin-top:3px}}
-.ok{{color:#22c55e;font-weight:700;font-size:1rem}}.warn{{color:#f97316;font-weight:700;font-size:1rem}}.crit{{color:#ef4444;font-weight:700;font-size:1rem}}
-.notes-box{{margin-top:8px;padding:9px 12px;border-radius:8px;background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.18);font-size:.85rem;color:#0f172a;line-height:1.6}}
-.threshold-row{{display:flex;gap:8px;margin-top:8px}}
-.th-badge{{flex:1;text-align:center;padding:7px 4px;border-radius:8px;font-size:.78rem;font-weight:700}}
-.info-name{{font-size:.85rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:4px}}
-.info-path{{font-size:.6rem;color:#2563eb;opacity:.8;margin-bottom:7px;font-family:monospace}}
-.info-badge{{display:inline-flex;align-items:center;gap:5px;font-size:.63rem;padding:2px 9px;border-radius:20px;border:1px solid;margin-bottom:9px}}
-.info-lbl{{font-size:.57rem;letter-spacing:.1em;text-transform:uppercase;color:#0f172a;margin-bottom:2px;margin-top:6px}}
-.info-val{{font-size:.75rem;color:#1e293b;line-height:1.4}}
-.sens{{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:6px;border:1px solid #e2e8f0;font-size:.7rem;margin-top:2px}}
-.ok{{color:#22c55e;font-weight:700}}.warn{{color:#f97316;font-weight:700}}.crit{{color:#ef4444;font-weight:700}}
-.notes-box{{margin-top:6px;padding:6px 9px;border-radius:6px;background:rgba(37,99,235,0.04);border:1px solid rgba(37,99,235,0.15);font-size:.7rem;color:#0f172a;line-height:1.5}}
-.threshold-row{{display:flex;gap:6px;margin-top:6px}}
-.th-badge{{flex:1;text-align:center;padding:4px;border-radius:6px;font-size:.65rem;font-weight:600}}
-</style></head><body>
-<div class="app">
-    <div class="tree-wrap"><svg id="svg"></svg></div>
-    <div class="right-panel">
-        <div class="sbox"><input type="text" id="sbox" placeholder="🔍 Rechercher un germe..." oninput="filterList()"></div>
-        <div class="germ-count" id="germCount">Chargement...</div>
-        <div class="germ-list" id="germList"></div>
-        <div class="info-panel" id="infoPanel"></div>
-    </div>
-</div>
-<script>
-const GERMS={germs_json};
-const RISK_COLORS={{"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}};
-const RISK_LABELS={{"1":"Limité","2":"Modéré","3":"Important","4":"Majeur","5":"Critique"}};
-const THRESHOLDS={thresholds_json};
-const DEFAULT_NAMES=new Set({default_names_json});
-const NODE_W=190,NODE_H=28,H_GAP=28,V_GAP=10;
-const LEVEL_COLS=["#38bdf8","#818cf8","#fb923c","#34d399","#a3e635"];
-
-function buildTree(){{
-  const root={{name:"Germes",children:[]}};
-  GERMS.forEach(g=>{{
-    let cur=root;
-    g.path.slice(1).forEach(n=>{{
-      let c=cur.children&&cur.children.find(x=>x.name===n);
-      if(!c){{
-        c={{name:n,children:[]}};
-        if(!cur.children)cur.children=[];
-        cur.children.push(c);
-      }}
-      cur=c;
-    }});
-  }});
-  function clean(n){{
-    if(n.children&&n.children.length===0)delete n.children;
-    else if(n.children)n.children.forEach(clean);
-  }}
-  clean(root);
-  return root;
-}}
-
-function computeLayout(node,depth=0,y=0){{
-  node.depth=depth;node.x=depth*(NODE_W+H_GAP);
-  if(!node.children||!node.children.length){{node.y=y;return y+NODE_H;}}
-  let cy=y;
-  node.children.forEach(c=>{{cy=computeLayout(c,depth+1,cy);cy+=V_GAP;}});
-  cy-=V_GAP;node.y=(y+cy)/2;return cy+V_GAP;
-}}
-
-function allNodes(n){{return[n,...(n.children||[]).flatMap(allNodes)];}}
-function allLinks(n){{return(n.children||[]).flatMap(c=>[{{source:n,target:c}},...allLinks(c)]);}}
-function buildPaths(n,p=[]){{n.fullPath=[...p,n.name];(n.children||[]).forEach(c=>buildPaths(c,n.fullPath));}}
-
-function renderTree(){{
-  const tree=buildTree();
-  computeLayout(tree);
-  buildPaths(tree);
-  const nodes=allNodes(tree),links=allLinks(tree);
-  const maxY=Math.max(...nodes.map(n=>n.y))+NODE_H+20;
-  const maxX=Math.max(...nodes.map(n=>n.x))+NODE_W+20;
-  const svg=document.getElementById('svg');
-  svg.innerHTML='';
-  svg.setAttribute('viewBox',`0 0 ${{maxX}} ${{maxY}}`);
-  svg.setAttribute('height',maxY);
-  svg.setAttribute('width',maxX);
-
-  links.forEach(l=>{{
-    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
-    const x1=l.source.x+NODE_W,y1=l.source.y+NODE_H/2,x2=l.target.x,y2=l.target.y+NODE_H/2,mx=(x1+x2)/2;
-    p.setAttribute('d',`M${{x1}},${{y1}} C${{mx}},${{y1}} ${{mx}},${{y2}} ${{x2}},${{y2}}`);
-    p.setAttribute('class','link');
-    p.dataset.source=l.source.name;p.dataset.target=l.target.name;
-    p.dataset.sourcefull=l.source.fullPath.join('|||');
-    p.dataset.targetfull=l.target.fullPath.join('|||');
-    svg.appendChild(p);
-  }});
-
-  nodes.forEach(node=>{{
-    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('class','node');
-    g.setAttribute('transform',`translate(${{node.x}},${{node.y}})`);
-    g.dataset.name=node.name;g.dataset.fullpath=node.fullPath.join('|||');
-    const col=LEVEL_COLS[node.depth]||"#0f172a";
-    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('width',NODE_W);rect.setAttribute('height',NODE_H);
-    rect.setAttribute('rx',5);rect.setAttribute('stroke',col);
-    const text=document.createElementNS('http://www.w3.org/2000/svg','text');
-    text.setAttribute('x',NODE_W/2);text.setAttribute('y',NODE_H/2+4);
-    text.setAttribute('text-anchor','middle');
-    text.textContent=node.name.length>27?node.name.substring(0,25)+'...':node.name;
-    g.appendChild(rect);g.appendChild(text);
-    g.addEventListener('mouseenter',()=>highlightPath(node.fullPath));
-    g.addEventListener('mouseleave',clearHighlight);
-    svg.appendChild(g);
-  }});
-}}
-
-let selectedPath=null;
-
-function highlightPath(exactPath){{
-  const validNodePaths=new Set();
-  for(let i=1;i<=exactPath.length;i++)validNodePaths.add(exactPath.slice(0,i).join('|||'));
-  document.querySelectorAll('.node').forEach(n=>{{
-    n.classList.toggle('highlighted',validNodePaths.has(n.dataset.fullpath||''));
-  }});
-  document.querySelectorAll('.link').forEach(l=>{{
-    const on=validNodePaths.has(l.dataset.sourcefull||'')&&validNodePaths.has(l.dataset.targetfull||'');
-    l.classList.toggle('highlighted',on);
-    if(on){{
-      const depth=(l.dataset.sourcefull||'').split('|||').length-1;
-      l.style.stroke=LEVEL_COLS[depth]||'#38bdf8';
-    }}else l.style.stroke='';
-  }});
-}}
-
-function clearHighlight(){{
-  if(selectedPath){{highlightPath(selectedPath);return;}}
-  document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlighted'));
-  document.querySelectorAll('.link').forEach(l=>{{l.classList.remove('highlighted');l.style.stroke=''}});
-}}
-
-function renderList(filter=''){{
-  const list=document.getElementById('germList');
-  const countEl=document.getElementById('germCount');
-  list.innerHTML='';
-  const filtered=GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase()));
-  countEl.textContent=filter?`${{filtered.length}} / ${{GERMS.length}} germe(s)`:`${{GERMS.length}} germe(s) — cliquez pour détails`;
-
-  const groups={{}};
-  filtered.forEach(g=>{{
-    const cat=(g.path&&g.path[3])||'Autres';
-    if(!groups[cat])groups[cat]=[];
-    groups[cat].push(g);
-  }});
-
-  Object.keys(groups).sort().forEach(cat=>{{
-    const header=document.createElement('div');
-    header.className='group-header';
-    header.textContent=cat;
-    list.appendChild(header);
-
-    groups[cat].forEach(g=>{{
-      const div=document.createElement('div');
-      div.className='germ-item';div.dataset.name=g.name;
-      const col=RISK_COLORS[g.risk];
-      const isCustom=!DEFAULT_NAMES.has(g.name);
-      const hasSporule=g.notes&&g.notes.toLowerCase().includes('sporul');
-      const hasResistance=g.surfa&&g.surfa.toLowerCase().includes('risque');
-      let badges='';
-      if(hasSporule)badges+='<span style="font-size:.5rem;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 4px;margin-left:3px">🧬</span>';
-      if(hasResistance)badges+='<span style="font-size:.5rem;background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 4px;margin-left:2px">⚠</span>';
-      if(isCustom)badges+='<span style="font-size:.5rem;background:rgba(56,189,248,0.15);color:#2563eb;border-radius:3px;padding:0 4px;margin-left:2px">★</span>';
-      div.innerHTML=`<span class="risk-dot" style="background:${{col}}"></span><span style="flex:1;line-height:1.3">${{g.name}}${{badges}}</span><span style="font-size:.65rem;color:${{col}};font-weight:800;flex-shrink:0">${{g.risk}}</span>`;
-      div.addEventListener('click',()=>selectGerm(g));
-      list.appendChild(div);
-    }});
-  }});
-}}
-
-function filterList(){{renderList(document.getElementById('sbox').value);}}
-
-function selectGerm(g){{
-  selectedPath=g.path;
-  highlightPath(g.path);
-  document.querySelectorAll('.germ-item').forEach(el=>el.classList.toggle('active',el.dataset.name===g.name));
-  showInfo(g);
-}}
-
-function showInfo(g){{
-  const panel=document.getElementById('infoPanel');
-  panel.classList.add('visible');
-  const col=RISK_COLORS[g.risk];
-  const th=THRESHOLDS[g.risk]||{{alert:25,action:40}};
-  function sens(v){{
-    if(!v)return['ok','✓'];
-    const l=v.toLowerCase();
-    if(l.includes('modéré'))return['warn','⚠'];
-    if(l.includes('risque'))return['crit','✗'];
-    return['ok','✓'];
-  }}
-  const[sc,si]=sens(g.surfa),[ac,ai]=sens(g.apa);
-  const nh=g.notes?`<div class="info-lbl">📝 Notes</div><div class="notes-box">${{g.notes}}</div>`:'';
-  const ch=g.comment?`<div class="info-lbl" style="color:#fb923c;margin-top:8px">💬 Commentaire</div><div class="notes-box" style="color:#fb923c;background:rgba(251,146,60,0.06);border-color:rgba(251,146,60,.35);font-style:italic">${{g.comment}}</div>`:'';
-  panel.innerHTML=`<div class="info-name">${{g.name}}</div>
-    <div class="info-path">${{g.path.join(' › ')}}</div>
-    <div class="info-badge" style="color:${{col}};background:${{col}}22;border-color:${{col}}55">
-      <span style="width:7px;height:7px;border-radius:50%;background:${{col}};display:inline-block"></span>
-      Niveau ${{g.risk}} — ${{RISK_LABELS[g.risk]}}
-    </div>
-    <div class="info-lbl">Pathogénicité</div><div class="info-val">${{g.pathotype}}</div>
-    <div class="info-lbl">Surfa'Safe</div><div class="sens"><span class="${{sc}}">${{si}}</span>${{g.surfa}}</div>
-    <div class="info-lbl">Acide Peracétique</div><div class="sens"><span class="${{ac}}">${{ai}}</span>${{g.apa}}</div>
-    <div class="info-lbl">Seuils UFC/m³ (criticité ${{g.risk}})</div>
-    <div class="threshold-row">
-      <div class="th-badge" style="background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid #f59e0b44">⚠️ Alerte ≥ ${{th.alert}}</div>
-      <div class="th-badge" style="background:rgba(239,68,68,.1);color:#ef4444;border:1px solid #ef444444">🚨 Action ≥ ${{th.action}}</div>
-    </div>
-    ${{nh}}${{ch}}`;
-}}
-
-renderTree();
-renderList();
-</script></body></html>"""
-
-    st.components.v1.html(tree_html, height=1200, scrolling=False)
-
-    st.markdown("### ✏️ Gérer les germes")
-    search_edit = st.text_input("Filtrer", placeholder="Rechercher un germe...", label_visibility="collapsed")
-    filtered = [g for g in st.session_state.germs if search_edit.lower() in g["name"].lower()] if search_edit else st.session_state.germs
-    for g in filtered:
-        real_idx = st.session_state.germs.index(g)
-        col_n, col_r, col_e, col_d = st.columns([4,1,1,1])
-        with col_n:
-            c = RISK_COLORS[g["risk"]]
-            st.markdown(f'<span style="color:{c};font-size:.75rem">●</span> <span style="font-size:.8rem;font-style:italic">{g["name"]}</span>', unsafe_allow_html=True)
-        with col_r:
-            st.markdown(f'<span style="font-size:.72rem;color:{RISK_COLORS[g["risk"]]}">Nv.{g["risk"]}</span>', unsafe_allow_html=True)
-        with col_e:
-            if st.button("✏️", key=f"edit_{real_idx}"):
-                st.session_state.edit_idx = real_idx
-                st.session_state.show_add = False
-                st.rerun()
-        with col_d:
-            if st.button("🗑️", key=f"del_{real_idx}"):
-                st.session_state.germs.pop(real_idx)
-                save_germs(st.session_state.germs)
-                st.rerun()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
 if active == "surveillance":
@@ -1245,6 +844,27 @@ if active == "surveillance":
                       </div>
                     </div>""", unsafe_allow_html=True)
 
+                    # ── Champs supplémentaires si Classe A ──────────────────
+                    num_isolateur = ""
+                    poste_val     = ""
+                    if pt_class == "A":
+                        st.markdown("""
+                        <div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;
+                        padding:8px 12px;margin-top:8px;font-size:.75rem;font-weight:700;color:#854d0e">
+                        🔬 Classe A — informations complémentaires requises
+                        </div>""", unsafe_allow_html=True)
+                        num_isolateur = st.text_input(
+                            "Numéro isolateur",
+                            placeholder="Ex: ISO-01",
+                            key="new_prelev_isolateur"
+                        )
+                        poste_val = st.radio(
+                            "Poste",
+                            ["Poste 1", "Poste 2", "Commun"],
+                            horizontal=True,
+                            key="new_prelev_poste"
+                        )
+
                 with p_col2:
                     oper_list = [
                         o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '')
@@ -1279,6 +899,9 @@ if active == "surveillance":
                             "date": str(p_date),
                             "archived": False
                         }
+                        if pt_class == "A":
+                            sample["num_isolateur"] = num_isolateur
+                            sample["poste"]         = poste_val
                         st.session_state.prelevements.append(sample)
                         save_prelevements(st.session_state.prelevements)
                         st.session_state.schedules.append({
@@ -1332,11 +955,21 @@ if active == "surveillance":
             bg_col     = "#fef2f2" if is_late else "#eff6ff"
             badge_col  = "#dc2626" if is_late else "#1d4ed8"
             status_txt = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-            smp = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
+            smp       = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
             pt_type   = smp.get('type', '?')       if smp else '?'
             pt_gelose = smp.get('gelose', '?')     if smp else '?'
             pt_class  = smp.get('room_class', '?') if smp else '?'
             pt_oper   = smp.get('operateur', '?')  if smp else '?'
+
+            extra_info = ""
+            if smp and smp.get("room_class") == "A":
+                iso = smp.get("num_isolateur", "—") or "—"
+                pst = smp.get("poste", "—") or "—"
+                extra_info = f"""
+                <div style="background:#fef9c3;border-radius:6px;padding:6px 8px;border:1px solid #fde047;
+                font-size:.7rem;color:#854d0e;font-weight:600;margin-top:6px">
+                🔬 Classe A · Isolateur : {iso} · {pst}
+                </div>"""
 
             with st.container():
                 st.markdown(f"""
@@ -1355,6 +988,7 @@ if active == "surveillance":
                     <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div></div>
                     <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div></div>
                   </div>
+                  {extra_info}
                 </div>""", unsafe_allow_html=True)
                 bc1, bc2 = st.columns([3, 1])
                 with bc1:
@@ -1374,14 +1008,25 @@ if active == "surveillance":
         # ── Traitement d'une lecture ───────────────────────────────────────────
         if st.session_state.current_process:
             proc_id = st.session_state.current_process
-            proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
+            proc    = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
             if proc:
-                smp = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+                smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
                 pt_type   = smp.get('type', '?')       if smp else '?'
                 pt_gelose = smp.get('gelose', '?')     if smp else '?'
                 pt_class  = smp.get('room_class', '?') if smp else '?'
                 pt_oper   = smp.get('operateur', '?')  if smp else '?'
                 pt_date   = smp.get('date', '?')       if smp else '?'
+
+                # Bandeau Classe A dans le traitement
+                classea_band = ""
+                if smp and smp.get("room_class") == "A":
+                    iso = smp.get("num_isolateur", "—") or "—"
+                    pst = smp.get("poste", "—") or "—"
+                    classea_band = f"""
+                    <div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;
+                    padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e">
+                    🔬 Classe A · Isolateur : {iso} · {pst}
+                    </div>"""
 
                 st.markdown("---")
                 st.markdown(f"""
@@ -1397,6 +1042,7 @@ if active == "surveillance":
                     <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
                     <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
                   </div>
+                  {classea_band}
                 </div>""", unsafe_allow_html=True)
 
                 lc1, lc2 = st.columns([2, 2])
@@ -1444,26 +1090,44 @@ if active == "surveillance":
                         st.session_state.current_process = None
                         st.rerun()
 
-        # ── Identifications en attente ─────────────────────────────────────────
-        pending_ids = [p for p in st.session_state.pending_identifications if p.get('status') == 'pending']
+        # ── Identifications en attente (J2 ET J7 toutes deux done) ────────────
+        def _both_readings_done(sample_id):
+            scheds = [x for x in st.session_state.schedules if x['sample_id'] == sample_id]
+            j2 = next((x for x in scheds if x['when'] == 'J2'), None)
+            j7 = next((x for x in scheds if x['when'] == 'J7'), None)
+            return (j2 is not None and j2['status'] == 'done') and \
+                   (j7 is not None and j7['status'] == 'done')
+
+        pending_ids = [
+            p for p in st.session_state.pending_identifications
+            if p.get('status') == 'pending' and _both_readings_done(p['sample_id'])
+        ]
+
         if pending_ids:
             st.markdown("---")
             st.markdown("#### 🔴 Identifications en attente")
+            germ_names = sorted([g['name'] for g in st.session_state.germs])
+
             for pi in pending_ids:
                 real_idx = st.session_state.pending_identifications.index(pi)
                 smp      = next((p for p in st.session_state.prelevements if p['id'] == pi['sample_id']), None)
                 pt_oper  = smp.get('operateur', '?') if smp else '?'
+
                 with st.expander(f"🔴 {pi['label']} — {pi['when']} — {pi['colonies']} UFC — {pi['date']}", expanded=True):
                     ic1, ic2 = st.columns([3, 1])
                     with ic1:
-                        germ_input = st.text_input("Germe identifié *", placeholder="Ex: Pseudomonas aeruginosa", key=f"germ_id_{real_idx}")
-                        remarque   = st.text_area("Remarque", height=60, key=f"rem_id_{real_idx}")
+                        germ_input = st.selectbox(
+                            "Germe identifié *",
+                            ["— Sélectionner un germe —"] + germ_names,
+                            key=f"germ_id_{real_idx}"
+                        )
+                        remarque = st.text_area("Remarque", height=60, key=f"rem_id_{real_idx}")
                     with ic2:
                         date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{real_idx}")
                     idc1, idc2, idc3 = st.columns([2, 2, 1])
                     with idc1:
                         if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{real_idx}"):
-                            if germ_input.strip():
+                            if germ_input and germ_input != "— Sélectionner un germe —":
                                 match, score = find_germ_match(germ_input, st.session_state.germs)
                                 if match and score > 0.4:
                                     risk   = match["risk"]
@@ -1485,7 +1149,7 @@ if active == "surveillance":
                                 else:
                                     st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
                             else:
-                                st.error("Le nom du germe est obligatoire.")
+                                st.error("Veuillez sélectionner un germe dans la liste.")
                     with idc2:
                         if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{real_idx}"):
                             sch = next((x for x in st.session_state.schedules
@@ -1534,7 +1198,7 @@ if active == "surveillance":
 
         import io as _io
 
-        _today_etiq = datetime.today().date()
+        _today_etiq      = datetime.today().date()
         _RISK_COLORS_ETQ = {
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
@@ -1592,11 +1256,20 @@ if active == "surveillance":
                     risk   = str(p.get("risk_level", ""))
                     rcol   = _RISK_COLORS_ETQ.get(risk, "#6366f1")
                     label  = p.get("label", "—")
-                    oper   = p.get("operateur", "—") or "—"
                     date_s = ""
                     if p.get("date"):
                         try:    date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
                         except: date_s = str(p["date"])
+                    classe_a_html = ""
+                    if p.get("room_class") == "A":
+                        iso = p.get("num_isolateur", "—") or "—"
+                        pst = p.get("poste", "—") or "—"
+                        classe_a_html = (
+                            f"<div style='font-size:5.5pt;color:#854d0e;font-weight:700;"
+                            f"background:#fef9c3;border-radius:3px;padding:2px 5px;"
+                            f"margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"
+                            f"🔬 ISO {iso} · {pst}</div>"
+                        )
                     risk_band = (
                         f"<div style='position:absolute;top:0;right:0;bottom:0;width:7px;"
                         f"background:{rcol};border-radius:0 6px 6px 0'>"
@@ -1612,17 +1285,16 @@ if active == "surveillance":
                         f"box-shadow:0 2px 8px rgba(0,0,0,.08)'>"
                         f"{risk_band}"
                         f"<div style='font-size:9pt;font-weight:900;color:#0f172a;"
-                        f"border-bottom:1.5px solid {rcol}33;padding-bottom:4px;margin-bottom:5px;"
+                        f"border-bottom:1.5px solid {rcol}33;padding-bottom:4px;margin-bottom:4px;"
                         f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
                         f"max-width:calc(5cm - 24px)'>{label}</div>"
+                        f"{classe_a_html}"
                         f"<div style='display:flex;align-items:center;gap:5px;margin-bottom:4px'>"
                         f"<span style='font-size:6.5pt;color:#64748b;font-weight:600;min-width:36px'>📅 Date</span>"
                         f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
                         f"<div style='display:flex;align-items:center;gap:5px'>"
-                        f"<span style='font-size:6.5pt;color:#64748b;font-weight:600;min-width:36px'>👤 Opér.</span>"
-                        f"<span style='font-size:7.5pt;font-weight:700;color:#0f172a;"
-                        f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                        f"max-width:calc(5cm - 70px)'>{oper}</span></div>"
+                        f"<span style='font-size:6.5pt;color:#64748b;font-weight:600'>👤 Préleveur :</span>"
+                        f"</div>"
                         f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
                         f"text-align:right;padding-top:4px'>URC — MicroSurveillance</div>"
                         f"</div>"
@@ -1651,7 +1323,7 @@ if active == "surveillance":
                         from reportlab.lib.enums     import TA_RIGHT
 
                         W_ETQ  = 5    * rl_cm
-                        H_ETQ  = 4   * rl_cm
+                        H_ETQ  = 4    * rl_cm
                         N_COLS = 4
                         GAP    = 0.35 * rl_cm
                         MARGIN = 1    * rl_cm
@@ -1664,29 +1336,39 @@ if active == "surveillance":
                             title=f"Étiquettes prélèvements {_today_etiq.strftime('%d/%m/%Y')}")
 
                         RISK_RL    = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-                        s_titre    = ParagraphStyle("etiq_titre", fontName="Helvetica-Bold", fontSize=8.5, leading=11, spaceAfter=3)
-                        s_lbl      = ParagraphStyle("etiq_lbl",   fontName="Helvetica",      fontSize=6,   leading=7,  textColor=rlc.HexColor("#64748b"))
-                        s_val      = ParagraphStyle("etiq_val",   fontName="Helvetica-Bold", fontSize=8,   leading=10, textColor=rlc.HexColor("#0f172a"))
-                        s_date     = ParagraphStyle("etiq_date",  fontName="Helvetica-Bold", fontSize=9,   leading=11, textColor=rlc.HexColor("#1e40af"))
-                        s_logo     = ParagraphStyle("etiq_logo",  fontName="Helvetica",      fontSize=5,   leading=6,  textColor=rlc.HexColor("#94a3b8"), alignment=TA_RIGHT)
-                        s_page_hdr = ParagraphStyle("page_hdr",   fontName="Helvetica-Bold", fontSize=9,   textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                        s_titre    = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold", fontSize=8.5, leading=11, spaceAfter=3)
+                        s_lbl      = ParagraphStyle("etiq_lbl",    fontName="Helvetica",      fontSize=6,   leading=7,  textColor=rlc.HexColor("#64748b"))
+                        s_val      = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold", fontSize=8,   leading=10, textColor=rlc.HexColor("#0f172a"))
+                        s_date     = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold", fontSize=9,   leading=11, textColor=rlc.HexColor("#1e40af"))
+                        s_logo     = ParagraphStyle("etiq_logo",   fontName="Helvetica",      fontSize=5,   leading=6,  textColor=rlc.HexColor("#94a3b8"), alignment=TA_RIGHT)
+                        s_classea  = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold", fontSize=5.5, leading=7,  textColor=rlc.HexColor("#854d0e"), backColor=rlc.HexColor("#fef9c3"), spaceAfter=2)
+                        s_page_hdr = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold", fontSize=9,   textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
 
                         def _build_cell(pd):
-                            rv  = str(pd.get("risk_level", ""))
-                            rc  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                            lv  = pd.get("label", "—")
-                            ov  = pd.get("operateur", "—") or "—"
-                            dv  = ""
+                            rv = str(pd.get("risk_level", ""))
+                            rc = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+                            lv = pd.get("label", "—")
+                            dv = ""
                             if pd.get("date"):
                                 try:    dv = datetime.fromisoformat(pd["date"]).strftime("%d/%m/%Y")
                                 except: dv = str(pd["date"])
+
+                            classe_a_rows = []
+                            if pd.get("room_class") == "A":
+                                iso = pd.get("num_isolateur", "—") or "—"
+                                pst = pd.get("poste", "—") or "—"
+                                classe_a_rows = [
+                                    [Paragraph(f"🔬 Isolateur {iso}  ·  {pst}", s_classea)],
+                                ]
+
                             inner = Table([
                                 [Paragraph(lv, s_titre)],
                                 [HRFlowable(width=W_ETQ - 0.8*rl_cm, thickness=0.8, color=rc, spaceAfter=3)],
+                                *classe_a_rows,
                                 [Paragraph("📅 Date prélèvement", s_lbl)],
                                 [Paragraph(dv or "—", s_date)],
-                                [Paragraph("👤 Opérateur", s_lbl)],
-                                [Paragraph(ov, s_val)],
+                                [Paragraph("👤 Préleveur :", s_lbl)],
+                                [Paragraph("", s_val)],
                                 [Paragraph("URC — MicroSurveillance", s_logo)],
                             ], colWidths=[W_ETQ - 0.8*rl_cm])
                             inner.setStyle(TableStyle([
@@ -1762,7 +1444,7 @@ if active == "surveillance":
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3 : PLANNING
 # ═══════════════════════════════════════════════════════════════════════════════
-elif active == "planning":
+if active == "planning":
     st.markdown("### 📅 Planning des prélèvements & lectures")
 
     _today_dt      = datetime.today().date()
@@ -2141,7 +1823,7 @@ elif active == "planning":
                         st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J7</span>",
                                     unsafe_allow_html=True)
 
-    # ═════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
     # ONGLET CHARGE HEBDO
     # ═════════════════════════════════════════════════════════════════════════
     def get_week_start(d):
@@ -2168,7 +1850,7 @@ elif active == "planning":
             if _ws <= _today_dt < _ws + timedelta(days=7):
                 ch_cur_idx = _i; break
 
-        csel_col1, csel_col2, csel_col3 = st.columns([3, 1, 1])
+        csel_col1, csel_col2 = st.columns([4, 1])
         with csel_col1:
             ch_sel_label = st.selectbox(
                 "Semaine", ch_week_labels, index=ch_cur_idx,
@@ -2178,15 +1860,11 @@ elif active == "planning":
                 "Nb préleveurs", min_value=1, max_value=20,
                 value=max(1, len(st.session_state.operators)), step=1,
                 key="ch_nb_prev")
-        with csel_col3:
-            nb_prelevements_max = st.number_input(
-                "Max / semaine", min_value=0, max_value=500,
-                value=0, step=1, key="ch_nb_prelev_max",
-                help="0 = pas de limite")
 
         ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
         ch_sel_we       = ch_sel_ws + timedelta(days=6)
         ch_holidays     = get_holidays_cached(ch_sel_ws.year)
+        # Jours ouvrés de la semaine complète (lundi→vendredi), sans limite de mois
         ch_working_days = [ch_sel_ws + timedelta(days=i) for i in range(5)
                            if (ch_sel_ws + timedelta(days=i)) not in ch_holidays]
         nb_jours        = len(ch_working_days)
@@ -2276,7 +1954,6 @@ elif active == "planning":
                           if (pt.get('room_class') or '').strip() == rc]
                 nb_pts = len(pts_rc)
 
-                # Fréquence la plus commune des points de cette classe
                 freq_vals = []
                 for pt in pts_rc:
                     try:
@@ -2368,9 +2045,8 @@ elif active == "planning":
                 risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
                 type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
 
-                # Override de classe actif ?
-                class_ov_dict = st.session_state.get(class_override_key, {})
-                co_val        = class_ov_dict.get(rc, 0)
+                class_ov_dict  = st.session_state.get(class_override_key, {})
+                co_val         = class_ov_dict.get(rc, 0)
                 class_override = int(co_val) if co_val and int(co_val) > 0 else None
 
                 nb_prevu, freq_label, sess_key = _get_prevu_semaine(
@@ -2420,7 +2096,6 @@ elif active == "planning":
                         f"padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>",
                         unsafe_allow_html=True)
                 with row_cols[4]:
-                    # Fréquence du point avec badge si override classe actif
                     badge = ""
                     if class_override is not None:
                         badge = (" <span style='background:#dbeafe;color:#1e40af;"
@@ -2448,6 +2123,348 @@ elif active == "planning":
                         f"border-radius:8px;padding:8px;text-align:center;"
                         f"font-size:.78rem;font-weight:700;color:{st_txt}'>"
                         f"{st_icon} {st_label}</div>", unsafe_allow_html=True)
+
+            st.divider()
+            taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
+            taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
+            st.markdown(
+                f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
+                f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
+                f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
+                f"<div style='display:flex;gap:20px;align-items:center'>"
+                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;"
+                f"text-transform:uppercase'>Prévu</div>"
+                f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
+                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;"
+                f"text-transform:uppercase'>Réalisé</div>"
+                f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
+                f"<div style='background:rgba(255,255,255,.15);border-radius:8px;padding:8px 16px;"
+                f"font-size:1rem;font-weight:800;color:{taux_col}'>{taux}% réalisé</div>"
+                f"</div></div>", unsafe_allow_html=True)
+
+            st.divider()
+
+            # ── Planning mensuel automatique — semaine par semaine ────────
+            st.markdown("#### 📅 Planning automatique — vue mensuelle")
+
+            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+            _pm_month = st.session_state.get("cal_month", _today_dt.month)
+
+            pm_nav1, pm_nav2, pm_nav3, pm_nav4, pm_nav5 = st.columns([1,1,3,1,1])
+            with pm_nav1:
+                if st.button("◄◄", key="pm_prev_year",  use_container_width=True):
+                    st.session_state.cal_year -= 1; st.rerun()
+            with pm_nav2:
+                if st.button("◄",  key="pm_prev_month", use_container_width=True):
+                    if st.session_state.cal_month == 1:
+                        st.session_state.cal_month = 12; st.session_state.cal_year -= 1
+                    else:
+                        st.session_state.cal_month -= 1
+                    st.rerun()
+            with pm_nav3:
+                _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+                _pm_month = st.session_state.get("cal_month", _today_dt.month)
+                st.markdown(
+                    "<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
+                    "border-radius:10px;padding:8px;color:#fff;font-weight:800;font-size:1rem'>"
+                    + MOIS_FR[_pm_month] + " " + str(_pm_year) + "</div>",
+                    unsafe_allow_html=True)
+            with pm_nav4:
+                if st.button("►",  key="pm_next_month", use_container_width=True):
+                    if st.session_state.cal_month == 12:
+                        st.session_state.cal_month = 1; st.session_state.cal_year += 1
+                    else:
+                        st.session_state.cal_month += 1
+                    st.rerun()
+            with pm_nav5:
+                if st.button("►►", key="pm_next_year",  use_container_width=True):
+                    st.session_state.cal_year += 1; st.rerun()
+            if st.button("📍 Mois courant", key="pm_today"):
+                st.session_state.cal_year  = _today_dt.year
+                st.session_state.cal_month = _today_dt.month
+                st.rerun()
+
+            import calendar as _cal_pm
+            import random  as _rnd_pm
+
+            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
+            _pm_month = st.session_state.get("cal_month", _today_dt.month)
+            _, _pm_ndays  = _cal_pm.monthrange(_pm_year, _pm_month)
+            _pm_start     = date_type(_pm_year, _pm_month, 1)
+            _pm_end       = date_type(_pm_year, _pm_month, _pm_ndays)
+            _pm_holidays  = get_holidays_cached(_pm_year)
+
+            # Semaines qui touchent le mois (lundi de la semaine inclus si vendredi dans le mois)
+            _pm_mondays = []
+            _cur = _pm_start - timedelta(days=_pm_start.weekday())
+            while _cur <= _pm_end:
+                _pm_mondays.append(_cur)
+                _cur += timedelta(weeks=1)
+
+            if "pm_selected_day" not in st.session_state:
+                st.session_state["pm_selected_day"] = None
+
+            rcp_pm = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+
+            for week_idx, week_monday in enumerate(_pm_mondays):
+                # ── CORRECTION PRINCIPALE : 5 jours ouvrés complets sans limite de mois ──
+                _wd_week = [
+                    week_monday + timedelta(days=i)
+                    for i in range(5)
+                    if (week_monday + timedelta(days=i)) not in _pm_holidays
+                ]
+                if not _wd_week:
+                    continue
+
+                nb_wd_week = len(_wd_week)
+                _plan_week   = {wd: [] for wd in _wd_week}
+                _charge_week = {wd: 0  for wd in _wd_week}
+                _to_repartir = []
+
+                for pt in st.session_state.points:
+                    rc_pt_pm  = (pt.get("room_class") or "").strip()
+                    co_val_pm = st.session_state.get(class_override_key, {}).get(rc_pt_pm, 0)
+                    # ── Seulement l'override de classe, ignorer fréquence individuelle si override actif ──
+                    co_pm = int(co_val_pm) if co_val_pm and int(co_val_pm) > 0 else None
+                    fu_pm = pt.get("frequency_unit", "/ semaine")
+                    fr_pm = pt.get("frequency")
+                    tache_pm = {
+                        "label":      pt["label"],
+                        "type":       pt.get("type", "—"),
+                        "risk":       int(pt.get("risk_level", 1)),
+                        "room_class": rc_pt_pm,
+                    }
+                    is_daily_pm = (
+                        fu_pm == "/ jour" and co_pm is None
+                        and fr_pm is not None and int(fr_pm or 0) > 0
+                    )
+                    if is_daily_pm:
+                        for wd in _wd_week:
+                            _plan_week[wd].append(tache_pm)
+                            _charge_week[wd] += 1
+                    else:
+                        nb_pm, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd_week, co_pm)
+                        for _ in range(nb_pm):
+                            _to_repartir.append(tache_pm)
+
+                # Répartition équilibrée sur les 5 jours (sans limite de mois)
+                _rng_pm = _rnd_pm.Random(_pm_year * 10000 + _pm_month * 100 + week_idx)
+                _rng_pm.shuffle(_to_repartir)
+                for t in _to_repartir:
+                    wd_c = min(_wd_week, key=lambda d: _charge_week[d])
+                    _plan_week[wd_c].append(t)
+                    _charge_week[wd_c] += 1
+
+                _we_end    = week_monday + timedelta(days=6)
+                _total_sem = sum(len(v) for v in _plan_week.values())
+                st.markdown(
+                    f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
+                    f"display:flex;justify-content:space-between;align-items:center;"
+                    f"margin-top:14px;margin-bottom:6px'>"
+                    f"<span style='color:#fff;font-weight:800;font-size:.88rem'>"
+                    f"Semaine {week_monday.isocalendar()[1]} — "
+                    f"{week_monday.strftime('%d/%m')} → {_we_end.strftime('%d/%m')}</span>"
+                    f"<span style='background:rgba(255,255,255,.15);color:#93c5fd;"
+                    f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
+                    f"📋 {_total_sem} prélèv. planifiés</span>"
+                    f"</div>",
+                    unsafe_allow_html=True)
+
+                _day_cols = st.columns(len(_wd_week))
+                for di, wd in enumerate(_wd_week):
+                    taches_j   = _plan_week[wd]
+                    prevu_j    = len(taches_j)
+                    is_today_d = (wd == _today_dt)
+                    is_past_d  = (wd < _today_dt)
+                    # Grisé si hors du mois affiché
+                    is_other_month = (wd.month != _pm_month)
+                    realise_j  = sum(
+                        1 for p in st.session_state.prelevements
+                        if p.get("date")
+                        and datetime.fromisoformat(p["date"]).date() == wd
+                        and not p.get("archived", False)
+                    )
+                    j2_j = [s for s in st.session_state.schedules
+                             if s["when"] == "J2"
+                             and datetime.fromisoformat(s["due_date"]).date() == wd]
+                    j7_j = [s for s in st.session_state.schedules
+                             if s["when"] == "J7"
+                             and datetime.fromisoformat(s["due_date"]).date() == wd]
+
+                    bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_month else ("#f8fafc" if is_past_d else "#ffffff"))
+                    border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_month else "1.5px solid #e2e8f0")
+                    jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_month or is_past_d else "#475569")
+                    op_d     = "0.6" if is_other_month else ("0.7" if is_past_d and not is_today_d else "1")
+
+                    if realise_j >= prevu_j and prevu_j > 0:
+                        stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅"
+                    elif realise_j > 0:
+                        stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳{realise_j}/{prevu_j}"
+                    elif prevu_j > 0:
+                        stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴{prevu_j}"
+                    else:
+                        stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="—"
+
+                    pts_html = ""
+                    for t in taches_j[:5]:
+                        rc_t = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                        icon = "💨" if t["type"] == "Air" else "🧴"
+                        lbl  = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                        pts_html += (
+                            f"<div style='border-left:2px solid {rc_t};padding:1px 5px;"
+                            f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>"
+                            f"{icon} {lbl}</div>")
+                    if len(taches_j) > 5:
+                        pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
+
+                    lect_html = ""
+                    if j2_j:
+                        lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
+                    if j7_j:
+                        lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
+
+                    # Badge "autre mois"
+                    autre_mois_badge = ""
+                    if is_other_month:
+                        autre_mois_badge = f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>{wd.strftime('%b')}</div>"
+
+                    is_selected = (st.session_state.get("pm_selected_day") == wd)
+                    sel_border  = "2.5px solid #7c3aed" if is_selected else border_d
+                    sel_bg      = "#faf5ff" if is_selected else bg_d
+
+                    card_html = (
+                        f"<div style='background:{sel_bg};border:{sel_border};border-radius:10px;"
+                        f"padding:8px 6px;opacity:{op_d};min-height:100px'>"
+                        f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
+                        f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
+                        f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
+                        f"{wd.strftime('%d/%m')}</div>"
+                        f"{autre_mois_badge}"
+                        f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
+                        f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
+                        f"margin-bottom:4px'>{stat_lbl}</div>"
+                        f"{pts_html}{lect_html}</div>")
+
+                    with _day_cols[di]:
+                        st.markdown(card_html, unsafe_allow_html=True)
+                        btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                        if st.button(btn_lbl, key=f"pm_btn_{wd.isoformat()}", use_container_width=True):
+                            if is_selected:
+                                st.session_state["pm_selected_day"] = None
+                            else:
+                                st.session_state["pm_selected_day"] = wd
+                            st.rerun()
+
+            # Panel fixe bas de page : détail du jour sélectionné
+            _sel = st.session_state.get("pm_selected_day")
+            if _sel:
+                import random as _rnd_fix
+                _sel_monday  = _sel - timedelta(days=_sel.weekday())
+                # Semaine complète sans limite de mois
+                _wd_sel_week = [
+                    _sel_monday + timedelta(days=i)
+                    for i in range(5)
+                    if (_sel_monday + timedelta(days=i)) not in _pm_holidays
+                ]
+                _plan_fix   = {wd: [] for wd in _wd_sel_week}
+                _charge_fix = {wd: 0  for wd in _wd_sel_week}
+                _torep_fix  = []
+                _wi_fix = _pm_mondays.index(_sel_monday) if _sel_monday in _pm_mondays else 0
+                for pt in st.session_state.points:
+                    _rc_f = (pt.get("room_class") or "").strip()
+                    _co_v = st.session_state.get(class_override_key, {}).get(_rc_f, 0)
+                    _co_f = int(_co_v) if _co_v and int(_co_v) > 0 else None
+                    _fu_f = pt.get("frequency_unit", "/ semaine")
+                    _fr_f = pt.get("frequency")
+                    _t_f  = {"label": pt["label"], "type": pt.get("type","—"),
+                             "risk": int(pt.get("risk_level",1)), "room_class": _rc_f}
+                    _is_d = (_fu_f == "/ jour" and _co_f is None
+                             and _fr_f is not None and int(_fr_f or 0) > 0)
+                    if _is_d:
+                        for wd in _wd_sel_week:
+                            _plan_fix[wd].append(_t_f); _charge_fix[wd] += 1
+                    else:
+                        _nb_f, _, _ = _get_prevu_semaine(pt, _sel_monday, len(_wd_sel_week), _co_f)
+                        for _ in range(_nb_f): _torep_fix.append(_t_f)
+                _rng_fix = _rnd_fix.Random(_pm_year * 10000 + _pm_month * 100 + _wi_fix)
+                _rng_fix.shuffle(_torep_fix)
+                for t in _torep_fix:
+                    _wdc = min(_wd_sel_week, key=lambda d: _charge_fix[d])
+                    _plan_fix[_wdc].append(t); _charge_fix[_wdc] += 1
+                taches_sel_list = _plan_fix.get(_sel, [])
+
+                j0r_sel = [p for p in st.session_state.prelevements
+                            if p.get("date") and not p.get("archived",False)
+                            and datetime.fromisoformat(p["date"]).date() == _sel]
+                j2r_sel = [s for s in st.session_state.schedules
+                            if s["when"]=="J2" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+                j7r_sel = [s for s in st.session_state.schedules
+                            if s["when"]=="J7" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+
+                _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+                _nb_t     = len(taches_sel_list)
+                _nb_j0    = len(j0r_sel)
+                _nb_j2    = len(j2r_sel)
+                _nb_j7    = len(j7r_sel)
+                rcp_fix   = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+
+                _cards = ""
+                for t in taches_sel_list:
+                    _c = rcp_fix.get(str(t["risk"]),"#94a3b8")
+                    _ic = "💨" if t["type"]=="Air" else "🧴"
+                    _dn = any(p.get("label")==t["label"] for p in j0r_sel)
+                    _bg = "#f0fdf4" if _dn else "#fff"
+                    _bd = "#86efac" if _dn else _c+"44"
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_bd};"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
+                               f"<div style=font-size:.63rem;color:#64748b>Cl. {t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
+                for s in j2r_sel:
+                    _dn = s["status"]=="done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
+                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📖 J2 — {s['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+                for s in j7r_sel:
+                    _dn = s["status"]=="done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
+                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
+                               f"border-left:3px solid {_c};border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📗 J7 — {s['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+                for p in j0r_sel:
+                    _cards += (f"<div style=background:#faf5ff;border:1px solid #e9d5ff;"
+                               f"border-left:3px solid #7c3aed;border-radius:7px;"
+                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
+                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>🧪 {p['label'][:22]}</div>"
+                               f"<div style=font-size:.63rem;color:#64748b>{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>")
+                if not _cards:
+                    _cards = "<div style=color:#94a3b8;font-size:.82rem;padding:8px 0;align-self:center>Aucune activité ce jour.</div>"
+                _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
+                st.markdown(
+                    "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
+                    "background:linear-gradient(135deg,#0f172a,#1e293b);"
+                    "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
+                    "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
+                    "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
+                    f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
+                    f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
+                    "<span style='font-size:.7rem;color:#475569;font-style:italic'>Cliquez à nouveau sur le jour pour fermer</span>"
+                    "</div>"
+                    f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>{_cards}</div>"
+                    "</div>"
+                    "<div style='height:170px'></div>",
+                    unsafe_allow_html=True)
 
             st.divider()
             taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
