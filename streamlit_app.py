@@ -8,6 +8,12 @@ import calendar as cal_module
 from datetime import datetime, timedelta, date as date_type
 import difflib
 
+# ── Gestion accès protégé ──────────────────────────────────────────────
+if "access_mode" not in st.session_state:
+    st.session_state["access_mode"] = None  # None = pas encore choisi
+
+MOT_DE_PASSE_ADMIN = "pharmaCHBA"
+
 # ── SUPABASE ───────────────────────────────────────────────────────────────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -621,6 +627,90 @@ def find_germ_match(query, germs):
             best_match = g
     return best_match, best_score
 
+
+# ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
+def check_access_protege(onglet_nom: str) -> bool:
+    """
+    Affiche un écran de connexion pour les onglets protégés.
+    Retourne True si l'utilisateur est en mode admin (modifications autorisées).
+    Retourne False si lecture seule (le contenu de l'onglet est bloqué via st.stop()).
+    """
+    key_mode = f"access_mode_{onglet_nom}"
+    key_pwd  = f"pwd_input_{onglet_nom}"
+    key_err  = f"pwd_error_{onglet_nom}"
+
+    # ── Déjà authentifié en admin ──────────────────────────────────────────
+    if st.session_state.get(key_mode) == "admin":
+        col_info, col_lock = st.columns([5, 1])
+        with col_info:
+            st.success("🔓 Mode administrateur — modifications autorisées")
+        with col_lock:
+            if st.button("🔒 Verrouiller", key=f"lock_{onglet_nom}", use_container_width=True):
+                st.session_state[key_mode] = None
+                st.rerun()
+        return True
+
+    # ── Déjà en lecture seule ──────────────────────────────────────────────
+    if st.session_state.get(key_mode) == "lecture":
+        col_info, col_conn = st.columns([5, 1])
+        with col_info:
+            st.info("👁️ Mode lecture seule — aucune modification possible")
+        with col_conn:
+            if st.button("🔑 Se connecter", key=f"connect_{onglet_nom}", use_container_width=True):
+                st.session_state[key_mode] = None
+                st.rerun()
+        return False
+
+    # ── Pas encore choisi → afficher le formulaire ─────────────────────────
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;"
+        "padding:28px 32px;max-width:460px;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.08)'>"
+        "<div style='text-align:center;font-size:2.2rem;margin-bottom:8px'>🔐</div>"
+        f"<div style='text-align:center;font-weight:800;font-size:1.15rem;color:#0f172a'>"
+        f"Accès protégé — {onglet_nom}</div>"
+        "<div style='text-align:center;font-size:.85rem;color:#64748b;margin:8px 0 20px'>"
+        "Cet onglet est restreint. Connectez-vous pour modifier,<br>ou continuez en lecture seule.</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**🔑 Accès administrateur**")
+        pwd = st.text_input(
+            "Mot de passe",
+            type="password",
+            key=key_pwd,
+            placeholder="Entrez le mot de passe",
+            label_visibility="collapsed"
+        )
+        if st.button("✅ Connexion", key=f"btn_admin_{onglet_nom}", use_container_width=True, type="primary"):
+            if pwd == MOT_DE_PASSE_ADMIN:
+                st.session_state[key_mode] = "admin"
+                st.session_state[key_err]  = False
+                st.rerun()
+            else:
+                st.session_state[key_err] = True
+                st.rerun()
+        if st.session_state.get(key_err):
+            st.error("❌ Mot de passe incorrect")
+
+    with col2:
+        st.markdown("**👁️ Lecture seule**")
+        st.markdown(
+            "<div style='font-size:.82rem;color:#64748b;margin-bottom:10px'>"
+            "Consultez le contenu sans pouvoir effectuer de modifications.</div>",
+            unsafe_allow_html=True
+        )
+        if st.button("👁️ Continuer en lecture", key=f"btn_lecture_{onglet_nom}", use_container_width=True):
+            st.session_state[key_mode] = "lecture"
+            st.rerun()
+
+    st.stop()  # bloque le rendu du reste de l'onglet tant qu'aucun choix n'est fait
+    return False
+
+
 # ── SESSION STATE ──────────────────────────────────────────────────────────────
 if "germs" not in st.session_state:
     _germs, _synced = load_germs()
@@ -790,10 +880,26 @@ if due_global and not st.session_state.due_alert_shown:
 st.markdown('<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>', unsafe_allow_html=True)
 st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# UTILISATION dans vos onglets (à coller en tête de chaque onglet protégé) :
+#
+#   if active == "parametres":
+#       can_edit = check_access_protege("Paramètres & Seuils")
+#       # si lecture seule → st.stop() est appelé dans la fonction,
+#       # donc la suite ne s'exécute que si can_edit == True
+#       ... reste du code paramètres ...
+#
+#   if active == "logigramme":
+#       can_edit = check_access_protege("Logigramme")
+#       ... reste du code logigramme ...
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 : LOGIGRAMME
 # ═══════════════════════════════════════════════════════════════════════════════
+
 if active == "logigramme":
+    can_edit = check_access_protege("Logigramme")  # ← ligne ajoutée
     _synced = st.session_state.get("germs_synced_count", 0)
     _total_default = len(DEFAULT_GERMS)
     _total_germs = len(st.session_state.germs)
@@ -3611,6 +3717,7 @@ elif active == "historique":
 # TAB : PARAMÈTRES
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "parametres":
+    can_edit = check_access_protege("Paramètres & Seuils")  # ← ligne ajoutée
     st.markdown("### ⚙️ Paramètres")
 
     (subtab_seuils_germe, subtab_seuils_classe, subtab_mesures,
