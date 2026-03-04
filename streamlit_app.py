@@ -1329,142 +1329,146 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     with tab_surv:
 
-        # ── Nouveau prélèvement ───────────────────────────────────────────────
-        with st.expander("🧪 Nouveau prélèvement", expanded=False):
-            if not st.session_state.points:
-                st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement**.")
-            else:
-                p_col1, p_col2, p_col3 = st.columns([3, 2, 1])
-                with p_col1:
-                    point_labels = [
-                        f"{pt['label']} — {pt.get('type','?')} — {pt.get('room_class','?')}"
-                        for pt in st.session_state.points
-                    ]
-                    sel_idx = st.selectbox(
-                        "Point de prélèvement",
-                        list(range(len(point_labels))),
-                        format_func=lambda i: point_labels[i],
-                        key="new_prelev_point"
+       # ── Modification d'un prélèvement existant ────────────────────────────
+if "edit_prelev_id" not in st.session_state:
+    st.session_state["edit_prelev_id"] = None
+
+for idx, samp in enumerate(st.session_state.prelevements):
+    if samp.get("archived"):
+        continue
+
+    col_info, col_btn = st.columns([5, 1])
+    with col_info:
+        st.markdown(
+            f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
+            f"padding:10px 16px;margin-bottom:6px'>"
+            f"<span style='font-weight:700'>{samp['label']}</span> "
+            f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
+            f"· Classe {samp.get('room_class','—')} "
+            f"· {samp.get('date','—')} "
+            f"· {samp.get('operateur','—')}</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+    with col_btn:
+        if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
+            st.session_state["edit_prelev_id"] = samp["id"]
+            st.rerun()
+
+    # ── Formulaire d'édition inline ───────────────────────────────────
+    if st.session_state["edit_prelev_id"] == samp["id"]:
+        with st.container():
+            st.markdown(
+                "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                unsafe_allow_html=True
+            )
+            st.markdown(f"**✏️ Modifier — {samp['label']}**")
+
+            e_col1, e_col2 = st.columns(2)
+            with e_col1:
+                # Opérateur
+                oper_list_e = [
+                    o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                    for o in st.session_state.operators
+                ]
+                current_oper = samp.get("operateur", "")
+                if oper_list_e:
+                    oper_options = ["— Sélectionner —"] + oper_list_e
+                    oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
+                    new_oper = st.selectbox(
+                        "Opérateur",
+                        oper_options,
+                        index=oper_idx,
+                        key=f"edit_oper_{samp['id']}"
                     )
-                    selected_point = st.session_state.points[sel_idx]
-                    pt_type   = selected_point.get('type', '—')
-                    pt_class  = selected_point.get('room_class', '—')
-                    pt_gelose = selected_point.get('gelose', '—')
-                    type_icon = "💨" if pt_type == "Air" else "🧴"
+                    new_oper = new_oper if new_oper != "— Sélectionner —" else ""
+                else:
+                    new_oper = st.text_input(
+                        "Opérateur",
+                        value=current_oper,
+                        key=f"edit_oper_{samp['id']}"
+                    )
 
-                    # Seuils de la classe pour info
-                    th_c_info = st.session_state.get("thresholds_classe", {}).get(pt_class, {})
-                    seuil_info = ""
-                    if th_c_info:
-                        seuil_info = (
-                            f"<div style='font-size:.6rem;color:#6366f1;margin-top:4px'>"
-                            f"Seuils classe {pt_class} : "
-                            f"⚠️ {th_c_info.get('alert','—')} UFC · "
-                            f"🚨 {th_c_info.get('action','—')} UFC</div>"
-                        )
+                # Date
+                try:
+                    current_date = datetime.fromisoformat(samp["date"]).date()
+                except Exception:
+                    current_date = datetime.today().date()
+                new_date = st.date_input(
+                    "Date prélèvement",
+                    value=current_date,
+                    key=f"edit_date_{samp['id']}"
+                )
 
-                    st.markdown(f"""
-                    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;
-                    padding:12px;margin-top:4px">
-                      <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">
-                        {type_icon} Détails du point sélectionné
-                      </div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
-                        </div>
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Classe</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_class}</div>
-                        </div>
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;
-                        grid-column:1/-1">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">
-                            🧫 {pt_gelose}
-                          </div>
-                        </div>
-                      </div>
-                      {seuil_info}
-                    </div>""", unsafe_allow_html=True)
+            with e_col2:
+                # Gélose
+                new_gelose = st.text_input(
+                    "Gélose",
+                    value=samp.get("gelose", ""),
+                    key=f"edit_gelose_{samp['id']}"
+                )
+                # Champs Classe A
+                if samp.get("room_class") == "A":
+                    new_isolateur = st.text_input(
+                        "Numéro isolateur",
+                        value=samp.get("num_isolateur", ""),
+                        key=f"edit_iso_{samp['id']}"
+                    )
+                    new_poste = st.radio(
+                        "Poste",
+                        ["Poste 1", "Poste 2", "Commun"],
+                        index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1"))
+                              if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
+                        horizontal=True,
+                        key=f"edit_poste_{samp['id']}"
+                    )
 
-                    # Champs Classe A
-                    num_isolateur = ""
-                    poste_val     = ""
-                    if pt_class == "A":
-                        st.markdown("""
-                        <div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;
-                        padding:8px 12px;margin-top:8px;font-size:.75rem;font-weight:700;color:#854d0e">
-                        🔬 Classe A — informations complémentaires requises
-                        </div>""", unsafe_allow_html=True)
-                        num_isolateur = st.text_input("Numéro isolateur", placeholder="Ex: ISO-01",
-                                                       key="new_prelev_isolateur")
-                        poste_val = st.radio("Poste", ["Poste 1", "Poste 2", "Commun"],
-                                              horizontal=True, key="new_prelev_poste")
+            # Recalcul J2/J7 si date changée
+            new_j2 = next_working_day_offset(new_date, 2)
+            new_j7 = next_working_day_offset(new_date, 5)
+            if new_date != current_date:
+                st.markdown(
+                    f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
+                    f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
+                    f"⚠️ Dates de lecture recalculées — "
+                    f"J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
+                    f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
 
-                with p_col2:
-                    oper_list = [
-                        o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
-                        for o in st.session_state.operators
-                    ]
-                    if oper_list:
-                        oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list,
-                                                 key="new_prelev_oper_sel")
-                        p_oper = oper_sel if oper_sel != "— Sélectionner —" else ""
-                    else:
-                        st.info("Aucun opérateur — ajoutez-en dans Paramètres")
-                        p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom",
-                                                key="new_prelev_oper_manual")
-                    p_date = st.date_input("Date prélèvement", value=datetime.today(),
-                                            key="new_prelev_date")
-                    j2_date_calc = next_working_day_offset(p_date, 2)
-                    j7_date_calc = next_working_day_offset(p_date, 5)
-                    st.markdown(f"""
-                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
-                    padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                      📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
-                      📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
-                    </div>""", unsafe_allow_html=True)
-
-                with p_col3:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("💾 Enregistrer\nprélèvement", use_container_width=True,
-                                  key="save_prelev"):
-                        pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                        sample = {
-                            "id":         pid,
-                            "label":      selected_point['label'],
-                            "type":       selected_point.get('type'),
-                            "gelose":     selected_point.get('gelose', '—'),
-                            "room_class": selected_point.get('room_class'),
-                            "operateur":  p_oper,
-                            "date":       str(p_date),
-                            "archived":   False
-                        }
-                        if pt_class == "A":
-                            sample["num_isolateur"] = num_isolateur
-                            sample["poste"]         = poste_val
-                        st.session_state.prelevements.append(sample)
-                        save_prelevements(st.session_state.prelevements)
-                        st.session_state.schedules.append({
-                            "id": f"sch_{pid}_J2", "sample_id": pid,
-                            "label": sample['label'], "due_date": j2_date_calc.isoformat(),
-                            "when": "J2", "status": "pending"
-                        })
-                        st.session_state.schedules.append({
-                            "id": f"sch_{pid}_J7", "sample_id": pid,
-                            "label": sample['label'], "due_date": j7_date_calc.isoformat(),
-                            "when": "J7", "status": "pending"
-                        })
+            btn_c1, btn_c2 = st.columns(2)
+            with btn_c1:
+                if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}",
+                             use_container_width=True, type="primary"):
+                    # Mise à jour du prélèvement
+                    st.session_state.prelevements[idx]["operateur"] = new_oper
+                    st.session_state.prelevements[idx]["date"]      = str(new_date)
+                    st.session_state.prelevements[idx]["gelose"]    = new_gelose
+                    if samp.get("room_class") == "A":
+                        st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
+                        st.session_state.prelevements[idx]["poste"]         = new_poste
+                    # Mise à jour des dates J2/J7 si date changée
+                    if new_date != current_date:
+                        for sch in st.session_state.schedules:
+                            if sch["sample_id"] == samp["id"]:
+                                if sch["when"] == "J2":
+                                    sch["due_date"] = new_j2.isoformat()
+                                elif sch["when"] == "J7":
+                                    sch["due_date"] = new_j7.isoformat()
                         save_schedules(st.session_state.schedules)
-                        st.success(
-                            f"✅ **{sample['label']}** enregistré ! "
-                            f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                            f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
-                        st.rerun()
+                    save_prelevements(st.session_state.prelevements)
+                    st.session_state["edit_prelev_id"] = None
+                    st.success("✅ Prélèvement mis à jour !")
+                    st.rerun()
+            with btn_c2:
+                if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}",
+                             use_container_width=True):
+                    st.session_state["edit_prelev_id"] = None
+                    st.rerun()
 
-        st.divider()
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Lectures en attente ───────────────────────────────────────────────
         st.markdown("#### 📅 Lectures en attente")
