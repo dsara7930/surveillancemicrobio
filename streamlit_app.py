@@ -936,13 +936,18 @@ if active == "logigramme":
 
     col_btn1, col_btn2 = st.columns([1,1])
     with col_btn1:
-        if st.button("➕ Ajouter un germe", use_container_width=True):
-            st.session_state.show_add = not st.session_state.show_add
-            st.session_state.edit_idx = None
+        if can_edit:  # ← AJOUTÉ
+            if st.button("➕ Ajouter un germe", use_container_width=True):
+                st.session_state.show_add = not st.session_state.show_add
+                st.session_state.edit_idx = None
     with col_btn2:
-        if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
-            save_germs(st.session_state.germs)
-            st.success("✅ Germes sauvegardés !")
+        if can_edit:  # ← AJOUTÉ
+            if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
+                save_germs(st.session_state.germs)
+                st.success("✅ Germes sauvegardés !")
+
+    if not can_edit:  # ← AJOUTÉ
+        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les germes.")
 
     def germ_form(existing=None, idx=None):
         is_edit = existing is not None
@@ -950,24 +955,24 @@ if active == "logigramme":
             st.markdown(f"### {'✏️ Modifier' if is_edit else '➕ Ajouter'} un germe")
             c1, c2, c3 = st.columns(3)
             with c1:
-                new_name = st.text_input("Nom du germe *", value=existing["name"] if is_edit else "", placeholder="Ex: Listeria spp.")
+                new_name = st.text_input("Nom du germe *", value=existing["name"] if is_edit else "", placeholder="Ex: Listeria spp.", disabled=not can_edit)
                 new_famille = st.selectbox("Famille *", ["Bactéries","Champignons"],
-                    index=["Bactéries","Champignons"].index(existing["path"][1]) if is_edit else 0)
+                    index=["Bactéries","Champignons"].index(existing["path"][1]) if is_edit else 0, disabled=not can_edit)
                 new_origine = st.selectbox("Origine *", ["Humains / Humain","Environnemental"],
-                    index=0 if (not is_edit or existing["path"][2] in ["Humains","Humain"]) else 1)
+                    index=0 if (not is_edit or existing["path"][2] in ["Humains","Humain"]) else 1, disabled=not can_edit)
             with c2:
                 if new_famille == "Bactéries":
                     cats = ["Peau / Muqueuses","Oropharynx / Gouttelettes","Flore fécale"] if "Humain" in new_origine else ["Humidité","Sol / Carton / Surface sèche"]
                 else:
                     cats = ["Peau / Muqueuse"] if "Humain" in new_origine else ["Humidité","Sol / Carton / Surface sèche","Air"]
                 cur_cat = existing["path"][3] if is_edit and existing["path"][3] in cats else cats[0]
-                new_cat = st.selectbox("Catégorie *", cats, index=cats.index(cur_cat) if cur_cat in cats else 0)
-                new_pathotype = st.text_input("Type de pathogène", value=existing.get("pathotype","") if is_edit else "")
-                new_notes = st.text_area("📝 Notes", value=existing.get("notes","") or "" if is_edit else "", height=55)
-                new_comment = st.text_area("💬 Commentaire détaillé", value=existing.get("comment","") or "" if is_edit else "", height=55)
+                new_cat = st.selectbox("Catégorie *", cats, index=cats.index(cur_cat) if cur_cat in cats else 0, disabled=not can_edit)
+                new_pathotype = st.text_input("Type de pathogène", value=existing.get("pathotype","") if is_edit else "", disabled=not can_edit)
+                new_notes = st.text_area("📝 Notes", value=existing.get("notes","") or "" if is_edit else "", height=55, disabled=not can_edit)
+                new_comment = st.text_area("💬 Commentaire détaillé", value=existing.get("comment","") or "" if is_edit else "", height=55, disabled=not can_edit)
             with c3:
                 risk_opts = ["1 — Limité","2 — Modéré","3 — Important","4 — Majeur","5 — Critique"]
-                new_risk_raw = st.selectbox("Criticité *", risk_opts, index=(existing["risk"]-1) if is_edit else 1)
+                new_risk_raw = st.selectbox("Criticité *", risk_opts, index=(existing["risk"]-1) if is_edit else 1, disabled=not can_edit)
                 risk_num = int(new_risk_raw[0])
                 th = get_thresholds_for_risk(risk_num, st.session_state.thresholds)
                 st.markdown(f"""<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:4px">
@@ -978,42 +983,44 @@ if active == "logigramme":
                     </div></div>""", unsafe_allow_html=True)
                 new_surfa = st.selectbox("Surfa'Safe *",
                     ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"],
-                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"].index(existing["surfa"]) if is_edit and existing.get("surfa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"] else 0)
+                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"].index(existing["surfa"]) if is_edit and existing.get("surfa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (biofilm)","Risque de résistance (spore)"] else 0, disabled=not can_edit)
                 new_apa = st.selectbox("APA *",
                     ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"],
-                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"].index(existing["apa"]) if is_edit and existing.get("apa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"] else 0)
+                    index=["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"].index(existing["apa"]) if is_edit and existing.get("apa") in ["Sensible","Risque modéré de résistance","Risque de résistance","Risque de résistance (spore)"] else 0, disabled=not can_edit)
 
             cb1, cb2 = st.columns([1,1])
             with cb1:
-                if st.button("✅ " + ("Modifier" if is_edit else "Ajouter"), use_container_width=True, key="form_submit"):
-                    if not new_name.strip():
-                        st.error("Le nom est obligatoire.")
-                        return
-                    origine_node = ("Humains" if new_famille=="Bactéries" else "Humain") if "Humain" in new_origine else "Environnemental"
-                    new_germ = dict(name=new_name.strip(), path=["Germes",new_famille,origine_node,new_cat],
-                        risk=risk_num, pathotype=new_pathotype or "Non défini",
-                        surfa=new_surfa, apa=new_apa,
-                        notes=new_notes.strip() or None, comment=new_comment.strip() or None)
-                    if is_edit:
-                        st.session_state.germs[idx] = new_germ
-                        st.session_state.edit_idx = None
-                    else:
-                        if any(g["name"].lower()==new_name.strip().lower() for g in st.session_state.germs):
-                            st.error("Ce germe existe déjà.")
+                if can_edit:
+                    if st.button("✅ " + ("Modifier" if is_edit else "Ajouter"), use_container_width=True, key="form_submit"):
+                        if not new_name.strip():
+                            st.error("Le nom est obligatoire.")
                             return
-                        st.session_state.germs.append(new_germ)
-                        st.session_state.show_add = False
-                    save_germs(st.session_state.germs)
-                    st.rerun()
+                        origine_node = ("Humains" if new_famille=="Bactéries" else "Humain") if "Humain" in new_origine else "Environnemental"
+                        new_germ = dict(name=new_name.strip(), path=["Germes",new_famille,origine_node,new_cat],
+                            risk=risk_num, pathotype=new_pathotype or "Non défini",
+                            surfa=new_surfa, apa=new_apa,
+                            notes=new_notes.strip() or None, comment=new_comment.strip() or None)
+                        if is_edit:
+                            st.session_state.germs[idx] = new_germ
+                            st.session_state.edit_idx = None
+                        else:
+                            if any(g["name"].lower()==new_name.strip().lower() for g in st.session_state.germs):
+                                st.error("Ce germe existe déjà.")
+                                return
+                            st.session_state.germs.append(new_germ)
+                            st.session_state.show_add = False
+                        save_germs(st.session_state.germs)
+                        st.rerun()
             with cb2:
-                if st.button("Annuler", use_container_width=True, key="form_cancel"):
-                    st.session_state.show_add = False
-                    st.session_state.edit_idx = None
-                    st.rerun()
+                if can_edit:
+                    if st.button("Annuler", use_container_width=True, key="form_cancel"):
+                        st.session_state.show_add = False
+                        st.session_state.edit_idx = None
+                        st.rerun()
 
-    if st.session_state.show_add and st.session_state.edit_idx is None:
+    if can_edit and st.session_state.show_add and st.session_state.edit_idx is None:
         germ_form()
-    if st.session_state.edit_idx is not None:
+    if can_edit and st.session_state.edit_idx is not None:
         germ_form(existing=st.session_state.germs[st.session_state.edit_idx], idx=st.session_state.edit_idx)
 
     st.divider()
@@ -1286,15 +1293,17 @@ renderList();
         with col_r:
             st.markdown(f'<span style="font-size:.72rem;color:{RISK_COLORS[g["risk"]]}">Nv.{g["risk"]}</span>', unsafe_allow_html=True)
         with col_e:
-            if st.button("✏️", key=f"edit_{real_idx}"):
-                st.session_state.edit_idx = real_idx
-                st.session_state.show_add = False
-                st.rerun()
+            if can_edit:
+                if st.button("✏️", key=f"edit_{real_idx}"):
+                    st.session_state.edit_idx = real_idx
+                    st.session_state.show_add = False
+                    st.rerun()
         with col_d:
-            if st.button("🗑️", key=f"del_{real_idx}"):
-                st.session_state.germs.pop(real_idx)
-                save_germs(st.session_state.germs)
-                st.rerun()
+            if can_edit:
+                if st.button("🗑️", key=f"del_{real_idx}"):
+                    st.session_state.germs.pop(real_idx)
+                    save_germs(st.session_state.germs)
+                    st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1323,270 +1332,265 @@ if active == "surveillance":
         if sg  in ("alert","action"): triggered.append("germe")
         if sc  in ("alert","action"): triggered.append("classe")
         return final, " & ".join(triggered), th_g, th_c
-
-    # ══════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════
     # ONGLET SURVEILLANCE
     # ══════════════════════════════════════════════════════════════════════════
-with tab_surv:
 
-       # ── Modification d'un prélèvement existant ────────────────────────────
-    if "edit_prelev_id" not in st.session_state:
-        st.session_state["edit_prelev_id"] = None
+    # ── Modification d'un prélèvement existant ────────────────────────────
+    for idx, samp in enumerate(st.session_state.prelevements):
+        if samp.get("archived"):
+            continue
 
-for idx, samp in enumerate(st.session_state.prelevements):
-    if samp.get("archived"):
-        continue
-
-    col_info, col_btn = st.columns([5, 1])
-    with col_info:
-        st.markdown(
-            f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
-            f"padding:10px 16px;margin-bottom:6px'>"
-            f"<span style='font-weight:700'>{samp['label']}</span> "
-            f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
-            f"· Classe {samp.get('room_class','—')} "
-            f"· {samp.get('date','—')} "
-            f"· {samp.get('operateur','—')}</span>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-    with col_btn:
-        if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
-            st.session_state["edit_prelev_id"] = samp["id"]
-            st.rerun()
-
-    # ── Formulaire d'édition inline ───────────────────────────────────
-    if st.session_state["edit_prelev_id"] == samp["id"]:
-        with st.container():
+        col_info, col_btn = st.columns([5, 1])
+        with col_info:
             st.markdown(
-                "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
-                "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
+                f"padding:10px 16px;margin-bottom:6px'>"
+                f"<span style='font-weight:700'>{samp['label']}</span> "
+                f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
+                f"· Classe {samp.get('room_class','—')} "
+                f"· {samp.get('date','—')} "
+                f"· {samp.get('operateur','—')}</span>"
+                f"</div>",
                 unsafe_allow_html=True
             )
-            st.markdown(f"**✏️ Modifier — {samp['label']}**")
+        with col_btn:
+            if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
+                st.session_state["edit_prelev_id"] = samp["id"]
+                st.rerun()
 
-            e_col1, e_col2 = st.columns(2)
-            with e_col1:
-                # Opérateur
-                oper_list_e = [
-                    o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
-                    for o in st.session_state.operators
-                ]
-                current_oper = samp.get("operateur", "")
-                if oper_list_e:
-                    oper_options = ["— Sélectionner —"] + oper_list_e
-                    oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
-                    new_oper = st.selectbox(
-                        "Opérateur",
-                        oper_options,
-                        index=oper_idx,
-                        key=f"edit_oper_{samp['id']}"
-                    )
-                    new_oper = new_oper if new_oper != "— Sélectionner —" else ""
-                else:
-                    new_oper = st.text_input(
-                        "Opérateur",
-                        value=current_oper,
-                        key=f"edit_oper_{samp['id']}"
-                    )
-
-                # Date
-                try:
-                    current_date = datetime.fromisoformat(samp["date"]).date()
-                except Exception:
-                    current_date = datetime.today().date()
-                new_date = st.date_input(
-                    "Date prélèvement",
-                    value=current_date,
-                    key=f"edit_date_{samp['id']}"
-                )
-
-            with e_col2:
-                # Gélose
-                new_gelose = st.text_input(
-                    "Gélose",
-                    value=samp.get("gelose", ""),
-                    key=f"edit_gelose_{samp['id']}"
-                )
-                # Champs Classe A
-                if samp.get("room_class") == "A":
-                    new_isolateur = st.text_input(
-                        "Numéro isolateur",
-                        value=samp.get("num_isolateur", ""),
-                        key=f"edit_iso_{samp['id']}"
-                    )
-                    new_poste = st.radio(
-                        "Poste",
-                        ["Poste 1", "Poste 2", "Commun"],
-                        index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1"))
-                              if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
-                        horizontal=True,
-                        key=f"edit_poste_{samp['id']}"
-                    )
-
-            # Recalcul J2/J7 si date changée
-            new_j2 = next_working_day_offset(new_date, 2)
-            new_j7 = next_working_day_offset(new_date, 5)
-            if new_date != current_date:
+        # ── Formulaire d'édition inline ───────────────────────────────────
+        if st.session_state.get("edit_prelev_id") == samp["id"]:
+            with st.container():
                 st.markdown(
-                    f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
-                    f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
-                    f"⚠️ Dates de lecture recalculées — "
-                    f"J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
-                    f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong>"
-                    f"</div>",
+                    "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                    "border-radius:10px;padding:16px;margin-bottom:12px'>",
                     unsafe_allow_html=True
                 )
+                st.markdown(f"**✏️ Modifier — {samp['label']}**")
 
-            btn_c1, btn_c2 = st.columns(2)
-            with btn_c1:
-                if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}",
-                             use_container_width=True, type="primary"):
-                    # Mise à jour du prélèvement
-                    st.session_state.prelevements[idx]["operateur"] = new_oper
-                    st.session_state.prelevements[idx]["date"]      = str(new_date)
-                    st.session_state.prelevements[idx]["gelose"]    = new_gelose
+                e_col1, e_col2 = st.columns(2)
+                with e_col1:
+                    # Opérateur
+                    oper_list_e = [
+                        o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                        for o in st.session_state.operators
+                    ]
+                    current_oper = samp.get("operateur", "")
+                    if oper_list_e:
+                        oper_options = ["— Sélectionner —"] + oper_list_e
+                        oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
+                        new_oper = st.selectbox(
+                            "Opérateur",
+                            oper_options,
+                            index=oper_idx,
+                            key=f"edit_oper_{samp['id']}"
+                        )
+                        new_oper = new_oper if new_oper != "— Sélectionner —" else ""
+                    else:
+                        new_oper = st.text_input(
+                            "Opérateur",
+                            value=current_oper,
+                            key=f"edit_oper_{samp['id']}"
+                        )
+
+                    # Date
+                    try:
+                        current_date = datetime.fromisoformat(samp["date"]).date()
+                    except Exception:
+                        current_date = datetime.today().date()
+                    new_date = st.date_input(
+                        "Date prélèvement",
+                        value=current_date,
+                        key=f"edit_date_{samp['id']}"
+                    )
+
+                with e_col2:
+                    # Gélose
+                    new_gelose = st.text_input(
+                        "Gélose",
+                        value=samp.get("gelose", ""),
+                        key=f"edit_gelose_{samp['id']}"
+                    )
+                    # Champs Classe A
+                    new_isolateur = ""
+                    new_poste = "Poste 1"
                     if samp.get("room_class") == "A":
-                        st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
-                        st.session_state.prelevements[idx]["poste"]         = new_poste
-                    # Mise à jour des dates J2/J7 si date changée
-                    if new_date != current_date:
-                        for sch in st.session_state.schedules:
-                            if sch["sample_id"] == samp["id"]:
-                                if sch["when"] == "J2":
-                                    sch["due_date"] = new_j2.isoformat()
-                                elif sch["when"] == "J7":
-                                    sch["due_date"] = new_j7.isoformat()
-                        save_schedules(st.session_state.schedules)
-                    save_prelevements(st.session_state.prelevements)
-                    st.session_state["edit_prelev_id"] = None
-                    st.success("✅ Prélèvement mis à jour !")
-                    st.rerun()
-            with btn_c2:
-                if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}",
-                             use_container_width=True):
-                    st.session_state["edit_prelev_id"] = None
-                    st.rerun()
+                        new_isolateur = st.text_input(
+                            "Numéro isolateur",
+                            value=samp.get("num_isolateur", ""),
+                            key=f"edit_iso_{samp['id']}"
+                        )
+                        new_poste = st.radio(
+                            "Poste",
+                            ["Poste 1", "Poste 2", "Commun"],
+                            index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1"))
+                                  if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
+                            horizontal=True,
+                            key=f"edit_poste_{samp['id']}"
+                        )
 
-            st.markdown("</div>", unsafe_allow_html=True)
+                # Recalcul J2/J7 si date changée
+                new_j2 = next_working_day_offset(new_date, 2)
+                new_j7 = next_working_day_offset(new_date, 5)
+                if new_date != current_date:
+                    st.markdown(
+                        f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
+                        f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
+                        f"⚠️ Dates de lecture recalculées — "
+                        f"J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
+                        f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
-        # ── Lectures en attente ───────────────────────────────────────────────
-        st.markdown("#### 📅 Lectures en attente")
-
-        pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
-        overdue  = [s for s in pending_schedules
-                    if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming = [s for s in pending_schedules
-                    if datetime.fromisoformat(s["due_date"]).date() > today]
-
-        if overdue:
-            st.markdown(
-                f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                f'padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">'
-                f'🔔 {len(overdue)} lecture(s) due(s) — à traiter dès que possible</span></div>',
-                unsafe_allow_html=True)
-        if upcoming:
-            st.markdown(
-                f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
-                f'padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">'
-                f'📆 {len(upcoming)} lecture(s) à venir</span></div>',
-                unsafe_allow_html=True)
-        if not pending_schedules:
-            st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
-
-        def _should_show(s, all_schedules):
-            if s['when'] == 'J2':
-                return True
-            j2 = next((x for x in all_schedules
-                        if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
-
-        for s in [s for s in (overdue + upcoming)
-                  if _should_show(s, st.session_state.schedules)]:
-            sched_date  = datetime.fromisoformat(s["due_date"]).date()
-            is_late     = sched_date <= today
-            border_col  = "#ef4444" if is_late else "#3b82f6"
-            bg_col      = "#fef2f2" if is_late else "#eff6ff"
-            badge_col   = "#dc2626" if is_late else "#1d4ed8"
-            status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-            smp         = next((p for p in st.session_state.prelevements
-                                if p['id'] == s['sample_id']), None)
-            pt_type     = smp.get('type', '?')       if smp else '?'
-            pt_gelose   = smp.get('gelose', '?')     if smp else '?'
-            pt_class    = smp.get('room_class', '?') if smp else '?'
-            pt_oper     = smp.get('operateur', '?')  if smp else '?'
-
-            extra_info = ""
-            if smp and smp.get("room_class") == "A":
-                iso = smp.get("num_isolateur", "—") or "—"
-                pst = smp.get("poste", "—") or "—"
-                extra_info = (
-                    f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
-                    f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
-                    f"font-weight:600;margin-top:6px'>"
-                    f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
-
-            with st.container():
-                st.markdown(f"""
-                <div style="background:{bg_col};border:1.5px solid {border_col};
-                border-radius:10px;padding:14px 16px;margin-bottom:8px">
-                  <div style="display:flex;align-items:center;justify-content:space-between;
-                  margin-bottom:8px">
-                    <div>
-                      <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
-                      <span style="background:{border_col};color:#fff;font-size:.6rem;
-                      font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">
-                        {s['when']}
-                      </span>
-                      <span style="color:{badge_col};font-size:.65rem;font-weight:600;
-                      margin-left:6px">{status_txt}</span>
-                    </div>
-                    <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
-                  </div>
-                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                    border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                    border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                    border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                    border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
-                    </div>
-                  </div>
-                  {extra_info}
-                </div>""", unsafe_allow_html=True)
-
-                bc1, bc2 = st.columns([3, 1])
-                with bc1:
-                    if st.button(f"🔬 Traiter cette lecture ({s['when']})",
-                                  key=f"proc_{s['id']}", use_container_width=True):
-                        st.session_state.current_process = s['id']
-                        st.rerun()
-                with bc2:
-                    if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}",
-                                  use_container_width=True):
-                        sid = s.get('sample_id')
-                        st.session_state.schedules    = [x for x in st.session_state.schedules
-                                                          if x['sample_id'] != sid]
-                        st.session_state.prelevements = [x for x in st.session_state.prelevements
-                                                          if x['id'] != sid]
-                        save_schedules(st.session_state.schedules)
+                btn_c1, btn_c2 = st.columns(2)
+                with btn_c1:
+                    if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}",
+                                 use_container_width=True, type="primary"):
+                        st.session_state.prelevements[idx]["operateur"] = new_oper
+                        st.session_state.prelevements[idx]["date"]      = str(new_date)
+                        st.session_state.prelevements[idx]["gelose"]    = new_gelose
+                        if samp.get("room_class") == "A":
+                            st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
+                            st.session_state.prelevements[idx]["poste"]         = new_poste
+                        if new_date != current_date:
+                            for sch in st.session_state.schedules:
+                                if sch["sample_id"] == samp["id"]:
+                                    if sch["when"] == "J2":
+                                        sch["due_date"] = new_j2.isoformat()
+                                    elif sch["when"] == "J7":
+                                        sch["due_date"] = new_j7.isoformat()
+                            save_schedules(st.session_state.schedules)
                         save_prelevements(st.session_state.prelevements)
-                        st.success("Prélèvement et lectures associées supprimés.")
+                        st.session_state["edit_prelev_id"] = None
+                        st.success("✅ Prélèvement mis à jour !")
+                        st.rerun()
+                with btn_c2:
+                    if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}",
+                                 use_container_width=True):
+                        st.session_state["edit_prelev_id"] = None
                         st.rerun()
 
+                st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Lectures en attente ───────────────────────────────────────────────
+    st.markdown("#### 📅 Lectures en attente")
+
+    pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
+    overdue  = [s for s in pending_schedules
+                if datetime.fromisoformat(s["due_date"]).date() <= today]
+    upcoming = [s for s in pending_schedules
+                if datetime.fromisoformat(s["due_date"]).date() > today]
+
+    if overdue:
+        st.markdown(
+            f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+            f'padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">'
+            f'🔔 {len(overdue)} lecture(s) due(s) — à traiter dès que possible</span></div>',
+            unsafe_allow_html=True)
+    if upcoming:
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
+            f'padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">'
+            f'📆 {len(upcoming)} lecture(s) à venir</span></div>',
+            unsafe_allow_html=True)
+    if not pending_schedules:
+        st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
+
+    def _should_show(s, all_schedules):
+        if s['when'] == 'J2':
+            return True
+        j2 = next((x for x in all_schedules
+                    if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
+        return j2 is None or j2['status'] == 'done'
+
+    for s in [s for s in (overdue + upcoming)
+              if _should_show(s, st.session_state.schedules)]:
+        sched_date  = datetime.fromisoformat(s["due_date"]).date()
+        is_late     = sched_date <= today
+        border_col  = "#ef4444" if is_late else "#3b82f6"
+        bg_col      = "#fef2f2" if is_late else "#eff6ff"
+        badge_col   = "#dc2626" if is_late else "#1d4ed8"
+        status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
+        smp         = next((p for p in st.session_state.prelevements
+                            if p['id'] == s['sample_id']), None)
+        pt_type     = smp.get('type', '?')       if smp else '?'
+        pt_gelose   = smp.get('gelose', '?')     if smp else '?'
+        pt_class    = smp.get('room_class', '?') if smp else '?'
+        pt_oper     = smp.get('operateur', '?')  if smp else '?'
+
+        extra_info = ""
+        if smp and smp.get("room_class") == "A":
+            iso = smp.get("num_isolateur", "—") or "—"
+            pst = smp.get("poste", "—") or "—"
+            extra_info = (
+                f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
+                f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
+                f"font-weight:600;margin-top:6px'>"
+                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
+
+        with st.container():
+            st.markdown(f"""
+            <div style="background:{bg_col};border:1.5px solid {border_col};
+            border-radius:10px;padding:14px 16px;margin-bottom:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;
+              margin-bottom:8px">
+                <div>
+                  <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                  <span style="background:{border_col};color:#fff;font-size:.6rem;
+                  font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">
+                    {s['when']}
+                  </span>
+                  <span style="color:{badge_col};font-size:.65rem;font-weight:600;
+                  margin-left:6px">{status_txt}</span>
+                </div>
+                <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;
+                border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;
+                border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;
+                border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Classe</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_class}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;
+                border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
+                </div>
+              </div>
+              {extra_info}
+            </div>""", unsafe_allow_html=True)
+
+            bc1, bc2 = st.columns([3, 1])
+            with bc1:
+                if st.button(f"🔬 Traiter cette lecture ({s['when']})",
+                              key=f"proc_{s['id']}", use_container_width=True):
+                    st.session_state.current_process = s['id']
+                    st.rerun()
+            with bc2:
+                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}",
+                              use_container_width=True):
+                    sid = s.get('sample_id')
+                    st.session_state.schedules    = [x for x in st.session_state.schedules
+                                                      if x['sample_id'] != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements
+                                                      if x['id'] != sid]
+                    save_schedules(st.session_state.schedules)
+                    save_prelevements(st.session_state.prelevements)
+                    st.success("Prélèvement et lectures associées supprimés.")
+                    st.rerun()
+                    
         # ── Traitement d'une lecture ──────────────────────────────────────────
         if st.session_state.current_process:
             proc_id = st.session_state.current_process
@@ -3721,7 +3725,9 @@ elif active == "historique":
 # TAB : PARAMÈTRES
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "parametres":
-    can_edit = check_access_protege("Paramètres & Seuils")  # ← ligne ajoutée
+    can_edit = check_access_protege("Paramètres & Seuils")
+    if not can_edit:
+        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
     st.markdown("### ⚙️ Paramètres")
 
     (subtab_seuils_germe, subtab_seuils_classe, subtab_mesures,
@@ -3771,19 +3777,21 @@ elif active == "parametres":
 
         cs, cr = st.columns(2)
         with cs:
-            if st.button("💾 Sauvegarder", use_container_width=True,
-                          key="save_seuils_germe"):
-                st.session_state.thresholds = new_thresholds
-                save_thresholds_and_measures(new_thresholds, st.session_state.measures)
-                st.success("✅ Seuils par germe sauvegardés !")
+            if can_edit:
+                if st.button("💾 Sauvegarder", use_container_width=True,
+                              key="save_seuils_germe"):
+                    st.session_state.thresholds = new_thresholds
+                    save_thresholds_and_measures(new_thresholds, st.session_state.measures)
+                    st.success("✅ Seuils par germe sauvegardés !")
         with cr:
-            if st.button("↩️ Réinitialiser", use_container_width=True,
-                          key="reinit_seuils_germe"):
-                st.session_state.thresholds = {k: dict(v)
-                                                for k, v in DEFAULT_THRESHOLDS.items()}
-                save_thresholds_and_measures(st.session_state.thresholds,
-                                              st.session_state.measures)
-                st.success("✅ Réinitialisé."); st.rerun()
+            if can_edit:
+                if st.button("↩️ Réinitialiser", use_container_width=True,
+                              key="reinit_seuils_germe"):
+                    st.session_state.thresholds = {k: dict(v)
+                                                    for k, v in DEFAULT_THRESHOLDS.items()}
+                    save_thresholds_and_measures(st.session_state.thresholds,
+                                                  st.session_state.measures)
+                    st.success("✅ Réinitialisé."); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # SEUILS PAR CLASSE
@@ -3856,7 +3864,8 @@ elif active == "parametres":
                     new_rl = st.selectbox(
                         f"Criticité zone {rc}", RL_OPTS,
                         index=cur_rl_idx,
-                        key=f"sc_risk_{rc}")
+                        key=f"sc_risk_{rc}",
+                        disabled=not can_edit)
                     rl_col = RL_COLORS.get(new_rl, "#6366f1")
                     st.markdown(
                         f"<div style='background:{rl_col}22;border:1px solid {rl_col}55;"
@@ -3869,13 +3878,15 @@ elif active == "parametres":
                         f"⚠️ Seuil alerte — classe {rc} (UFC/m³)",
                         min_value=0, max_value=10000,
                         value=cur_alert, step=1,
-                        key=f"sc_alert_{rc}")
+                        key=f"sc_alert_{rc}",
+                        disabled=not can_edit)
                 with hc4:
                     new_ac_c = st.number_input(
                         f"🚨 Seuil action — classe {rc} (UFC/m³)",
                         min_value=0, max_value=10000,
                         value=cur_action, step=1,
-                        key=f"sc_action_{rc}")
+                        key=f"sc_action_{rc}",
+                        disabled=not can_edit)
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -3915,27 +3926,29 @@ elif active == "parametres":
             st.divider()
             sc1, sc2 = st.columns(2)
             with sc1:
-                if st.button("💾 Sauvegarder seuils par classe",
-                              use_container_width=True, key="save_seuils_classe"):
-                    st.session_state.thresholds_classe = new_thresholds_classe
-                    _supa_upsert('thresholds_classe', json.dumps(
-                        new_thresholds_classe, ensure_ascii=False))
-                    st.success("✅ Seuils par classe sauvegardés !")
+                if can_edit:
+                    if st.button("💾 Sauvegarder seuils par classe",
+                                  use_container_width=True, key="save_seuils_classe"):
+                        st.session_state.thresholds_classe = new_thresholds_classe
+                        _supa_upsert('thresholds_classe', json.dumps(
+                            new_thresholds_classe, ensure_ascii=False))
+                        st.success("✅ Seuils par classe sauvegardés !")
             with sc2:
-                if st.button("↩️ Valeurs GMP par défaut",
-                              use_container_width=True, key="reinit_seuils_classe"):
-                    st.session_state.thresholds_classe = {
-                        rc: {
-                            "alert":      DEFAULT_CLASSE_TH.get(
-                                rc.replace(' ','').upper()[:1], {}).get("alert", 50),
-                            "action":     DEFAULT_CLASSE_TH.get(
-                                rc.replace(' ','').upper()[:1], {}).get("action", 100),
-                            "risk_label": DEFAULT_CLASSE_TH.get(
-                                rc.replace(' ','').upper()[:1], {}).get("risk_label","Important"),
+                if can_edit:
+                    if st.button("↩️ Valeurs GMP par défaut",
+                                  use_container_width=True, key="reinit_seuils_classe"):
+                        st.session_state.thresholds_classe = {
+                            rc: {
+                                "alert":      DEFAULT_CLASSE_TH.get(
+                                    rc.replace(' ','').upper()[:1], {}).get("alert", 50),
+                                "action":     DEFAULT_CLASSE_TH.get(
+                                    rc.replace(' ','').upper()[:1], {}).get("action", 100),
+                                "risk_label": DEFAULT_CLASSE_TH.get(
+                                    rc.replace(' ','').upper()[:1], {}).get("risk_label","Important"),
+                            }
+                            for rc in all_classes_params
                         }
-                        for rc in all_classes_params
-                    }
-                    st.success("✅ Valeurs GMP restaurées."); st.rerun()
+                        st.success("✅ Valeurs GMP restaurées."); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # MESURES CORRECTIVES
@@ -3968,15 +3981,16 @@ elif active == "parametres":
                 ["Tout","⚠️ Alerte","🚨 Action"],
                 label_visibility="collapsed", key="filter_type")
         with col_f4:
-            if st.button("➕ Nouvelle", use_container_width=True):
-                st.session_state.show_new_measure = True
+            if can_edit:
+                if st.button("➕ Nouvelle", use_container_width=True):
+                    st.session_state.show_new_measure = True
 
         active_scope = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
         active_risk  = filter_risk_lbl.split()[-1]   if filter_risk_lbl != "🌐 Tout" else None
         active_type  = ("alert" if "Alerte" in filter_type else "action") \
                        if filter_type != "Tout" else None
 
-        if st.session_state.get("show_new_measure", False):
+        if can_edit and st.session_state.get("show_new_measure", False):
             with st.container():
                 st.markdown("#### ➕ Nouvelle mesure")
                 nmc1, nmc2, nmc3, nmc4 = st.columns([3,2,1.5,1.5])
@@ -4050,25 +4064,28 @@ elif active == "parametres":
                     f'font-weight:600;text-align:center">{tlbl}</div>',
                     unsafe_allow_html=True)
             with rc4:
-                if st.button("✏️", key=f"edit_btn_{real_idx}"):
-                    st.session_state[f"edit_m_{real_idx}"] = True; st.rerun()
+                if can_edit:
+                    if st.button("✏️", key=f"edit_btn_{real_idx}"):
+                        st.session_state[f"edit_m_{real_idx}"] = True; st.rerun()
             with rc5:
-                if st.button("🗑️", key=f"del_m_{real_idx}"):
-                    om.pop(real_idx)
-                    save_origin_measures(om)
-                    st.session_state.origin_measures = om
-                    st.rerun()
+                if can_edit:
+                    if st.button("🗑️", key=f"del_m_{real_idx}"):
+                        om.pop(real_idx)
+                        save_origin_measures(om)
+                        st.session_state.origin_measures = om
+                        st.rerun()
 
-        st.divider()
         col_sr, col_def = st.columns(2)
         with col_sr:
-            if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"):
-                save_origin_measures(om); st.success("✅ Sauvegardé !")
+            if can_edit:
+                if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"):
+                    save_origin_measures(om); st.success("✅ Sauvegardé !")
         with col_def:
-            if st.button("↩️ Réinitialiser", use_container_width=True,
-                          key="reinit_mesures"):
-                st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
-                save_origin_measures(st.session_state.origin_measures); st.rerun()
+            if can_edit:
+                if st.button("↩️ Réinitialiser", use_container_width=True,
+                              key="reinit_mesures"):
+                    st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
+                    save_origin_measures(st.session_state.origin_measures); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # POINTS DE PRÉLÈVEMENT
@@ -4137,9 +4154,11 @@ elif active == "parametres":
                 with c2:
                     be, bd = st.columns(2)
                     with be:
-                        if st.button("✏️", key=f"edit_pt_{i}"):
-                            st.session_state._edit_point = i; st.rerun()
-                    with bd:
+                        if can_edit:
+                            if st.button("✏️", key=f"edit_pt_{i}"):
+                                st.session_state._edit_point = i; st.rerun()
+                with bd:
+                    if can_edit:
                         if st.button("🗑️", key=f"del_pt_{i}"):
                             st.session_state.points.pop(i)
                             save_points(st.session_state.points); st.rerun()
@@ -4208,7 +4227,7 @@ elif active == "parametres":
             with eb2:
                 if st.button("Annuler", key="pt_cancel_edit"):
                     st.session_state._edit_point = None; st.rerun()
-        else:
+        elif can_edit:
             st.markdown("### ➕ Ajouter un point")
             np1, np2, np3, np4 = st.columns([3,2,2,2])
             with np1:
@@ -4283,13 +4302,15 @@ elif active == "parametres":
                       </div>
                     </div>""", unsafe_allow_html=True)
                 with oc2:
-                    if st.button("✏️", key=f"edit_op_{i}"):
-                        st.session_state._edit_operator = i; st.rerun()
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_op_{i}"):
+                            st.session_state._edit_operator = i; st.rerun()
                 with oc3:
-                    if st.button("🗑️", key=f"del_op_{i}"):
-                        ops.pop(i)
-                        save_operators(ops)
-                        st.session_state.operators = ops; st.rerun()
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_op_{i}"):
+                            ops.pop(i)
+                            save_operators(ops)
+                            st.session_state.operators = ops; st.rerun()
 
         st.divider()
         p_opts = ["Préparateur en pharmacie hospitalière","Pharmacien","Interne de pharmacie"]
@@ -4322,7 +4343,7 @@ elif active == "parametres":
             with eb2:
                 if st.button("Annuler", use_container_width=True, key="op_cancel_edit"):
                     st.session_state._edit_operator = None; st.rerun()
-        else:
+        elif can_edit:
             st.markdown("### ➕ Ajouter un opérateur")
             nc1, nc2 = st.columns(2)
             with nc1:
@@ -4443,9 +4464,10 @@ elif active == "parametres":
                                       key="confirm_restore_no"):
                             st.session_state.confirm_restore = False; st.rerun()
                 else:
-                    if st.button("⬆️ Restaurer ces données", use_container_width=True,
-                                  key="restore_btn"):
-                        st.session_state.confirm_restore = True; st.rerun()
+                    if can_edit:
+                        if st.button("⬆️ Restaurer ces données", use_container_width=True,
+                                      key="restore_btn"):
+                            st.session_state.confirm_restore = True; st.rerun()
             except json.JSONDecodeError:
                 st.error("❌ Fichier JSON invalide.")
             except Exception as e:
@@ -4502,32 +4524,34 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             st.markdown("### 🔄 Actions Supabase")
             syn1, syn2 = st.columns(2)
             with syn1:
-                if st.button("🔄 Forcer la synchronisation", use_container_width=True):
-                    save_germs(st.session_state.germs)
-                    save_prelevements(st.session_state.prelevements)
-                    save_schedules(st.session_state.schedules)
-                    save_surveillance(st.session_state.surveillance)
-                    save_points(st.session_state.points)
-                    save_operators(st.session_state.operators)
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    save_origin_measures(st.session_state.origin_measures)
-                    _supa_upsert('thresholds_classe', json.dumps(
-                        st.session_state.get("thresholds_classe", {}), ensure_ascii=False))
-                    st.success("✅ Toutes les données synchronisées !")
+                if can_edit:
+                    if st.button("🔄 Forcer la synchronisation", use_container_width=True):
+                        save_germs(st.session_state.germs)
+                        save_prelevements(st.session_state.prelevements)
+                        save_schedules(st.session_state.schedules)
+                        save_surveillance(st.session_state.surveillance)
+                        save_points(st.session_state.points)
+                        save_operators(st.session_state.operators)
+                        save_pending_identifications(st.session_state.pending_identifications)
+                        save_origin_measures(st.session_state.origin_measures)
+                        _supa_upsert('thresholds_classe', json.dumps(
+                            st.session_state.get("thresholds_classe", {}), ensure_ascii=False))
+                        st.success("✅ Toutes les données synchronisées !")
             with syn2:
-                if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
-                    st.session_state.germs                    = load_germs()
-                    st.session_state.prelevements             = load_prelevements()
-                    st.session_state.schedules                = load_schedules()
-                    st.session_state.surveillance             = load_surveillance()
-                    st.session_state.points                   = load_points()
-                    st.session_state.operators                = load_operators()
-                    st.session_state.pending_identifications  = load_pending_identifications()
-                    st.session_state.origin_measures          = load_origin_measures()
-                    _raw_tc = _supa_get('thresholds_classe')
-                    if _raw_tc:
-                        try:
-                            st.session_state.thresholds_classe = json.loads(_raw_tc)
-                        except Exception:
-                            pass
-                    st.success("✅ Données rechargées depuis Supabase !"); st.rerun()
+                if can_edit:
+                    if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
+                        st.session_state.germs                    = load_germs()
+                        st.session_state.prelevements             = load_prelevements()
+                        st.session_state.schedules                = load_schedules()
+                        st.session_state.surveillance             = load_surveillance()
+                        st.session_state.points                   = load_points()
+                        st.session_state.operators                = load_operators()
+                        st.session_state.pending_identifications  = load_pending_identifications()
+                        st.session_state.origin_measures          = load_origin_measures()
+                        _raw_tc = _supa_get('thresholds_classe')
+                        if _raw_tc:
+                            try:
+                                st.session_state.thresholds_classe = json.loads(_raw_tc)
+                            except Exception:
+                                pass
+                        st.success("✅ Données rechargées depuis Supabase !"); st.rerun()
