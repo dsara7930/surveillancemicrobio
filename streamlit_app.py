@@ -1327,11 +1327,11 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET SURVEILLANCE
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_surv:
+with tab_surv:
 
        # ── Modification d'un prélèvement existant ────────────────────────────
-if "edit_prelev_id" not in st.session_state:
-    st.session_state["edit_prelev_id"] = None
+    if "edit_prelev_id" not in st.session_state:
+        st.session_state["edit_prelev_id"] = None
 
 for idx, samp in enumerate(st.session_state.prelevements):
     if samp.get("archived"):
