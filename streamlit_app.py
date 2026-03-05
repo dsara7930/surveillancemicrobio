@@ -3544,22 +3544,26 @@ elif active == "plan":
         pts_json  = json.dumps(st.session_state.map_points, ensure_ascii=False)
 
         if is_pdf:
-            # ── Affichage PDF dans iframe + overlay canvas pour les points ────
-            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+            # Extraire le base64 pur (sans le préfixe data:...)
+            pdf_b64_pure = st.session_state.map_image.split(",")[1]
+
+            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
+<style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#f8fafc;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;height:100vh}}
 .toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
 .toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
 .toolbar button{{cursor:pointer}}.toolbar button.active,.toolbar button:hover{{background:#2563eb;color:#fff}}
-.viewer{{flex:1;position:relative;overflow:hidden}}
-iframe{{width:100%;height:100%;border:none;display:block}}
-#overlay{{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}}
-#overlay.add-mode{{pointer-events:all;cursor:crosshair}}
-.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;pointer-events:all;transition:transform .15s}}
+.viewer{{flex:1;position:relative;overflow:auto;background:#64748b}}
+#pdfCanvas{{display:block;margin:0 auto;max-width:100%}}
+.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
 .point:hover{{transform:translate(-50%,-50%) scale(1.4)}}
 .point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#334155}}
 .tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:.72rem;pointer-events:none;z-index:999;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
 .tooltip.visible{{display:block}}
+#canvasWrap{{position:relative;display:inline-block;margin:0 auto}}
+.viewer-inner{{text-align:center;min-height:100%}}
 </style></head><body>
 <div class="toolbar">
   <input id="ptLabel" placeholder="Nom du point" style="width:140px">
@@ -3570,43 +3574,54 @@ iframe{{width:100%;height:100%;border:none;display:block}}
   <button id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
   <button onclick="clearLast()">↩️ Annuler dernier</button>
   <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp; 🟡 Alerte &nbsp; 🔴 Action</span>
+  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp;🟡 Alerte &nbsp;🔴 Action</span>
 </div>
 <div class="viewer" id="viewer">
-  <iframe src="{st.session_state.map_image}#toolbar=0&navpanes=0&scrollbar=0" id="pdfFrame"></iframe>
-  <div id="overlay" onclick="handleClick(event)"></div>
-  <div id="tooltip" class="tooltip"></div>
+  <div class="viewer-inner">
+    <div id="canvasWrap">
+      <canvas id="pdfCanvas"></canvas>
+      <div id="tooltip" class="tooltip"></div>
+    </div>
+  </div>
 </div>
 <script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 let addMode = false;
 let points  = {pts_json};
 const surv  = {surv_json};
+let canvasRect = null;
+
+// Charger le PDF depuis base64
+const pdfData = atob('{pdf_b64_pure}');
+const pdfBytes = new Uint8Array(pdfData.length);
+for (let i = 0; i < pdfData.length; i++) pdfBytes[i] = pdfData.charCodeAt(i);
+
+pdfjsLib.getDocument({{data: pdfBytes}}).promise.then(pdf => {{
+  pdf.getPage(1).then(page => {{
+    const viewport = page.getViewport({{scale: 1.8}});
+    const canvas   = document.getElementById('pdfCanvas');
+    canvas.width   = viewport.width;
+    canvas.height  = viewport.height;
+    page.render({{canvasContext: canvas.getContext('2d'), viewport}}).promise.then(() => {{
+      canvasRect = canvas.getBoundingClientRect();
+      renderPoints();
+    }});
+  }});
+}});
 
 function toggleAdd() {{
   addMode = !addMode;
   const btn = document.getElementById('addBtn');
-  const ov  = document.getElementById('overlay');
   btn.classList.toggle('active', addMode);
   btn.textContent = addMode ? '✋ Annuler' : '📍 Placer un point';
-  ov.className = addMode ? 'add-mode' : '';
-}}
-
-function handleClick(e) {{
-  if (!addMode) return;
-  const viewer = document.getElementById('viewer');
-  const rect   = viewer.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
-  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
-  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
-  const survLabel = document.getElementById('ptSurv').value || null;
-  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
-  renderPoints();
-  toggleAdd();
+  document.getElementById('viewer').style.cursor = addMode ? 'crosshair' : 'default';
 }}
 
 function renderPoints() {{
   document.querySelectorAll('.point').forEach(p => p.remove());
-  const viewer = document.getElementById('viewer');
+  const wrap = document.getElementById('canvasWrap');
   points.forEach((pt, i) => {{
     const s = surv.find(r => r.label === (pt.survLabel || pt.label));
     const status = s ? s.status : 'none';
@@ -3617,7 +3632,7 @@ function renderPoints() {{
     div.textContent = i + 1;
     div.addEventListener('mouseenter', e => showTip(e, pt, s));
     div.addEventListener('mouseleave', hideTip);
-    viewer.appendChild(div);
+    wrap.appendChild(div);
   }});
 }}
 
@@ -3634,10 +3649,22 @@ function hideTip()  {{ document.getElementById('tooltip').classList.remove('visi
 function clearLast(){{ if (points.length) {{ points.pop(); renderPoints(); }} }}
 function clearAll() {{ if (confirm('Effacer tous les points ?')) {{ points = []; renderPoints(); }} }}
 
-renderPoints();
-</script></body></html>"""
+document.getElementById('canvasWrap').addEventListener('click', function(e) {{
+  if (!addMode) return;
+  if (e.target.classList.contains('point')) return;
+  const wrap = document.getElementById('canvasWrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
+  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
+  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
+  const survLabel = document.getElementById('ptSurv').value || null;
+  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
+  renderPoints();
+  toggleAdd();
+}});
+<\/script></body></html>"""
 
-        else:
+        else : 
             # ── Affichage image classique ──────────────────────────────────────
             map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0}}
