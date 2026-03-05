@@ -2528,17 +2528,22 @@ if active == "planning":
         _, n_days_m = _cal3.monthrange(cal_year, cal_month)
         cal_weeks   = _cal3.monthcalendar(cal_year, cal_month)
 
-        # ── Snapshot session_state pour le rendu ──────────────────────────────
-        _prevs    = [p for p in st.session_state.prelevements if not p.get("archived", False)]
-        _scheds   = st.session_state.schedules
+       # ── Snapshot session_state pour le rendu ──────────────────────────────
+        _prevs       = [p for p in st.session_state.prelevements if not p.get("archived", False)]
+        _active_sids = {p['id'] for p in _prevs}  # IDs des prélèvements actifs uniquement
 
         def _get_day_cal(d):
+            # On filtre strictement : seuls les schedules dont le sample existe encore et n'est pas archivé
             j0r = [p for p in _prevs
                    if p.get('date') and datetime.fromisoformat(p['date']).date() == d]
-            j2r = [s for s in _scheds
-                   if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
-            j7r = [s for s in _scheds
-                   if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
+            j2r = [s for s in st.session_state.schedules
+                   if s['when'] == 'J2'
+                   and s.get('sample_id') in _active_sids
+                   and datetime.fromisoformat(s['due_date']).date() == d]
+            j7r = [s for s in st.session_state.schedules
+                   if s['when'] == 'J7'
+                   and s.get('sample_id') in _active_sids
+                   and datetime.fromisoformat(s['due_date']).date() == d]
             return j0r, j2r, j7r
 
         # ── Légende ───────────────────────────────────────────────────────────
