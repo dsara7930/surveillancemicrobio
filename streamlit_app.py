@@ -533,15 +533,19 @@ def load_surveillance():
     return []
 
 def save_surveillance(records):
-    if not records:
-        return
     js = json.dumps(records, ensure_ascii=False)
     _supa_upsert('surveillance', js)
+    # Supprimer le CSV si liste vide, sinon écrire
     try:
-        with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=records[0].keys())
-            writer.writeheader()
-            writer.writerows(records)
+        if not records:
+            if os.path.exists(CSV_FILE):
+                os.remove(CSV_FILE)
+        else:
+            all_keys = list(dict.fromkeys(k for r in records for k in r.keys()))
+            with open(CSV_FILE, "w", newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=all_keys, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(records)
     except Exception:
         pass
 
