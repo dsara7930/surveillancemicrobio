@@ -3621,7 +3621,9 @@ elif active == "historique":
         c_dl, c_cl = st.columns(2)
         with c_dl:
             csv_str = io.StringIO()
-            writer = csv.DictWriter(csv_str, fieldnames=surv[0].keys())
+           # Collecte tous les champs présents dans tous les enregistrements (union)
+            all_keys = list(dict.fromkeys(k for r in surv for k in r.keys()))
+            writer = csv.DictWriter(csv_str, fieldnames=all_keys, extrasaction="ignore")
             writer.writeheader(); writer.writerows(surv)
             st.download_button("⬇️ Télécharger CSV", csv_str.getvalue(), "surveillance.csv", "text/csv", use_container_width=True)
         with c_cl:
