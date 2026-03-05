@@ -3907,7 +3907,19 @@ elif active == "historique":
         with c_cl:
             if st.button("🗑️ Vider l'historique", use_container_width=True):
                 st.session_state.surveillance = []
-                if os.path.exists(CSV_FILE): os.remove(CSV_FILE)
+                save_surveillance([])
+                try:
+                    supa = get_supabase_client()
+                    if supa:
+                        import json as _json
+                        supa.table("app_data").upsert({
+                            "key": "surveillance",
+                            "value": _json.dumps([], ensure_ascii=False)
+                        }).execute()
+                except Exception:
+                    pass
+                if os.path.exists(CSV_FILE):
+                    os.remove(CSV_FILE)
                 st.rerun()
         alerts = sum(1 for r in surv if r["status"]=="alert")
         actions = sum(1 for r in surv if r["status"]=="action")
