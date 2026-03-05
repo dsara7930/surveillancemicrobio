@@ -3520,254 +3520,368 @@ if active == "planning":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "plan":
     st.markdown("#### 🗺️ Plan URC interactif — placement des prélèvements")
-    uploaded = st.file_uploader("Uploader le plan URC (PNG, JPG ou PDF)", type=["png","jpg","jpeg","pdf"], key="plan_upload_main")
+
+    # ── Upload ────────────────────────────────────────────────────────────────
+    uploaded = st.file_uploader(
+        "Uploader le plan URC (PNG, JPG ou PDF)",
+        type=["png", "jpg", "jpeg", "pdf"],
+        key="plan_upload_main"
+    )
 
     if uploaded:
         raw = uploaded.read()
         if uploaded.type == "application/pdf":
-            pdf_b64 = base64.b64encode(raw).decode()
-            st.session_state.map_image = f"data:application/pdf;base64,{pdf_b64}"
-            st.session_state.map_is_pdf = True
+            try:
+                from pdf2image import convert_from_bytes
+                import io as _io2
+                with st.spinner("🔄 Conversion du PDF en cours..."):
+                    pages = convert_from_bytes(raw, dpi=150, first_page=1, last_page=1)
+                    buf = _io2.BytesIO()
+                    pages[0].save(buf, format="PNG")
+                    buf.seek(0)
+                    img_b64 = base64.b64encode(buf.read()).decode()
+                    st.session_state.map_image = f"data:image/png;base64,{img_b64}"
+                st.success("✅ PDF converti avec succès.")
+            except ImportError:
+                st.error("❌ `pdf2image` non installé — ajoutez `pdf2image` dans requirements.txt et `poppler-utils` dans packages.txt.")
+                st.stop()
+            except Exception as e:
+                st.error(f"❌ Erreur conversion PDF : {e}")
+                st.stop()
         else:
             img_b64 = base64.b64encode(raw).decode()
             st.session_state.map_image = f"data:{uploaded.type};base64,{img_b64}"
-            st.session_state.map_is_pdf = False
 
+    # ── Affichage ─────────────────────────────────────────────────────────────
     if st.session_state.get("map_image"):
-        is_pdf = st.session_state.get("map_is_pdf", False)
+
         surv_points = [
-            {"label": r["prelevement"], "germ": r["germ_match"],
-             "ufc": r["ufc"], "date": r["date"], "status": r["status"]}
+            {
+                "label":  r["prelevement"],
+                "germ":   r["germ_match"],
+                "ufc":    r["ufc"],
+                "date":   r["date"],
+                "status": r["status"],
+            }
             for r in st.session_state.surveillance
         ]
         surv_json = json.dumps(surv_points, ensure_ascii=False)
-        pts_json  = json.dumps(st.session_state.map_points, ensure_ascii=False)
+        pts_json  = json.dumps(st.session_state.get("map_points", []), ensure_ascii=False)
 
-        if is_pdf:
-            # Extraire le base64 pur (sans le préfixe data:...)
-            pdf_b64_pure = st.session_state.map_image.split(",")[1]
+        options_html = "".join(
+            f'<option value="{r["label"]}">'
+            f'{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)'
+            f'</option>'
+            for r in surv_points
+        )
 
-            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;height:100vh}}
-.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
-.toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
-.toolbar button{{cursor:pointer}}.toolbar button.active,.toolbar button:hover{{background:#2563eb;color:#fff}}
-.viewer{{flex:1;position:relative;overflow:auto;background:#64748b}}
-#pdfCanvas{{display:block;margin:0 auto;max-width:100%}}
-.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
-.point:hover{{transform:translate(-50%,-50%) scale(1.4)}}
-.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#334155}}
-.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:.72rem;pointer-events:none;z-index:999;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
-.tooltip.visible{{display:block}}
-#canvasWrap{{position:relative;display:inline-block;margin:0 auto}}
-.viewer-inner{{text-align:center;min-height:100%}}
+        map_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{
+  background: #1e293b;
+  font-family: 'Segoe UI', sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}}
+
+/* ── Toolbar ── */
+.toolbar {{
+  padding: 8px 14px;
+  background: #fff;
+  border-bottom: 2px solid #e2e8f0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}}
+.toolbar input, .toolbar select {{
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: #1e293b;
+  font-size: .75rem;
+  outline: none;
+}}
+.toolbar input:focus, .toolbar select:focus {{
+  border-color: #2563eb;
+}}
+.tb-btn {{
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: #1e293b;
+  font-size: .75rem;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}}
+.tb-btn:hover {{ background: #dbeafe; border-color: #2563eb; color: #1e40af; }}
+.tb-btn.active {{ background: #2563eb; border-color: #2563eb; color: #fff; }}
+.tb-btn.danger:hover {{ background: #fef2f2; border-color: #ef4444; color: #dc2626; }}
+.legend {{
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: .65rem;
+  color: #64748b;
+}}
+.legend-dot {{
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 3px;
+}}
+
+/* ── Map ── */
+.map-wrap {{
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #1e293b;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}}
+.map-inner {{
+  position: relative;
+  display: inline-block;
+  margin: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  border-radius: 4px;
+  overflow: visible;
+}}
+#planImg {{
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  user-select: none;
+  -webkit-user-drag: none;
+}}
+
+/* ── Points ── */
+.point {{
+  position: absolute;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,.6);
+  z-index: 20;
+  transition: transform .15s, box-shadow .15s;
+  pointer-events: all;
+}}
+.point:hover {{
+  transform: translate(-50%, -50%) scale(1.5);
+  box-shadow: 0 4px 20px rgba(0,0,0,.7);
+}}
+.point.ok     {{ background: #22c55e; }}
+.point.alert  {{ background: #f59e0b; }}
+.point.action {{ background: #ef4444; }}
+.point.none   {{ background: #475569; }}
+
+/* ── Tooltip ── */
+.tooltip {{
+  position: fixed;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: .73rem;
+  pointer-events: none;
+  z-index: 9999;
+  display: none;
+  min-width: 210px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  line-height: 1.7;
+}}
+.tooltip.visible {{ display: block; }}
+.tip-title {{
+  font-weight: 800;
+  font-size: .82rem;
+  color: #1e293b;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 5px;
+}}
+.tip-row {{ color: #475569; }}
+.tip-row b {{ color: #1e293b; }}
+
+/* ── Mode curseur ── */
+.map-wrap.add-mode {{ cursor: crosshair; }}
+
+/* ── Compteur ── */
+#counter {{
+  font-size: .72rem;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-weight: 600;
+}}
 </style></head><body>
+
 <div class="toolbar">
-  <input id="ptLabel" placeholder="Nom du point" style="width:140px">
-  <select id="ptSurv" style="width:210px">
-    <option value="">-- Lier à un prélèvement --</option>
-    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
+  <input id="ptLabel" placeholder="🏷️ Nom du point" style="width:150px">
+  <select id="ptSurv" style="width:220px">
+    <option value="">— Lier à un résultat —</option>
+    {options_html}
   </select>
-  <button id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
-  <button onclick="clearLast()">↩️ Annuler dernier</button>
-  <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp;🟡 Alerte &nbsp;🔴 Action</span>
-</div>
-<div class="viewer" id="viewer">
-  <div class="viewer-inner">
-    <div id="canvasWrap">
-      <canvas id="pdfCanvas"></canvas>
-      <div id="tooltip" class="tooltip"></div>
-    </div>
+  <button class="tb-btn" id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
+  <button class="tb-btn" onclick="clearLast()">↩️ Annuler dernier</button>
+  <button class="tb-btn danger" onclick="clearAll()">🗑️ Tout effacer</button>
+  <span id="counter">0 point(s)</span>
+  <div class="legend">
+    <span><span class="legend-dot" style="background:#475569"></span>Non lié</span>
+    <span><span class="legend-dot" style="background:#22c55e"></span>OK</span>
+    <span><span class="legend-dot" style="background:#f59e0b"></span>Alerte</span>
+    <span><span class="legend-dot" style="background:#ef4444"></span>Action</span>
   </div>
 </div>
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-let addMode = false;
-let points  = {pts_json};
-const surv  = {surv_json};
-let canvasRect = null;
-
-// Charger le PDF depuis base64
-const pdfData = atob('{pdf_b64_pure}');
-const pdfBytes = new Uint8Array(pdfData.length);
-for (let i = 0; i < pdfData.length; i++) pdfBytes[i] = pdfData.charCodeAt(i);
-
-pdfjsLib.getDocument({{data: pdfBytes}}).promise.then(pdf => {{
-  pdf.getPage(1).then(page => {{
-    const viewport = page.getViewport({{scale: 1.8}});
-    const canvas   = document.getElementById('pdfCanvas');
-    canvas.width   = viewport.width;
-    canvas.height  = viewport.height;
-    page.render({{canvasContext: canvas.getContext('2d'), viewport}}).promise.then(() => {{
-      canvasRect = canvas.getBoundingClientRect();
-      renderPoints();
-    }});
-  }});
-}});
-
-function toggleAdd() {{
-  addMode = !addMode;
-  const btn = document.getElementById('addBtn');
-  btn.classList.toggle('active', addMode);
-  btn.textContent = addMode ? '✋ Annuler' : '📍 Placer un point';
-  document.getElementById('viewer').style.cursor = addMode ? 'crosshair' : 'default';
-}}
-
-function renderPoints() {{
-  document.querySelectorAll('.point').forEach(p => p.remove());
-  const wrap = document.getElementById('canvasWrap');
-  points.forEach((pt, i) => {{
-    const s = surv.find(r => r.label === (pt.survLabel || pt.label));
-    const status = s ? s.status : 'none';
-    const div = document.createElement('div');
-    div.className = 'point ' + status;
-    div.style.left = pt.x + '%';
-    div.style.top  = pt.y + '%';
-    div.textContent = i + 1;
-    div.addEventListener('mouseenter', e => showTip(e, pt, s));
-    div.addEventListener('mouseleave', hideTip);
-    wrap.appendChild(div);
-  }});
-}}
-
-function showTip(e, pt, s) {{
-  const t = document.getElementById('tooltip');
-  t.innerHTML = '<div style="font-weight:800;color:#1e293b;margin-bottom:6px">📍 ' + pt.label + '</div>'
-    + (s ? '<div>Germe : <i>' + s.germ + '</i></div><div>UFC : <b>' + s.ufc + '</b></div><div>Date : ' + s.date + '</div>'
-         : '<div style="color:#94a3b8">Non lié à un résultat</div>');
-  t.style.left = (e.clientX + 15) + 'px';
-  t.style.top  = (e.clientY - 10) + 'px';
-  t.classList.add('visible');
-}}
-function hideTip()  {{ document.getElementById('tooltip').classList.remove('visible'); }}
-function clearLast(){{ if (points.length) {{ points.pop(); renderPoints(); }} }}
-function clearAll() {{ if (confirm('Effacer tous les points ?')) {{ points = []; renderPoints(); }} }}
-
-document.getElementById('canvasWrap').addEventListener('click', function(e) {{
-  if (!addMode) return;
-  if (e.target.classList.contains('point')) return;
-  const wrap = document.getElementById('canvasWrap');
-  const rect = wrap.getBoundingClientRect();
-  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
-  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
-  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
-  const survLabel = document.getElementById('ptSurv').value || null;
-  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
-  renderPoints();
-  toggleAdd();
-}});
-<\/script></body></html>"""
-
-        else : 
-            # ── Affichage image classique ──────────────────────────────────────
-            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column}}
-.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
-.toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
-.toolbar button{{cursor:pointer}}.toolbar button.active,.toolbar button:hover{{background:#2563eb;color:#fff}}
-.map-container{{flex:1;overflow:auto;position:relative}}.map-inner{{position:relative;display:inline-block;min-width:100%}}
-#planImg{{max-width:100%;display:block}}
-.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:10;transition:transform .15s}}
-.point:hover{{transform:translate(-50%,-50%) scale(1.4)}}
-.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#334155}}
-.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:.72rem;pointer-events:none;z-index:999;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
-.tooltip.visible{{display:block}}
-</style></head><body>
-<div class="toolbar">
-  <input id="ptLabel" placeholder="Nom du point" style="width:140px">
-  <select id="ptSurv" style="width:210px">
-    <option value="">-- Lier à un prélèvement --</option>
-    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
-  </select>
-  <button id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
-  <button onclick="clearLast()">↩️ Annuler dernier</button>
-  <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp; 🟡 Alerte &nbsp; 🔴 Action</span>
-</div>
-<div class="map-container" id="mapContainer">
+<div class="map-wrap" id="mapWrap">
   <div class="map-inner" id="mapInner">
-    <img id="planImg" src="{st.session_state.map_image}" draggable="false">
-    <div id="tooltip" class="tooltip"></div>
+    <img id="planImg" src="{st.session_state.map_image}" draggable="false" alt="Plan URC">
   </div>
 </div>
+<div id="tooltip" class="tooltip"></div>
+
 <script>
 let addMode = false;
 let points  = {pts_json};
 const surv  = {surv_json};
 
+function updateCounter() {{
+  document.getElementById('counter').textContent = points.length + ' point(s)';
+}}
+
 function toggleAdd() {{
   addMode = !addMode;
-  const btn = document.getElementById('addBtn');
+  const btn  = document.getElementById('addBtn');
+  const wrap = document.getElementById('mapWrap');
   btn.classList.toggle('active', addMode);
-  btn.textContent = addMode ? '✋ Annuler' : '📍 Placer un point';
-  document.getElementById('mapContainer').style.cursor = addMode ? 'crosshair' : 'default';
+  btn.textContent = addMode ? '✋ Annuler placement' : '📍 Placer un point';
+  wrap.classList.toggle('add-mode', addMode);
 }}
 
 function renderPoints() {{
   document.querySelectorAll('.point').forEach(p => p.remove());
   const inner = document.getElementById('mapInner');
   points.forEach((pt, i) => {{
-    const s = surv.find(r => r.label === (pt.survLabel || pt.label));
+    const s      = surv.find(r => r.label === (pt.survLabel || pt.label));
     const status = s ? s.status : 'none';
-    const div = document.createElement('div');
-    div.className = 'point ' + status;
-    div.style.left = pt.x + '%';
-    div.style.top  = pt.y + '%';
+    const div    = document.createElement('div');
+    div.className   = 'point ' + status;
+    div.style.left  = pt.x + '%';
+    div.style.top   = pt.y + '%';
     div.textContent = i + 1;
+    div.title       = pt.label;
     div.addEventListener('mouseenter', e => showTip(e, pt, s));
     div.addEventListener('mouseleave', hideTip);
     inner.appendChild(div);
   }});
+  updateCounter();
 }}
 
 function showTip(e, pt, s) {{
   const t = document.getElementById('tooltip');
-  t.innerHTML = '<div style="font-weight:800;color:#1e293b;margin-bottom:6px">📍 ' + pt.label + '</div>'
-    + (s ? '<div>Germe : <i>' + s.germ + '</i></div><div>UFC : <b>' + s.ufc + '</b></div><div>Date : ' + s.date + '</div>'
-         : '<div style="color:#94a3b8">Non lié à un résultat</div>');
-  t.style.left = (e.clientX + 15) + 'px';
-  t.style.top  = (e.clientY - 10) + 'px';
+  const statusTxt = s
+    ? (s.status === 'ok' ? '✅ Conforme' : s.status === 'alert' ? '⚠️ Alerte' : '🚨 Action requise')
+    : null;
+  t.innerHTML =
+    '<div class="tip-title">📍 ' + pt.label + '</div>' +
+    (s
+      ? '<div class="tip-row">Germe : <b>' + s.germ + '</b></div>' +
+        '<div class="tip-row">UFC/m³ : <b>' + s.ufc + '</b></div>' +
+        '<div class="tip-row">Date : <b>' + s.date + '</b></div>' +
+        '<div class="tip-row" style="margin-top:4px">Statut : <b>' + statusTxt + '</b></div>'
+      : '<div class="tip-row" style="color:#94a3b8;font-style:italic">Non lié à un résultat</div>'
+    );
+  t.style.left = (e.clientX + 16) + 'px';
+  t.style.top  = (e.clientY - 12) + 'px';
   t.classList.add('visible');
 }}
-function hideTip()  {{ document.getElementById('tooltip').classList.remove('visible'); }}
-function clearLast(){{ if (points.length) {{ points.pop(); renderPoints(); }} }}
-function clearAll() {{ if (confirm('Effacer tous les points ?')) {{ points = []; renderPoints(); }} }}
 
+function hideTip() {{
+  document.getElementById('tooltip').classList.remove('visible');
+}}
+
+function clearLast() {{
+  if (points.length === 0) return;
+  points.pop();
+  renderPoints();
+}}
+
+function clearAll() {{
+  if (!confirm('Effacer tous les points du plan ?')) return;
+  points = [];
+  renderPoints();
+}}
+
+// Clic sur la carte pour placer un point
 document.getElementById('mapInner').addEventListener('click', function(e) {{
   if (!addMode) return;
+  if (e.target.classList.contains('point')) return;
   const img  = document.getElementById('planImg');
   const rect = img.getBoundingClientRect();
-  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
-  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
-  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
-  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
+  if (e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top  || e.clientY > rect.bottom) return;
+  const x         = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
+  const y         = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
+  const label     = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
   const survLabel = document.getElementById('ptSurv').value || null;
   points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
   renderPoints();
   toggleAdd();
 }});
 
-const img = document.getElementById('planImg');
-if (img.complete) renderPoints(); else img.addEventListener('load', renderPoints);
-</script></body></html>"""
+// Tooltip suit la souris
+document.addEventListener('mousemove', function(e) {{
+  const t = document.getElementById('tooltip');
+  if (t.classList.contains('visible')) {{
+    t.style.left = (e.clientX + 16) + 'px';
+    t.style.top  = (e.clientY - 12) + 'px';
+  }}
+}});
 
-        st.components.v1.html(map_html, height=700, scrolling=False)
+// Init
+const img = document.getElementById('planImg');
+if (img.complete && img.naturalWidth > 0) renderPoints();
+else img.addEventListener('load', renderPoints);
+</script>
+</body></html>"""
+
+        st.components.v1.html(map_html, height=720, scrolling=False)
 
     else:
-        st.markdown(
-            '<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;'
-            'padding:64px;text-align:center;color:#64748b">'
-            '<div style="font-size:3rem;margin-bottom:12px">🗺️</div>'
-            '<div style="font-size:1rem;font-weight:600">Uploadez un plan URC</div>'
-            '<div style="font-size:.8rem;margin-top:6px">PNG, JPG ou PDF acceptés</div>'
-            '</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;
+                    padding:72px 32px;text-align:center;color:#64748b;margin-top:16px">
+          <div style="font-size:3.5rem;margin-bottom:12px">🗺️</div>
+          <div style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:6px">
+            Aucun plan chargé
+          </div>
+          <div style="font-size:.85rem">
+            Uploadez un plan URC en <strong>PNG</strong>, <strong>JPG</strong> ou <strong>PDF</strong>
+          </div>
+          <div style="font-size:.75rem;color:#94a3b8;margin-top:8px">
+            Le PDF sera automatiquement converti en image
+          </div>
+        </div>""", unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
