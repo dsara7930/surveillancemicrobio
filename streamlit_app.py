@@ -1305,9 +1305,7 @@ renderList();
                     save_germs(st.session_state.germs)
                     st.rerun()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB : SURVEILLANCE
-# ═══════════════════════════════════════════════════════════════════════════════
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1447,7 +1445,7 @@ if active == "surveillance":
             if samp.get("archived"):
                 continue
 
-            col_info, col_btn = st.columns([5, 1])
+            col_info, col_edit, col_del = st.columns([5, 1, 1])
             with col_info:
                 st.markdown(
                     f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
@@ -1459,9 +1457,24 @@ if active == "surveillance":
                     f"· {samp.get('operateur','—')}</span>"
                     f"</div>",
                     unsafe_allow_html=True)
-            with col_btn:
+            with col_edit:
                 if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
                     st.session_state["edit_prelev_id"] = samp["id"]
+                    st.rerun()
+            with col_del:
+                if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
+                    sid = samp["id"]
+                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+                    st.session_state.pending_identifications = [
+                        x for x in st.session_state.pending_identifications if x.get('sample_id') != sid
+                    ]
+                    save_schedules(st.session_state.schedules)
+                    save_prelevements(st.session_state.prelevements)
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    if st.session_state.get("edit_prelev_id") == sid:
+                        st.session_state["edit_prelev_id"] = None
+                    st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                     st.rerun()
 
             if st.session_state.get("edit_prelev_id") == samp["id"]:
@@ -1957,51 +1970,84 @@ if active == "surveillance":
                             if germ_input and germ_input != "— Sélectionner un germe —":
                                 match, score = find_germ_match(germ_input, st.session_state.germs)
                                 if match and score > 0.4:
-                                    risk   = match["risk"]
-                                    th     = get_thresholds_for_risk(risk, st.session_state.thresholds)
-                                    ufc    = _ufc
-                                    status = "action" if ufc >= th["action"] else "alert" if ufc >= th["alert"] else "ok"
-                                    st.session_state.surveillance.append({
-                                        "date":             str(date_id),
-                                        "prelevement":      _label,
-                                        "sample_id":        _sid,
-                                        "germ_saisi":       germ_input,
-                                        "germ_match":       match["name"],
-                                        "match_score":      f"{int(score*100)}%",
-                                        "ufc":              ufc,
-                                        "risk":             risk,
-                                        "room_class":       pt_class,
-                                        "alert_threshold":  th["alert"],
-                                        "action_threshold": th["action"],
-                                        "triggered_by":     "germe",
-                                        "status":           status,
-                                        "operateur":        pt_oper,
-                                        "remarque":         remarque,
-                                        "readings":         _when_str,
-                                    })
-                                    save_surveillance(st.session_state.surveillance)
-                                    for _ri in real_indices:
-                                        st.session_state.pending_identifications[_ri]['status'] = 'done'
-                                    save_pending_identifications(st.session_state.pending_identifications)
-                                    if status in ("alert", "action"):
-                                        st.session_state["_show_mesures_popup"] = {
-                                            "status":       status,
-                                            "germ":         match["name"],
-                                            "ufc":          ufc,
-                                            "risk":         risk,
-                                            "label":        _label,
-                                            "room_class":   pt_class,
-                                            "triggered_by": "germe",
-                                            "th_germe":     th,
-                                            "th_classe":    {},
-                                        }
-                                    else:
-                                        st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — Conforme")
-                                    st.rerun()
+                                    risk  = match["risk"]
+                                    ufc   = _ufc
+
+                                # ── Seuils germe ──────────────────────────────────────
+                                th_germe = get_thresholds_for_risk(risk, st.session_state.thresholds)
+
+                                # ── Seuils classe ─────────────────────────────────────
+                                th_classe = st.session_state.get("thresholds_classe", {}).get(pt_class, {})
+
+                                # ── Seuil le plus contraignant (le plus bas) ──────────
+                                germe_alert  = th_germe.get("alert",  float("inf"))
+                                germe_action = th_germe.get("action", float("inf"))
+                                classe_alert  = th_classe.get("alert",  float("inf")) if th_classe else float("inf")
+                                classe_action = th_classe.get("action", float("inf")) if th_classe else float("inf")
+
+                                eff_alert  = min(germe_alert,  classe_alert)
+                                eff_action = min(germe_action, classe_action)
+
+                                # ── Qui a déclenché ? ─────────────────────────────────
+                                if ufc >= eff_action:
+                                    status = "action"
+                                    triggered_by = "classe" if classe_action <= germe_action else "germe"
+                                elif ufc >= eff_alert:
+                                    status = "alert"
+                                    triggered_by = "classe" if classe_alert <= germe_alert else "germe"
                                 else:
-                                    st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
+                                    status = "ok"
+                                    triggered_by = None
+
+                                # ── Seuil effectif affiché (le plus contraignant) ─────
+                                th_display = {
+                                    "alert":  eff_alert  if eff_alert  != float("inf") else "—",
+                                    "action": eff_action if eff_action != float("inf") else "—",
+                                }
+
+                                st.session_state.surveillance.append({
+                                    "date":             str(date_id),
+                                    "prelevement":      _label,
+                                    "sample_id":        _sid,
+                                    "germ_saisi":       germ_input,
+                                    "germ_match":       match["name"],
+                                    "match_score":      f"{int(score*100)}%",
+                                    "ufc":              ufc,
+                                    "risk":             risk,
+                                    "room_class":       pt_class,
+                                    "alert_threshold":  th_display["alert"],
+                                    "action_threshold": th_display["action"],
+                                    "triggered_by":     triggered_by,
+                                    "status":           status,
+                                    "operateur":        pt_oper,
+                                    "remarque":         remarque,
+                                    "readings":         _when_str,
+                                })
+                                save_surveillance(st.session_state.surveillance)
+
+                                for _ri in real_indices:
+                                    st.session_state.pending_identifications[_ri]['status'] = 'done'
+                                save_pending_identifications(st.session_state.pending_identifications)
+
+                                if status in ("alert", "action"):
+                                    st.session_state["_show_mesures_popup"] = {
+                                        "status":       status,
+                                        "germ":         match["name"],
+                                        "ufc":          ufc,
+                                        "risk":         risk,
+                                        "label":        _label,
+                                        "room_class":   pt_class,
+                                        "triggered_by": triggered_by,
+                                        "th_germe":     th_display,
+                                        "th_classe":    {},
+                                    }
+                                else:
+                                    st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — Conforme")
+                                st.rerun()
                             else:
-                                st.error("Veuillez sélectionner un germe dans la liste.")
+                                st.warning(f"⚠️ Aucune correspondance pour **{germ_input}**.")
+                        else:
+                            st.error("Veuillez sélectionner un germe dans la liste.")
                     with idc2:
                         if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{_key}"):
                             for _e in _entries:
