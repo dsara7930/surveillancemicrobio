@@ -3521,59 +3521,226 @@ if active == "planning":
 elif active == "plan":
     st.markdown("#### 🗺️ Plan URC interactif — placement des prélèvements")
     uploaded = st.file_uploader("Uploader le plan URC (PNG, JPG ou PDF)", type=["png","jpg","jpeg","pdf"], key="plan_upload_main")
+
     if uploaded:
         raw = uploaded.read()
         if uploaded.type == "application/pdf":
             pdf_b64 = base64.b64encode(raw).decode()
-            surv_points = [{"label": r["prelevement"], "germ": r["germ_match"], "ufc": r["ufc"], "date": r["date"], "status": r["status"]} for r in st.session_state.surveillance]
-            surv_json = json.dumps(surv_points, ensure_ascii=False)
-            pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
-            st.info("Plan PDF chargé — utilisez l'interface ci-dessous pour placer les points.")
+            st.session_state.map_image = f"data:application/pdf;base64,{pdf_b64}"
+            st.session_state.map_is_pdf = True
         else:
-            img_data = base64.b64encode(raw).decode()
-            st.session_state.map_image = f"data:{uploaded.type};base64,{img_data}"
+            img_b64 = base64.b64encode(raw).decode()
+            st.session_state.map_image = f"data:{uploaded.type};base64,{img_b64}"
+            st.session_state.map_is_pdf = False
 
-    if st.session_state.map_image and (not uploaded or uploaded.type != "application/pdf"):
-        surv_points = [{"label": r["prelevement"], "germ": r["germ_match"], "ufc": r["ufc"], "date": r["date"], "status": r["status"]} for r in st.session_state.surveillance]
+    if st.session_state.get("map_image"):
+        is_pdf = st.session_state.get("map_is_pdf", False)
+        surv_points = [
+            {"label": r["prelevement"], "germ": r["germ_match"],
+             "ufc": r["ufc"], "date": r["date"], "status": r["status"]}
+            for r in st.session_state.surveillance
+        ]
         surv_json = json.dumps(surv_points, ensure_ascii=False)
-        pts_json = json.dumps(st.session_state.map_points, ensure_ascii=False)
-        map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0}}body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:80vh;display:flex;flex-direction:column}}
-.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}}
-.toolbar select,.toolbar input,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
-.toolbar button{{cursor:pointer}}.toolbar button:hover,.toolbar button.active{{background:#2563eb;color:#fff}}
-.map-container{{flex:1;overflow:auto;position:relative}}.map-inner{{position:relative;display:inline-block;min-width:100%;min-height:100%}}
-#planImg{{max-width:100%;display:block}}
-.point{{position:absolute;width:24px;height:24px;border-radius:50%;border:2px solid white;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;box-shadow:0 0 10px rgba(0,0,0,.6);transition:transform .2s;z-index:10}}
-.point:hover{{transform:translate(-50%,-50%) scale(1.5)}}.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#0f172a}}
-.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px;font-size:.72rem;pointer-events:none;z-index:1000;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
+        pts_json  = json.dumps(st.session_state.map_points, ensure_ascii=False)
+
+        if is_pdf:
+            # ── Affichage PDF dans iframe + overlay canvas pour les points ────
+            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#f8fafc;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;height:100vh}}
+.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
+.toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
+.toolbar button{{cursor:pointer}}.toolbar button.active,.toolbar button:hover{{background:#2563eb;color:#fff}}
+.viewer{{flex:1;position:relative;overflow:hidden}}
+iframe{{width:100%;height:100%;border:none;display:block}}
+#overlay{{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}}
+#overlay.add-mode{{pointer-events:all;cursor:crosshair}}
+.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;pointer-events:all;transition:transform .15s}}
+.point:hover{{transform:translate(-50%,-50%) scale(1.4)}}
+.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#334155}}
+.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:.72rem;pointer-events:none;z-index:999;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
 .tooltip.visible{{display:block}}
 </style></head><body>
 <div class="toolbar">
-  <input id="ptLabel" placeholder="Nom du point" style="width:130px">
-  <select id="ptSurv" style="width:200px"><option value="">-- Lier à un prélèvement --</option>{''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}</select>
-  <button id="addBtn" onclick="toggleAddMode()">📍 Placer un point</button>
+  <input id="ptLabel" placeholder="Nom du point" style="width:140px">
+  <select id="ptSurv" style="width:210px">
+    <option value="">-- Lier à un prélèvement --</option>
+    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
+  </select>
+  <button id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
   <button onclick="clearLast()">↩️ Annuler dernier</button>
   <button onclick="clearAll()">🗑️ Tout effacer</button>
-  <span style="font-size:.65rem;color:#94a3b8">✅OK 🟡Alerte 🔴Action</span>
+  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp; 🟡 Alerte &nbsp; 🔴 Action</span>
 </div>
-<div class="map-container" id="mapContainer"><div class="map-inner" id="mapInner"><img id="planImg" src="{st.session_state.map_image}" draggable="false"><div id="tooltip" class="tooltip"></div></div></div>
+<div class="viewer" id="viewer">
+  <iframe src="{st.session_state.map_image}#toolbar=0&navpanes=0&scrollbar=0" id="pdfFrame"></iframe>
+  <div id="overlay" onclick="handleClick(event)"></div>
+  <div id="tooltip" class="tooltip"></div>
+</div>
 <script>
-let addMode=false;let points={pts_json};const survData={surv_json};
-function toggleAddMode(){{addMode=!addMode;const btn=document.getElementById('addBtn');btn.classList.toggle('active',addMode);btn.textContent=addMode?'✋ Annuler':'📍 Placer un point';document.getElementById('mapContainer').style.cursor=addMode?'crosshair':'default';}}
-function renderPoints(){{document.querySelectorAll('.point').forEach(p=>p.remove());const img=document.getElementById('planImg');if(!img)return;const inner=document.getElementById('mapInner');points.forEach((pt,i)=>{{const surv=survData.find(s=>s.label===(pt.survLabel||pt.label));const status=surv?surv.status:'none';const div=document.createElement('div');div.className=`point ${{status}}`;div.style.left=pt.x+'%';div.style.top=pt.y+'%';div.textContent=i+1;div.addEventListener('mouseenter',e=>showTip(e,pt,surv));div.addEventListener('mouseleave',hideTip);inner.appendChild(div);}});}}
-function showTip(e,pt,surv){{const t=document.getElementById('tooltip');t.innerHTML=`<div style="font-weight:700;margin-bottom:6px">${{pt.label}}</div>`+(surv?`<div>Germe : <i>${{surv.germ}}</i></div><div>UFC : <b>${{surv.ufc}}</b></div><div>Date : ${{surv.date}}</div>`:'<div>Non lié</div>');t.style.left=(e.clientX+15)+'px';t.style.top=(e.clientY-10)+'px';t.classList.add('visible');}}
-function hideTip(){{document.getElementById('tooltip').classList.remove('visible');}}
-function clearLast(){{if(points.length>0){{points.pop();renderPoints();}}}}
-function clearAll(){{if(confirm('Effacer tous les points ?')){{points=[];renderPoints();}}}}
-document.getElementById('mapInner').addEventListener('click',function(e){{if(!addMode)return;const img=document.getElementById('planImg');if(!img)return;const rect=img.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return;const x=((e.clientX-rect.left)/rect.width*100);const y=((e.clientY-rect.top)/rect.height*100);const label=document.getElementById('ptLabel').value||`Point ${{points.length+1}}`;const survLabel=document.getElementById('ptSurv').value||null;points.push({{x,y,label,survLabel}});renderPoints();toggleAddMode();}});
-const img=document.getElementById('planImg');if(img)img.addEventListener('load',renderPoints);else renderPoints();
+let addMode = false;
+let points  = {pts_json};
+const surv  = {surv_json};
+
+function toggleAdd() {{
+  addMode = !addMode;
+  const btn = document.getElementById('addBtn');
+  const ov  = document.getElementById('overlay');
+  btn.classList.toggle('active', addMode);
+  btn.textContent = addMode ? '✋ Annuler' : '📍 Placer un point';
+  ov.className = addMode ? 'add-mode' : '';
+}}
+
+function handleClick(e) {{
+  if (!addMode) return;
+  const viewer = document.getElementById('viewer');
+  const rect   = viewer.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
+  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
+  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
+  const survLabel = document.getElementById('ptSurv').value || null;
+  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
+  renderPoints();
+  toggleAdd();
+}}
+
+function renderPoints() {{
+  document.querySelectorAll('.point').forEach(p => p.remove());
+  const viewer = document.getElementById('viewer');
+  points.forEach((pt, i) => {{
+    const s = surv.find(r => r.label === (pt.survLabel || pt.label));
+    const status = s ? s.status : 'none';
+    const div = document.createElement('div');
+    div.className = 'point ' + status;
+    div.style.left = pt.x + '%';
+    div.style.top  = pt.y + '%';
+    div.textContent = i + 1;
+    div.addEventListener('mouseenter', e => showTip(e, pt, s));
+    div.addEventListener('mouseleave', hideTip);
+    viewer.appendChild(div);
+  }});
+}}
+
+function showTip(e, pt, s) {{
+  const t = document.getElementById('tooltip');
+  t.innerHTML = '<div style="font-weight:800;color:#1e293b;margin-bottom:6px">📍 ' + pt.label + '</div>'
+    + (s ? '<div>Germe : <i>' + s.germ + '</i></div><div>UFC : <b>' + s.ufc + '</b></div><div>Date : ' + s.date + '</div>'
+         : '<div style="color:#94a3b8">Non lié à un résultat</div>');
+  t.style.left = (e.clientX + 15) + 'px';
+  t.style.top  = (e.clientY - 10) + 'px';
+  t.classList.add('visible');
+}}
+function hideTip()  {{ document.getElementById('tooltip').classList.remove('visible'); }}
+function clearLast(){{ if (points.length) {{ points.pop(); renderPoints(); }} }}
+function clearAll() {{ if (confirm('Effacer tous les points ?')) {{ points = []; renderPoints(); }} }}
+
+renderPoints();
 </script></body></html>"""
-        st.components.v1.html(map_html, height=650, scrolling=False)
-    elif not uploaded:
-        st.markdown('''<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;padding:48px;text-align:center;color:#0f172a"><div style="font-size:2rem;margin-bottom:8px">🗺️</div><div>Uploadez un plan URC (PNG/JPG/PDF)</div></div>''', unsafe_allow_html=True)
 
+        else:
+            # ── Affichage image classique ──────────────────────────────────────
+            map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#f8fafc;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column}}
+.toolbar{{padding:8px 12px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
+.toolbar input,.toolbar select,.toolbar button{{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.75rem}}
+.toolbar button{{cursor:pointer}}.toolbar button.active,.toolbar button:hover{{background:#2563eb;color:#fff}}
+.map-container{{flex:1;overflow:auto;position:relative}}.map-inner{{position:relative;display:inline-block;min-width:100%}}
+#planImg{{max-width:100%;display:block}}
+.point{{position:absolute;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:10;transition:transform .15s}}
+.point:hover{{transform:translate(-50%,-50%) scale(1.4)}}
+.point.ok{{background:#22c55e}}.point.alert{{background:#f59e0b}}.point.action{{background:#ef4444}}.point.none{{background:#334155}}
+.tooltip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px;font-size:.72rem;pointer-events:none;z-index:999;display:none;min-width:200px;box-shadow:0 4px 20px rgba(0,0,0,.15)}}
+.tooltip.visible{{display:block}}
+</style></head><body>
+<div class="toolbar">
+  <input id="ptLabel" placeholder="Nom du point" style="width:140px">
+  <select id="ptSurv" style="width:210px">
+    <option value="">-- Lier à un prélèvement --</option>
+    {''.join(f'<option value="{r["label"]}">{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)</option>' for r in surv_points)}
+  </select>
+  <button id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
+  <button onclick="clearLast()">↩️ Annuler dernier</button>
+  <button onclick="clearAll()">🗑️ Tout effacer</button>
+  <span style="font-size:.65rem;color:#94a3b8">🟢 OK &nbsp; 🟡 Alerte &nbsp; 🔴 Action</span>
+</div>
+<div class="map-container" id="mapContainer">
+  <div class="map-inner" id="mapInner">
+    <img id="planImg" src="{st.session_state.map_image}" draggable="false">
+    <div id="tooltip" class="tooltip"></div>
+  </div>
+</div>
+<script>
+let addMode = false;
+let points  = {pts_json};
+const surv  = {surv_json};
 
+function toggleAdd() {{
+  addMode = !addMode;
+  const btn = document.getElementById('addBtn');
+  btn.classList.toggle('active', addMode);
+  btn.textContent = addMode ? '✋ Annuler' : '📍 Placer un point';
+  document.getElementById('mapContainer').style.cursor = addMode ? 'crosshair' : 'default';
+}}
+
+function renderPoints() {{
+  document.querySelectorAll('.point').forEach(p => p.remove());
+  const inner = document.getElementById('mapInner');
+  points.forEach((pt, i) => {{
+    const s = surv.find(r => r.label === (pt.survLabel || pt.label));
+    const status = s ? s.status : 'none';
+    const div = document.createElement('div');
+    div.className = 'point ' + status;
+    div.style.left = pt.x + '%';
+    div.style.top  = pt.y + '%';
+    div.textContent = i + 1;
+    div.addEventListener('mouseenter', e => showTip(e, pt, s));
+    div.addEventListener('mouseleave', hideTip);
+    inner.appendChild(div);
+  }});
+}}
+
+function showTip(e, pt, s) {{
+  const t = document.getElementById('tooltip');
+  t.innerHTML = '<div style="font-weight:800;color:#1e293b;margin-bottom:6px">📍 ' + pt.label + '</div>'
+    + (s ? '<div>Germe : <i>' + s.germ + '</i></div><div>UFC : <b>' + s.ufc + '</b></div><div>Date : ' + s.date + '</div>'
+         : '<div style="color:#94a3b8">Non lié à un résultat</div>');
+  t.style.left = (e.clientX + 15) + 'px';
+  t.style.top  = (e.clientY - 10) + 'px';
+  t.classList.add('visible');
+}}
+function hideTip()  {{ document.getElementById('tooltip').classList.remove('visible'); }}
+function clearLast(){{ if (points.length) {{ points.pop(); renderPoints(); }} }}
+function clearAll() {{ if (confirm('Effacer tous les points ?')) {{ points = []; renderPoints(); }} }}
+
+document.getElementById('mapInner').addEventListener('click', function(e) {{
+  if (!addMode) return;
+  const img  = document.getElementById('planImg');
+  const rect = img.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+  const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
+  const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
+  const label = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
+  const survLabel = document.getElementById('ptSurv').value || null;
+  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
+  renderPoints();
+  toggleAdd();
+}});
+
+const img = document.getElementById('planImg');
+if (img.complete) renderPoints(); else img.addEventListener('load', renderPoints);
+</script></body></html>"""
+
+        st.components.v1.html(map_html, height=700, scrolling=False)
+
+    else:
+        st.markdown(
+            '<div style="background:#f8fafc;border:2px dashed #e2e8f0;border-radius:12px;'
+            'padding:64px;text-align:center;color:#64748b">'
+            '<div style="font-size:3rem;margin-bottom:12px">🗺️</div>'
+            '<div style="font-size:1rem;font-weight:600">Uploadez un plan URC</div>'
+            '<div style="font-size:.8rem;margin-top:6px">PNG, JPG ou PDF acceptés</div>'
+            '</div>', unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
