@@ -1305,7 +1305,9 @@ renderList();
                     save_germs(st.session_state.germs)
                     st.rerun()
 
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB : SURVEILLANCE
+# ═══════════════════════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1314,25 +1316,9 @@ if active == "surveillance":
 
     tab_surv, tab_etiq = st.tabs(["🔬 Surveillance", "🏷️ Étiquettes"])
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # HELPERS SEUILS DUAL (germe + classe)
-    # ─────────────────────────────────────────────────────────────────────────
-    def _get_status_dual(ufc, risk_germe, room_class):
-        th_g  = get_thresholds_for_risk(risk_germe, st.session_state.thresholds)
-        th_c  = st.session_state.get("thresholds_classe", {}).get(room_class or "", {})
-        sg    = "action" if ufc >= th_g["action"] else "alert" if ufc >= th_g["alert"] else "ok"
-        al_c  = th_c.get("alert",  999999)
-        ac_c  = th_c.get("action", 999999)
-        sc    = "action" if ufc >= ac_c else "alert" if ufc >= al_c else "ok"
-        rank  = {"ok": 0, "alert": 1, "action": 2}
-        final = sg if rank[sg] >= rank[sc] else sc
-        if final == "ok":
-            return "ok", None, th_g, th_c
-        triggered = []
-        if sg in ("alert", "action"): triggered.append("germe")
-        if sc in ("alert", "action"): triggered.append("classe")
-        return final, " & ".join(triggered), th_g, th_c
-
+    # ══════════════════════════════════════════════════════════════════════════
+    # ONGLET SURVEILLANCE
+    # ══════════════════════════════════════════════════════════════════════════
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET SURVEILLANCE
     # ══════════════════════════════════════════════════════════════════════════
@@ -1399,7 +1385,6 @@ if active == "surveillance":
                       📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
 
-                    # ── Champs Classe A ──────────────────────────────────────
                     p_isolateur = ""
                     p_poste = "Poste 1"
                     if selected_point.get('room_class') == "A":
@@ -1473,8 +1458,7 @@ if active == "surveillance":
                     f"· {samp.get('date','—')} "
                     f"· {samp.get('operateur','—')}</span>"
                     f"</div>",
-                    unsafe_allow_html=True
-                )
+                    unsafe_allow_html=True)
             with col_btn:
                 if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
                     st.session_state["edit_prelev_id"] = samp["id"]
@@ -1485,10 +1469,8 @@ if active == "surveillance":
                     st.markdown(
                         "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
                         "border-radius:10px;padding:16px;margin-bottom:12px'>",
-                        unsafe_allow_html=True
-                    )
+                        unsafe_allow_html=True)
                     st.markdown(f"**✏️ Modifier — {samp['label']}**")
-
                     e_col1, e_col2 = st.columns(2)
                     with e_col1:
                         oper_list_e = [
@@ -1508,7 +1490,6 @@ if active == "surveillance":
                         except Exception:
                             current_date = datetime.today().date()
                         new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
-
                     with e_col2:
                         new_gelose = st.text_input("Gélose", value=samp.get("gelose", ""), key=f"edit_gelose_{samp['id']}")
                         new_isolateur = ""
@@ -1521,7 +1502,6 @@ if active == "surveillance":
                                       if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
                                 horizontal=True, key=f"edit_poste_{samp['id']}"
                             )
-
                     new_j2 = next_working_day_offset(new_date, 2)
                     new_j7 = next_working_day_offset(new_date, 5)
                     if new_date != current_date:
@@ -1530,9 +1510,7 @@ if active == "surveillance":
                             f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
                             f"⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
                             f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>",
-                            unsafe_allow_html=True
-                        )
-
+                            unsafe_allow_html=True)
                     btn_c1, btn_c2 = st.columns(2)
                     with btn_c1:
                         if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
@@ -1556,7 +1534,6 @@ if active == "surveillance":
                         if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
                             st.session_state["edit_prelev_id"] = None
                             st.rerun()
-
                     st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Lectures en attente ───────────────────────────────────────────────
@@ -1667,17 +1644,6 @@ if active == "surveillance":
                         f"font-size:.75rem;font-weight:700;color:#854d0e'>"
                         f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
 
-                th_c_proc = st.session_state.get("thresholds_classe", {}).get(pt_class, {})
-                seuils_band = ""
-                if th_c_proc:
-                    seuils_band = (
-                        f"<div style='background:#f5f3ff;border:1px solid #ddd6fe;"
-                        f"border-radius:8px;padding:8px 12px;margin-top:8px;"
-                        f"font-size:.72rem;color:#5b21b6'>"
-                        f"🏷️ Seuils classe <strong>{pt_class}</strong> : "
-                        f"⚠️ alerte ≥ {th_c_proc.get('alert','—')} UFC · "
-                        f"🚨 action ≥ {th_c_proc.get('action','—')} UFC</div>")
-
                 st.markdown("---")
                 st.markdown(f"""
                 <div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;padding:16px;margin-bottom:16px">
@@ -1693,7 +1659,6 @@ if active == "surveillance":
                     <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
                   </div>
                   {classea_band}
-                  {seuils_band}
                 </div>""", unsafe_allow_html=True)
 
                 lc1, lc2 = st.columns([2, 2])
@@ -1721,36 +1686,27 @@ if active == "surveillance":
                             else:
                                 st.success(f"✅ Lecture J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
                             st.session_state.surveillance.append({
-                                "date":             str(today),
-                                "prelevement":      proc['label'],
-                                "sample_id":        proc.get('sample_id', ''),
-                                "germ_saisi":       "",
-                                "germ_match":       "Négatif",
-                                "match_score":      "—",
-                                "ufc":              0,
-                                "risk":             0,
-                                "room_class":       pt_class,
-                                "alert_threshold":  "—",
-                                "action_threshold": "—",
-                                "alert_classe":     "—",
-                                "action_classe":    "—",
-                                "triggered_by":     None,
-                                "status":           "ok",
-                                "operateur":        pt_oper,
-                                "remarque":         f"Lecture {proc['when']} négative"
+                                "date": str(today), "prelevement": proc['label'],
+                                "sample_id": proc.get('sample_id', ''),
+                                "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
+                                "ufc": 0, "risk": 0, "room_class": pt_class,
+                                "alert_threshold": "—", "action_threshold": "—",
+                                "triggered_by": None, "status": "ok",
+                                "operateur": pt_oper,
+                                "remarque": f"Lecture {proc['when']} négative"
                             })
                             save_surveillance(st.session_state.surveillance)
                         else:
                             st.session_state.pending_identifications.append({
-                                "sample_id": proc['sample_id'],
-                                "label":     proc['label'],
-                                "when":      proc['when'],
-                                "colonies":  int(ncol),
-                                "date":      str(today),
-                                "status":    "pending"
+                                "sample_id": proc['sample_id'], "label": proc['label'],
+                                "when": proc['when'], "colonies": int(ncol),
+                                "date": str(today), "status": "pending"
                             })
                             save_pending_identifications(st.session_state.pending_identifications)
-                            st.success(f"🔴 {proc['when']} positive ({ncol} UFC) — identification requise ci-dessous.")
+                            if proc['when'] == 'J2':
+                                st.success(f"🔴 J2 positive ({ncol} UFC) — identification différée jusqu'à la lecture J7.")
+                            else:
+                                st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise ci-dessous.")
                         st.session_state.current_process = None
                         st.rerun()
                 with vc2:
@@ -1758,160 +1714,274 @@ if active == "surveillance":
                         st.session_state.current_process = None
                         st.rerun()
 
-        # ── Popup mesures correctives ─────────────────────────────────────────
-        if st.session_state.get("_show_mesures_popup"):
-            _pop        = st.session_state["_show_mesures_popup"]
-            _status_pop = _pop["status"]
-            _germ_pop   = _pop["germ"]
-            _ufc_pop    = _pop["ufc"]
-            _risk_pop   = _pop["risk"]
-            _label_pop  = _pop["label"]
-            _rc_pop     = _pop.get("room_class", "—")
-            _trig_pop   = _pop.get("triggered_by", "germe")
-            _th_g_pop   = _pop.get("th_germe", {})
-            _th_c_pop   = _pop.get("th_classe", {})
-            _is_action  = _status_pop == "action"
-            _sc         = "#ef4444" if _is_action else "#f59e0b"
-            _ic         = "🚨" if _is_action else "⚠️"
-            _txt        = "ACTION REQUISE" if _is_action else "ALERTE"
-            _grad       = "135deg,#dc2626,#ef4444" if _is_action else "135deg,#d97706,#f59e0b"
-            _sub_col    = "#fecaca" if _is_action else "#fef3c7"
-            _bg_mes     = "#fef2f2" if _is_action else "#fffbeb"
-            _bd_mes     = "#fca5a5" if _is_action else "#fcd34d"
-            _hd_col     = "#991b1b" if _is_action else "#92400e"
 
-            def _mesure_match(m):
-                if _status_pop == "alert" and m.get("type") not in ("alert", "both"):
-                    return False
-                if _status_pop == "action" and m.get("type") not in ("action", "both"):
-                    return False
+        # ── Alerte mesures correctives (carte inline) ─────────────────────────
+        def _render_alerte_mesures(pop_data, key_suffix):
+            """Affiche une carte d'alerte inline avec les mesures correctives."""
+            _is_action = pop_data["status"] == "action"
+            _border    = "#ef4444" if _is_action else "#f59e0b"
+            _bg_head   = "#fef2f2" if _is_action else "#fffbeb"
+            _hd_col    = "#991b1b" if _is_action else "#92400e"
+            _ic        = "🚨" if _is_action else "⚠️"
+            _txt       = "ACTION REQUISE" if _is_action else "ALERTE"
+            _th_g      = pop_data.get("th_germe", {})
+
+            type_colors = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
+            type_labels = {"action": "🚨 Action",  "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
+
+            def _match(m):
+                if pop_data["status"] == "alert"  and m.get("type") not in ("alert",  "both"): return False
+                if pop_data["status"] == "action" and m.get("type") not in ("action", "both"): return False
                 mr = m.get("risk", "all")
                 if mr != "all":
-                    if isinstance(mr, list):
-                        if _risk_pop not in mr: return False
-                    else:
-                        if mr != _risk_pop: return False
+                    if isinstance(mr, list): return pop_data["risk"] in mr
+                    return mr == pop_data["risk"]
                 return True
 
-            _mesures_filtrees = [m for m in st.session_state.origin_measures if _mesure_match(m)]
+            mesures = [m for m in st.session_state.origin_measures if _match(m)]
 
+            # En-tête coloré
             st.markdown(f"""
-            <div style="position:fixed;inset:0;background:rgba(15,23,42,.75);z-index:99999;display:flex;align-items:center;justify-content:center">
-              <div style="background:#fff;border-radius:16px;width:min(640px,95vw);max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.45)">
-                <div style="background:linear-gradient({_grad});padding:22px 26px;position:sticky;top:0;z-index:10">
-                  <div style="display:flex;align-items:center;gap:16px">
-                    <span style="font-size:2.4rem">{_ic}</span>
-                    <div>
-                      <div style="color:#fff;font-weight:900;font-size:1.15rem">{_txt} — {_label_pop}</div>
-                      <div style="color:{_sub_col};font-size:.78rem;margin-top:4px;line-height:1.6">
-                        {_ufc_pop} UFC · Germe : <em>{_germ_pop}</em> · Criticité {_risk_pop} · Classe {_rc_pop}<br>
-                        Déclencheur : <strong>{_trig_pop}</strong>
-                        · Seuil germe ⚠️ {_th_g_pop.get('alert','—')} 🚨 {_th_g_pop.get('action','—')} UFC
-                        · Seuil classe ⚠️ {_th_c_pop.get('alert','—')} 🚨 {_th_c_pop.get('action','—')} UFC
-                      </div>
+            <div style="border:2.5px solid {_border};border-radius:14px;overflow:hidden;
+                        margin-top:16px;margin-bottom:4px;box-shadow:0 4px 20px {_border}33">
+              <div style="background:{_bg_head};padding:16px 20px;border-bottom:1.5px solid {_border}44">
+                <div style="display:flex;align-items:center;gap:14px">
+                  <span style="font-size:2rem;line-height:1">{_ic}</span>
+                  <div>
+                    <div style="font-size:1.05rem;font-weight:900;color:{_hd_col};letter-spacing:.01em">
+                      {_txt} — {pop_data['label']}
+                    </div>
+                    <div style="font-size:.78rem;color:#475569;margin-top:4px;line-height:1.7">
+                      <strong>{pop_data['ufc']} UFC</strong>
+                      &nbsp;·&nbsp; Germe : <em>{pop_data['germ']}</em>
+                      &nbsp;·&nbsp; Criticité {pop_data['risk']}
+                      &nbsp;·&nbsp; Classe {pop_data.get('room_class','—')}<br>
+                      Seuils : ⚠️ {_th_g.get('alert','—')} UFC &nbsp;/&nbsp; 🚨 {_th_g.get('action','—')} UFC
                     </div>
                   </div>
                 </div>
-                <div style="padding:16px 20px 6px 20px;background:{_bg_mes};border-bottom:1px solid {_bd_mes}">
-                  <div style="font-size:.82rem;font-weight:800;color:{_hd_col};margin-bottom:10px">📋 Mesures correctives applicables</div>""",
-                unsafe_allow_html=True)
+              </div>
+              <div style="background:#fff;padding:14px 20px 6px 20px">
+                <div style="font-size:.82rem;font-weight:800;color:{_hd_col};margin-bottom:10px">
+                  📋 Mesures correctives applicables
+                </div>""", unsafe_allow_html=True)
 
-            type_colors_pop = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
-            type_labels_pop = {"action": "🚨 Action", "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
-
-            if _mesures_filtrees:
-                for _m in _mesures_filtrees:
-                    _tc = type_colors_pop.get(_m["type"], "#94a3b8")
-                    _tl = type_labels_pop.get(_m["type"], _m["type"])
-                    st.markdown(f"""
-                    <div style="background:#fff;border:1px solid #e2e8f0;border-left:3px solid {_tc};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-                      <div style="font-size:.82rem;color:#0f172a;line-height:1.5;flex:1">• {_m['text']}</div>
-                      <span style="background:{_tc}22;color:{_tc};border:1px solid {_tc}55;border-radius:6px;padding:2px 8px;font-size:.62rem;font-weight:700;white-space:nowrap;flex-shrink:0">{_tl}</span>
-                    </div>""", unsafe_allow_html=True)
+            if mesures:
+                for _m in mesures:
+                    _tc = type_colors.get(_m["type"], "#94a3b8")
+                    _tl = type_labels.get(_m["type"], _m["type"])
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
+                        f"border-left:4px solid {_tc};border-radius:0 8px 8px 0;"
+                        f"padding:10px 14px;margin-bottom:7px;display:flex;"
+                        f"align-items:center;justify-content:space-between;gap:12px'>"
+                        f"<div style='font-size:.83rem;color:#0f172a;line-height:1.5;flex:1'>"
+                        f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
+                        f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;"
+                        f"border-radius:6px;padding:3px 9px;font-size:.65rem;font-weight:800;"
+                        f"white-space:nowrap;flex-shrink:0'>{_tl}</span></div>",
+                        unsafe_allow_html=True)
             else:
                 st.markdown(
-                    "<div style='font-size:.8rem;color:#94a3b8;font-style:italic;padding:8px 0'>"
-                    "Aucune mesure corrective configurée pour ce niveau.<br>"
-                    "→ Ajoutez-en dans <strong>Paramètres → Mesures correctives</strong>."
-                    "</div>", unsafe_allow_html=True)
+                    "<div style='font-size:.8rem;color:#94a3b8;font-style:italic;padding:6px 0 10px'>"
+                    "Aucune mesure corrective configurée — ajoutez-en dans "
+                    "<strong>Paramètres → Mesures correctives</strong>.</div>",
+                    unsafe_allow_html=True)
 
-            st.markdown("</div></div></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
 
-            _pc1, _pc2 = st.columns([2, 1])
-            with _pc1:
-                if st.button("✅ Compris — Mesures prises en charge", use_container_width=True, key="popup_close_ok", type="primary"):
+            # Boutons d'action directement sous la carte
+            _b1, _b2, _b3 = st.columns([3, 2, 1])
+            with _b1:
+                if st.button("✅ Compris — Mesures prises en charge",
+                             use_container_width=True, type="primary",
+                             key=f"alert_ok_{key_suffix}"):
+                    st.session_state["_last_mesures_popup"] = pop_data
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
-            with _pc2:
-                if st.button("🖨️ Imprimer / noter", use_container_width=True, key="popup_close_print"):
+            with _b2:
+                if st.button("🖨️ Imprimer / noter",
+                             use_container_width=True,
+                             key=f"alert_print_{key_suffix}"):
+                    st.session_state["_last_mesures_popup"] = pop_data
                     st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
+            with _b3:
+                if st.button("✕ Ignorer",
+                             use_container_width=True,
+                             key=f"alert_dismiss_{key_suffix}"):
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
+
+        if st.session_state.get("_show_mesures_popup"):
+            _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
+
+        # ── Récapitulatif masquable dans un expander ──────────────────────────
+        if not st.session_state.get("_show_mesures_popup") and \
+           st.session_state.get("_last_mesures_popup"):
+            _last      = st.session_state["_last_mesures_popup"]
+            _is_action = _last["status"] == "action"
+            _sc  = "#ef4444" if _is_action else "#f59e0b"
+            _hd  = "#991b1b" if _is_action else "#92400e"
+            _ic  = "🚨" if _is_action else "⚠️"
+            _txt = "ACTION REQUISE" if _is_action else "ALERTE"
+
+            with st.expander(
+                f"{_ic} Récapitulatif — {_txt} · {_last['label']} · {_last['ufc']} UFC",
+                expanded=False
+            ):
+                def _match_last(m):
+                    if _last["status"] == "alert"  and m.get("type") not in ("alert",  "both"): return False
+                    if _last["status"] == "action" and m.get("type") not in ("action", "both"): return False
+                    mr = m.get("risk", "all")
+                    if mr != "all":
+                        if isinstance(mr, list): return _last["risk"] in mr
+                        return mr == _last["risk"]
+                    return True
+
+                _mes_last = [m for m in st.session_state.origin_measures if _match_last(m)]
+                type_colors_l = {"action":"#ef4444","alert":"#f59e0b","both":"#818cf8"}
+                type_labels_l = {"action":"🚨 Action","alert":"⚠️ Alerte","both":"⚠️🚨 Les deux"}
+
+                st.markdown(
+                    f"<div style='font-size:.8rem;color:{_hd};font-weight:700;margin-bottom:8px'>"
+                    f"📋 {_last['germ']} · Criticité {_last['risk']} · "
+                    f"Classe {_last.get('room_class','—')}</div>",
+                    unsafe_allow_html=True)
+
+                if _mes_last:
+                    for _m in _mes_last:
+                        _tc = type_colors_l.get(_m["type"], "#94a3b8")
+                        _tl = type_labels_l.get(_m["type"], _m["type"])
+                        st.markdown(
+                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
+                            f"border-left:4px solid {_tc};border-radius:0 8px 8px 0;"
+                            f"padding:8px 12px;margin-bottom:6px;display:flex;"
+                            f"align-items:center;justify-content:space-between;gap:10px'>"
+                            f"<div style='font-size:.8rem;color:#0f172a;flex:1'>"
+                            f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
+                            f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;"
+                            f"border-radius:6px;padding:2px 8px;font-size:.63rem;font-weight:800;"
+                            f"white-space:nowrap'>{_tl}</span></div>",
+                            unsafe_allow_html=True)
+                else:
+                    st.caption("Aucune mesure corrective configurée.")
+
+                if st.button("✕ Effacer ce récapitulatif", key="dismiss_last_mesures"):
+                    st.session_state["_last_mesures_popup"] = None
                     st.rerun()
 
         # ── Identifications en attente ────────────────────────────────────────
-        def _both_readings_done(sample_id):
-            scheds = [x for x in st.session_state.schedules if x['sample_id'] == sample_id]
-            j2 = next((x for x in scheds if x['when'] == 'J2'), None)
-            j7 = next((x for x in scheds if x['when'] == 'J7'), None)
-            return (j2 is not None and j2['status'] == 'done') and \
-                   (j7 is not None and j7['status'] == 'done')
+        # Règle : l'identification n'est proposée QUE lorsque J7 est terminée.
+        # Si J2 est positive mais J7 pas encore traitée → on attend J7.
+        # Si J7 n'existe pas pour ce sample → on propose dès que la lecture est done.
+        def _j7_done_or_absent(sample_id):
+            j7 = next((x for x in st.session_state.schedules
+                        if x['sample_id'] == sample_id and x['when'] == 'J7'), None)
+            if j7 is None:
+                return True          # pas de J7 → identification immédiate
+            return j7['status'] == 'done'
 
-        pending_ids = [
+        _all_pending = [
             p for p in st.session_state.pending_identifications
-            if p.get('status') == 'pending' and _both_readings_done(p['sample_id'])
+            if p.get('status') == 'pending' and _j7_done_or_absent(p['sample_id'])
         ]
 
-        if pending_ids:
+        _seen_sids = {}
+        for _p in _all_pending:
+            _sid = _p['sample_id']
+            if _sid not in _seen_sids:
+                _seen_sids[_sid] = {
+                    "sample_id": _sid,
+                    "label":     _p['label'],
+                    "date":      _p['date'],
+                    "entries":   [],
+                    "when_list": [],
+                    "colonies":  0,
+                }
+            _seen_sids[_sid]["entries"].append(_p)
+            _seen_sids[_sid]["when_list"].append(_p['when'])
+            if _p['when'] == 'J7' or _seen_sids[_sid]["colonies"] == 0:
+                _seen_sids[_sid]["colonies"] = _p['colonies']
+
+        pending_ids_grouped = list(_seen_sids.values())
+
+        if pending_ids_grouped:
             st.markdown("---")
             st.markdown("#### 🔴 Identifications en attente")
             germ_names = sorted([g['name'] for g in st.session_state.germs])
 
-            for pi in pending_ids:
-                real_idx = st.session_state.pending_identifications.index(pi)
-                smp      = next((p for p in st.session_state.prelevements if p['id'] == pi['sample_id']), None)
+            for pg in pending_ids_grouped:
+                _sid      = pg["sample_id"]
+                _entries  = pg["entries"]
+                _when_str = " + ".join(sorted(set(pg["when_list"])))
+                _ufc      = pg["colonies"]
+                _label    = pg["label"]
+                _date     = pg["date"]
+
+                smp      = next((p for p in st.session_state.prelevements if p['id'] == _sid), None)
                 pt_oper  = smp.get('operateur', '?') if smp else '?'
                 pt_class = smp.get('room_class', '')  if smp else ''
 
-                with st.expander(f"🔴 {pi['label']} — {pi['when']} — {pi['colonies']} UFC — {pi['date']}", expanded=True):
+                real_indices = [
+                    st.session_state.pending_identifications.index(e)
+                    for e in _entries
+                    if e in st.session_state.pending_identifications
+                ]
+                _key = _sid.replace("-", "_")
+
+                with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
+                    if len(_entries) > 1:
+                        _ufc_detail = "  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
+                        st.markdown(
+                            f"<div style='background:#fef9c3;border:1px solid #fde047;"
+                            f"border-radius:8px;padding:8px 12px;margin-bottom:8px;"
+                            f"font-size:.75rem;color:#854d0e;font-weight:600'>"
+                            f"⚠️ Lectures J2 <em>et</em> J7 positives — "
+                            f"une seule identification requise · {_ufc_detail}</div>",
+                            unsafe_allow_html=True)
+
                     ic1, ic2 = st.columns([3, 1])
                     with ic1:
                         germ_input = st.selectbox(
                             "Germe identifié *",
                             ["— Sélectionner un germe —"] + germ_names,
-                            key=f"germ_id_{real_idx}")
-                        remarque = st.text_area("Remarque", height=60, key=f"rem_id_{real_idx}")
+                            key=f"germ_id_{_key}")
+                        remarque = st.text_area("Remarque", height=60, key=f"rem_id_{_key}")
                     with ic2:
-                        date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{real_idx}")
+                        date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{_key}")
 
                     idc1, idc2, idc3 = st.columns([2, 2, 1])
                     with idc1:
-                        if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{real_idx}"):
+                        if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{_key}"):
                             if germ_input and germ_input != "— Sélectionner un germe —":
                                 match, score = find_germ_match(germ_input, st.session_state.germs)
                                 if match and score > 0.4:
-                                    risk                         = match["risk"]
-                                    ufc                          = pi['colonies']
-                                    status, triggered_by, th_g, th_c = _get_status_dual(ufc, risk, pt_class)
+                                    risk   = match["risk"]
+                                    th     = get_thresholds_for_risk(risk, st.session_state.thresholds)
+                                    ufc    = _ufc
+                                    status = "action" if ufc >= th["action"] else "alert" if ufc >= th["alert"] else "ok"
                                     st.session_state.surveillance.append({
                                         "date":             str(date_id),
-                                        "prelevement":      pi['label'],
-                                        "sample_id":        pi.get('sample_id', ''),
+                                        "prelevement":      _label,
+                                        "sample_id":        _sid,
                                         "germ_saisi":       germ_input,
                                         "germ_match":       match["name"],
                                         "match_score":      f"{int(score*100)}%",
                                         "ufc":              ufc,
                                         "risk":             risk,
                                         "room_class":       pt_class,
-                                        "alert_threshold":  th_g.get("alert", "—"),
-                                        "action_threshold": th_g.get("action", "—"),
-                                        "alert_classe":     th_c.get("alert", "—"),
-                                        "action_classe":    th_c.get("action", "—"),
-                                        "triggered_by":     triggered_by,
+                                        "alert_threshold":  th["alert"],
+                                        "action_threshold": th["action"],
+                                        "triggered_by":     "germe",
                                         "status":           status,
                                         "operateur":        pt_oper,
-                                        "remarque":         remarque
+                                        "remarque":         remarque,
+                                        "readings":         _when_str,
                                     })
                                     save_surveillance(st.session_state.surveillance)
-                                    st.session_state.pending_identifications[real_idx]['status'] = 'done'
+                                    for _ri in real_indices:
+                                        st.session_state.pending_identifications[_ri]['status'] = 'done'
                                     save_pending_identifications(st.session_state.pending_identifications)
                                     if status in ("alert", "action"):
                                         st.session_state["_show_mesures_popup"] = {
@@ -1919,11 +1989,11 @@ if active == "surveillance":
                                             "germ":         match["name"],
                                             "ufc":          ufc,
                                             "risk":         risk,
-                                            "label":        pi['label'],
+                                            "label":        _label,
                                             "room_class":   pt_class,
-                                            "triggered_by": triggered_by or "germe",
-                                            "th_germe":     th_g,
-                                            "th_classe":    th_c,
+                                            "triggered_by": "germe",
+                                            "th_germe":     th,
+                                            "th_classe":    {},
                                         }
                                     else:
                                         st.success(f"✅ {match['name']} ({int(score*100)}%) — {ufc} UFC — Conforme")
@@ -1933,18 +2003,21 @@ if active == "surveillance":
                             else:
                                 st.error("Veuillez sélectionner un germe dans la liste.")
                     with idc2:
-                        if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{real_idx}"):
-                            sch = next((x for x in st.session_state.schedules
-                                if x['sample_id'] == pi['sample_id'] and x['when'] == pi['when'] and x['status'] == 'done'), None)
-                            if sch:
-                                sch['status'] = 'pending'
-                                save_schedules(st.session_state.schedules)
-                            st.session_state.pending_identifications.pop(real_idx)
+                        if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{_key}"):
+                            for _e in _entries:
+                                sch = next((x for x in st.session_state.schedules
+                                    if x['sample_id'] == _sid and x['when'] == _e['when'] and x['status'] == 'done'), None)
+                                if sch:
+                                    sch['status'] = 'pending'
+                            save_schedules(st.session_state.schedules)
+                            for _ri in sorted(real_indices, reverse=True):
+                                st.session_state.pending_identifications.pop(_ri)
                             save_pending_identifications(st.session_state.pending_identifications)
                             st.rerun()
                     with idc3:
-                        if st.button("🗑️", use_container_width=True, key=f"del_id_{real_idx}"):
-                            st.session_state.pending_identifications.pop(real_idx)
+                        if st.button("🗑️", use_container_width=True, key=f"del_id_{_key}"):
+                            for _ri in sorted(real_indices, reverse=True):
+                                st.session_state.pending_identifications.pop(_ri)
                             save_pending_identifications(st.session_state.pending_identifications)
                             st.rerun()
 
@@ -1965,7 +2038,7 @@ if active == "surveillance":
                         f"margin-left:6px'>⚡ {trig}</span>")
                 st.markdown(f"""
                 <div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;
-                padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
+                    padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
                   <span style="font-size:1.1rem">{ic}</span>
                   <div style="flex:1">
                     <div style="font-size:.78rem;color:#1e293b;font-weight:600">
@@ -1979,31 +2052,30 @@ if active == "surveillance":
                 </div>""", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET ÉTIQUETTES
+    # ONGLET ÉTIQUETTES — tout le contenu est DANS with tab_etiq
     # ══════════════════════════════════════════════════════════════════════════
     with tab_etiq:
-        st.markdown("### 🏷️ Étiquettes de prélèvement")
-
         import io as _io
 
-        _today_etiq      = datetime.today().date()
+        st.markdown("### 🏷️ Étiquettes de prélèvement")
+
+        _today_etiq = datetime.today().date()
         _RISK_COLORS_ETQ = {
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
         }
 
-        all_prevs = [p for p in st.session_state.prelevements
-                     if not p.get("archived", False)]
+        all_prevs = [p for p in st.session_state.prelevements if not p.get("archived", False)]
 
         if not all_prevs:
-            st.info("Aucun prélèvement enregistré.")
+            st.info("Aucun prélèvement enregistré. Créez-en d'abord dans **Nouveau prélèvement**.")
         else:
             with st.expander("🔍 Filtres", expanded=True):
                 fc1, fc2, fc3 = st.columns(3)
                 with fc1:
                     dates_dispo = sorted(
-                        {datetime.fromisoformat(p["date"]).date()
-                         for p in all_prevs if p.get("date")}, reverse=True)
+                        {datetime.fromisoformat(p["date"]).date() for p in all_prevs if p.get("date")},
+                        reverse=True)
                     sel_dates = st.multiselect(
                         "Date(s)", dates_dispo,
                         default=[dates_dispo[0]] if dates_dispo else [],
@@ -2012,20 +2084,17 @@ if active == "surveillance":
                 with fc2:
                     sel_points = st.multiselect(
                         "Point(s) de prélèvement",
-                        sorted({p.get("label","") for p in all_prevs if p.get("label")}),
+                        sorted({p.get("label", "") for p in all_prevs if p.get("label")}),
                         key="etiq_points")
                 with fc3:
                     sel_opers = st.multiselect(
                         "Opérateur(s)",
-                        sorted({p.get("operateur","") for p in all_prevs
-                                if p.get("operateur")}),
+                        sorted({p.get("operateur", "") for p in all_prevs if p.get("operateur")}),
                         key="etiq_opers")
 
             filtered = all_prevs
             if sel_dates:
-                filtered = [p for p in filtered
-                            if p.get("date")
-                            and datetime.fromisoformat(p["date"]).date() in sel_dates]
+                filtered = [p for p in filtered if p.get("date") and datetime.fromisoformat(p["date"]).date() in sel_dates]
             if sel_points:
                 filtered = [p for p in filtered if p.get("label") in sel_points]
             if sel_opers:
@@ -2038,8 +2107,7 @@ if active == "surveillance":
             else:
                 st.markdown(
                     f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
-                    f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;"
-                    f"margin-bottom:8px'>"
+                    f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;margin-bottom:8px'>"
                     f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer</div>",
                     unsafe_allow_html=True)
 
@@ -2083,13 +2151,10 @@ if active == "surveillance":
                         f"max-width:calc(6cm - 24px)'>{label}</div>"
                         f"{classe_a_html}"
                         f"<div style='display:flex;align-items:center;gap:5px;margin-bottom:4px'>"
-                        f"<span style='font-size:8pt;color:#64748b;font-weight:600;"
-                        f"min-width:44px'>📅 Date</span>"
-                        f"<span style='font-size:10pt;font-weight:800;color:#1e40af'>"
-                        f"{date_s or '—'}</span></div>"
+                        f"<span style='font-size:8pt;color:#64748b;font-weight:600;min-width:44px'>📅 Date</span>"
+                        f"<span style='font-size:10pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
                         f"<div style='display:flex;align-items:center;gap:5px'>"
-                        f"<span style='font-size:8pt;color:#64748b;font-weight:600'>"
-                        f"👤 Préleveur :</span></div>"
+                        f"<span style='font-size:8pt;color:#64748b;font-weight:600'>👤 Préleveur :</span></div>"
                         f"<div style='margin-top:auto;font-size:6.5pt;color:#94a3b8;"
                         f"text-align:right;padding-top:4px'>URC — MicroSurveillance</div>"
                         f"</div>")
@@ -2099,12 +2164,9 @@ if active == "surveillance":
                 for idx, p in enumerate(filtered[:preview_max]):
                     with p_cols[idx % 3]:
                         st.markdown(_preview_card(p), unsafe_allow_html=True)
-                        st.markdown("<div style='margin-bottom:8px'></div>",
-                                    unsafe_allow_html=True)
+                        st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
                 if n_sel > preview_max:
-                    st.caption(
-                        f"Prévisualisation limitée aux {preview_max} premières "
-                        f"— toutes les {n_sel} figureront dans le PDF.")
+                    st.caption(f"Prévisualisation limitée aux {preview_max} premières — toutes les {n_sel} figureront dans le PDF.")
 
                 st.markdown("---")
                 if st.button(
@@ -2115,8 +2177,7 @@ if active == "surveillance":
                         from reportlab.lib.units     import cm as rl_cm
                         from reportlab.lib           import colors as rlc
                         from reportlab.platypus      import (SimpleDocTemplate, Table,
-                                                              TableStyle, Paragraph,
-                                                              HRFlowable)
+                                                              TableStyle, Paragraph, HRFlowable)
                         from reportlab.lib.styles    import ParagraphStyle
                         from reportlab.lib.enums     import TA_RIGHT
 
@@ -2134,30 +2195,13 @@ if active == "surveillance":
                             title=f"Étiquettes {_today_etiq.strftime('%d/%m/%Y')}")
 
                         RISK_RL   = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold",
-                                                    fontSize=11,  leading=14, spaceAfter=4)
-                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",
-                                                    fontSize=8,   leading=9,
-                                                    textColor=rlc.HexColor("#64748b"))
-                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold",
-                                                    fontSize=10,  leading=12,
-                                                    textColor=rlc.HexColor("#0f172a"))
-                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold",
-                                                    fontSize=12,  leading=14,
-                                                    textColor=rlc.HexColor("#1e40af"))
-                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",
-                                                    fontSize=6.5, leading=8,
-                                                    textColor=rlc.HexColor("#94a3b8"),
-                                                    alignment=TA_RIGHT)
-                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold",
-                                                    fontSize=7.5, leading=9,
-                                                    textColor=rlc.HexColor("#854d0e"),
-                                                    backColor=rlc.HexColor("#fef9c3"),
-                                                    spaceAfter=3)
-                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold",
-                                                    fontSize=9,
-                                                    textColor=rlc.HexColor("#1e40af"),
-                                                    spaceAfter=6)
+                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold", fontSize=11, leading=14, spaceAfter=4)
+                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",      fontSize=8,  leading=9,  textColor=rlc.HexColor("#64748b"))
+                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold", fontSize=10, leading=12, textColor=rlc.HexColor("#0f172a"))
+                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold", fontSize=12, leading=14, textColor=rlc.HexColor("#1e40af"))
+                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",      fontSize=6.5,leading=8,  textColor=rlc.HexColor("#94a3b8"), alignment=TA_RIGHT)
+                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold", fontSize=7.5,leading=9,  textColor=rlc.HexColor("#854d0e"),  backColor=rlc.HexColor("#fef9c3"), spaceAfter=3)
+                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold", fontSize=9,  textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
 
                         def _build_cell(pd):
                             rv = str(pd.get("risk_level", ""))
@@ -2165,23 +2209,16 @@ if active == "surveillance":
                             lv = pd.get("label", "—")
                             dv = ""
                             if pd.get("date"):
-                                try:
-                                    dv = datetime.fromisoformat(
-                                        pd["date"]).strftime("%d/%m/%Y")
-                                except:
-                                    dv = str(pd["date"])
-
+                                try:    dv = datetime.fromisoformat(pd["date"]).strftime("%d/%m/%Y")
+                                except: dv = str(pd["date"])
                             classea_rows = []
                             if pd.get("room_class") == "A":
                                 iso = pd.get("num_isolateur", "—") or "—"
                                 pst = pd.get("poste", "—") or "—"
-                                classea_rows = [[Paragraph(
-                                    f"🔬 Isolateur {iso}  ·  {pst}", s_classea)]]
-
+                                classea_rows = [[Paragraph(f"🔬 Isolateur {iso}  ·  {pst}", s_classea)]]
                             inner = Table([
                                 [Paragraph(lv, s_titre)],
-                                [HRFlowable(width=W_ETQ - 1.0*rl_cm, thickness=0.8,
-                                             color=rc, spaceAfter=3)],
+                                [HRFlowable(width=W_ETQ - 1.0*rl_cm, thickness=0.8, color=rc, spaceAfter=3)],
                                 *classea_rows,
                                 [Paragraph("📅 Date prélèvement", s_lbl)],
                                 [Paragraph(dv or "—", s_date)],
@@ -2196,8 +2233,7 @@ if active == "surveillance":
                                 ("BOTTOMPADDING", (0,0),(-1,-1), 2),
                                 ("TOPPADDING",    (0,-1),(0,-1), 6),
                             ]))
-                            outer = Table([[inner]], colWidths=[W_ETQ],
-                                           rowHeights=[H_ETQ])
+                            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
                             outer.setStyle(TableStyle([
                                 ("BOX",            (0,0),(0,0), 1.5, rc),
                                 ("ROUNDEDCORNERS", (0,0),(0,0), [6]),
@@ -2220,9 +2256,7 @@ if active == "surveillance":
                             while len(row_buf) < N_COLS: row_buf.append("")
                             rows.append(row_buf)
 
-                        main_tbl = Table(rows,
-                                          colWidths=[W_ETQ]*N_COLS,
-                                          rowHeights=[H_ETQ]*len(rows))
+                        main_tbl = Table(rows, colWidths=[W_ETQ]*N_COLS, rowHeights=[H_ETQ]*len(rows))
                         main_tbl.setStyle(TableStyle([
                             ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
                             ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
@@ -2233,8 +2267,7 @@ if active == "surveillance":
 
                         doc.build([
                             Paragraph(
-                                f"Étiquettes prélèvements — "
-                                f"Imprimé le {_today_etiq.strftime('%d/%m/%Y')} — "
+                                f"Étiquettes prélèvements — Imprimé le {_today_etiq.strftime('%d/%m/%Y')} — "
                                 f"{n_sel} étiquette{'s' if n_sel > 1 else ''}",
                                 s_phdr),
                             main_tbl
@@ -2248,25 +2281,19 @@ if active == "surveillance":
                             mime="application/pdf",
                             use_container_width=True, key="etiq_dl_btn")
                         st.markdown(
-                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                            f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
-                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
-                            f"✅ PDF généré avec succès</div>"
+                            f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
+                            f"padding:10px 14px;margin-top:6px'>"
+                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>✅ PDF généré avec succès</div>"
                             f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
-                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
-                            f"{N_COLS} colonnes · Format A4 · 6×4.5 cm</div></div>",
+                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · {N_COLS} colonnes · Format A4 · 6×4.5 cm</div></div>",
                             unsafe_allow_html=True)
 
                     except ImportError:
-                        st.error(
-                            "❌ **ReportLab** non installé.\n\n"
-                            "Ajoutez `reportlab` dans **requirements.txt**.")
+                        st.error("❌ **ReportLab** non installé.\n\nAjoutez `reportlab` dans **requirements.txt**.")
                     except Exception as _e:
                         st.error(f"Erreur génération PDF : {_e}")
                         import traceback; st.code(traceback.format_exc())
-
-
-
+                        
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 3 : PLANNING
 # ═══════════════════════════════════════════════════════════════════════════════

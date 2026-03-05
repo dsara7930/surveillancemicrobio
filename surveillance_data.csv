@@ -1,4 +1,0 @@
-date,prelevement,sample_id,germ_saisi,germ_match,match_score,ufc,risk,alert_threshold,action_threshold,status,operateur,remarque
-2026-03-04,Sol,s1_1772555027,,Négatif,—,0,0,—,—,ok,Maria,Lecture J2 négative
-2026-03-04,Sol,s1_1772555027,,Négatif,—,0,0,—,—,ok,Maria,Lecture J7 négative
-2026-03-04,Sol,s2_1772622054,Geobacillus stearothermophilus (SPORULES),Geobacillus stearothermophilus (SPORULES),90%,1,2,25,40,ok,,
