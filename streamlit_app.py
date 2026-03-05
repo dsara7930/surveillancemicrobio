@@ -3532,21 +3532,22 @@ elif active == "plan":
         raw = uploaded.read()
         if uploaded.type == "application/pdf":
             try:
-                from pdf2image import convert_from_bytes
+                import fitz
                 import io as _io2
                 with st.spinner("🔄 Conversion du PDF en cours..."):
-                    pages = convert_from_bytes(raw, dpi=150, first_page=1, last_page=1)
-                    buf = _io2.BytesIO()
-                    pages[0].save(buf, format="PNG")
-                    buf.seek(0)
+                    doc  = fitz.open(stream=raw, filetype="pdf")
+                    page = doc[0]
+                    mat  = fitz.Matrix(2.0, 2.0)
+                    pix  = page.get_pixmap(matrix=mat)
+                    buf  = _io2.BytesIO(pix.tobytes("png"))
                     img_b64 = base64.b64encode(buf.read()).decode()
                     st.session_state.map_image = f"data:image/png;base64,{img_b64}"
                 st.success("✅ PDF converti avec succès.")
             except ImportError:
-                st.error("❌ `pdf2image` non installé — ajoutez `pdf2image` dans requirements.txt et `poppler-utils` dans packages.txt.")
+                st.error("❌ PyMuPDF non installé — ajoutez `PyMuPDF` dans requirements.txt")
                 st.stop()
             except Exception as e:
-                st.error(f"❌ Erreur conversion PDF : {e}")
+                st.error(f"❌ Erreur : {e}")
                 st.stop()
         else:
             img_b64 = base64.b64encode(raw).decode()
