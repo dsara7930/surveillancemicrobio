@@ -2481,11 +2481,12 @@ if active == "planning":
         "📅 Calendrier", "📊 Charge hebdo", "📥 Export Excel"
     ])
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET CALENDRIER  — J0 réels + J2 + J7 uniquement
+# ═════════════════════════════════════════════════════════════════════════
+    # ONGLET CALENDRIER
     # ═════════════════════════════════════════════════════════════════════════
     with plan_tab_view:
 
+        # ── Navigation mois ───────────────────────────────────────────────────
         nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
         with nav_c1:
             if st.button("◀◀", use_container_width=True, key="cal_prev_year"):
@@ -2499,9 +2500,9 @@ if active == "planning":
                 st.rerun()
         with nav_c3:
             st.markdown(
-                "<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
-                "border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>📅 "
-                + MOIS_FR[st.session_state.cal_month] + " " + str(st.session_state.cal_year) + "</div>",
+                f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
+                f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
+                f"📅 {MOIS_FR[st.session_state.cal_month]} {st.session_state.cal_year}</div>",
                 unsafe_allow_html=True)
         with nav_c4:
             if st.button("▶", use_container_width=True, key="cal_next_month"):
@@ -2525,55 +2526,65 @@ if active == "planning":
 
         import calendar as _cal3
         _, n_days_m = _cal3.monthrange(cal_year, cal_month)
-        month_start = date_type(cal_year, cal_month, 1)
-        month_end   = date_type(cal_year, cal_month, n_days_m)
         cal_weeks   = _cal3.monthcalendar(cal_year, cal_month)
 
+        # ── Snapshot session_state pour le rendu ──────────────────────────────
+        _prevs    = [p for p in st.session_state.prelevements if not p.get("archived", False)]
+        _scheds   = st.session_state.schedules
+
         def _get_day_cal(d):
-            j0r = [p for p in st.session_state.prelevements
-                   if p.get('date')
-                   and datetime.fromisoformat(p['date']).date() == d
-                   and not p.get('archived', False)]
-            j2r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J2'
-                   and datetime.fromisoformat(s['due_date']).date() == d]
-            j7r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J7'
-                   and datetime.fromisoformat(s['due_date']).date() == d]
+            j0r = [p for p in _prevs
+                   if p.get('date') and datetime.fromisoformat(p['date']).date() == d]
+            j2r = [s for s in _scheds
+                   if s['when'] == 'J2' and datetime.fromisoformat(s['due_date']).date() == d]
+            j7r = [s for s in _scheds
+                   if s['when'] == 'J7' and datetime.fromisoformat(s['due_date']).date() == d]
             return j0r, j2r, j7r
 
-        # Légende
-        st.markdown(
-            '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;'
-            'background:#f8fafc;border-radius:8px;padding:10px">'
-            '<div style="display:flex;align-items:center;gap:4px">'
-            '<div style="width:11px;height:11px;border-radius:3px;background:#7c3aed"></div>'
-            '<span style="font-size:.68rem;color:#1e293b">Prélèv. réel (J0)</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px">'
-            '<div style="width:11px;height:11px;border-radius:3px;background:#d97706"></div>'
-            '<span style="font-size:.68rem;color:#1e293b">Lecture J2</span></div>'
-            '<div style="display:flex;align-items:center;gap:4px">'
-            '<div style="width:11px;height:11px;border-radius:3px;background:#0369a1"></div>'
-            '<span style="font-size:.68rem;color:#1e293b">Lecture J7</span></div>'
-            '</div>',
-            unsafe_allow_html=True)
+        # ── Légende ───────────────────────────────────────────────────────────
+        st.markdown("""
+        <div style="display:flex;gap:12px;margin:12px 0;flex-wrap:wrap;
+                    background:#f8fafc;border-radius:10px;padding:10px 14px;
+                    border:1px solid #e2e8f0">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:12px;height:12px;border-radius:3px;background:#7c3aed"></div>
+            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Prélèv. réel (J0)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:12px;height:12px;border-radius:3px;background:#d97706"></div>
+            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Lecture J2 à faire</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:12px;height:12px;border-radius:3px;background:#0369a1"></div>
+            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Lecture J7 à faire</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:12px;height:12px;border-radius:3px;background:#ef4444"></div>
+            <span style="font-size:.72rem;color:#1e293b;font-weight:600">En retard</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:12px;height:12px;border-radius:3px;background:#22c55e"></div>
+            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Faite ✅</span>
+          </div>
+        </div>""", unsafe_allow_html=True)
 
-        # En-tête jours
-        hdr = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">'
+        # ── En-tête colonnes jours ────────────────────────────────────────────
+        hdr = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">'
         for i, jour in enumerate(JOURS_FR_COURT):
             cc = "#ef4444" if i >= 5 else "#1e40af"
             hdr += (f'<div style="text-align:center;padding:8px 4px;font-weight:800;'
                     f'font-size:.78rem;color:{cc};border-radius:6px;background:#eff6ff">{jour}</div>')
         hdr += '</div>'
 
+        # ── Grille des jours ─────────────────────────────────────────────────
         day_has_content = {}
-        grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'
+        grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">'
 
         for week in cal_weeks:
             for day_idx, day_num in enumerate(week):
                 is_weekend = day_idx >= 5
                 if day_num == 0:
-                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:90px"></div>'
+                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:95px"></div>'
                     continue
 
                 d = date_type(cal_year, cal_month, day_num)
@@ -2583,52 +2594,97 @@ if active == "planning":
                 is_past        = d < _today_dt
                 j0r, j2r, j7r  = _get_day_cal(d)
 
-                bg  = "#dbeafe" if is_today else ("#f1f5f9" if is_non_working else "#ffffff")
-                bdr = "2px solid #2563eb" if is_today else "1px solid #e2e8f0"
-                dnc = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
-                op  = "0.65" if is_past and not is_today else "1"
+                # Couleurs de fond
+                if is_today:
+                    bg  = "#dbeafe"
+                    bdr = "2px solid #2563eb"
+                elif is_non_working:
+                    bg  = "#f1f5f9"
+                    bdr = "1px solid #e2e8f0"
+                else:
+                    bg  = "#ffffff"
+                    bdr = "1px solid #e2e8f0"
 
-                b = ""
+                dnc = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
+                op  = "0.6" if is_past and not is_today and not j0r and not j2r and not j7r else "1"
+
+                badges = ""
+
+                # J0 — prélèvements réels
                 if j0r:
-                    b += (f'<div style="background:#7c3aed;color:#fff;border-radius:4px;'
-                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
-                          f'🧪 {len(j0r)} J0</div>')
+                    badges += (
+                        f'<div style="background:#7c3aed;color:#fff;border-radius:4px;'
+                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
+                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                        f'🧪 {len(j0r)} J0</div>')
+
+                # J2 — lectures
                 for s in j2r:
                     done = s['status'] == 'done'
-                    late = not done and d < _today_dt
+                    late = not done and d <= _today_dt
                     sc   = "#22c55e" if done else ("#ef4444" if late else "#d97706")
-                    si   = "✅" if done else ("⚠️" if late else "📖")
-                    b += (f'<div style="background:{sc};color:#fff;border-radius:4px;'
-                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
-                          f'{si} J2</div>')
+                    si   = "✅" if done else ("🔔" if late else "📖")
+                    lbl  = "✅ J2 faite" if done else ("⚠️ J2 retard" if late else "📖 J2")
+                    badges += (
+                        f'<div style="background:{sc};color:#fff;border-radius:4px;'
+                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
+                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                        f'{lbl}</div>')
+
+                # J7 — lectures
                 for s in j7r:
                     done = s['status'] == 'done'
-                    late = not done and d < _today_dt
+                    late = not done and d <= _today_dt
                     sc   = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
-                    si   = "✅" if done else ("⚠️" if late else "📗")
-                    b += (f'<div style="background:{sc};color:#fff;border-radius:4px;'
-                          f'padding:1px 5px;font-size:.6rem;font-weight:700;margin-top:2px">'
-                          f'{si} J7</div>')
+                    lbl  = "✅ J7 faite" if done else ("⚠️ J7 retard" if late else "📗 J7")
+                    badges += (
+                        f'<div style="background:{sc};color:#fff;border-radius:4px;'
+                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
+                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                        f'{lbl}</div>')
 
+                # Label week-end / férié
                 hlbl = ""
                 if is_holiday and not is_weekend:
-                    hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">Férié</div>'
+                    hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">🔴 Férié</div>'
                 elif is_weekend:
                     hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
 
                 day_has_content[d] = {"j0r": j0r, "j2r": j2r, "j7r": j7r}
-                grid += (
-                    f'<div style="background:{bg};border:{bdr};border-radius:8px;padding:6px;'
-                    f'min-height:90px;opacity:{op};display:flex;flex-direction:column">'
-                    f'<div style="font-weight:800;font-size:.9rem;color:{dnc};margin-bottom:2px">'
-                    f'{day_num}</div>{hlbl}{b}</div>')
-        grid += '</div>'
 
+                grid += (
+                    f'<div style="background:{bg};border:{bdr};border-radius:8px;padding:6px 5px;'
+                    f'min-height:95px;opacity:{op};display:flex;flex-direction:column">'
+                    f'<div style="font-weight:800;font-size:.88rem;color:{dnc}">{day_num}</div>'
+                    f'{hlbl}{badges}</div>')
+
+        grid += '</div>'
         st.markdown(hdr + grid, unsafe_allow_html=True)
 
-        # ── Détail par jour ────────────────────────────────────────────────
+        # ── Stats du mois ─────────────────────────────────────────────────────
+        total_j0  = sum(len(v["j0r"]) for v in day_has_content.values())
+        total_j2  = sum(len(v["j2r"]) for v in day_has_content.values())
+        total_j7  = sum(len(v["j7r"]) for v in day_has_content.values())
+        done_j2   = sum(1 for v in day_has_content.values() for s in v["j2r"] if s["status"] == "done")
+        done_j7   = sum(1 for v in day_has_content.values() for s in v["j7r"] if s["status"] == "done")
+        late_all  = sum(
+            1 for v in day_has_content.values()
+            for s in v["j2r"] + v["j7r"]
+            if s["status"] != "done" and datetime.fromisoformat(s["due_date"]).date() <= _today_dt
+        )
+
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+        mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+        mc1.metric("🧪 Prélèv. J0", total_j0)
+        mc2.metric("📖 Lectures J2", total_j2, f"✅ {done_j2} faites")
+        mc3.metric("📗 Lectures J7", total_j7, f"✅ {done_j7} faites")
+        mc4.metric("✅ Taux J2", f"{int(done_j2/total_j2*100)}%" if total_j2 else "—")
+        mc5.metric("🔔 En retard", late_all, delta_color="inverse")
+
+        # ── Détail par jour ───────────────────────────────────────────────────
         st.markdown("---")
-        st.markdown("**💡 Détail par jour** — sélectionnez un jour :")
+        st.markdown("#### 💡 Détail par jour")
+
         import calendar as _cal2
         _, n_days = _cal2.monthrange(cal_year, cal_month)
         working_days_month = [
@@ -2636,91 +2692,132 @@ if active == "planning":
             if date_type(cal_year, cal_month, dd).weekday() < 5
             and date_type(cal_year, cal_month, dd) not in holidays_this_month
         ]
+
         if working_days_month:
-            day_options = {
-                d.strftime('%A %d/%m') + (" 📍" if any([
-                    day_has_content.get(d, {}).get('j0r'),
-                    day_has_content.get(d, {}).get('j2r'),
-                    day_has_content.get(d, {}).get('j7r')
-                ]) else ""): d
-                for d in working_days_month
-            }
+            day_options = {}
+            for d in working_days_month:
+                data = day_has_content.get(d, {"j0r": [], "j2r": [], "j7r": []})
+                has  = data["j0r"] or data["j2r"] or data["j7r"]
+                suffix = " 📍" if has else ""
+                day_options[d.strftime('%A %d/%m') + suffix] = d
+
+            # Pré-sélectionner aujourd'hui si dans le mois, sinon premier jour
+            default_idx = 0
+            keys_list = list(day_options.keys())
+            for i, d in enumerate(day_options.values()):
+                if d == _today_dt:
+                    default_idx = i
+                    break
+
             sel_day_label = st.selectbox(
-                "Jour", list(day_options.keys()),
-                label_visibility="collapsed", key="cal_day_detail_sel")
+                "Sélectionnez un jour",
+                keys_list,
+                index=default_idx,
+                label_visibility="collapsed",
+                key="cal_day_detail_sel")
             sel_day = day_options[sel_day_label]
             data    = day_has_content.get(sel_day, {"j0r": [], "j2r": [], "j7r": []})
             j0r_d, j2r_d, j7r_d = data["j0r"], data["j2r"], data["j7r"]
 
             if not j0r_d and not j2r_d and not j7r_d:
-                st.info("Aucune activité ce jour.")
+                st.info(f"Aucune activité le {sel_day.strftime('%d/%m/%Y')}.")
             else:
                 det_cols = st.columns(3)
+
                 with det_cols[0]:
-                    st.markdown("**🧪 Prélèvements J0 réels**")
+                    st.markdown(
+                        f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                        f"border-radius:8px;padding:8px 12px;margin-bottom:8px;text-align:center'>"
+                        f"<div style='font-weight:800;color:#7c3aed;font-size:.85rem'>"
+                        f"🧪 Prélèvements J0</div>"
+                        f"<div style='font-size:.7rem;color:#64748b'>{len(j0r_d)} prélèvement(s)</div>"
+                        f"</div>", unsafe_allow_html=True)
                     if j0r_d:
                         for p in j0r_d:
+                            iso_info = ""
+                            if p.get("room_class") == "A":
+                                iso_info = (
+                                    f"<div style='font-size:.68rem;color:#854d0e;"
+                                    f"background:#fef9c3;border-radius:4px;padding:2px 5px;"
+                                    f"margin-top:3px'>🔬 {p.get('num_isolateur','—')} · {p.get('poste','—')}</div>")
                             st.markdown(
-                                "<div style='background:#faf5ff;border:1px solid #e9d5ff;"
-                                "border-left:3px solid #7c3aed;border-radius:8px;"
-                                "padding:8px 12px;margin-bottom:4px'>"
+                                f"<div style='background:#fff;border:1px solid #e9d5ff;"
+                                f"border-left:3px solid #7c3aed;border-radius:8px;"
+                                f"padding:8px 12px;margin-bottom:5px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{p['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:2px'>"
                                 f"Type : {p.get('type','—')} · Classe : {p.get('room_class','—')}</div>"
-                                f"<div style='font-size:.7rem;color:#475569'>Opérateur : {p.get('operateur','—') or '—'}</div>"
-                                f"<div style='font-size:.7rem;color:#475569'>Gélose : {p.get('gelose','—')}</div>"
-                                "</div>", unsafe_allow_html=True)
+                                f"<div style='font-size:.7rem;color:#475569'>"
+                                f"Opérateur : {p.get('operateur','—') or '—'}</div>"
+                                f"<div style='font-size:.7rem;color:#1d4ed8'>"
+                                f"🧫 Gélose : {p.get('gelose','—')}</div>"
+                                f"{iso_info}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucun prélèvement</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<div style='text-align:center;color:#94a3b8;font-size:.78rem;"
+                            "padding:16px'>Aucun prélèvement</div>", unsafe_allow_html=True)
+
                 with det_cols[1]:
-                    st.markdown("**📖 Lectures J2**")
+                    st.markdown(
+                        f"<div style='background:#fffbeb;border:1px solid #fde68a;"
+                        f"border-radius:8px;padding:8px 12px;margin-bottom:8px;text-align:center'>"
+                        f"<div style='font-weight:800;color:#d97706;font-size:.85rem'>"
+                        f"📖 Lectures J2</div>"
+                        f"<div style='font-size:.7rem;color:#64748b'>{len(j2r_d)} lecture(s)</div>"
+                        f"</div>", unsafe_allow_html=True)
                     if j2r_d:
                         for s in j2r_d:
-                            samp  = next((p for p in st.session_state.prelevements
-                                          if p['id'] == s['sample_id']), None)
+                            samp  = next((p for p in _prevs if p['id'] == s['sample_id']), None)
                             done  = s['status'] == 'done'
-                            late  = not done and sel_day < _today_dt
-                            st_col = "#22c55e" if done else ("#ef4444" if late else "#d97706")
+                            late  = not done and sel_day <= _today_dt
+                            sc    = "#22c55e" if done else ("#ef4444" if late else "#d97706")
                             st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
                             st.markdown(
-                                "<div style='background:#fffbeb;border:1px solid #fde68a;"
-                                "border-left:3px solid #d97706;border-radius:8px;"
-                                "padding:8px 12px;margin-bottom:4px'>"
+                                f"<div style='background:#fff;border:1px solid #fde68a;"
+                                f"border-left:3px solid {sc};border-radius:8px;"
+                                f"padding:8px 12px;margin-bottom:5px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{s['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:2px'>"
                                 f"J0 : {samp.get('date','—') if samp else '—'}</div>"
                                 f"<div style='font-size:.7rem;color:#475569'>"
                                 f"Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>"
+                                f"<div style='font-size:.72rem;font-weight:800;color:{sc};margin-top:4px'>"
                                 f"{st_txt}</div></div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J2</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<div style='text-align:center;color:#94a3b8;font-size:.78rem;"
+                            "padding:16px'>Aucune lecture J2</div>", unsafe_allow_html=True)
+
                 with det_cols[2]:
-                    st.markdown("**📗 Lectures J7**")
+                    st.markdown(
+                        f"<div style='background:#eff6ff;border:1px solid #bae6fd;"
+                        f"border-radius:8px;padding:8px 12px;margin-bottom:8px;text-align:center'>"
+                        f"<div style='font-weight:800;color:#0369a1;font-size:.85rem'>"
+                        f"📗 Lectures J7</div>"
+                        f"<div style='font-size:.7rem;color:#64748b'>{len(j7r_d)} lecture(s)</div>"
+                        f"</div>", unsafe_allow_html=True)
                     if j7r_d:
                         for s in j7r_d:
-                            samp  = next((p for p in st.session_state.prelevements
-                                          if p['id'] == s['sample_id']), None)
+                            samp  = next((p for p in _prevs if p['id'] == s['sample_id']), None)
                             done  = s['status'] == 'done'
-                            late  = not done and sel_day < _today_dt
-                            st_col = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
+                            late  = not done and sel_day <= _today_dt
+                            sc    = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
                             st_txt = "✅ Faite" if done else ("⚠️ En retard" if late else "⏳ À faire")
                             st.markdown(
-                                "<div style='background:#eff6ff;border:1px solid #bae6fd;"
-                                "border-left:3px solid #0369a1;border-radius:8px;"
-                                "padding:8px 12px;margin-bottom:4px'>"
+                                f"<div style='background:#fff;border:1px solid #bae6fd;"
+                                f"border-left:3px solid {sc};border-radius:8px;"
+                                f"padding:8px 12px;margin-bottom:5px'>"
                                 f"<div style='font-weight:700;color:#0f172a;font-size:.82rem'>{s['label']}</div>"
-                                f"<div style='font-size:.7rem;color:#475569;margin-top:3px'>"
+                                f"<div style='font-size:.7rem;color:#475569;margin-top:2px'>"
                                 f"J0 : {samp.get('date','—') if samp else '—'}</div>"
                                 f"<div style='font-size:.7rem;color:#475569'>"
                                 f"Opérateur : {samp.get('operateur','—') if samp else '—'}</div>"
-                                f"<div style='font-size:.72rem;font-weight:700;color:{st_col};margin-top:3px'>"
+                                f"<div style='font-size:.72rem;font-weight:800;color:{sc};margin-top:4px'>"
                                 f"{st_txt}</div></div>", unsafe_allow_html=True)
                     else:
-                        st.markdown("<span style='font-size:.75rem;color:#94a3b8'>Aucune lecture J7</span>",
-                                    unsafe_allow_html=True)
+                        st.markdown(
+                            "<div style='text-align:center;color:#94a3b8;font-size:.78rem;"
+                            "padding:16px'>Aucune lecture J7</div>", unsafe_allow_html=True)
 
 # ═════════════════════════════════════════════════════════════════════════
     # ONGLET CHARGE HEBDO
