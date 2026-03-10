@@ -4465,36 +4465,69 @@ elif active == "historique":
         # ══════════════════════════════════════════════════════════════════
         with hist_tab_liste:
             for r in reversed(surv):
+                real_i = surv.index(r)
                 ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
                 with st.expander(
                     ic + " " + r["date"] + " — " + r["prelevement"]
                     + " — " + r["germ_match"] + " — " + str(r["ufc"]) + " UFC/m³"
                 ):
-                    c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
-                    c1.markdown(
-                        "**Germe saisi :** " + r["germ_saisi"]
-                        + "\n\n**Correspondance :** " + r["germ_match"]
-                        + " (" + str(r["match_score"]) + ")")
-                    c2.markdown(
-                        "**UFC/m³ :** " + str(r["ufc"])
-                        + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"])
-                        + " | **Seuil action :** ≥" + str(r["action_threshold"]))
-                    c3.markdown(
-                        "**Opérateur :** " + str(r.get("operateur", "N/A"))
-                        + "\n\n**Remarque :** " + str(r.get("remarque", "—")))
-                    if r.get("commentaire"):
+                    # ── Mode édition ──────────────────────────────────────
+                    if st.session_state.get("edit_surv_idx") == real_i:
+                        st.markdown("**✏️ Modifier cette entrée**")
+                        e1, e2 = st.columns(2)
+                        with e1:
+                            new_germ    = st.text_input("Germe",      value=r.get("germ_match",""),  key=f"es_germ_{real_i}")
+                            new_ufc     = st.number_input("UFC",       value=int(r.get("ufc",0)), min_value=0, key=f"es_ufc_{real_i}")
+                            new_operateur = st.text_input("Opérateur", value=r.get("operateur",""), key=f"es_oper_{real_i}")
+                        with e2:
+                            new_remarque    = st.text_area("Remarque",    value=r.get("remarque",""),    height=70, key=f"es_rem_{real_i}")
+                            new_commentaire = st.text_area("Commentaire", value=r.get("commentaire",""), height=70, key=f"es_com_{real_i}")
+                        sb1, sb2 = st.columns(2)
+                        with sb1:
+                            if st.button("💾 Sauvegarder", key=f"es_save_{real_i}", use_container_width=True, type="primary"):
+                                st.session_state.surveillance[real_i]["germ_match"]   = new_germ
+                                st.session_state.surveillance[real_i]["germ_saisi"]   = new_germ
+                                st.session_state.surveillance[real_i]["ufc"]          = new_ufc
+                                st.session_state.surveillance[real_i]["operateur"]    = new_operateur
+                                st.session_state.surveillance[real_i]["remarque"]     = new_remarque
+                                st.session_state.surveillance[real_i]["commentaire"]  = new_commentaire
+                                save_surveillance(st.session_state.surveillance)
+                                st.session_state["edit_surv_idx"] = None
+                                st.rerun()
+                        with sb2:
+                            if st.button("✕ Annuler", key=f"es_cancel_{real_i}", use_container_width=True):
+                                st.session_state["edit_surv_idx"] = None
+                                st.rerun()
+
+                    # ── Mode lecture ──────────────────────────────────────
+                    else:
+                        c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
+                        c1.markdown(
+                            "**Germe saisi :** " + r["germ_saisi"]
+                            + "\n\n**Correspondance :** " + r["germ_match"]
+                            + " (" + str(r["match_score"]) + ")")
+                        c2.markdown(
+                            "**UFC/m³ :** " + str(r["ufc"])
+                            + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"])
+                            + " | **Seuil action :** ≥" + str(r["action_threshold"]))
                         c3.markdown(
-                            f"<div style='background:#f5f3ff;border:1px solid #c4b5fd;"
-                            f"border-radius:6px;padding:6px 10px;margin-top:6px;"
-                            f"font-size:.78rem;color:#5b21b6'>"
-                            f"💬 <b>Commentaire :</b> {r['commentaire']}</div>",
-                            unsafe_allow_html=True)
-                    with c4:
-                        real_i = surv.index(r)
-                        if st.button("🗑️", key="del_surv_" + str(real_i)):
-                            st.session_state.surveillance.pop(real_i)
-                            save_surveillance(st.session_state.surveillance)
-                            st.rerun()
+                            "**Opérateur :** " + str(r.get("operateur", "N/A"))
+                            + "\n\n**Remarque :** " + str(r.get("remarque", "—")))
+                        if r.get("commentaire"):
+                            c3.markdown(
+                                f"<div style='background:#f5f3ff;border:1px solid #c4b5fd;"
+                                f"border-radius:6px;padding:6px 10px;margin-top:6px;"
+                                f"font-size:.78rem;color:#5b21b6'>"
+                                f"💬 <b>Commentaire :</b> {r['commentaire']}</div>",
+                                unsafe_allow_html=True)
+                        with c4:
+                            if st.button("✏️", key=f"edit_surv_{real_i}", use_container_width=True):
+                                st.session_state["edit_surv_idx"] = real_i
+                                st.rerun()
+                            if st.button("🗑️", key=f"del_surv_{real_i}", use_container_width=True):
+                                st.session_state.surveillance.pop(real_i)
+                                save_surveillance(st.session_state.surveillance)
+                                st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
 
