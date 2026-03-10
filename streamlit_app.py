@@ -501,17 +501,34 @@ def _save_json_key(key, data, local_file):
         pass
 
 def load_points(): return _load_json_key('points', POINTS_FILE)
-def save_points(d): _save_json_key('points', d, POINTS_FILE)
+def save_points(d, supa=True):
+    _save_json_key('points', d, POINTS_FILE)
+    if supa: _supa_upsert('points', json.dumps(d, ensure_ascii=False))
+
 def load_prelevements(): return _load_json_key('prelevements', PRELEVEMENTS_FILE)
-def save_prelevements(d): _save_json_key('prelevements', d, PRELEVEMENTS_FILE)
+def save_prelevements(d, supa=True):
+    _save_json_key('prelevements', d, PRELEVEMENTS_FILE)
+    if supa: _supa_upsert('prelevements', json.dumps(d, ensure_ascii=False))
+
 def load_schedules(): return _load_json_key('schedules', SCHEDULES_FILE)
-def save_schedules(d): _save_json_key('schedules', d, SCHEDULES_FILE)
+def save_schedules(d, supa=True):
+    _save_json_key('schedules', d, SCHEDULES_FILE)
+    if supa: _supa_upsert('schedules', json.dumps(d, ensure_ascii=False))
+
 def load_pending_identifications(): return _load_json_key('pending_identifications', PENDING_FILE)
-def save_pending_identifications(d): _save_json_key('pending_identifications', d, PENDING_FILE)
+def save_pending_identifications(d, supa=True):
+    _save_json_key('pending_identifications', d, PENDING_FILE)
+    if supa: _supa_upsert('pending_identifications', json.dumps(d, ensure_ascii=False))
+
 def load_archived_samples(): return _load_json_key('archived_samples', ARCHIVED_FILE)
-def save_archived_samples(d): _save_json_key('archived_samples', d, ARCHIVED_FILE)
+def save_archived_samples(d, supa=True):
+    _save_json_key('archived_samples', d, ARCHIVED_FILE)
+    if supa: _supa_upsert('archived_samples', json.dumps(d, ensure_ascii=False))
+
 def load_operators(): return _load_json_key('operators', OPERATORS_FILE)
-def save_operators(d): _save_json_key('operators', d, OPERATORS_FILE)
+def save_operators(d, supa=True):
+    _save_json_key('operators', d, OPERATORS_FILE)
+    if supa: _supa_upsert('operators', json.dumps(d, ensure_ascii=False))
 
 def load_surveillance():
     raw_json = _supa_get('surveillance')
