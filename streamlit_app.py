@@ -430,30 +430,24 @@ def get_thresholds_for_risk(risk, thresholds):
     return thresholds.get(risk, {"alert": 25, "action": 40})
 
 def load_origin_measures():
-    defaults_by_id = {m["id"]: m for m in DEFAULT_ORIGIN_MEASURES}
-    saved = []
     raw_json = _supa_get('measures')
     if raw_json:
         try:
             raw = json.loads(raw_json)
-            if isinstance(raw, list):
-                saved = raw
+            if isinstance(raw, list) and raw:
+                return raw
         except Exception:
-            saved = []
-    if not saved and os.path.exists(THRESHOLDS_FILE):
+            pass
+    if os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
                 raw = json.load(f)
-            if "measures" in raw and isinstance(raw["measures"], list):
-                saved = raw["measures"]
+            if "measures" in raw and isinstance(raw["measures"], list) and raw["measures"]:
+                return raw["measures"]
         except Exception:
-            saved = []
-    saved_ids = {m.get("id") for m in saved}
-    merged = [dict(m) for m in saved]
-    for dflt in DEFAULT_ORIGIN_MEASURES:
-        if dflt["id"] not in saved_ids:
-            merged.append(dict(dflt))
-    return merged if merged else [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
+            pass
+    # Aucune donnée sauvegardée → on charge les défauts une seule fois
+    return [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
 
 def save_origin_measures(measures, supa=True):
     if supa:
