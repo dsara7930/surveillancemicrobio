@@ -321,7 +321,8 @@ def _supa_upsert(key, value_json):
             on_conflict='key'
         ).execute()
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[SUPA ERROR] key={key} : {e}")  # visible dans les logs Streamlit Cloud
         return False
 
 def _supa_get(key):
@@ -456,7 +457,14 @@ def load_origin_measures():
 
 def save_origin_measures(measures, supa=True):
     if supa:
-        _supa_upsert('measures', json.dumps(measures, ensure_ascii=False))
+        try:
+            result = _supa_upsert('measures', json.dumps(measures, ensure_ascii=False))
+            if not result:
+                import streamlit as st
+                st.warning("⚠️ Supabase non connecté — sauvegarde locale uniquement.")
+        except Exception as e:
+            import streamlit as st
+            st.error(f"❌ Erreur Supabase : {e}")
     if os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
