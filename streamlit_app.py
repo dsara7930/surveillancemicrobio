@@ -1643,11 +1643,17 @@ if active == "surveillance":
                 with bc2:
                     if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
                         sid = s.get('sample_id')
-                        st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
-                        st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']        != sid]
+                        st.session_state.schedules = [
+                            x for x in st.session_state.schedules if x['sample_id'] != sid]
+                        st.session_state.prelevements = [
+                            x for x in st.session_state.prelevements if x['id'] != sid]
+                        st.session_state.pending_identifications = [
+                            x for x in st.session_state.pending_identifications
+                            if x.get('sample_id') != sid]
                         save_schedules(st.session_state.schedules)
                         save_prelevements(st.session_state.prelevements)
-                        st.success("Prélèvement et lectures associées supprimés.")
+                        save_pending_identifications(st.session_state.pending_identifications)
+                        st.success("Prélèvement, lectures et identifications en attente supprimés.")
                         st.rerun()
 
         # ── Traitement d'une lecture ──────────────────────────────────────────
@@ -4776,8 +4782,14 @@ elif active == "parametres":
         type_labels  = {"alert":"⚠️ Alerte","action":"🚨 Action","both":"⚠️🚨 Alerte & Action"}
         type_colors  = {"alert":"#f59e0b","action":"#ef4444","both":"#818cf8"}
         scope_r_map  = {v: k for k, v in scope_labels.items()}
+        risk_opts_map = {
+            "all":"🌐 Toutes","1":"🟢 1","2":"🟢 2","3":"🟡 3",
+            "4":"🟠 4","5":"🔴 5","[3,4,5]":"3-4-5",
+            "[4,5]":"4-5","[1,2,3]":"1-2-3"
+        }
+        risk_opts_rev = {v: k for k, v in risk_opts_map.items()}
 
-        col_f1, col_f2, col_f3, col_f4 = st.columns([2,1.5,1.5,1])
+        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 1.5, 1.5, 1])
         with col_f1:
             filter_scope = st.selectbox("Origine",
                 ["Tout afficher"] + list(scope_labels.values()),
@@ -4794,16 +4806,23 @@ elif active == "parametres":
             if can_edit:
                 if st.button("➕ Nouvelle", use_container_width=True):
                     st.session_state.show_new_measure = True
+                    st.session_state["_edit_mesure_idx"] = None
+                    st.rerun()
 
         active_scope = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
         active_risk  = filter_risk_lbl.split()[-1]   if filter_risk_lbl != "🌐 Tout" else None
         active_type  = ("alert" if "Alerte" in filter_type else "action") \
                        if filter_type != "Tout" else None
 
+        # ── Formulaire nouvelle mesure ────────────────────────────────────
         if can_edit and st.session_state.get("show_new_measure", False):
             with st.container():
+                st.markdown(
+                    "<div style='background:#f0fdf4;border:1.5px solid #86efac;"
+                    "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                    unsafe_allow_html=True)
                 st.markdown("#### ➕ Nouvelle mesure")
-                nmc1, nmc2, nmc3, nmc4 = st.columns([3,2,1.5,1.5])
+                nmc1, nmc2, nmc3, nmc4 = st.columns([3, 2, 1.5, 1.5])
                 with nmc1:
                     nm_text = st.text_input("Texte *", key="nm_text")
                 with nmc2:
@@ -4811,21 +4830,16 @@ elif active == "parametres":
                         list(scope_labels.values()), key="nm_scope")
                     nm_scope = scope_r_map.get(nm_scope_label, "all")
                 with nmc3:
-                    risk_opts_nm = {
-                        "all":"🌐 Toutes","1":"🟢 1","2":"🟢 2","3":"🟡 3",
-                        "4":"🟠 4","5":"🔴 5","[3,4,5]":"3-4-5",
-                        "[4,5]":"4-5","[1,2,3]":"1-2-3"
-                    }
                     nm_risk_lbl = st.selectbox("Criticité",
-                        list(risk_opts_nm.values()), key="nm_risk")
-                    nm_risk_key = {v:k for k,v in risk_opts_nm.items()}.get(nm_risk_lbl,"all")
+                        list(risk_opts_map.values()), key="nm_risk")
+                    nm_risk_key = risk_opts_rev.get(nm_risk_lbl, "all")
                     nm_risk = ("all" if nm_risk_key == "all"
                                else json.loads(nm_risk_key) if nm_risk_key.startswith("[")
                                else int(nm_risk_key))
                 with nmc4:
                     nm_type_label = st.selectbox("Type",
                         list(type_labels.values()), key="nm_type")
-                    nm_type = {v:k for k,v in type_labels.items()}.get(nm_type_label,"alert")
+                    nm_type = {v: k for k, v in type_labels.items()}.get(nm_type_label, "alert")
                 nb1, nb2 = st.columns(2)
                 with nb1:
                     if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
@@ -4843,7 +4857,9 @@ elif active == "parametres":
                             st.rerun()
                 with nb2:
                     if st.button("Annuler", use_container_width=True, key="nm_cancel"):
-                        st.session_state.show_new_measure = False; st.rerun()
+                        st.session_state.show_new_measure = False
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
         def _passes_filter(m):
             if active_scope and m["scope"] != active_scope:
@@ -4851,51 +4867,125 @@ elif active == "parametres":
             if active_type and m["type"] != active_type and m["type"] != "both":
                 return False
             if active_risk:
-                mr = m.get("risk","all")
+                mr = m.get("risk", "all")
                 if mr != "all":
                     if isinstance(mr, list):
-                        if int(active_risk) not in mr: return False
+                        if int(active_risk) not in mr:
+                            return False
                     else:
-                        if str(mr) != active_risk: return False
+                        if str(mr) != active_risk:
+                            return False
             return True
 
+        # ── Liste des mesures ─────────────────────────────────────────────
         for m in [m for m in om if _passes_filter(m)]:
             real_idx = om.index(m)
-            tcol = type_colors.get(m["type"],"#0f172a")
+            tcol = type_colors.get(m["type"], "#0f172a")
             tlbl = type_labels.get(m["type"], m["type"])
-            rc1, rc2, rc3, rc4, rc5 = st.columns([4.5,1.2,1.5,0.8,0.8])
-            with rc1:
-                st.markdown(
-                    f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">'
-                    f'• {m["text"]}</div>', unsafe_allow_html=True)
-            with rc3:
-                st.markdown(
-                    f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};"'
-                    f'font-weight:600;text-align:center">{tlbl}</div>',
-                    unsafe_allow_html=True)
-            with rc4:
-                if can_edit:
-                    if st.button("✏️", key=f"edit_btn_{real_idx}"):
-                        st.session_state[f"edit_m_{real_idx}"] = True; st.rerun()
-            with rc5:
-                if can_edit:
-                    if st.button("🗑️", key=f"del_m_{real_idx}"):
-                        om.pop(real_idx)
-                        save_origin_measures(om)
-                        st.session_state.origin_measures = om
-                        st.rerun()
+
+            # ── Mode édition inline ───────────────────────────────────────
+            if st.session_state.get("_edit_mesure_idx") == real_idx:
+                with st.container():
+                    st.markdown(
+                        "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                        "border-radius:10px;padding:14px;margin-bottom:8px'>",
+                        unsafe_allow_html=True)
+                    st.markdown(f"**✏️ Modifier la mesure**")
+                    ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
+                    with ec1:
+                        new_text = st.text_input("Texte *",
+                            value=m.get("text", ""),
+                            key=f"em_text_{real_idx}")
+                    with ec2:
+                        cur_scope_lbl = scope_labels.get(m.get("scope","all"), "🌐 Toutes")
+                        scope_opts    = list(scope_labels.values())
+                        scope_idx     = scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0
+                        new_scope_lbl = st.selectbox("Origine", scope_opts,
+                            index=scope_idx, key=f"em_scope_{real_idx}")
+                        new_scope = scope_r_map.get(new_scope_lbl, "all")
+                    with ec3:
+                        cur_risk    = m.get("risk", "all")
+                        cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
+                                        else json.dumps(cur_risk).replace(" ",""))
+                        cur_risk_lbl = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
+                        risk_opts_list = list(risk_opts_map.values())
+                        risk_idx  = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
+                        new_risk_lbl = st.selectbox("Criticité", risk_opts_list,
+                            index=risk_idx, key=f"em_risk_{real_idx}")
+                        new_risk_key = risk_opts_rev.get(new_risk_lbl, "all")
+                        new_risk = ("all" if new_risk_key == "all"
+                                    else json.loads(new_risk_key) if new_risk_key.startswith("[")
+                                    else int(new_risk_key))
+                    with ec4:
+                        cur_type_lbl = type_labels.get(m.get("type","alert"), "⚠️ Alerte")
+                        type_opts    = list(type_labels.values())
+                        type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
+                        new_type_lbl = st.selectbox("Type", type_opts,
+                            index=type_idx, key=f"em_type_{real_idx}")
+                        new_type = {v: k for k, v in type_labels.items()}.get(new_type_lbl, "alert")
+
+                    sb1, sb2 = st.columns(2)
+                    with sb1:
+                        if st.button("💾 Sauvegarder", key=f"em_save_{real_idx}",
+                                     use_container_width=True, type="primary"):
+                            if new_text.strip():
+                                om[real_idx]["text"]  = new_text.strip()
+                                om[real_idx]["scope"] = new_scope
+                                om[real_idx]["risk"]  = new_risk
+                                om[real_idx]["type"]  = new_type
+                                save_origin_measures(om)
+                                st.session_state.origin_measures  = om
+                                st.session_state["_edit_mesure_idx"] = None
+                                st.rerun()
+                            else:
+                                st.error("Le texte est obligatoire.")
+                    with sb2:
+                        if st.button("✕ Annuler", key=f"em_cancel_{real_idx}",
+                                     use_container_width=True):
+                            st.session_state["_edit_mesure_idx"] = None
+                            st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Mode lecture ──────────────────────────────────────────────
+            else:
+                rc1, rc2, rc3, rc4, rc5 = st.columns([4.5, 1.2, 1.5, 0.8, 0.8])
+                with rc1:
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">'
+                        f'• {m["text"]}</div>',
+                        unsafe_allow_html=True)
+                with rc3:
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};"'
+                        f'font-weight:600;text-align:center">{tlbl}</div>',
+                        unsafe_allow_html=True)
+                with rc4:
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_btn_{real_idx}"):
+                            st.session_state["_edit_mesure_idx"] = real_idx
+                            st.session_state["show_new_measure"] = False
+                            st.rerun()
+                with rc5:
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_m_{real_idx}"):
+                            om.pop(real_idx)
+                            save_origin_measures(om)
+                            st.session_state.origin_measures = om
+                            st.rerun()
 
         col_sr, col_def = st.columns(2)
         with col_sr:
             if can_edit:
                 if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"):
-                    save_origin_measures(om); st.success("✅ Sauvegardé !")
+                    save_origin_measures(om)
+                    st.success("✅ Sauvegardé !")
         with col_def:
             if can_edit:
                 if st.button("↩️ Réinitialiser", use_container_width=True,
                               key="reinit_mesures"):
                     st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
-                    save_origin_measures(st.session_state.origin_measures); st.rerun()
+                    save_origin_measures(st.session_state.origin_measures)
+                    st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # POINTS DE PRÉLÈVEMENT
