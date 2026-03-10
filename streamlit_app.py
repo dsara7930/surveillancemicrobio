@@ -4582,11 +4582,11 @@ elif active == "parametres":
             c1, c2 = st.columns(2)
             with c1:
                 new_alert  = st.number_input("⚠️ Seuil alerte (UFC/m³)", min_value=0,
-                                              value=int(th.get("alert",10)),
+                                              value=int(th.get("alert", 10)),
                                               key=f"alert_{risk}")
             with c2:
                 new_action = st.number_input("🚨 Seuil action (UFC/m³)", min_value=0,
-                                              value=int(th.get("action",50)),
+                                              value=int(th.get("action", 50)),
                                               key=f"action_{risk}")
             new_thresholds[risk] = {"alert": new_alert, "action": new_action}
             st.divider()
@@ -4597,7 +4597,8 @@ elif active == "parametres":
                 if st.button("💾 Sauvegarder", use_container_width=True,
                               key="save_seuils_germe"):
                     st.session_state.thresholds = new_thresholds
-                    save_thresholds_and_measures(new_thresholds, st.session_state.measures)
+                    # supa=True : synchronisation Supabase déclenchée par le bouton
+                    save_thresholds_and_measures(new_thresholds, st.session_state.measures, supa=True)
                     st.success("✅ Seuils par germe sauvegardés !")
         with cr:
             if can_edit:
@@ -4606,7 +4607,7 @@ elif active == "parametres":
                     st.session_state.thresholds = {k: dict(v)
                                                     for k, v in DEFAULT_THRESHOLDS.items()}
                     save_thresholds_and_measures(st.session_state.thresholds,
-                                                  st.session_state.measures)
+                                                  st.session_state.measures, supa=True)
                     st.success("✅ Réinitialisé."); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -4632,9 +4633,9 @@ elif active == "parametres":
 
         DEFAULT_CLASSE_TH = {
             "A": {"alert": 1,   "action": 1,   "risk_label": "Critique",  "color": "#ef4444"},
-            "B": {"alert": 5,   "action": 10,  "risk_label": "Majeur",    "color": "#f97316"},
-            "C": {"alert": 50,  "action": 100, "risk_label": "Important", "color": "#f59e0b"},
-            "D": {"alert": 100, "action": 200, "risk_label": "Modéré",    "color": "#84cc16"},
+            "B": {"alert": 5,   "action": 15,  "risk_label": "Majeur",    "color": "#f97316"},
+            "C": {"alert": 15,  "action": 30, "risk_label": "Important", "color": "#f59e0b"},
+            "D": {"alert": 25, "action": 40, "risk_label": "Modéré",    "color": "#84cc16"},
         }
         RL_COLORS = {
             "Limité":"#22c55e","Modéré":"#84cc16",
@@ -4649,17 +4650,17 @@ elif active == "parametres":
             new_thresholds_classe = {}
 
             for rc in all_classes_params:
-                rc_key   = rc.replace(' ','').upper()[:1]
+                rc_key   = rc.replace(' ', '').upper()[:1]
                 defaults = DEFAULT_CLASSE_TH.get(rc_key,
-                           {"alert":50,"action":100,"risk_label":"Important","color":"#6366f1"})
+                           {"alert": 50, "action": 100, "risk_label": "Important", "color": "#6366f1"})
                 saved    = st.session_state.thresholds_classe.get(rc, {})
                 cur_alert  = int(saved.get("alert",  defaults["alert"]))
                 cur_action = int(saved.get("action", defaults["action"]))
                 cur_rl     = saved.get("risk_label", defaults["risk_label"])
                 rc_color   = defaults["color"]
 
-                pts_rc   = [pt for pt in st.session_state.points
-                            if (pt.get('room_class') or '').strip() == rc]
+                pts_rc = [pt for pt in st.session_state.points
+                          if (pt.get('room_class') or '').strip() == rc]
 
                 st.markdown(
                     f"<div style='background:{rc_color}11;border:1.5px solid {rc_color}44;"
@@ -4679,30 +4680,26 @@ elif active == "parametres":
                     cur_rl_idx = RL_OPTS.index(cur_rl) if cur_rl in RL_OPTS else 2
                     new_rl = st.selectbox(
                         f"Criticité zone {rc}", RL_OPTS,
-                        index=cur_rl_idx,
-                        key=f"sc_risk_{rc}",
+                        index=cur_rl_idx, key=f"sc_risk_{rc}",
                         disabled=not can_edit)
                     rl_col = RL_COLORS.get(new_rl, "#6366f1")
                     st.markdown(
                         f"<div style='background:{rl_col}22;border:1px solid {rl_col}55;"
                         f"border-radius:6px;padding:4px 8px;text-align:center;"
                         f"font-size:.72rem;font-weight:700;color:{rl_col};margin-top:4px'>"
-                        f"{new_rl}</div>",
-                        unsafe_allow_html=True)
+                        f"{new_rl}</div>", unsafe_allow_html=True)
                 with hc3:
                     new_al_c = st.number_input(
                         f"⚠️ Seuil alerte — classe {rc} (UFC/m³)",
                         min_value=0, max_value=10000,
                         value=cur_alert, step=1,
-                        key=f"sc_alert_{rc}",
-                        disabled=not can_edit)
+                        key=f"sc_alert_{rc}", disabled=not can_edit)
                 with hc4:
                     new_ac_c = st.number_input(
                         f"🚨 Seuil action — classe {rc} (UFC/m³)",
                         min_value=0, max_value=10000,
                         value=cur_action, step=1,
-                        key=f"sc_action_{rc}",
-                        disabled=not can_edit)
+                        key=f"sc_action_{rc}", disabled=not can_edit)
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
@@ -4716,8 +4713,8 @@ elif active == "parametres":
             st.markdown("#### 📊 Récapitulatif")
             recap_cols = st.columns(len(all_classes_params))
             for ci, rc in enumerate(all_classes_params):
-                th_c  = new_thresholds_classe.get(rc, {})
-                rl_c  = th_c.get("risk_label","—")
+                th_c   = new_thresholds_classe.get(rc, {})
+                rl_c   = th_c.get("risk_label", "—")
                 rl_col = RL_COLORS.get(rl_c, "#6366f1")
                 with recap_cols[ci]:
                     st.markdown(
@@ -4727,8 +4724,7 @@ elif active == "parametres":
                         f"<div style='font-size:1.6rem;font-weight:900;color:{rl_col}'>{rc}</div>"
                         f"<div style='font-size:.65rem;color:{rl_col};font-weight:700;"
                         f"text-transform:uppercase;margin-bottom:8px'>{rl_c}</div>"
-                        f"<div style='background:#fffbeb;border-radius:6px;padding:5px;"
-                        f"margin-bottom:4px'>"
+                        f"<div style='background:#fffbeb;border-radius:6px;padding:5px;margin-bottom:4px'>"
                         f"<div style='font-size:.6rem;color:#92400e'>⚠️ ALERTE</div>"
                         f"<div style='font-size:1rem;font-weight:800;color:#d97706'>"
                         f"≥ {th_c.get('alert','—')} UFC</div></div>"
@@ -4736,8 +4732,7 @@ elif active == "parametres":
                         f"<div style='font-size:.6rem;color:#991b1b'>🚨 ACTION</div>"
                         f"<div style='font-size:1rem;font-weight:800;color:#dc2626'>"
                         f"≥ {th_c.get('action','—')} UFC</div></div>"
-                        f"</div>",
-                        unsafe_allow_html=True)
+                        f"</div>", unsafe_allow_html=True)
 
             st.divider()
             sc1, sc2 = st.columns(2)
@@ -4746,6 +4741,7 @@ elif active == "parametres":
                     if st.button("💾 Sauvegarder seuils par classe",
                                   use_container_width=True, key="save_seuils_classe"):
                         st.session_state.thresholds_classe = new_thresholds_classe
+                        # supa=True : synchronisation Supabase déclenchée par le bouton
                         _supa_upsert('thresholds_classe', json.dumps(
                             new_thresholds_classe, ensure_ascii=False))
                         st.success("✅ Seuils par classe sauvegardés !")
@@ -4756,14 +4752,16 @@ elif active == "parametres":
                         st.session_state.thresholds_classe = {
                             rc: {
                                 "alert":      DEFAULT_CLASSE_TH.get(
-                                    rc.replace(' ','').upper()[:1], {}).get("alert", 50),
+                                    rc.replace(' ', '').upper()[:1], {}).get("alert", 50),
                                 "action":     DEFAULT_CLASSE_TH.get(
-                                    rc.replace(' ','').upper()[:1], {}).get("action", 100),
+                                    rc.replace(' ', '').upper()[:1], {}).get("action", 100),
                                 "risk_label": DEFAULT_CLASSE_TH.get(
-                                    rc.replace(' ','').upper()[:1], {}).get("risk_label","Important"),
+                                    rc.replace(' ', '').upper()[:1], {}).get("risk_label", "Important"),
                             }
                             for rc in all_classes_params
                         }
+                        _supa_upsert('thresholds_classe', json.dumps(
+                            st.session_state.thresholds_classe, ensure_ascii=False))
                         st.success("✅ Valeurs GMP restaurées."); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -4772,20 +4770,20 @@ elif active == "parametres":
     with subtab_mesures:
         om = st.session_state.origin_measures
         scope_labels = {
-            "all":"🌐 Toutes","Air":"💨 Air","Humidité":"💧 Humidité",
-            "Flore fécale":"🦠 Flore fécale",
-            "Oropharynx / Gouttelettes":"😷 Oropharynx",
-            "Peau / Muqueuses":"🖐️ Peau / Muqueuses",
-            "Peau / Muqueuse":"🖐️ Peau / Muqueuse",
-            "Sol / Carton / Surface sèche":"📦 Sol / Surface sèche"
+            "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
+            "Flore fécale": "🦠 Flore fécale",
+            "Oropharynx / Gouttelettes": "😷 Oropharynx",
+            "Peau / Muqueuses": "🖐️ Peau / Muqueuses",
+            "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
+            "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
         }
-        type_labels  = {"alert":"⚠️ Alerte","action":"🚨 Action","both":"⚠️🚨 Alerte & Action"}
-        type_colors  = {"alert":"#f59e0b","action":"#ef4444","both":"#818cf8"}
-        scope_r_map  = {v: k for k, v in scope_labels.items()}
+        type_labels = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
+        type_colors = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
+        scope_r_map = {v: k for k, v in scope_labels.items()}
         risk_opts_map = {
-            "all":"🌐 Toutes","1":"🟢 1","2":"🟢 2","3":"🟡 3",
-            "4":"🟠 4","5":"🔴 5","[3,4,5]":"3-4-5",
-            "[4,5]":"4-5","[1,2,3]":"1-2-3"
+            "all": "🌐 Toutes", "1": "🟢 1", "2": "🟢 2", "3": "🟡 3",
+            "4": "🟠 4", "5": "🔴 5", "[3,4,5]": "3-4-5",
+            "[4,5]": "4-5", "[1,2,3]": "1-2-3"
         }
         risk_opts_rev = {v: k for k, v in risk_opts_map.items()}
 
@@ -4796,11 +4794,11 @@ elif active == "parametres":
                 label_visibility="collapsed", key="filter_scope")
         with col_f2:
             filter_risk_lbl = st.selectbox("Criticité",
-                ["🌐 Tout","🟢 1","🟢 2","🟡 3","🟠 4","🔴 5"],
+                ["🌐 Tout", "🟢 1", "🟢 2", "🟡 3", "🟠 4", "🔴 5"],
                 label_visibility="collapsed", key="filter_risk")
         with col_f3:
             filter_type = st.selectbox("Type",
-                ["Tout","⚠️ Alerte","🚨 Action"],
+                ["Tout", "⚠️ Alerte", "🚨 Action"],
                 label_visibility="collapsed", key="filter_type")
         with col_f4:
             if can_edit:
@@ -4851,7 +4849,8 @@ elif active == "parametres":
                                 "risk":  nm_risk,
                                 "type":  nm_type
                             })
-                            save_origin_measures(om)
+                            # supa=False : on attend le bouton 💾 Sauvegarder
+                            save_origin_measures(om, supa=False)
                             st.session_state.origin_measures  = om
                             st.session_state.show_new_measure = False
                             st.rerun()
@@ -4877,6 +4876,14 @@ elif active == "parametres":
                             return False
             return True
 
+        # ── Bandeau modifications non sauvegardées ────────────────────────
+        if st.session_state.get("_mesures_modifiees"):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;"
+                "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#92400e'>"
+                "⚠️ Modifications non sauvegardées — cliquez sur <strong>💾 Sauvegarder</strong> pour les envoyer vers Supabase."
+                "</div>", unsafe_allow_html=True)
+
         # ── Liste des mesures ─────────────────────────────────────────────
         for m in [m for m in om if _passes_filter(m)]:
             real_idx = om.index(m)
@@ -4890,26 +4897,25 @@ elif active == "parametres":
                         "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
                         "border-radius:10px;padding:14px;margin-bottom:8px'>",
                         unsafe_allow_html=True)
-                    st.markdown(f"**✏️ Modifier la mesure**")
+                    st.markdown("**✏️ Modifier la mesure**")
                     ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
                     with ec1:
                         new_text = st.text_input("Texte *",
-                            value=m.get("text", ""),
-                            key=f"em_text_{real_idx}")
+                            value=m.get("text", ""), key=f"em_text_{real_idx}")
                     with ec2:
-                        cur_scope_lbl = scope_labels.get(m.get("scope","all"), "🌐 Toutes")
+                        cur_scope_lbl = scope_labels.get(m.get("scope", "all"), "🌐 Toutes")
                         scope_opts    = list(scope_labels.values())
                         scope_idx     = scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0
                         new_scope_lbl = st.selectbox("Origine", scope_opts,
                             index=scope_idx, key=f"em_scope_{real_idx}")
                         new_scope = scope_r_map.get(new_scope_lbl, "all")
                     with ec3:
-                        cur_risk    = m.get("risk", "all")
+                        cur_risk     = m.get("risk", "all")
                         cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
-                                        else json.dumps(cur_risk).replace(" ",""))
+                                        else json.dumps(cur_risk).replace(" ", ""))
                         cur_risk_lbl = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
                         risk_opts_list = list(risk_opts_map.values())
-                        risk_idx  = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
+                        risk_idx = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
                         new_risk_lbl = st.selectbox("Criticité", risk_opts_list,
                             index=risk_idx, key=f"em_risk_{real_idx}")
                         new_risk_key = risk_opts_rev.get(new_risk_lbl, "all")
@@ -4917,7 +4923,7 @@ elif active == "parametres":
                                     else json.loads(new_risk_key) if new_risk_key.startswith("[")
                                     else int(new_risk_key))
                     with ec4:
-                        cur_type_lbl = type_labels.get(m.get("type","alert"), "⚠️ Alerte")
+                        cur_type_lbl = type_labels.get(m.get("type", "alert"), "⚠️ Alerte")
                         type_opts    = list(type_labels.values())
                         type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
                         new_type_lbl = st.selectbox("Type", type_opts,
@@ -4926,16 +4932,18 @@ elif active == "parametres":
 
                     sb1, sb2 = st.columns(2)
                     with sb1:
-                        if st.button("💾 Sauvegarder", key=f"em_save_{real_idx}",
+                        if st.button("✔️ Valider", key=f"em_save_{real_idx}",
                                      use_container_width=True, type="primary"):
                             if new_text.strip():
                                 om[real_idx]["text"]  = new_text.strip()
                                 om[real_idx]["scope"] = new_scope
                                 om[real_idx]["risk"]  = new_risk
                                 om[real_idx]["type"]  = new_type
-                                save_origin_measures(om)
-                                st.session_state.origin_measures  = om
+                                # supa=False : on attend le bouton 💾 Sauvegarder
+                                save_origin_measures(om, supa=False)
+                                st.session_state.origin_measures     = om
                                 st.session_state["_edit_mesure_idx"] = None
+                                st.session_state["_mesures_modifiees"] = True
                                 st.rerun()
                             else:
                                 st.error("Le texte est obligatoire.")
@@ -4952,8 +4960,7 @@ elif active == "parametres":
                 with rc1:
                     st.markdown(
                         f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">'
-                        f'• {m["text"]}</div>',
-                        unsafe_allow_html=True)
+                        f'• {m["text"]}</div>', unsafe_allow_html=True)
                 with rc3:
                     st.markdown(
                         f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};"'
@@ -4969,22 +4976,27 @@ elif active == "parametres":
                     if can_edit:
                         if st.button("🗑️", key=f"del_m_{real_idx}"):
                             om.pop(real_idx)
-                            save_origin_measures(om)
-                            st.session_state.origin_measures = om
+                            # supa=False : on attend le bouton 💾 Sauvegarder
+                            save_origin_measures(om, supa=False)
+                            st.session_state.origin_measures       = om
+                            st.session_state["_mesures_modifiees"] = True
                             st.rerun()
 
         col_sr, col_def = st.columns(2)
         with col_sr:
             if can_edit:
                 if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"):
-                    save_origin_measures(om)
-                    st.success("✅ Sauvegardé !")
+                    # supa=True : synchronisation Supabase déclenchée par le bouton
+                    save_origin_measures(om, supa=True)
+                    st.session_state["_mesures_modifiees"] = False
+                    st.success("✅ Mesures sauvegardées et synchronisées !")
         with col_def:
             if can_edit:
                 if st.button("↩️ Réinitialiser", use_container_width=True,
                               key="reinit_mesures"):
                     st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
-                    save_origin_measures(st.session_state.origin_measures)
+                    save_origin_measures(st.session_state.origin_measures, supa=True)
+                    st.session_state["_mesures_modifiees"] = False
                     st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -4992,9 +5004,9 @@ elif active == "parametres":
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_points:
         st.markdown("Gérez les points de prélèvement.")
-        PT_RISK_OPTS      = ["1 — Limité","2 — Modéré","3 — Important","4 — Majeur","5 — Critique"]
-        PT_RISK_COLORS    = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-        PT_FREQ_UNIT_OPTS = ["/ jour","/ semaine","/ mois"]
+        PT_RISK_OPTS      = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Majeur", "5 — Critique"]
+        PT_RISK_COLORS    = {"1": "#22c55e", "2": "#84cc16", "3": "#f59e0b", "4": "#f97316", "5": "#ef4444"}
+        PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
         if not st.session_state.points:
             st.info("Aucun point défini.")
@@ -5013,12 +5025,12 @@ elif active == "parametres":
             </div>""", unsafe_allow_html=True)
 
             for i, pt in enumerate(list(st.session_state.points)):
-                pt_type    = pt.get('type','—')
-                type_icon  = "💨" if pt_type == "Air" else "🧴"
-                risk_val   = str(pt.get('risk_level','—'))
-                risk_col   = PT_RISK_COLORS.get(risk_val, "#94a3b8")
-                freq       = pt.get('frequency', 1)
-                freq_unit  = pt.get('frequency_unit','/ semaine')
+                pt_type   = pt.get('type', '—')
+                type_icon = "💨" if pt_type == "Air" else "🧴"
+                risk_val  = str(pt.get('risk_level', '—'))
+                risk_col  = PT_RISK_COLORS.get(risk_val, "#94a3b8")
+                freq      = pt.get('frequency', 1)
+                freq_unit = pt.get('frequency_unit', '/ semaine')
                 freq_short = (str(freq) + "x/" +
                               ("j" if "jour" in freq_unit else
                                "sem" if "sem" in freq_unit else "mois"))
@@ -5033,35 +5045,33 @@ elif active == "parametres":
                         f"border-top:none;padding:9px 14px;align-items:center'>"
                         f"<div style='font-size:.88rem;font-weight:700;color:#0f172a'>"
                         f"{type_icon} {pt['label']}</div>"
+                        f"<div style='font-size:.75rem;color:#475569;text-align:center'>{pt_type}</div>"
                         f"<div style='font-size:.75rem;color:#475569;text-align:center'>"
-                        f"{pt_type}</div>"
-                        f"<div style='font-size:.75rem;color:#475569;text-align:center'>"
-                        f"{pt.get('room_class','—')}</div>"
+                        f"{pt.get('room_class', '—')}</div>"
                         f"<div style='font-size:.72rem;color:#1d4ed8;text-align:center'>"
-                        f"🧫 {pt.get('gelose','—')[:16]}</div>"
+                        f"🧫 {pt.get('gelose', '—')[:16]}</div>"
                         f"<div style='text-align:center'>"
                         f"<span style='background:{risk_col}22;color:{risk_col};"
                         f"border:1px solid {risk_col}55;border-radius:6px;"
-                        f"padding:2px 7px;font-size:.72rem;font-weight:700'>"
-                        f"Nv.{risk_val}</span></div>"
+                        f"padding:2px 7px;font-size:.72rem;font-weight:700'>Nv.{risk_val}</span></div>"
                         f"<div style='text-align:center'>"
                         f"<span style='background:#eff6ff;color:#1e40af;"
                         f"border:1px solid #bfdbfe;border-radius:6px;"
-                        f"padding:2px 8px;font-size:.75rem;font-weight:700'>"
-                        f"🔁 {freq_short}</span></div>"
-                        f"</div>",
-                        unsafe_allow_html=True)
+                        f"padding:2px 8px;font-size:.75rem;font-weight:700'>🔁 {freq_short}</span></div>"
+                        f"</div>", unsafe_allow_html=True)
                 with c2:
                     be, bd = st.columns(2)
                     with be:
                         if can_edit:
                             if st.button("✏️", key=f"edit_pt_{i}"):
                                 st.session_state._edit_point = i; st.rerun()
-                with bd:
-                    if can_edit:
-                        if st.button("🗑️", key=f"del_pt_{i}"):
-                            st.session_state.points.pop(i)
-                            save_points(st.session_state.points); st.rerun()
+                    with bd:
+                        if can_edit:
+                            if st.button("🗑️", key=f"del_pt_{i}"):
+                                st.session_state.points.pop(i)
+                                # Points : sync immédiate (action destructive explicite)
+                                save_points(st.session_state.points, supa=True)
+                                st.rerun()
 
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
@@ -5076,37 +5086,37 @@ elif active == "parametres":
             idx = st.session_state._edit_point
             pt  = st.session_state.points[idx]
             st.markdown(f"### ✏️ Modifier — {pt['label']}")
-            er1, er2, er3, er4 = st.columns([3,2,2,2])
+            er1, er2, er3, er4 = st.columns([3, 2, 2, 2])
             with er1:
                 new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
             with er2:
-                new_type = st.selectbox("Type", ["Air","Surface"],
-                    index=["Air","Surface"].index(pt.get('type','Air'))
-                    if pt.get('type','Air') in ["Air","Surface"] else 0,
+                new_type = st.selectbox("Type", ["Air", "Surface"],
+                    index=["Air", "Surface"].index(pt.get('type', 'Air'))
+                    if pt.get('type', 'Air') in ["Air", "Surface"] else 0,
                     key="pt_edit_type")
             with er3:
-                new_room = st.text_input("Classe", value=pt.get('room_class',''),
+                new_room = st.text_input("Classe", value=pt.get('room_class', ''),
                                           key="pt_edit_room", placeholder="Ex: A")
             with er4:
-                g_opts = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                g_opts = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                            if new_type == "Air"
-                           else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"])
-                cur_g   = pt.get('gelose', g_opts[0])
-                g_idx   = g_opts.index(cur_g) if cur_g in g_opts else 0
+                           else ["Gélose contact (RODAC)", "Gélose contact TSA", "Ecouvillonnage", "Autre"])
+                cur_g  = pt.get('gelose', g_opts[0])
+                g_idx  = g_opts.index(cur_g) if cur_g in g_opts else 0
                 new_gel = st.selectbox("Gélose", g_opts, index=g_idx, key="pt_edit_gelose")
-            er5, er6, er7 = st.columns([2,1,2])
+            er5, er6, er7 = st.columns([2, 1, 2])
             with er5:
                 cur_ro  = next((o for o in PT_RISK_OPTS
-                                if o.startswith(str(pt.get('risk_level','1')))), PT_RISK_OPTS[0])
+                                if o.startswith(str(pt.get('risk_level', '1')))), PT_RISK_OPTS[0])
                 new_ro  = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS,
                                         index=PT_RISK_OPTS.index(cur_ro), key="pt_edit_risk")
                 new_risk = int(new_ro[0])
             with er6:
                 new_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31,
-                                            value=int(pt.get('frequency',1)), step=1,
+                                            value=int(pt.get('frequency', 1)), step=1,
                                             key="pt_edit_freq")
             with er7:
-                cur_unit = pt.get('frequency_unit','/ semaine')
+                cur_unit = pt.get('frequency_unit', '/ semaine')
                 unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) \
                            if cur_unit in PT_FREQ_UNIT_OPTS else 1
                 new_fu   = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx,
@@ -5121,7 +5131,8 @@ elif active == "parametres":
                         "risk_level": new_risk, "frequency": new_freq,
                         "frequency_unit": new_fu
                     }
-                    save_points(st.session_state.points)
+                    # supa=True : action explicite Enregistrer
+                    save_points(st.session_state.points, supa=True)
                     st.session_state._edit_point = None
                     st.success("✅ Point mis à jour"); st.rerun()
             with eb2:
@@ -5129,30 +5140,28 @@ elif active == "parametres":
                     st.session_state._edit_point = None; st.rerun()
         elif can_edit:
             st.markdown("### ➕ Ajouter un point")
-            np1, np2, np3, np4 = st.columns([3,2,2,2])
+            np1, np2, np3, np4 = st.columns([3, 2, 2, 2])
             with np1:
                 np_label = st.text_input("Nom *", placeholder="Ex: Salle 3 — Poste A",
                                           key="np_label")
             with np2:
-                np_type = st.selectbox("Type", ["Air","Surface"], key="np_type")
+                np_type = st.selectbox("Type", ["Air", "Surface"], key="np_type")
             with np3:
                 np_room = st.text_input("Classe", placeholder="Ex: A", key="np_room")
             with np4:
-                g_opts_new = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                g_opts_new = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                                if np_type == "Air"
-                               else ["Gélose contact (RODAC)","Gélose contact TSA","Ecouvillonnage","Autre"])
+                               else ["Gélose contact (RODAC)", "Gélose contact TSA", "Ecouvillonnage", "Autre"])
                 np_gel = st.selectbox("Gélose", g_opts_new, key="np_gelose")
-            np5, np6, np7 = st.columns([2,1,2])
+            np5, np6, np7 = st.columns([2, 1, 2])
             with np5:
-                np_ro   = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS,
-                                        index=0, key="np_risk")
+                np_ro   = st.selectbox("🎯 Niveau de risque", PT_RISK_OPTS, index=0, key="np_risk")
                 np_risk = int(np_ro[0])
             with np6:
                 np_freq = st.number_input("🔁 Fréquence", min_value=1, max_value=31,
                                            value=1, step=1, key="np_freq")
             with np7:
-                np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0,
-                                      key="np_freq_unit")
+                np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
             if st.button("➕ Ajouter", key="np_add"):
                 if not np_label.strip():
                     st.error("Le nom est requis")
@@ -5164,7 +5173,8 @@ elif active == "parametres":
                         "risk_level": np_risk, "frequency": np_freq,
                         "frequency_unit": np_fu
                     })
-                    save_points(st.session_state.points)
+                    # supa=True : action explicite Ajouter
+                    save_points(st.session_state.points, supa=True)
                     st.success(f"✅ Point **{np_label}** ajouté"); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5182,9 +5192,9 @@ elif active == "parametres":
                 f'👥 {len(ops)} opérateur(s)</span></div>',
                 unsafe_allow_html=True)
             for i, op in enumerate(ops):
-                nom        = op.get('nom','—')
-                profession = op.get('profession','—')
-                oc1, oc2, oc3 = st.columns([5,1,1])
+                nom        = op.get('nom', '—')
+                profession = op.get('profession', '—')
+                oc1, oc2, oc3 = st.columns([5, 1, 1])
                 with oc1:
                     st.markdown(f"""
                     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
@@ -5196,9 +5206,7 @@ elif active == "parametres":
                       </div>
                       <div>
                         <div style="font-weight:700;font-size:.9rem;color:#0f172a">{nom}</div>
-                        <div style="font-size:.72rem;color:#475569;margin-top:2px">
-                          👔 {profession}
-                        </div>
+                        <div style="font-size:.72rem;color:#475569;margin-top:2px">👔 {profession}</div>
                       </div>
                     </div>""", unsafe_allow_html=True)
                 with oc2:
@@ -5209,11 +5217,12 @@ elif active == "parametres":
                     if can_edit:
                         if st.button("🗑️", key=f"del_op_{i}"):
                             ops.pop(i)
-                            save_operators(ops)
+                            # supa=True : action destructive explicite
+                            save_operators(ops, supa=True)
                             st.session_state.operators = ops; st.rerun()
 
         st.divider()
-        p_opts = ["Préparateur en pharmacie hospitalière","Pharmacien","Interne de pharmacie"]
+        p_opts = ["Préparateur en pharmacie hospitalière", "Pharmacien", "Interne de pharmacie"]
 
         if st.session_state.get('_edit_operator') is not None:
             idx = st.session_state._edit_operator
@@ -5221,21 +5230,19 @@ elif active == "parametres":
             st.markdown(f"### ✏️ Modifier — {op.get('nom','')}")
             ec1, ec2 = st.columns(2)
             with ec1:
-                edit_nom = st.text_input("Nom *", value=op.get('nom',''),
-                                          key="op_edit_nom")
+                edit_nom = st.text_input("Nom *", value=op.get('nom', ''), key="op_edit_nom")
             with ec2:
-                cur_p    = op.get('profession','')
+                cur_p    = op.get('profession', '')
                 p_idx    = p_opts.index(cur_p) if cur_p in p_opts else 0
-                edit_pro = st.selectbox("Profession *", p_opts, index=p_idx,
-                                         key="op_edit_prof")
+                edit_pro = st.selectbox("Profession *", p_opts, index=p_idx, key="op_edit_prof")
             eb1, eb2 = st.columns(2)
             with eb1:
-                if st.button("✅ Enregistrer", use_container_width=True,
-                              key="op_save_edit"):
+                if st.button("✅ Enregistrer", use_container_width=True, key="op_save_edit"):
                     if edit_nom.strip():
                         st.session_state.operators[idx] = {
                             "nom": edit_nom.strip(), "profession": edit_pro}
-                        save_operators(st.session_state.operators)
+                        # supa=True : action explicite Enregistrer
+                        save_operators(st.session_state.operators, supa=True)
                         st.session_state._edit_operator = None
                         st.success("✅ Mis à jour"); st.rerun()
                     else:
@@ -5247,8 +5254,7 @@ elif active == "parametres":
             st.markdown("### ➕ Ajouter un opérateur")
             nc1, nc2 = st.columns(2)
             with nc1:
-                new_nom = st.text_input("Nom *", placeholder="Ex: Marie Dupont",
-                                         key="op_new_nom")
+                new_nom = st.text_input("Nom *", placeholder="Ex: Marie Dupont", key="op_new_nom")
             with nc2:
                 new_pro = st.selectbox("Profession *", p_opts, key="op_new_prof")
             if st.button("➕ Ajouter", key="op_add"):
@@ -5260,7 +5266,8 @@ elif active == "parametres":
                 else:
                     st.session_state.operators.append({
                         "nom": new_nom.strip(), "profession": new_pro})
-                    save_operators(st.session_state.operators)
+                    # supa=True : action explicite Ajouter
+                    save_operators(st.session_state.operators, supa=True)
                     st.success(f"✅ **{new_nom}** ajouté"); st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5291,7 +5298,6 @@ elif active == "parametres":
         st.divider()
         st.markdown("#### ⬇️ Exporter toutes les données")
         backup_data = export_all_data()
-        # Inclure seuils classe dans l'export
         backup_data["thresholds_classe"] = st.session_state.get("thresholds_classe", {})
         backup_json     = json.dumps(backup_data, ensure_ascii=False, indent=2)
         backup_filename = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -5350,7 +5356,6 @@ elif active == "parametres":
                         if st.button("✅ OUI — Restaurer maintenant",
                                       use_container_width=True, key="confirm_restore_yes"):
                             ok, msg = import_all_data(backup_content)
-                            # Restaurer seuils classe si présents
                             if "thresholds_classe" in backup_content:
                                 st.session_state.thresholds_classe = \
                                     backup_content["thresholds_classe"]
@@ -5426,28 +5431,29 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             with syn1:
                 if can_edit:
                     if st.button("🔄 Forcer la synchronisation", use_container_width=True):
-                        save_germs(st.session_state.germs)
-                        save_prelevements(st.session_state.prelevements)
-                        save_schedules(st.session_state.schedules)
-                        save_surveillance(st.session_state.surveillance)
-                        save_points(st.session_state.points)
-                        save_operators(st.session_state.operators)
-                        save_pending_identifications(st.session_state.pending_identifications)
-                        save_origin_measures(st.session_state.origin_measures)
+                        save_germs(st.session_state.germs, supa=True)
+                        save_prelevements(st.session_state.prelevements, supa=True)
+                        save_schedules(st.session_state.schedules, supa=True)
+                        save_surveillance(st.session_state.surveillance, supa=True)
+                        save_points(st.session_state.points, supa=True)
+                        save_operators(st.session_state.operators, supa=True)
+                        save_pending_identifications(st.session_state.pending_identifications, supa=True)
+                        save_origin_measures(st.session_state.origin_measures, supa=True)
                         _supa_upsert('thresholds_classe', json.dumps(
                             st.session_state.get("thresholds_classe", {}), ensure_ascii=False))
+                        st.session_state["_mesures_modifiees"] = False
                         st.success("✅ Toutes les données synchronisées !")
             with syn2:
                 if can_edit:
                     if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
-                        st.session_state.germs                    = load_germs()
-                        st.session_state.prelevements             = load_prelevements()
-                        st.session_state.schedules                = load_schedules()
-                        st.session_state.surveillance             = load_surveillance()
-                        st.session_state.points                   = load_points()
-                        st.session_state.operators                = load_operators()
-                        st.session_state.pending_identifications  = load_pending_identifications()
-                        st.session_state.origin_measures          = load_origin_measures()
+                        st.session_state.germs                   = load_germs()
+                        st.session_state.prelevements            = load_prelevements()
+                        st.session_state.schedules               = load_schedules()
+                        st.session_state.surveillance            = load_surveillance()
+                        st.session_state.points                  = load_points()
+                        st.session_state.operators               = load_operators()
+                        st.session_state.pending_identifications = load_pending_identifications()
+                        st.session_state.origin_measures         = load_origin_measures()
                         _raw_tc = _supa_get('thresholds_classe')
                         if _raw_tc:
                             try:
