@@ -471,7 +471,7 @@ def save_origin_measures(measures, supa=True):
             json.dump(raw, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
-    
+
 def _load_json_key(key, local_file):
     raw_json = _supa_get(key)
     if raw_json:
@@ -5117,7 +5117,7 @@ elif active == "parametres":
             with er4:
                 g_opts = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                            if new_type == "Air"
-                           else ["Gélose contact (RODAC)", "Gélose contact TSA", "Ecouvillonnage", "Autre"])
+                           else ["Gélose contact TSA", "Ecouvillonnage", "Autre"])
                 cur_g  = pt.get('gelose', g_opts[0])
                 g_idx  = g_opts.index(cur_g) if cur_g in g_opts else 0
                 new_gel = st.selectbox("Gélose", g_opts, index=g_idx, key="pt_edit_gelose")
@@ -5168,7 +5168,7 @@ elif active == "parametres":
             with np4:
                 g_opts_new = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                                if np_type == "Air"
-                               else ["Gélose contact (RODAC)", "Gélose contact TSA", "Ecouvillonnage", "Autre"])
+                               else ["Gélose contact TSA", "Ecouvillonnage", "Autre"])
                 np_gel = st.selectbox("Gélose", g_opts_new, key="np_gelose")
             np5, np6, np7 = st.columns([2, 1, 2])
             with np5:
