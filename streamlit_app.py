@@ -454,9 +454,9 @@ def load_origin_measures():
             merged.append(dict(dflt))
     return merged if merged else [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
 
-def save_origin_measures(measures):
-    js = json.dumps(measures, ensure_ascii=False)
-    _supa_upsert('measures', js)
+def save_origin_measures(measures, supa=True):
+    if supa:
+        _supa_upsert('measures', json.dumps(measures, ensure_ascii=False))
     if os.path.exists(THRESHOLDS_FILE):
         try:
             with open(THRESHOLDS_FILE) as f:
@@ -471,7 +471,7 @@ def save_origin_measures(measures):
             json.dump(raw, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
-
+    
 def _load_json_key(key, local_file):
     raw_json = _supa_get(key)
     if raw_json:
