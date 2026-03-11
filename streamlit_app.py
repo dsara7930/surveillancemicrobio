@@ -1166,25 +1166,7 @@ if active == "logigramme":
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-                # Grille seuils rappel
-                st.markdown("""
-                <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
-                padding:10px;margin-top:10px'>
-                  <div style='font-size:.6rem;color:#475569;text-transform:uppercase;
-                  font-weight:700;margin-bottom:6px;letter-spacing:.08em'>
-                    Rappel grille score total (germe × lieu)
-                  </div>
-                  <div style='display:flex;gap:5px;flex-direction:column'>
-                    <div style='background:#f0fdf4;border-radius:5px;padding:4px 8px;
-                    font-size:.62rem;color:#166534;font-weight:600'>✅ Score &lt; 16 → Conforme</div>
-                    <div style='background:#fffbeb;border-radius:5px;padding:4px 8px;
-                    font-size:.62rem;color:#92400e;font-weight:600'>⚠️ Score 16–24 → Alerte</div>
-                    <div style='background:#fef2f2;border-radius:5px;padding:4px 8px;
-                    font-size:.62rem;color:#991b1b;font-weight:600'>🚨 Score &gt; 24 → Action</div>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
-            
+                            
             # ── Boutons ──────────────────────────────────────────────────────
             st.markdown("</div>", unsafe_allow_html=True)
             cb1, cb2 = st.columns(2)
