@@ -4878,7 +4878,7 @@ elif active == "parametres":
     LOC_CRIT_OPTS = [
         "1 — Limité",
         "2 — Modéré",
-        "3 — Important"
+        "3 — Important",
         "4 — Maximal",
     ]
     LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0bb3f5", "3": "#efab44", "4": "#dc2626"}
@@ -5100,14 +5100,7 @@ elif active == "parametres":
     # POINTS DE PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_points:
-        st.markdown("""
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
-        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
-        ℹ️ Le <strong>niveau de criticité du lieu</strong> (1–3) est automatiquement repris
-        lors de l'identification microbiologique.<br>
-        Score total = criticité lieu × score germe · ⚠️ Alerte : 16–24 · 🚨 Action : &gt; 24
-        </div>""", unsafe_allow_html=True)
-
+        
         if not st.session_state.points:
             st.info("Aucun point défini.")
         else:
