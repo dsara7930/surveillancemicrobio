@@ -5223,7 +5223,39 @@ elif active == "parametres":
                 unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 1
                 new_fu   = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
 
-            
+            # Aperçu grille seuils
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+            padding:10px 14px;margin-top:6px">
+              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
+              font-weight:700;margin-bottom:8px">
+                Grille d'alerte — criticité lieu {new_lc} (score = lieu × germe)
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #86efac">
+                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
+                  <div style="font-size:.78rem;color:#166534;font-weight:800;margin-top:2px">Score &lt; 16</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe ≤ {int(15/new_lc)}</div>
+                </div>
+                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fcd34d">
+                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
+                  <div style="font-size:.78rem;color:#92400e;font-weight:800;margin-top:2px">Score 16–24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe {round(16/new_lc,1)}–{round(24/new_lc,1)}</div>
+                </div>
+                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fca5a5">
+                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
+                  <div style="font-size:.78rem;color:#dc2626;font-weight:800;margin-top:2px">Score &gt; 24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe &gt; {round(24/new_lc,1)}</div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
             eb1, eb2 = st.columns(2)
             with eb1:
                 if st.button("✅ Enregistrer", key="pt_save_edit"):
