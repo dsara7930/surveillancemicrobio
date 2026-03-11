@@ -1602,13 +1602,17 @@ if active == "surveillance":
                           <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
                           <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
                         </div>
+                        <div style="background:#dbeafe;border-radius:6px;padding:8px;border:1px solid #93c5fd">
+                          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe ISO / GMP</div>
+                          <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:2px">{pt_room if pt_room and pt_room != '—' else '—'}</div>
+                        </div>
                         <div style="background:{lc_col}11;border-radius:6px;padding:8px;border:1px solid {lc_col}44">
                           <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
                           <div style="font-size:.85rem;font-weight:700;color:{lc_col};margin-top:2px">
                             Nv.{pt_loc_crit} — {lc_lbl}
                           </div>
                         </div>
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe;grid-column:1/-1">
+                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
                           <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
                           <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
                         </div>
@@ -1704,8 +1708,14 @@ if active == "surveillance":
                 continue
             col_info, col_edit, col_del = st.columns([5, 1, 1])
             with col_info:
-                loc_c = int(samp.get("location_criticality", 1))
-                lc_col = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+                loc_c    = int(samp.get("location_criticality", 1))
+                lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+                room_cl  = samp.get('room_class','') or ''
+                room_badge = (
+                    f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+                    f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
+                    f"margin-left:4px'>Cl.{room_cl}</span>"
+                    if room_cl else "")
                 _comment_html = (
                     f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
                     f"💬 {samp['commentaire']}</div>"
@@ -1713,7 +1723,7 @@ if active == "surveillance":
                 st.markdown(
                     f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
                     f"padding:10px 16px;margin-bottom:6px'>"
-                    f"<span style='font-weight:700'>{samp['label']}</span> "
+                    f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
                     f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
                     f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
                     f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
@@ -1844,12 +1854,18 @@ if active == "surveillance":
             badge_col   = "#dc2626" if is_late else "#1d4ed8"
             status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
             smp         = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
-            pt_type     = smp.get('type', '?')      if smp else '?'
-            pt_gelose   = smp.get('gelose', '?')    if smp else '?'
-            pt_oper     = smp.get('operateur', '?') if smp else '?'
+            pt_type     = smp.get('type', '?')       if smp else '?'
+            pt_gelose   = smp.get('gelose', '?')     if smp else '?'
+            pt_oper     = smp.get('operateur', '?')  if smp else '?'
+            pt_room_cl  = smp.get('room_class', '')  if smp else ''
             loc_crit    = _get_location_criticality(smp) if smp else 1
             lc_col_s    = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
             lc_lbl_s    = _loc_crit_label(loc_crit)
+            room_cl_badge = (
+                f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+                f"border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:800;"
+                f"margin-left:6px'>Cl.{pt_room_cl}</span>"
+                if pt_room_cl else "")
 
             extra_info = ""
             if smp and loc_crit == 3:
@@ -1868,16 +1884,21 @@ if active == "surveillance":
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                     <div>
                       <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                      {room_cl_badge}
                       <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
                       padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
                       <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
                     </div>
                     <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
                   </div>
-                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
                     <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
                       <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
                       <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+                    </div>
+                    <div style="background:#dbeafe;border-radius:6px;padding:6px 8px;border:1px solid #93c5fd">
+                      <div style="font-size:.55rem;color:#1e40af;text-transform:uppercase">Classe</div>
+                      <div style="font-size:.75rem;font-weight:800;color:#1e40af">{pt_room_cl or '—'}</div>
                     </div>
                     <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
                       <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
@@ -1918,10 +1939,11 @@ if active == "surveillance":
             proc    = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
             if proc:
                 smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
-                pt_type   = smp.get('type', '?')      if smp else '?'
-                pt_gelose = smp.get('gelose', '?')    if smp else '?'
-                pt_oper   = smp.get('operateur', '?') if smp else '?'
-                pt_date   = smp.get('date', '?')      if smp else '?'
+                pt_type   = smp.get('type', '?')       if smp else '?'
+                pt_gelose = smp.get('gelose', '?')     if smp else '?'
+                pt_oper   = smp.get('operateur', '?')  if smp else '?'
+                pt_date   = smp.get('date', '?')       if smp else '?'
+                pt_room_p = smp.get('room_class', '')  if smp else ''
                 loc_crit  = _get_location_criticality(smp) if smp else 1
                 lc_col_p  = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
 
@@ -1945,12 +1967,17 @@ if active == "surveillance":
                     <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;
                     padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
                   </div>
-                  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+                  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
                     <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
                       <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div>
                       <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">
                         {'💨' if pt_type=='Air' else '🧴'} {pt_type}
                       </div>
+                    </div>
+                    <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;
+                    border:1px solid #93c5fd">
+                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div>
+                      <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:3px">{pt_room_p or '—'}</div>
                     </div>
                     <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
                       <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div>
@@ -2442,7 +2469,6 @@ if active == "surveillance":
                     <span style="font-size:.75rem;color:{sc};font-weight:800">{ufc_display}</span>
                   </div>
                 </div>""", unsafe_allow_html=True)
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET ÉTIQUETTES — tout le contenu est DANS with tab_etiq
     # ══════════════════════════════════════════════════════════════════════════
@@ -4871,9 +4897,9 @@ elif active == "parametres":
 
     # ── Constantes Points ──────────────────────────────────────────────────────
     LOC_CRIT_OPTS = [
-        "1 — Zone non critique",
-        "2 — Zone semi-critique",
-        "3 — Zone critique",
+        "1 — Zone non critique (locaux techniques, couloirs...)",
+        "2 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)",
+        "3 — Zone critique (ZAC, salles blanches, isolateurs...)",
     ]
     LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}
     LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique"}
@@ -5107,10 +5133,11 @@ elif active == "parametres":
         else:
             st.markdown("""
             <div style="display:grid;
-            grid-template-columns:2.4fr 0.8fr 1.4fr 1fr 1.2fr 0.5fr 0.5fr;
+            grid-template-columns:2.2fr 0.7fr 0.7fr 1.3fr 0.9fr 1.1fr 0.5fr 0.5fr;
             gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
               <div style="font-size:.72rem;font-weight:800;color:#fff">Point</div>
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Type</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Classe</div>
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Criticité lieu</div>
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Gélose</div>
               <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Fréquence</div>
@@ -5123,6 +5150,7 @@ elif active == "parametres":
                 loc_crit  = str(pt.get('location_criticality', 1))
                 lc_color  = LOC_CRIT_COLORS.get(loc_crit, "#94a3b8")
                 lc_label  = LOC_CRIT_LABELS.get(loc_crit, "—")
+                room_cl   = pt.get('room_class', '—') or '—'
                 freq      = pt.get('frequency', 1)
                 freq_unit = pt.get('frequency_unit', '/ semaine')
                 freq_short = (str(freq) + "x/" +
@@ -5134,19 +5162,23 @@ elif active == "parametres":
                 with c1:
                     st.markdown(
                         f"<div style='display:grid;"
-                        f"grid-template-columns:2.4fr 0.8fr 1.4fr 1fr 1.2fr;"
+                        f"grid-template-columns:2.2fr 0.7fr 0.7fr 1.3fr 0.9fr 1.1fr;"
                         f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
                         f"border-top:none;padding:9px 14px;align-items:center'>"
                         f"<div style='font-size:.88rem;font-weight:700;color:#0f172a'>"
                         f"{type_icon} {pt['label']}</div>"
                         f"<div style='font-size:.75rem;color:#475569;text-align:center'>{pt_type}</div>"
                         f"<div style='text-align:center'>"
+                        f"<span style='background:#dbeafe;color:#1e40af;"
+                        f"border:1px solid #93c5fd;border-radius:6px;"
+                        f"padding:2px 8px;font-size:.78rem;font-weight:800'>{room_cl}</span></div>"
+                        f"<div style='text-align:center'>"
                         f"<span style='background:{lc_color}22;color:{lc_color};"
                         f"border:1px solid {lc_color}55;border-radius:6px;"
-                        f"padding:3px 8px;font-size:.72rem;font-weight:700'>"
+                        f"padding:3px 8px;font-size:.68rem;font-weight:700'>"
                         f"Nv.{loc_crit} — {lc_label}</span></div>"
                         f"<div style='font-size:.72rem;color:#1d4ed8;text-align:center'>"
-                        f"🧫 {pt.get('gelose','—')[:14]}</div>"
+                        f"🧫 {pt.get('gelose','—')[:12]}</div>"
                         f"<div style='text-align:center'>"
                         f"<span style='background:#eff6ff;color:#1e40af;"
                         f"border:1px solid #bfdbfe;border-radius:6px;"
@@ -5182,7 +5214,7 @@ elif active == "parametres":
             pt  = st.session_state.points[idx]
             st.markdown(f"### ✏️ Modifier — {pt['label']}")
 
-            er1, er2, er3 = st.columns([3, 2, 2])
+            er1, er2, er3, er_room = st.columns([3, 1.5, 1, 1.5])
             with er1:
                 new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
             with er2:
@@ -5191,6 +5223,10 @@ elif active == "parametres":
                     index=["Air","Surface"].index(pt.get('type','Air'))
                     if pt.get('type','Air') in ["Air","Surface"] else 0,
                     key="pt_edit_type")
+            with er_room:
+                new_room = st.text_input(
+                    "Classe ISO / GMP", value=pt.get('room_class', ''),
+                    placeholder="Ex: A, B, C, D…", key="pt_edit_room")
             with er3:
                 cur_lc  = int(pt.get('location_criticality', 1))
                 lc_idx  = max(0, min(cur_lc - 1, 2))
@@ -5267,7 +5303,7 @@ elif active == "parametres":
                         "location_criticality": new_lc,
                         "frequency":            new_freq,
                         "frequency_unit":       new_fu,
-                        "room_class":           pt.get("room_class", ""),
+                        "room_class":           new_room.strip(),
                     }
                     save_points(st.session_state.points, supa=True)
                     st.session_state._edit_point = None
@@ -5282,12 +5318,15 @@ elif active == "parametres":
         elif can_edit:
             st.markdown("### ➕ Ajouter un point de prélèvement")
 
-            np1, np2, np3 = st.columns([3, 2, 2])
+            np1, np2, np3, np_room_col = st.columns([3, 1.5, 1.5, 1.5])
             with np1:
                 np_label = st.text_input(
                     "Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
             with np2:
                 np_type = st.selectbox("Type", ["Air", "Surface"], key="np_type")
+            with np_room_col:
+                np_room = st.text_input(
+                    "Classe ISO / GMP", placeholder="Ex: A, B, C, D…", key="np_room")
             with np3:
                 np_lc_lbl = st.selectbox("🏷️ Criticité du lieu *", LOC_CRIT_OPTS, key="np_lc")
                 np_lc = int(np_lc_lbl[0])
@@ -5351,7 +5390,7 @@ elif active == "parametres":
                         "location_criticality": np_lc,
                         "frequency":            np_freq,
                         "frequency_unit":       np_fu,
-                        "room_class":           "",
+                        "room_class":           np_room.strip(),
                     })
                     save_points(st.session_state.points, supa=True)
                     st.success(f"✅ Point **{np_label}** ajouté")
