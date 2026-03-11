@@ -1188,9 +1188,6 @@ if active == "logigramme":
                             resistance=resist_num,
                             dissemination=dissem_num,
                             risk=risk_num,
-                            pathotype=new_pathotype or "Non défini",
-                            surfa=new_surfa,
-                            apa=new_apa,
                             notes=new_notes.strip() or None,
                             comment=new_comment.strip() or None,
                         )
