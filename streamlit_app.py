@@ -1132,11 +1132,11 @@ if active == "logigramme":
                 rc = _risk_color(risk_num)
                 rl = _risk_label(risk_num)
 
-                if risk_num > 24:
+                if risk_num > 36:
                     status_txt = "🚨 Action probable si lieu ≥ critique"
                     status_bg  = "#fef2f2"
                     status_c   = "#991b1b"
-                elif risk_num >= 16:
+                elif risk_num >= 24:
                     status_txt = "⚠️ Alerte probable si lieu ≥ semi-critique"
                     status_bg  = "#fffbeb"
                     status_c   = "#92400e"
@@ -1520,7 +1520,7 @@ renderList();
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE — COMPLET
 # score_total = location_criticality (1–3) × germ_score (1–27)
-# ⚠️ Alerte : 16 ≤ score ≤ 24  |  🚨 Action : score > 24
+# ⚠️ Alerte : 24 ≤ score ≤ 36  |  🚨 Action : score > 36
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "surveillance":
@@ -1554,8 +1554,8 @@ if active == "surveillance":
         return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
 
     def _evaluate_score(total):
-        if total > 24:  return "action", "🚨 ACTION",  "#ef4444"
-        if total >= 16: return "alert",  "⚠️ ALERTE",  "#f59e0b"
+        if total > 36:  return "action", "🚨 ACTION",  "#ef4444"
+        if total >= 24: return "alert",  "⚠️ ALERTE",  "#f59e0b"
         return "ok", "✅ Conforme", "#22c55e"
 
     def _loc_crit_label(n):
@@ -2036,7 +2036,7 @@ if active == "surveillance":
                                 "ufc": 0, "germ_score": 0, "location_criticality": loc_crit,
                                 "total_score": 0, "risk": 0,
                                 "room_class": smp.get('room_class','') if smp else '',
-                                "alert_threshold": "Score ≥ 16", "action_threshold": "Score > 24",
+                                "alert_threshold": "Score ≥ 24", "action_threshold": "Score > 36",
                                 "triggered_by": None, "status": "ok",
                                 "operateur": pt_oper,
                                 "remarque": f"Lecture {proc['when']} négative"
@@ -2116,7 +2116,7 @@ if active == "surveillance":
                       Lieu {_loc_c} × Germe {_germ_sc}
                     </div>
                     <div style="font-size:.62rem;font-weight:700;color:{_hd_col};margin-top:4px">
-                      {'Seuil action (> 24)' if _is_action else 'Seuil alerte (16–24)'}
+                      {'Seuil action (> 36)' if _is_action else 'Seuil alerte (24–36)'}
                     </div>
                   </div>
                 </div>
@@ -2362,8 +2362,8 @@ if active == "surveillance":
                                         "total_score":       total_sc,
                                         "risk":              match.get("risk", germ_sc),
                                         "room_class":        pt_class,
-                                        "alert_threshold":   "Score ≥ 16",
-                                        "action_threshold":  "Score > 24",
+                                        "alert_threshold":   "Score ≥ 24",
+                                        "action_threshold":  "Score > 36",
                                         "triggered_by":      triggered_by,
                                         "status":            status,
                                         "operateur":         pt_oper,
@@ -2393,7 +2393,7 @@ if active == "surveillance":
                                             "germ_score":      germ_sc,
                                             "loc_criticality": loc_crit,
                                             "total_score":     total_sc,
-                                            "th_germe":        {"alert":"Score ≥ 16","action":"Score > 24"},
+                                            "th_germe":        {"alert":"Score ≥ 24","action":"Score > 36"},
                                         }
                                     else:
                                         st.success(
@@ -4897,12 +4897,13 @@ elif active == "parametres":
 
     # ── Constantes Points ──────────────────────────────────────────────────────
     LOC_CRIT_OPTS = [
-        "1 — Zone non critique (locaux techniques, couloirs...)",
-        "2 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)",
-        "3 — Zone critique (ZAC, salles blanches, isolateurs...)",
+        "1 — Limité",
+        "2 — Modéré",
+        "3 — Important"
+        "4 — Maximal",
     ]
-    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}
-    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique"}
+    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0bb3f5", "3": "#efab44", "4": "#dc2626"}
+    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Modéré", "3": "Important", "4": "Maximal"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
     # ══════════════════════════════════════════════════════════════════════════
