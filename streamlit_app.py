@@ -1061,7 +1061,7 @@ if active == "logigramme":
                     disabled=not can_edit)
 
                 new_origine = st.selectbox(
-                    "Origine *", ["Humains / Humain", "Environnemental"],
+                    "Origine *", ["Humains ", "Environnemental"],
                     index=0 if (not is_edit or existing["path"][2] in ["Humains", "Humain"]) else 1,
                     disabled=not can_edit)
 
