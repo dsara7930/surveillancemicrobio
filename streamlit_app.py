@@ -1080,11 +1080,7 @@ if active == "logigramme":
                     index=cats.index(cur_cat) if cur_cat in cats else 0,
                     disabled=not can_edit)
 
-                new_pathotype = st.text_input(
-                    "Type de pathogène",
-                    value=existing.get("pathotype", "") if is_edit else "",
-                    disabled=not can_edit)
-
+                
                 new_notes = st.text_area(
                     "📝 Notes",
                     value=existing.get("notes", "") or "" if is_edit else "",
@@ -1188,87 +1184,7 @@ if active == "logigramme":
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-            # ── Col 3 : désinfectants ────────────────────────────────────────
-            with c3:
-                st.markdown(
-                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
-                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
-                    "🧴 Désinfectants</div>", unsafe_allow_html=True)
-
-                SURFA_OPTS = [
-                    "Sensible",
-                    "Risque modéré de résistance",
-                    "Risque de résistance",
-                    "Risque de résistance (biofilm)",
-                    "Risque de résistance (spore)",
-                ]
-                APA_OPTS = [
-                    "Sensible",
-                    "Risque modéré de résistance",
-                    "Risque de résistance",
-                    "Risque de résistance (spore)",
-                ]
-                cur_surfa = existing.get("surfa", "Sensible") if is_edit else "Sensible"
-                cur_apa   = existing.get("apa",   "Sensible") if is_edit else "Sensible"
-
-                new_surfa = st.selectbox(
-                    "Surfa'Safe",
-                    SURFA_OPTS,
-                    index=SURFA_OPTS.index(cur_surfa) if cur_surfa in SURFA_OPTS else 0,
-                    disabled=not can_edit)
-                new_apa = st.selectbox(
-                    "Acide Peracétique (APA)",
-                    APA_OPTS,
-                    index=APA_OPTS.index(cur_apa) if cur_apa in APA_OPTS else 0,
-                    disabled=not can_edit)
-
-                # Cohérence résistance / désinfectants
-                r_infer = _infer_resistance(new_surfa, new_apa)
-                if r_infer != resist_num:
-                    st.markdown(
-                        f"<div style='background:#fffbeb;border:1px solid #fcd34d;"
-                        f"border-radius:8px;padding:8px;margin-top:8px;"
-                        f"font-size:.68rem;color:#92400e'>"
-                        f"⚠️ Cohérence : la résistance déduite des désinfectants "
-                        f"({r_infer}) diffère du critère saisi ({resist_num}). "
-                        f"Vérifiez la cohérence.</div>",
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                        f"border-radius:8px;padding:8px;margin-top:8px;"
-                        f"font-size:.68rem;color:#166534'>"
-                        f"✅ Cohérence désinfectants / résistance confirmée.</div>",
-                        unsafe_allow_html=True)
-
-                # Aperçu fiches désinfectants
-                def _sens_icon(v):
-                    if not v: return ("ok", "✓")
-                    l = v.lower()
-                    if "modéré" in l: return ("warn", "⚠")
-                    if "risque" in l: return ("crit", "✗")
-                    return ("ok", "✓")
-
-                sc_s, si_s = _sens_icon(new_surfa)
-                sc_a, si_a = _sens_icon(new_apa)
-                c_map = {"ok": "#22c55e", "warn": "#f97316", "crit": "#ef4444"}
-
-                st.markdown(f"""
-                <div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
-                padding:10px;margin-top:8px'>
-                  <div style='font-size:.6rem;color:#475569;text-transform:uppercase;
-                  font-weight:700;margin-bottom:6px'>Résumé</div>
-                  <div style='display:flex;align-items:center;gap:8px;padding:5px 0;
-                  border-bottom:1px solid #f1f5f9'>
-                    <span style='color:{c_map[sc_s]};font-weight:700;font-size:.9rem'>{si_s}</span>
-                    <span style='font-size:.75rem;color:#0f172a'>Surfa'Safe — {new_surfa}</span>
-                  </div>
-                  <div style='display:flex;align-items:center;gap:8px;padding:5px 0'>
-                    <span style='color:{c_map[sc_a]};font-weight:700;font-size:.9rem'>{si_a}</span>
-                    <span style='font-size:.75rem;color:#0f172a'>APA — {new_apa}</span>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
+            
             # ── Boutons ──────────────────────────────────────────────────────
             st.markdown("</div>", unsafe_allow_html=True)
             cb1, cb2 = st.columns(2)
