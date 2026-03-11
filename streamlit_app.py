@@ -5291,32 +5291,6 @@ elif active == "parametres":
             with np6:
                 np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
 
-            # Aperçu grille
-            st.markdown(f"""
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
-            padding:10px 14px;margin-top:4px;margin-bottom:10px">
-              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
-              font-weight:700;margin-bottom:8px">
-                Aperçu grille (criticité lieu {np_lc} × score germe)
-              </div>
-              <div style="display:flex;gap:8px">
-                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:7px;
-                text-align:center;border:1px solid #86efac">
-                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
-                  <div style="font-size:.72rem;color:#166534;font-weight:800">Score &lt; 16</div>
-                </div>
-                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:7px;
-                text-align:center;border:1px solid #fcd34d">
-                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
-                  <div style="font-size:.72rem;color:#92400e;font-weight:800">Score 16–24</div>
-                </div>
-                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:7px;
-                text-align:center;border:1px solid #fca5a5">
-                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
-                  <div style="font-size:.72rem;color:#dc2626;font-weight:800">Score &gt; 24</div>
-                </div>
-              </div>
-            </div>""", unsafe_allow_html=True)
 
             if st.button("➕ Ajouter", key="np_add"):
                 if not np_label.strip():
