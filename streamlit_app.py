@@ -354,33 +354,31 @@ def load_germs():
         except Exception:
             saved = []
 
+    # Si rien en base → on retourne les défauts tels quels
+    if not saved:
+        return [dict(d) for d in DEFAULT_GERMS], len(DEFAULT_GERMS)
+
     saved_by_name = {g.get("name", ""): g for g in saved}
     merged = []
-    synced_count = 0
+    new_defaults_added = 0
 
     for dflt in DEFAULT_GERMS:
         name = dflt["name"]
         if name in saved_by_name:
-            # ── Germ existant : on garde TOUTES les valeurs sauvegardées ──
-            g = dict(saved_by_name[name])
-            # On complète seulement les champs absents (nouveaux champs ajoutés au modèle)
-            for field, val in dflt.items():
-                if field not in g:
-                    g[field] = val
-                    synced_count += 1
+            # ── Germ existant : on garde TOUT ce qui est sauvegardé ──
+            merged.append(dict(saved_by_name[name]))
         else:
-            # ── Nouveau germ par défaut : on l'ajoute ──
-            g = dict(dflt)
-            synced_count += 1
-        merged.append(g)
+            # ── Nouveau germ par défaut absent de la base ──
+            merged.append(dict(dflt))
+            new_defaults_added += 1
 
-    # ── Germes personnalisés (hors DEFAULT_GERMS) ──
+    # ── Germes personnalisés (absents de DEFAULT_GERMS) ──
     for g in saved:
         name = g.get("name", "")
         if name and name not in defaults_by_name:
             merged.append(dict(g))
 
-    return merged, synced_count
+    return merged, new_defaults_added
 
 def save_germs(germs):
     js = json.dumps(germs, ensure_ascii=False)
@@ -743,11 +741,11 @@ def check_access_protege(onglet_nom: str) -> bool:
 
 # ── SESSION STATE ──────────────────────────────────────────────────────────────
 if "germs" not in st.session_state:
-    _germs, _synced = load_germs()
+    _germs, _new = load_germs()
     st.session_state.germs = _germs
-    st.session_state.germs_synced_count = _synced
-    # Sauvegarde uniquement s'il y a de vrais nouveaux champs à propager
-    if _synced > 0:
+    st.session_state.germs_synced_count = _new
+    # Sauvegarde SEULEMENT si de nouveaux germes par défaut ont été ajoutés
+    if _new > 0:
         save_germs(st.session_state.germs)
 if "thresholds" not in st.session_state:
     st.session_state.thresholds = load_thresholds()
