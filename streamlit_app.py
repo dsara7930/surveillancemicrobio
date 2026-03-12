@@ -1116,21 +1116,7 @@ if active == "logigramme":
                     index=min(cur_dissem - 1, 2),
                     key="form_dissem", disabled=not can_edit)
                 dissem_num = int(dissem_lbl[0])
- 
-            # col 3 Notes
-            with c3:
-                                
-                new_notes = st.text_area(
-                    "📝 Notes",
-                    value=existing.get("notes", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
 
-                new_comment = st.text_area(
-                    "💬 Commentaire détaillé",
-                    value=existing.get("comment", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                    
                 # ── Score calculé ────────────────────────────────────────────
                 risk_num = patho_num * resist_num * dissem_num
                 rc = _risk_color(risk_num)
@@ -1149,6 +1135,21 @@ if active == "logigramme":
                     status_bg  = "#f0fdf4"
                     status_c   = "#166534"
 
+ 
+            # col 3 Notes
+            with c3:
+                                
+                new_notes = st.text_area(
+                    "📝 Notes",
+                    value=existing.get("notes", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                new_comment = st.text_area(
+                    "💬 Commentaire détaillé",
+                    value=existing.get("comment", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                                    
                 st.markdown(f"""
                 <div style="background:{rc}12;border:2px solid {rc}55;border-radius:12px;
                 padding:14px;margin-top:8px;text-align:center">
