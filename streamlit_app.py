@@ -361,7 +361,7 @@ def load_germs():
         if name in saved_by_name:
             g = dict(saved_by_name[name])
             old_risk = g.get("risk")
-            for field in ["path", "risk","notes", "comment"]:
+            for field in ["path","notes", "comment"]:
                 g[field] = dflt[field]
             if old_risk != dflt["risk"]:
                 synced_count += 1
