@@ -1117,7 +1117,7 @@ if active == "logigramme":
                     key="form_dissem", disabled=not can_edit)
                 dissem_num = int(dissem_lbl[0])
 
-                # ── Score calculé ────────────────────────────────────────────
+                # ── Score calculé ────────────────────────────────────────────              
                 risk_num = patho_num * resist_num * dissem_num
                 rc = _risk_color(risk_num)
                 rl = _risk_label(risk_num)
@@ -1157,6 +1157,11 @@ if active == "logigramme":
                 </div>""", unsafe_allow_html=True)
 
             # col 3 Notes
+            st.markdown(
+                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
+                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
+                    "Information supplémentaire</div>", unsafe_allow_html=True)
+            
             with c3:
                                 
                 new_notes = st.text_area(
