@@ -1415,7 +1415,7 @@ function selectGerm(g){{
 function showInfo(g){{
   const panel=document.getElementById('infoPanel');panel.classList.add('visible');
   const score=germScore(g);const col=riskColor(score);
-  }}
+  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
   
   const alertRow=score>24?`<div class="alert-row" style="background:#fef2f2;color:#991b1b">🚨 Action (score germe seul &gt; 24)</div>`
     :score>=16?`<div class="alert-row" style="background:#fffbeb;color:#92400e">⚠️ Alerte probable selon criticité du lieu</div>`
