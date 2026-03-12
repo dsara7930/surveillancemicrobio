@@ -353,26 +353,33 @@ def load_germs():
                 saved = json.load(f)
         except Exception:
             saved = []
+
     saved_by_name = {g.get("name", ""): g for g in saved}
     merged = []
     synced_count = 0
+
     for dflt in DEFAULT_GERMS:
         name = dflt["name"]
         if name in saved_by_name:
+            # ── Germ existant : on garde TOUTES les valeurs sauvegardées ──
             g = dict(saved_by_name[name])
-            
-            for field in ["path","notes", "comment"]:
-                g[field] = dflt[field]
-            
-                synced_count += 1
+            # On complète seulement les champs absents (nouveaux champs ajoutés au modèle)
+            for field, val in dflt.items():
+                if field not in g:
+                    g[field] = val
+                    synced_count += 1
         else:
+            # ── Nouveau germ par défaut : on l'ajoute ──
             g = dict(dflt)
             synced_count += 1
         merged.append(g)
+
+    # ── Germes personnalisés (hors DEFAULT_GERMS) ──
     for g in saved:
         name = g.get("name", "")
         if name and name not in defaults_by_name:
             merged.append(dict(g))
+
     return merged, synced_count
 
 def save_germs(germs):
@@ -739,6 +746,7 @@ if "germs" not in st.session_state:
     _germs, _synced = load_germs()
     st.session_state.germs = _germs
     st.session_state.germs_synced_count = _synced
+    # Sauvegarde uniquement s'il y a de vrais nouveaux champs à propager
     if _synced > 0:
         save_germs(st.session_state.germs)
 if "thresholds" not in st.session_state:
