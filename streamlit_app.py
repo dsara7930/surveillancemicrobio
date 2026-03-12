@@ -1080,16 +1080,6 @@ if active == "logigramme":
                     index=cats.index(cur_cat) if cur_cat in cats else 0,
                     disabled=not can_edit)
 
-                
-                new_notes = st.text_area(
-                    "📝 Notes",
-                    value=existing.get("notes", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                new_comment = st.text_area(
-                    "💬 Commentaire détaillé",
-                    value=existing.get("comment", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
 
             # ── Col 2 : critères de criticité ────────────────────────────────
             with c2:
@@ -1126,7 +1116,21 @@ if active == "logigramme":
                     index=min(cur_dissem - 1, 2),
                     key="form_dissem", disabled=not can_edit)
                 dissem_num = int(dissem_lbl[0])
+ 
+            # col 3 Notes
+            with c3:
+                                
+                new_notes = st.text_area(
+                    "📝 Notes",
+                    value=existing.get("notes", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
 
+                new_comment = st.text_area(
+                    "💬 Commentaire détaillé",
+                    value=existing.get("comment", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                    
                 # ── Score calculé ────────────────────────────────────────────
                 risk_num = patho_num * resist_num * dissem_num
                 rc = _risk_color(risk_num)
