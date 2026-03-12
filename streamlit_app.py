@@ -360,10 +360,11 @@ def load_germs():
         name = dflt["name"]
         if name in saved_by_name:
             g = dict(saved_by_name[name])
-            old_risk = g.get("risk")
+            
             for field in ["path","notes", "comment"]:
                 g[field] = dflt[field]
             
+                synced_count += 1
         else:
             g = dict(dflt)
             synced_count += 1
