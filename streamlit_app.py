@@ -1135,21 +1135,6 @@ if active == "logigramme":
                     status_bg  = "#f0fdf4"
                     status_c   = "#166534"
 
- 
-            # col 3 Notes
-            with c3:
-                                
-                new_notes = st.text_area(
-                    "📝 Notes",
-                    value=existing.get("notes", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                new_comment = st.text_area(
-                    "💬 Commentaire détaillé",
-                    value=existing.get("comment", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                                    
                 st.markdown(f"""
                 <div style="background:{rc}12;border:2px solid {rc}55;border-radius:12px;
                 padding:14px;margin-top:8px;text-align:center">
@@ -1171,7 +1156,21 @@ if active == "logigramme":
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-                            
+            # col 3 Notes
+            with c3:
+                                
+                new_notes = st.text_area(
+                    "📝 Notes",
+                    value=existing.get("notes", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                new_comment = st.text_area(
+                    "💬 Commentaire détaillé",
+                    value=existing.get("comment", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                                    
+                                           
             # ── Boutons ──────────────────────────────────────────────────────
             st.markdown("</div>", unsafe_allow_html=True)
             cb1, cb2 = st.columns(2)
