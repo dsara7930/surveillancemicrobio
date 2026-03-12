@@ -363,8 +363,7 @@ def load_germs():
             old_risk = g.get("risk")
             for field in ["path","notes", "comment"]:
                 g[field] = dflt[field]
-            if old_risk != dflt["risk"]:
-                synced_count += 1
+            
         else:
             g = dict(dflt)
             synced_count += 1
