@@ -1415,8 +1415,8 @@ function selectGerm(g){{
 function showInfo(g){{
   const panel=document.getElementById('infoPanel');panel.classList.add('visible');
   const score=germScore(g);const col=riskColor(score);
-  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
-  const[sc,si]=sens(g.surfa),[ac,ai]=sens(g.apa);
+  }}
+  
   const alertRow=score>24?`<div class="alert-row" style="background:#fef2f2;color:#991b1b">🚨 Action (score germe seul &gt; 24)</div>`
     :score>=16?`<div class="alert-row" style="background:#fffbeb;color:#92400e">⚠️ Alerte probable selon criticité du lieu</div>`
     :`<div class="alert-row" style="background:#f0fdf4;color:#166534">✅ Conforme à score germe seul</div>`;
@@ -1453,9 +1453,7 @@ function showInfo(g){{
       <div style="font-size:.6rem;color:#94a3b8">${{g.pathogenicity||'?'}} × ${{g.resistance||'?'}} × ${{g.dissemination||'?'}}</div>
     </div>
     ${{alertRow}}
-    <div class="info-lbl" style="margin-top:10px">Désinfectants</div>
-    <div class="sens"><span class="${{sc}}">${{si}}</span><span style="font-size:.72rem">Surfa'Safe — ${{g.surfa||'—'}}</span></div>
-    <div class="sens"><span class="${{ac}}">${{ai}}</span><span style="font-size:.72rem">APA — ${{g.apa||'—'}}</span></div>
+    
     ${{nh}}${{ch}}`;
 }}
 renderTree();
