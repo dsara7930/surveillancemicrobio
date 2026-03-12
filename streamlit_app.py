@@ -1478,7 +1478,7 @@ renderList();
                  if search_edit.lower() in g["name"].lower()]
                 if search_edit else st.session_state.germs)
 
-    for g in filtered:
+    for i, g in enumerate(filtered):
         real_idx = st.session_state.germs.index(g)
         score    = _germ_score(g)
         c        = _risk_color(score)
@@ -1500,13 +1500,13 @@ renderList();
                 unsafe_allow_html=True)
         with col_e:
             if can_edit:
-                if st.button("✏️", key=f"edit_{real_idx}"):
+                if st.button("✏️", key=f"edit_{real_idx}_{i}"):
                     st.session_state.edit_idx = real_idx
                     st.session_state.show_add = False
                     st.rerun()
         with col_d:
             if can_edit:
-                if st.button("🗑️", key=f"del_{real_idx}"):
+                if st.button("🗑️", key=f"del_{real_idx}_{i}"):
                     st.session_state.germs.pop(real_idx)
                     save_germs(st.session_state.germs)
                     st.rerun()
