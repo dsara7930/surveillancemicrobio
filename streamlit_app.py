@@ -816,6 +816,7 @@ if "planning_overrides" not in st.session_state:
     raw = _supa_get('planning_overrides')
     st.session_state["planning_overrides"] = json.loads(raw) if raw else {}
 
+
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<p style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;font-weight:700">NAVIGATION</p>', unsafe_allow_html=True)
@@ -852,6 +853,21 @@ with st.sidebar:
     )
     if not supa_ok:
         st.markdown('<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">⚠️ Sans Supabase, exportez régulièrement vos données !</p>', unsafe_allow_html=True)
+
+    # ── 🍄 Champignon dansant ─────────────────────────────────────────────
+    st.markdown("""
+    <div style="text-align:center;margin-top:18px;padding-bottom:8px">
+      <img
+        src="https://media.giphy.com/media/l0MYEqEzwMWFCg8rm/giphy.gif"
+        alt="🍄 dancing mushroom"
+        style="width:80px;border-radius:12px;opacity:.92"
+        onerror="this.src='https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif'"
+      />
+      <div style="font-size:.6rem;color:#94a3b8;margin-top:4px;font-style:italic">
+        bonne surveillance 🍄
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 active = st.session_state.active_tab
 today = datetime.today().date()
@@ -1589,7 +1605,8 @@ if active == "surveillance":
             if not st.session_state.points:
                 st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement**.")
             else:
-                p_col1, p_col2, p_col3 = st.columns([3, 2, 1])
+                # ── Ligne 1 : point + opérateur + date ──────────────────────
+                p_col1, p_col2 = st.columns([3, 2])
                 with p_col1:
                     point_labels = [
                         f"{pt['label']} — {pt.get('type','?')} — "
@@ -1637,7 +1654,7 @@ if active == "surveillance":
                       font-size:.68rem;color:#475569;border:1px solid #e2e8f0">
                         <strong>Grille seuils :</strong>
                         score = criticité lieu ({pt_loc_crit}) × score germe &nbsp;·&nbsp;
-                        ⚠️ Alerte 16–24 &nbsp;·&nbsp; 🚨 Action &gt; 24
+                        ⚠️ Alerte 24–36 &nbsp;·&nbsp; 🚨 Action &gt; 36
                       </div>
                     </div>""", unsafe_allow_html=True)
 
@@ -1662,25 +1679,201 @@ if active == "surveillance":
                       📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
-                    p_isolateur = ""
-                    p_poste = "Poste 1"
-                    if selected_point.get('room_class') == "A" or pt_loc_crit == 3:
-                        st.markdown(
-                            "<div style='background:#fef9c3;border:1px solid #fde047;"
-                            "border-radius:8px;padding:10px;margin-top:8px'>"
-                            "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:8px'>"
-                            "🔬 Paramètres Zone Critique (Nv.3)</div>",
-                            unsafe_allow_html=True)
-                        p_isolateur = st.radio(
-                            "Quel isolateur ?", ["Iso 16/0724","Iso 14/07169"],
-                            horizontal=True, key="new_prelev_isolateur")
-                        p_poste = st.radio(
-                            "Quel poste ?", ["Poste 1","Poste 2","Commun"],
-                            horizontal=True, key="new_prelev_poste")
-                        st.markdown("</div>", unsafe_allow_html=True)
 
-                with p_col3:
-                    st.markdown("<br>", unsafe_allow_html=True)
+                # ── Classe A uniquement : isolateur + poste ──────────────────
+                p_isolateur = ""
+                p_poste     = "Poste 1"
+                if str(pt_room).strip().upper() == "A":
+                    st.markdown(
+                        "<div style='background:#fef9c3;border:1px solid #fde047;"
+                        "border-radius:8px;padding:10px 14px;margin-top:8px'>"
+                        "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:8px'>"
+                        "🔬 Paramètres Zone Classe A</div>",
+                        unsafe_allow_html=True)
+                    iso_col, poste_col = st.columns(2)
+                    with iso_col:
+                        p_isolateur = st.radio(
+                            "Isolateur", ["Iso 16/0724","Iso 14/07169"],
+                            horizontal=True, key="new_prelev_isolateur")
+                    with poste_col:
+                        p_poste = st.radio(
+                            "Poste", ["Poste 1","Poste 2","Commun"],
+                            horizontal=True, key="new_prelev_poste")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+                # ── Ligne 2 : plan URC + bouton enregistrer ──────────────────
+                map_col, btn_col = st.columns([5, 1])
+
+                with map_col:
+                    st.markdown(
+                        "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
+                        "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                        unsafe_allow_html=True)
+
+                    lc_plan, rc_plan = st.columns([1, 2])
+
+                    with lc_plan:
+                        plan_upload_new = st.file_uploader(
+                            "Plan URC (PNG / JPG)",
+                            type=["png", "jpg", "jpeg"],
+                            key="plan_upload_new_prelev"
+                        )
+                        if plan_upload_new:
+                            import base64 as _b64_np
+                            raw_np = plan_upload_new.read()
+                            b64_np = _b64_np.b64encode(raw_np).decode()
+                            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
+                            st.session_state["_new_prelev_plan_point"] = None
+
+                        _cur_pt = st.session_state.get("_new_prelev_plan_point")
+
+                        if st.session_state.get("map_image"):
+                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
+                            if _cur_pt:
+                                st.markdown(
+                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
+                                    unsafe_allow_html=True)
+                            else:
+                                st.info("Aucun point placé.")
+
+                            st.markdown(
+                                "<div style='font-size:.68rem;color:#94a3b8;margin-top:8px;margin-bottom:2px'>"
+                                "Position manuelle :</div>", unsafe_allow_html=True)
+                            _px = st.number_input(
+                                "X%", 0.0, 100.0,
+                                value=float(_cur_pt["x"]) if _cur_pt else 50.0,
+                                step=0.5, format="%.1f",
+                                key=f"np_px_{selected_point.get('label','')}")
+                            _py = st.number_input(
+                                "Y%", 0.0, 100.0,
+                                value=float(_cur_pt["y"]) if _cur_pt else 50.0,
+                                step=0.5, format="%.1f",
+                                key=f"np_py_{selected_point.get('label','')}")
+
+                            col_val, col_clr = st.columns(2)
+                            with col_val:
+                                if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
+                                    st.session_state["_new_prelev_plan_point"] = {
+                                        "x": _px, "y": _py,
+                                        "label":      selected_point.get("label", ""),
+                                        "room_class": selected_point.get("room_class", ""),
+                                        "loc_crit":   int(selected_point.get("location_criticality", 1)),
+                                        "survLabel":  None,
+                                    }
+                                    st.rerun()
+                            with col_clr:
+                                if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
+                                    st.session_state["_new_prelev_plan_point"] = None
+                                    st.rerun()
+                        else:
+                            st.markdown(
+                                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                                "padding:16px;text-align:center;color:#94a3b8;font-size:.72rem'>"
+                                "📁 Uploadez d'abord le plan URC</div>",
+                                unsafe_allow_html=True)
+
+                    with rc_plan:
+                        if st.session_state.get("map_image"):
+                            _np_img     = st.session_state["map_image"]
+                            _np_label   = selected_point.get("label", "Point")
+                            _np_point   = st.session_state.get("_new_prelev_plan_point")
+                            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
+                            _np_lc      = int(selected_point.get("location_criticality", 1))
+                            _lc_col_map = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_np_lc), "#3b82f6")
+                            _np_rc      = selected_point.get("room_class", "")
+
+                            _np_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
+     display:flex;flex-direction:column;overflow:hidden}}
+.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;
+     display:flex;gap:6px;align-items:center;flex-shrink:0}}
+.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;
+      padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
+.btn.active{{background:#2563eb;border-color:#2563eb;color:#fff}}
+#st{{font-size:.62rem;color:#64748b;margin-left:auto;padding-right:4px}}
+.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;
+     align-items:flex-start;justify-content:center}}
+.mi{{position:relative;display:inline-block;margin:8px;
+     box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
+#img{{display:block;max-width:100%;border-radius:4px;user-select:none}}
+.pt{{position:absolute;width:28px;height:28px;border-radius:50%;
+     background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;
+     transform:translate(-50%,-50%);display:flex;align-items:center;
+     justify-content:center;font-size:13px;font-weight:800;color:#fff;
+     box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
+.pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
+.mw.add{{cursor:crosshair}}
+</style></head><body>
+<div class="tb">
+  <button class="btn" id="ab" onclick="tog()">📍 Placer / Déplacer</button>
+  <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
+  <span id="st">—</span>
+</div>
+<div class="mw" id="mw">
+  <div class="mi" id="mi">
+    <img id="img" src="{_np_img}" draggable="false">
+  </div>
+</div>
+<script>
+let add=false;
+let pt={_np_pt_json};
+const lbl="{_np_label}";
+const rc="{_np_rc}";
+const lc={_np_lc};
+function upd(){{
+  document.getElementById('st').textContent =
+    pt ? '📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche'
+       : 'Aucun point placé';
+}}
+function render(){{
+  document.querySelectorAll('.pt').forEach(p=>p.remove());
+  if(!pt) return;
+  const d=document.createElement('div');
+  d.className='pt'; d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
+  d.textContent='📍'; d.title=lbl;
+  document.getElementById('mi').appendChild(d);
+  upd();
+}}
+function tog(){{
+  add=!add;
+  document.getElementById('ab').classList.toggle('active',add);
+  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';
+  document.getElementById('mw').classList.toggle('add',add);
+}}
+function clr(){{ pt=null; render(); upd(); }}
+document.getElementById('mi').addEventListener('click',function(e){{
+  if(!add) return;
+  if(e.target.classList.contains('pt')) return;
+  const img=document.getElementById('img');
+  const r=img.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) return;
+  const x=((e.clientX-r.left)/r.width*100);
+  const y=((e.clientY-r.top)/r.height*100);
+  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
+  render(); tog();
+}});
+const img=document.getElementById('img');
+if(img.complete&&img.naturalWidth>0) render();
+else img.addEventListener('load',render);
+upd();
+</script></body></html>"""
+                            st.components.v1.html(_np_html, height=280, scrolling=False)
+                            st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
+                        else:
+                            st.markdown(
+                                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                                "padding:40px;text-align:center;color:#94a3b8;font-size:.75rem'>"
+                                "🗺️ La carte apparaîtra ici après upload du plan</div>",
+                                unsafe_allow_html=True)
+
+                with btn_col:
+                    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
                     if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
                         pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                         sample = {
@@ -1693,8 +1886,8 @@ if active == "surveillance":
                             "operateur":            p_oper,
                             "date":                 str(p_date),
                             "archived":             False,
-                            "num_isolateur":        p_isolateur if pt_loc_crit == 3 else "",
-                            "poste":                p_poste if pt_loc_crit == 3 else "",
+                            "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                            "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
                             "commentaire":          p_commentaire
                         }
                         st.session_state.prelevements.append(sample)
@@ -1714,20 +1907,21 @@ if active == "surveillance":
                             f"✅ **{sample['label']}** enregistré !\n"
                             f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
                             f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
-# ── Persiste point carte ─────────────────────────────
-_np_saved_pt = st.session_state.get("_new_prelev_plan_point")
-if _np_saved_pt:
-    if "map_points" not in st.session_state:
-        st.session_state.map_points = []
-    _existing = [p.get("label") for p in st.session_state.map_points]
-    if _np_saved_pt["label"] not in _existing:
-        st.session_state.map_points.append(_np_saved_pt)
-    else:
-        for _mp in st.session_state.map_points:
-            if _mp.get("label") == _np_saved_pt["label"]:
-                _mp.update(_np_saved_pt)
-    st.session_state["_new_prelev_plan_point"] = None
-    st.rerun()   # ← maintenant dans le if, seulement quand nécessaire
+
+        # ── Persiste point carte ──────────────────────────────────────────────
+        _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
+        if _np_saved_pt:
+            if "map_points" not in st.session_state:
+                st.session_state.map_points = []
+            _existing = [p.get("label") for p in st.session_state.map_points]
+            if _np_saved_pt["label"] not in _existing:
+                st.session_state.map_points.append(_np_saved_pt)
+            else:
+                for _mp in st.session_state.map_points:
+                    if _mp.get("label") == _np_saved_pt["label"]:
+                        _mp.update(_np_saved_pt)
+            st.session_state["_new_prelev_plan_point"] = None
+            st.rerun()
 
 # ── Plan URC : upload + placement point ──────────────────────────────
 with st.expander("🗺️ Localiser sur le plan URC (optionnel)", expanded=False):
@@ -4432,371 +4626,7 @@ if active == "planning":
                 use_container_width=True)
             st.success(f"✅ Fichier **{fname}** généré")
             
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 4 : PLAN URC
-# ═══════════════════════════════════════════════════════════════════════════════
-elif active == "plan":
-    st.markdown("#### 🗺️ Plan URC interactif — placement des prélèvements")
 
-    # ── Upload ────────────────────────────────────────────────────────────────
-    uploaded = st.file_uploader(
-        "Uploader le plan URC (PNG, JPG ou PDF)",
-        type=["png", "jpg", "jpeg", "pdf"],
-        key="plan_upload_main"
-    )
-
-    if uploaded:
-        raw = uploaded.read()
-        if uploaded.type == "application/pdf":
-            try:
-                import fitz
-                import io as _io2
-                with st.spinner("🔄 Conversion du PDF en cours..."):
-                    doc  = fitz.open(stream=raw, filetype="pdf")
-                    page = doc[0]
-                    mat  = fitz.Matrix(2.0, 2.0)
-                    pix  = page.get_pixmap(matrix=mat)
-                    buf  = _io2.BytesIO(pix.tobytes("png"))
-                    img_b64 = base64.b64encode(buf.read()).decode()
-                    st.session_state.map_image = f"data:image/png;base64,{img_b64}"
-                st.success("✅ PDF converti avec succès.")
-            except ImportError:
-                st.error("❌ PyMuPDF non installé — ajoutez `PyMuPDF` dans requirements.txt")
-                st.stop()
-            except Exception as e:
-                st.error(f"❌ Erreur : {e}")
-                st.stop()
-        else:
-            img_b64 = base64.b64encode(raw).decode()
-            st.session_state.map_image = f"data:{uploaded.type};base64,{img_b64}"
-
-    # ── Affichage ─────────────────────────────────────────────────────────────
-    if st.session_state.get("map_image"):
-
-        surv_points = [
-            {
-                "label":  r["prelevement"],
-                "germ":   r["germ_match"],
-                "ufc":    r["ufc"],
-                "date":   r["date"],
-                "status": r["status"],
-            }
-            for r in st.session_state.surveillance
-        ]
-        surv_json = json.dumps(surv_points, ensure_ascii=False)
-        pts_json  = json.dumps(st.session_state.get("map_points", []), ensure_ascii=False)
-
-        options_html = "".join(
-            f'<option value="{r["label"]}">'
-            f'{r["label"]} — {r["germ"]} ({r["ufc"]} UFC)'
-            f'</option>'
-            for r in surv_points
-        )
-
-        map_html = f'''<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{
-  background: #1e293b;
-  font-family: 'Segoe UI', sans-serif;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}}
-
-/* ── Toolbar ── */
-.toolbar {{
-  padding: 8px 14px;
-  background: #fff;
-  border-bottom: 2px solid #e2e8f0;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}}
-.toolbar input, .toolbar select {{
-  background: #f8fafc;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 5px 9px;
-  color: #1e293b;
-  font-size: .75rem;
-  outline: none;
-}}
-.toolbar input:focus, .toolbar select:focus {{
-  border-color: #2563eb;
-}}
-.tb-btn {{
-  background: #f8fafc;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 5px 10px;
-  color: #1e293b;
-  font-size: .75rem;
-  cursor: pointer;
-  transition: all .15s;
-  white-space: nowrap;
-}}
-.tb-btn:hover {{ background: #dbeafe; border-color: #2563eb; color: #1e40af; }}
-.tb-btn.active {{ background: #2563eb; border-color: #2563eb; color: #fff; }}
-.tb-btn.danger:hover {{ background: #fef2f2; border-color: #ef4444; color: #dc2626; }}
-.legend {{
-  margin-left: auto;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  font-size: .65rem;
-  color: #64748b;
-}}
-.legend-dot {{
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 3px;
-}}
-
-/* ── Map ── */
-.map-wrap {{
-  flex: 1;
-  overflow: auto;
-  position: relative;
-  background: #1e293b;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}}
-.map-inner {{
-  position: relative;
-  display: inline-block;
-  margin: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5);
-  border-radius: 4px;
-  overflow: visible;
-}}
-#planImg {{
-  display: block;
-  max-width: 100%;
-  border-radius: 4px;
-  user-select: none;
-  -webkit-user-drag: none;
-}}
-
-/* ── Points ── */
-.point {{
-  position: absolute;
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: 2.5px solid #fff;
-  cursor: pointer;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 800;
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(0,0,0,.6);
-  z-index: 20;
-  transition: transform .15s, box-shadow .15s;
-  pointer-events: all;
-}}
-.point:hover {{
-  transform: translate(-50%, -50%) scale(1.5);
-  box-shadow: 0 4px 20px rgba(0,0,0,.7);
-}}
-.point.ok     {{ background: #22c55e; }}
-.point.alert  {{ background: #f59e0b; }}
-.point.action {{ background: #ef4444; }}
-.point.none   {{ background: #475569; }}
-
-/* ── Tooltip ── */
-.tooltip {{
-  position: fixed;
-  background: #fff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: .73rem;
-  pointer-events: none;
-  z-index: 9999;
-  display: none;
-  min-width: 210px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.18);
-  line-height: 1.7;
-}}
-.tooltip.visible {{ display: block; }}
-.tip-title {{
-  font-weight: 800;
-  font-size: .82rem;
-  color: #1e293b;
-  margin-bottom: 6px;
-  border-bottom: 1px solid #f1f5f9;
-  padding-bottom: 5px;
-}}
-.tip-row {{ color: #475569; }}
-.tip-row b {{ color: #1e293b; }}
-
-/* ── Mode curseur ── */
-.map-wrap.add-mode {{ cursor: crosshair; }}
-
-/* ── Compteur ── */
-#counter {{
-  font-size: .72rem;
-  color: #64748b;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-weight: 600;
-}}
-</style></head><body>
-
-<div class="toolbar">
-  <input id="ptLabel" placeholder="🏷️ Nom du point" style="width:150px">
-  <select id="ptSurv" style="width:220px">
-    <option value="">— Lier à un résultat —</option>
-    {options_html}
-  </select>
-  <button class="tb-btn" id="addBtn" onclick="toggleAdd()">📍 Placer un point</button>
-  <button class="tb-btn" onclick="clearLast()">↩️ Annuler dernier</button>
-  <button class="tb-btn danger" onclick="clearAll()">🗑️ Tout effacer</button>
-  <span id="counter">0 point(s)</span>
-  <div class="legend">
-    <span><span class="legend-dot" style="background:#475569"></span>Non lié</span>
-    <span><span class="legend-dot" style="background:#22c55e"></span>OK</span>
-    <span><span class="legend-dot" style="background:#f59e0b"></span>Alerte</span>
-    <span><span class="legend-dot" style="background:#ef4444"></span>Action</span>
-  </div>
-</div>
-
-<div class="map-wrap" id="mapWrap">
-  <div class="map-inner" id="mapInner">
-    <img id="planImg" src="{st.session_state.map_image}" draggable="false" alt="Plan URC">
-  </div>
-</div>
-<div id="tooltip" class="tooltip"></div>
-
-<script>
-let addMode = false;
-let points  = {pts_json};
-const surv  = {surv_json};
-
-function updateCounter() {{
-  document.getElementById('counter').textContent = points.length + ' point(s)';
-}}
-
-function toggleAdd() {{
-  addMode = !addMode;
-  const btn  = document.getElementById('addBtn');
-  const wrap = document.getElementById('mapWrap');
-  btn.classList.toggle('active', addMode);
-  btn.textContent = addMode ? '✋ Annuler placement' : '📍 Placer un point';
-  wrap.classList.toggle('add-mode', addMode);
-}}
-
-function renderPoints() {{
-  document.querySelectorAll('.point').forEach(p => p.remove());
-  const inner = document.getElementById('mapInner');
-  points.forEach((pt, i) => {{
-    const s      = surv.find(r => r.label === (pt.survLabel || pt.label));
-    const status = s ? s.status : 'none';
-    const div    = document.createElement('div');
-    div.className   = 'point ' + status;
-    div.style.left  = pt.x + '%';
-    div.style.top   = pt.y + '%';
-    div.textContent = i + 1;
-    div.title       = pt.label;
-    div.addEventListener('mouseenter', e => showTip(e, pt, s));
-    div.addEventListener('mouseleave', hideTip);
-    inner.appendChild(div);
-  }});
-  updateCounter();
-}}
-
-function showTip(e, pt, s) {{
-  const t = document.getElementById('tooltip');
-  const statusTxt = s
-    ? (s.status === 'ok' ? '✅ Conforme' : s.status === 'alert' ? '⚠️ Alerte' : '🚨 Action requise')
-    : null;
-  t.innerHTML =
-    '<div class="tip-title">📍 ' + pt.label + '</div>' +
-    (s
-      ? '<div class="tip-row">Germe : <b>' + s.germ + '</b></div>' +
-        '<div class="tip-row">UFC/m³ : <b>' + s.ufc + '</b></div>' +
-        '<div class="tip-row">Date : <b>' + s.date + '</b></div>' +
-        '<div class="tip-row" style="margin-top:4px">Statut : <b>' + statusTxt + '</b></div>'
-      : '<div class="tip-row" style="color:#94a3b8;font-style:italic">Non lié à un résultat</div>'
-    );
-  t.style.left = (e.clientX + 16) + 'px';
-  t.style.top  = (e.clientY - 12) + 'px';
-  t.classList.add('visible');
-}}
-
-function hideTip() {{
-  document.getElementById('tooltip').classList.remove('visible');
-}}
-
-function clearLast() {{
-  if (points.length === 0) return;
-  points.pop();
-  renderPoints();
-}}
-
-function clearAll() {{
-  if (!confirm('Effacer tous les points du plan ?')) return;
-  points = [];
-  renderPoints();
-}}
-
-document.getElementById('mapInner').addEventListener('click', function(e) {{
-  if (!addMode) return;
-  if (e.target.classList.contains('point')) return;
-  const img  = document.getElementById('planImg');
-  const rect = img.getBoundingClientRect();
-  if (e.clientX < rect.left || e.clientX > rect.right ||
-      e.clientY < rect.top  || e.clientY > rect.bottom) return;
-  const x         = ((e.clientX - rect.left) / rect.width  * 100).toFixed(2);
-  const y         = ((e.clientY - rect.top)  / rect.height * 100).toFixed(2);
-  const label     = document.getElementById('ptLabel').value.trim() || ('Point ' + (points.length + 1));
-  const survLabel = document.getElementById('ptSurv').value || null;
-  points.push({{ x: parseFloat(x), y: parseFloat(y), label, survLabel }});
-  renderPoints();
-  toggleAdd();
-}});
-
-document.addEventListener('mousemove', function(e) {{
-  const t = document.getElementById('tooltip');
-  if (t.classList.contains('visible')) {{
-    t.style.left = (e.clientX + 16) + 'px';
-    t.style.top  = (e.clientY - 12) + 'px';
-  }}
-}});
-
-const img = document.getElementById('planImg');
-if (img.complete && img.naturalWidth > 0) renderPoints();
-else img.addEventListener('load', renderPoints);
-</script>
-</body></html>'''
-
-        st.components.v1.html(map_html, height=720, scrolling=False)
-
-    else:
-        st.markdown("""
-        <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;
-                    padding:72px 32px;text-align:center;color:#64748b;margin-top:16px">
-          <div style="font-size:3.5rem;margin-bottom:12px">🗺️</div>
-          <div style="font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:6px">
-            Aucun plan chargé
-          </div>
-          <div style="font-size:.85rem">
-            Uploadez un plan URC en <strong>PNG</strong>, <strong>JPG</strong> ou <strong>PDF</strong>
-          </div>
-          <div style="font-size:.75rem;color:#94a3b8;margin-top:8px">
-            Le PDF sera automatiquement converti en image
-          </div>
-        </div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
