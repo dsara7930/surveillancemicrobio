@@ -866,7 +866,7 @@ with st.sidebar:
       </iframe>
       <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
                   font-family:'Segoe UI',sans-serif">
-        bonne surveillance 🍄
+        Bonne surveillance :) 🍄
       </div>
     </div>
     """, height=140, scrolling=False)
