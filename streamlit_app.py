@@ -3672,157 +3672,50 @@ if active == "planning":
 
         st.divider()
 
-        # ══════════════════════════════════════════════════════════════════
-        # PLANNING HEBDO : DISPATCH PAR JOUR
-        # ══════════════════════════════════════════════════════════════════
-        st.markdown("#### 🗓️ Planning de prélèvements — dispatch journalier")
-
-        def _get_weekly_alloc(points, class_overrides, working_days):
-            """Retourne {pt_label: nb_fois_par_semaine} en respectant les overrides de classe."""
-            from collections import Counter as _CtrA
-            alloc   = {}
-            nb_j    = len(working_days)
-
-            classes_in_points = sorted({
-                (pt.get('room_class') or '').strip()
-                for pt in points
-                if (pt.get('room_class') or '').strip()
-            })
-
-            for rc in classes_in_points:
-                pts_rc   = [pt for pt in points if (pt.get('room_class') or '').strip() == rc]
-                override = int(class_overrides.get(rc, 0))
-
-                pt_freqs_rc = []
-                for pt in pts_rc:
-                    try:
-                        f = int(pt.get('frequency') or 1)
-                        u = pt.get('frequency_unit', '/ semaine')
-                        if '/ mois' in u:
-                            f_week = round(f / 4.33)
-                        elif '/ jour' in u:
-                            f_week = f * nb_j
-                        else:
-                            f_week = f
-                        pt_freqs_rc.append(max(1, f_week))
-                    except Exception:
-                        pt_freqs_rc.append(1)
-
-                total_poids = sum(pt_freqs_rc) or 1
-
-                if override > 0:
-                    total_assigned = 0
-                    for i, (pt, poids) in enumerate(zip(pts_rc, pt_freqs_rc)):
-                        if i < len(pts_rc) - 1:
-                            a = round(poids / total_poids * override)
-                        else:
-                            a = override - total_assigned
-                        total_assigned += a
-                        alloc[pt['label']] = max(0, a)
-                else:
-                    for pt, f in zip(pts_rc, pt_freqs_rc):
-                        alloc[pt['label']] = f
-
-            return alloc
-
         def _dispatch_to_days(alloc, working_days):
-            """Répartit les prélèvements sur les jours ouvrés.
-            Règle : pas deux fois le même point le même jour sauf si fréquence > nb_jours."""
+            """Répartit les prélèvements sur les jours ouvrés de façon uniforme.
+            Règle : étalement round-robin pour éviter les concentrations en début de semaine."""
             from collections import defaultdict
             nb_j     = len(working_days)
             schedule = defaultdict(list)
 
-            for label, weekly in alloc.items():
+            # Trier par label pour un résultat déterministe
+            for label in sorted(alloc.keys()):
+                weekly = alloc[label]
                 if weekly <= 0 or nb_j == 0:
                     continue
+
                 if weekly <= nb_j:
-                    step   = nb_j / weekly
-                    chosen = [int(i * step) for i in range(weekly)]
-                    chosen = list(dict.fromkeys(min(c, nb_j - 1) for c in chosen))
-                    if len(chosen) < weekly:
-                        remaining = [i for i in range(nb_j) if i not in chosen]
-                        chosen   += remaining[:weekly - len(chosen)]
-                    for idx in chosen[:weekly]:
+                    # Étalement uniforme : on espace les passages équitablement
+                    # Ex : 2 fois en 5 jours → jours 0 et 2 (pas 0 et 1)
+                    indices = []
+                    for k in range(weekly):
+                        idx = round(k * nb_j / weekly)
+                        idx = min(idx, nb_j - 1)
+                        # Éviter doublons
+                        while idx in indices:
+                            idx = (idx + 1) % nb_j
+                        indices.append(idx)
+                    for idx in indices:
                         schedule[working_days[idx]].append(label)
                 else:
+                    # Plus de passages que de jours → répartir équitablement
                     per_day = weekly // nb_j
                     extra   = weekly % nb_j
+                    # Distribuer l'extra de façon espacée (pas jours 0,1,2...)
+                    extra_days = set()
+                    for k in range(extra):
+                        eidx = round(k * nb_j / extra) if extra > 0 else 0
+                        eidx = min(eidx, nb_j - 1)
+                        while eidx in extra_days:
+                            eidx = (eidx + 1) % nb_j
+                        extra_days.add(eidx)
                     for i, d in enumerate(working_days):
-                        count = per_day + (1 if i < extra else 0)
+                        count = per_day + (1 if i in extra_days else 0)
                         for _ in range(count):
                             schedule[d].append(label)
 
             return schedule
-
-        cur_overrides = st.session_state.get(class_override_key, {})
-        weekly_alloc  = _get_weekly_alloc(st.session_state.points, cur_overrides, ch_working_days)
-        daily_sched   = _dispatch_to_days(weekly_alloc, ch_working_days)
-
-        if not st.session_state.points:
-            st.info("Aucun point de prélèvement défini.")
-        elif not ch_working_days:
-            st.warning("Aucun jour ouvré cette semaine.")
-        else:
-            day_names = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
-            rc_colors = {"A": "#22c55e", "B": "#84cc16", "C": "#f59e0b", "D": "#f97316"}
-
-            # En-têtes jours
-            day_cols = st.columns(nb_jours)
-            for i, (col, wd) in enumerate(zip(day_cols, ch_working_days)):
-                nb_actes = len(daily_sched[wd])
-                is_today = (wd == _today_dt)
-                bg_hd    = "#2563eb" if is_today else "#1e40af"
-                col.markdown(
-                    f"<div style='background:{bg_hd};border-radius:8px;padding:8px;text-align:center'>"
-                    f"<div style='color:#bfdbfe;font-size:.62rem;font-weight:700;text-transform:uppercase'>"
-                    f"{day_names[wd.weekday()]}</div>"
-                    f"<div style='color:#fff;font-size:.75rem;font-weight:600'>{wd.strftime('%d/%m')}</div>"
-                    f"<div style='background:rgba(255,255,255,.25);border-radius:6px;margin-top:4px;"
-                    f"padding:2px;color:#fff;font-size:.8rem;font-weight:800'>{nb_actes} acte(s)</div>"
-                    f"</div>",
-                    unsafe_allow_html=True)
-
-            # Cartes par jour
-            day_cols2 = st.columns(nb_jours)
-            for i, (col, wd) in enumerate(zip(day_cols2, ch_working_days)):
-                labels_today = daily_sched[wd]
-                if not labels_today:
-                    col.markdown(
-                        "<div style='background:#f8fafc;border:1px dashed #e2e8f0;"
-                        "border-radius:8px;padding:12px;text-align:center;"
-                        "font-size:.7rem;color:#94a3b8;margin-top:4px'>—</div>",
-                        unsafe_allow_html=True)
-                else:
-                    from collections import Counter as _Ctr2
-                    cnt   = _Ctr2(labels_today)
-                    cards = ""
-                    for lbl, n in cnt.items():
-                        pt_obj = next((p for p in st.session_state.points if p['label'] == lbl), None)
-                        rc_pt  = (pt_obj.get('room_class') or '') if pt_obj else ''
-                        bg_c   = rc_colors.get(rc_pt.replace(' ', '').upper()[:1], "#6366f1")
-                        repeat = (
-                            f" <span style='background:{bg_c};color:#fff;border-radius:4px;"
-                            f"padding:0 4px;font-size:.55rem'>×{n}</span>"
-                            if n > 1 else "")
-                        cards += (
-                            f"<div style='background:{bg_c}18;border:1px solid {bg_c}55;"
-                            f"border-radius:6px;padding:5px 7px;margin-top:4px;"
-                            f"font-size:.68rem;color:#0f172a;font-weight:600;line-height:1.3'>"
-                            f"{lbl}{repeat}"
-                            f"<div style='font-size:.58rem;color:{bg_c};font-weight:700'>"
-                            f"Classe {rc_pt}</div></div>")
-                    col.markdown(cards, unsafe_allow_html=True)
-
-            # Résumé total
-            total_dispatch = sum(len(v) for v in daily_sched.values())
-            st.markdown(
-                f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
-                f"padding:10px 16px;margin-top:12px;font-size:.8rem;color:#166534;font-weight:600'>"
-                f"✅ Total planifié cette semaine : <b>{total_dispatch} prélèvement(s)</b> "
-                f"répartis sur {nb_jours} jour(s) ouvré(s)</div>",
-                unsafe_allow_html=True)
-
-        st.divider()
 
         # ══════════════════════════════════════════════════════════════════
         # TABLEAU DÉTAIL PAR POINT
