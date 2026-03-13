@@ -1727,7 +1727,7 @@ if _np_saved_pt:
             if _mp.get("label") == _np_saved_pt["label"]:
                 _mp.update(_np_saved_pt)
     st.session_state["_new_prelev_plan_point"] = None
-st.rerun()
+    st.rerun()   # ← maintenant dans le if, seulement quand nécessaire
 
 # ── Plan URC : upload + placement point ──────────────────────────────
 with st.expander("🗺️ Localiser sur le plan URC (optionnel)", expanded=False):
