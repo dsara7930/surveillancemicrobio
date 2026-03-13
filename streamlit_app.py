@@ -854,22 +854,22 @@ with st.sidebar:
     if not supa_ok:
         st.markdown('<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">⚠️ Sans Supabase, exportez régulièrement vos données !</p>', unsafe_allow_html=True)
 
-    # ── 🍄 Champignon dansant ─────────────────────────────────────────────
+# ── 🍄 Champignon dansant ─────────────────────────────────────────────
     st.components.v1.html("""
-    <div style="text-align:center;margin-top:14px;padding-bottom:6px">
+    <div style="text-align:center;margin-top:14px;padding-bottom:4px">
       <iframe
-        src="https://giphy.com/embed/9PgxWeMeUw4TjNGfes"
-        width="90" height="90"
+        src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+        width="100" height="100"
         style="border:none;border-radius:12px;pointer-events:none"
         frameBorder="0"
         allowFullScreen>
       </iframe>
-      <div style="font-size:10px;color:#94a3b8;margin-top:2px;font-style:italic;
+      <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
                   font-family:'Segoe UI',sans-serif">
         bonne surveillance 🍄
       </div>
     </div>
-    """, height=115, scrolling=False)
+    """, height=140, scrolling=False)
 
 active = st.session_state.active_tab
 today = datetime.today().date()
