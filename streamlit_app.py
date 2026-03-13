@@ -186,7 +186,7 @@ DEFAULT_MEASURES = {
 
 ALL_ORIGINS = [
     "Air","Humidité","Flore fécale","Oropharynx / Gouttelettes",
-    "Peau / Muqueuses","Peau / Muqueuse","Sol / Carton / Surface sèche",
+    "Peau / Muqueuse","Sol / Carton / Surface sèche",
 ]
 
 MEASURES_FILE = "measures_config.json"
@@ -231,11 +231,11 @@ DEFAULT_ORIGIN_MEASURES = [
     {"id":"m043","text":"Retrait et destruction des cartons et emballages suspects","scope":"Sol / Carton / Surface sèche","risk":"all","type":"action"},
     {"id":"m044","text":"Décontamination sporicide si spores détectées (Bacillus, Clostridium)","scope":"Sol / Carton / Surface sèche","risk":[4,5],"type":"action"},
     {"id":"m045","text":"Bilan sporal complet de la zone","scope":"Sol / Carton / Surface sèche","risk":[5],"type":"action"},
-    {"id":"m050","text":"Vérifier les procédures d'habillage et port des EPI","scope":"Peau / Muqueuses","risk":"all","type":"alert"},
-    {"id":"m051","text":"Contrôler la technique de friction hydro-alcoolique","scope":"Peau / Muqueuses","risk":"all","type":"alert"},
-    {"id":"m052","text":"Renforcer la formation du personnel (hygiène des mains)","scope":"Peau / Muqueuses","risk":[3,4,5],"type":"action"},
-    {"id":"m053","text":"Vérifier l'absence de lésion cutanée chez le personnel","scope":"Peau / Muqueuses","risk":[4,5],"type":"action"},
-    {"id":"m054","text":"Enquête sur le personnel intervenant dans la zone","scope":"Peau / Muqueuses","risk":[4,5],"type":"action"},
+    {"id":"m050","text":"Vérifier les procédures d'habillage et port des EPI","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
+    {"id":"m051","text":"Contrôler la technique de friction hydro-alcoolique","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
+    {"id":"m052","text":"Renforcer la formation du personnel (hygiène des mains)","scope":"Peau / Muqueuse","risk":[3,4,5],"type":"action"},
+    {"id":"m053","text":"Vérifier l'absence de lésion cutanée chez le personnel","scope":"Peau / Muqueuse","risk":[4,5],"type":"action"},
+    {"id":"m054","text":"Enquête sur le personnel intervenant dans la zone","scope":"Peau / Muqueuse","risk":[4,5],"type":"action"},
     {"id":"m055","text":"Vérifier les procédures d'habillage et port des EPI","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
     {"id":"m056","text":"Contrôler la technique de friction hydro-alcoolique","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
     {"id":"m057","text":"Renforcer la formation du personnel (hygiène des mains)","scope":"Peau / Muqueuse","risk":[3,4,5],"type":"action"},
@@ -253,12 +253,12 @@ DEFAULT_ORIGIN_MEASURES = [
 ]
 
 DEFAULT_GERMS = [
-    dict(name="Staphylococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
-    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
-    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
-    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
-    dict(name="Dermabacter hominis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
-    dict(name="Brevibacterium epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuses"],notes=None,comment=None),
+    dict(name="Staphylococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
+    dict(name="Corynebacterium spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
+    dict(name="Cutibacterium acnes",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
+    dict(name="Micrococcus spp.",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
+    dict(name="Dermabacter hominis",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
+    dict(name="Brevibacterium epidermidis",path=["Germes","Bactéries","Humains","Peau / Muqueuse"],notes=None,comment=None),
     dict(name="Streptococcus mitis/salivarius/sanguinis/anginosus",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],notes=None,comment=None),
     dict(name="Streptococcus pyogenes/agalactiae/pneumoniae",path=["Germes","Bactéries","Humains","Oropharynx / Gouttelettes"],notes=None,comment=None),
     dict(name="Escherichia coli",path=["Germes","Bactéries","Humains","Flore fécale"],notes=None,comment=None),
@@ -1097,7 +1097,7 @@ if active == "logigramme":
                     disabled=not can_edit)
 
                 if new_famille == "Bactéries":
-                    cats = (["Peau / Muqueuses", "Oropharynx / Gouttelettes", "Flore fécale"]
+                    cats = (["Peau / Muqueuse", "Oropharynx / Gouttelettes", "Flore fécale"]
                             if "Humain" in new_origine
                             else ["Humidité", "Sol / Carton / Surface sèche"])
                 else:
@@ -5044,7 +5044,6 @@ elif active == "parametres":
             "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
             "Flore fécale": "🦠 Flore fécale",
             "Oropharynx / Gouttelettes": "😷 Oropharynx",
-            "Peau / Muqueuses": "🖐️ Peau / Muqueuses",
             "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
             "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
         }
