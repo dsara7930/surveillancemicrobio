@@ -680,6 +680,32 @@ def find_germ_match(query, germs):
             best_match = g
     return best_match, best_score
 
+# ── Helpers scoring — niveau global ───────────────────────────────────
+def _get_location_criticality(sample):
+    if "location_criticality" in sample:
+        try: return int(sample["location_criticality"])
+        except: pass
+    pt = next((p for p in st.session_state.points
+               if p.get("label") == sample.get("label")), None)
+    if pt and "location_criticality" in pt:
+        try: return int(pt["location_criticality"])
+        except: pass
+    rc = str(sample.get("room_class", "")).strip().upper()
+    return {"A": 3, "B": 2, "C": 2, "D": 1}.get(rc, 1)
+
+def _get_germ_score(germ):
+    if all(k in germ for k in ("pathogenicity", "resistance", "dissemination")):
+        return int(germ["pathogenicity"]) * int(germ["resistance"]) * int(germ["dissemination"])
+    old = germ.get("risk", 1)
+    return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
+
+def _evaluate_score(total):
+    if total > 36:  return "action", "🚨 ACTION",  "#ef4444"
+    if total >= 24: return "alert",  "⚠️ ALERTE",  "#f59e0b"
+    return "ok", "✅ Conforme", "#22c55e"
+
+def _loc_crit_label(n):
+    return {1: "Non critique", 2: "Semi-critique", 3: "Critique"}.get(n, str(n))
 
 # ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
 def check_access_protege(onglet_nom: str) -> bool:
@@ -1560,40 +1586,7 @@ renderList();
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    # ── Helpers scoring ────────────────────────────────────────────────────────
-    def _get_location_criticality(sample):
-        """
-        Récupère la criticité du lieu depuis le sample.
-        Fallback : retrouve le point dans session_state.points,
-        puis migration room_class (A=3, B/C=2, D=1), sinon 1.
-        """
-        if "location_criticality" in sample:
-            try: return int(sample["location_criticality"])
-            except: pass
-        # Cherche dans la liste des points par label
-        pt = next((p for p in st.session_state.points
-                   if p.get("label") == sample.get("label")), None)
-        if pt and "location_criticality" in pt:
-            try: return int(pt["location_criticality"])
-            except: pass
-        # Migration room_class
-        rc = str(sample.get("room_class", "")).strip().upper()
-        return {"A": 3, "B": 2, "C": 2, "D": 1}.get(rc, 1)
-
-    def _get_germ_score(germ):
-        """Score du germe : p × r × d, ou migration ancien modèle."""
-        if all(k in germ for k in ("pathogenicity", "resistance", "dissemination")):
-            return int(germ["pathogenicity"]) * int(germ["resistance"]) * int(germ["dissemination"])
-        old = germ.get("risk", 1)
-        return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
-
-    def _evaluate_score(total):
-        if total > 36:  return "action", "🚨 ACTION",  "#ef4444"
-        if total >= 24: return "alert",  "⚠️ ALERTE",  "#f59e0b"
-        return "ok", "✅ Conforme", "#22c55e"
-
-    def _loc_crit_label(n):
-        return {1: "Non critique", 2: "Semi-critique", 3: "Critique"}.get(n, str(n))
+    
 
     tab_surv, tab_etiq = st.tabs(["🔬 Surveillance", "🏷️ Étiquettes"])
 
@@ -1760,21 +1753,7 @@ if active == "surveillance":
                                     unsafe_allow_html=True)
                             else:
                                 st.info("Aucun point placé.")
-
-                            st.markdown(
-                                "<div style='font-size:.68rem;color:#94a3b8;margin-top:8px;margin-bottom:2px'>"
-                                "Position manuelle :</div>", unsafe_allow_html=True)
-                            _px = st.number_input(
-                                "X%", 0.0, 100.0,
-                                value=float(_cur_pt["x"]) if _cur_pt else 50.0,
-                                step=0.5, format="%.1f",
-                                key=f"np_px_{selected_point.get('label','')}")
-                            _py = st.number_input(
-                                "Y%", 0.0, 100.0,
-                                value=float(_cur_pt["y"]) if _cur_pt else 50.0,
-                                step=0.5, format="%.1f",
-                                key=f"np_py_{selected_point.get('label','')}")
-
+                            
                             col_val, col_clr = st.columns(2)
                             with col_val:
                                 if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
@@ -1945,50 +1924,51 @@ upd();
             st.rerun()
 
 # ── Prélèvements actifs ───────────────────────────────────────────────
-for idx, samp in enumerate(st.session_state.prelevements):
-    if samp.get("archived"):
-        continue
-    col_info, col_edit, col_del = st.columns([5, 1, 1])
-    with col_info:
-        loc_c    = int(samp.get("location_criticality", 1))
-        lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
-        room_cl  = samp.get('room_class','') or ''
-        room_badge = (
-            f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
-            f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
-            f"margin-left:4px'>Cl.{room_cl}</span>"
-            if room_cl else "")
-        _comment_html = (
-            f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
-            f"💬 {samp['commentaire']}</div>"
-            if samp.get('commentaire') else "")
-        st.markdown(
-            f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
-            f"padding:10px 16px;margin-bottom:6px'>"
-            f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
-            f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
-            f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
-            f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
-            f"{_comment_html}</div>",
-            unsafe_allow_html=True)
-    with col_edit:
-        if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
-            st.session_state["edit_prelev_id"] = samp["id"]
-            st.rerun()
-    with col_del:
-        if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
-            sid = samp["id"]
-            st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
-            st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
-            st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
-            save_schedules(st.session_state.schedules)
-            save_prelevements(st.session_state.prelevements)
-            save_pending_identifications(st.session_state.pending_identifications)
-            if st.session_state.get("edit_prelev_id") == sid:
-                st.session_state["edit_prelev_id"] = None
-            st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
-            st.rerun()
+        for idx, samp in enumerate(st.session_state.prelevements):
+            if samp.get("archived"):
+                continue
+            col_info, col_edit, col_del = st.columns([5, 1, 1])
+            with col_info:
+                loc_c    = int(samp.get("location_criticality", 1))
+                lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+                room_cl  = samp.get('room_class','') or ''
+                room_badge = (
+                    f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+                    f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
+                    f"margin-left:4px'>Cl.{room_cl}</span>"
+                    if room_cl else "")
+                _comment_html = (
+                    f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
+                    f"💬 {samp['commentaire']}</div>"
+                    if samp.get('commentaire') else "")
+                st.markdown(
+                    f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
+                    f"padding:10px 16px;margin-bottom:6px'>"
+                    f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
+                    f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
+                    f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
+                    f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
+                    f"{_comment_html}</div>",
+                    unsafe_allow_html=True)
+            with col_edit:
+                if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
+                    st.session_state["edit_prelev_id"] = samp["id"]
+                    st.rerun()
+            with col_del:
+                if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
+                    sid = samp["id"]
+                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+                    st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+                    save_schedules(st.session_state.schedules)
+                    save_prelevements(st.session_state.prelevements)
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    if st.session_state.get("edit_prelev_id") == sid:
+                        st.session_state["edit_prelev_id"] = None
+                    st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
+                    st.rerun()
 
+            # ── Formulaire modification ── (niveau boucle for, hors col_del)
             if st.session_state.get("edit_prelev_id") == samp["id"]:
                 with st.container():
                     st.markdown(
@@ -2020,7 +2000,7 @@ for idx, samp in enumerate(st.session_state.prelevements):
                         new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
                         new_isolateur = ""
                         new_poste = "Poste 1"
-                        if int(samp.get("location_criticality", 1)) == 3:
+                        if str(samp.get("room_class","")).strip().upper() == "A":
                             new_isolateur = st.text_input("Numéro isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
                             new_poste = st.radio(
                                 "Poste", ["Poste 1","Poste 2","Commun"],
@@ -2043,7 +2023,7 @@ for idx, samp in enumerate(st.session_state.prelevements):
                             st.session_state.prelevements[idx]["date"]        = str(new_date)
                             st.session_state.prelevements[idx]["gelose"]      = new_gelose
                             st.session_state.prelevements[idx]["commentaire"] = new_commentaire
-                            if int(samp.get("location_criticality",1)) == 3:
+                            if str(samp.get("room_class","")).strip().upper() == "A":
                                 st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
                                 st.session_state.prelevements[idx]["poste"]         = new_poste
                             if new_date != current_date:
@@ -2062,7 +2042,8 @@ for idx, samp in enumerate(st.session_state.prelevements):
                             st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Lectures en attente ───────────────────────────────────────────────
+        # ── Lectures en attente ── (hors boucle for) ──────────────────────────
+        st.divider()
         st.markdown("#### 📅 Lectures en attente")
         pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
         overdue  = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() <= today]
@@ -2110,14 +2091,14 @@ for idx, samp in enumerate(st.session_state.prelevements):
                 if pt_room_cl else "")
 
             extra_info = ""
-            if smp and loc_crit == 3:
+            if smp and str(smp.get("room_class","")).strip().upper() == "A":
                 iso = smp.get("num_isolateur","—") or "—"
                 pst = smp.get("poste","—") or "—"
                 extra_info = (
                     f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
                     f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
                     f"font-weight:600;margin-top:6px'>"
-                    f"🔬 Zone Critique · Isolateur : {iso} · {pst}</div>")
+                    f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
 
             with st.container():
                 st.markdown(f"""
@@ -2190,14 +2171,14 @@ for idx, samp in enumerate(st.session_state.prelevements):
                 lc_col_p  = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
 
                 classea_band = ""
-                if smp and loc_crit == 3:
+                if smp and str(smp.get("room_class","")).strip().upper() == "A":
                     iso = smp.get("num_isolateur","—") or "—"
                     pst = smp.get("poste","—") or "—"
                     classea_band = (
                         f"<div style='background:#fef9c3;border:1px solid #fde047;"
                         f"border-radius:8px;padding:8px 12px;margin-top:10px;"
                         f"font-size:.75rem;font-weight:700;color:#854d0e'>"
-                        f"🔬 Zone Critique · Isolateur : {iso} · {pst}</div>")
+                        f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
 
                 st.markdown("---")
                 st.markdown(f"""
