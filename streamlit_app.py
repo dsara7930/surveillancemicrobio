@@ -4552,6 +4552,7 @@ else img.addEventListener('load', renderPoints);
             Le PDF sera automatiquement converti en image
           </div>
         </div>""", unsafe_allow_html=True)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4560,8 +4561,22 @@ elif active == "historique":
     surv  = st.session_state.surveillance
     total = len(surv)
 
+    # ── Helper : criticité d'un germe depuis st.session_state.germs ──────────
+    def _get_criticite(germ_name):
+        """Retourne la criticité (1-5) d'un germe, 0 si inconnu."""
+        for g in st.session_state.get("germs", []):
+            if g.get("name", "") == germ_name:
+                return int(g.get("criticite", 0) or 0)
+        return 0
+
+    def _crit_label(c):
+        return {5: "Critique", 4: "Majeur", 3: "Important", 2: "Modéré", 1: "Limité"}.get(c, "—")
+
+    def _crit_color(c):
+        return {5: "#7c3aed", 4: "#ef4444", 3: "#f97316", 2: "#f59e0b", 1: "#22c55e"}.get(c, "#94a3b8")
+
     if surv:
-        # ── Boutons export / vider ────────────────────────────────────────────
+        # ── Export / Vider ────────────────────────────────────────────────────
         c_dl, c_cl = st.columns(2)
         with c_dl:
             csv_str  = io.StringIO()
@@ -4597,13 +4612,12 @@ elif active == "historique":
         def _parse_date(d_str):
             for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
                 try:
-                    return datetime.strptime(d_str, fmt).date()
+                    return datetime.strptime(str(d_str), fmt).date()
                 except Exception:
                     pass
             return None
 
-        all_dates_raw = [_parse_date(r.get("date", "")) for r in surv]
-        all_dates_ok  = [d for d in all_dates_raw if d]
+        all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
 
@@ -4615,25 +4629,19 @@ elif active == "historique":
             unsafe_allow_html=True)
         cf1, cf2 = st.columns(2)
         with cf1:
-            date_debut = st.date_input(
-                "Du", value=d_min, min_value=d_min, max_value=d_max,
-                key="hist_date_debut", label_visibility="visible")
+            date_debut = st.date_input("Du",  value=d_min, min_value=d_min, max_value=d_max, key="hist_date_debut")
         with cf2:
-            date_fin = st.date_input(
-                "Au", value=d_max, min_value=d_min, max_value=d_max,
-                key="hist_date_fin", label_visibility="visible")
+            date_fin   = st.date_input("Au",  value=d_max, min_value=d_min, max_value=d_max, key="hist_date_fin")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Appliquer le filtre
-        surv_f = [
-            r for r in surv
-            if _parse_date(r.get("date", "")) is not None
-            and date_debut <= _parse_date(r.get("date", "")) <= date_fin
-        ]
+        surv_f  = [r for r in surv
+                   if _parse_date(r.get("date","")) is not None
+                   and date_debut <= _parse_date(r.get("date","")) <= date_fin]
         total_f = len(surv_f)
 
         if total_f < total:
-            st.caption(f"🔍 {total_f} résultat(s) affiché(s) sur {total} — période : {date_debut.strftime('%d/%m/%Y')} → {date_fin.strftime('%d/%m/%Y')}")
+            st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
+                       f"{date_debut.strftime('%d/%m/%Y')} → {date_fin.strftime('%d/%m/%Y')}")
 
         # ── Métriques globales ────────────────────────────────────────────────
         alerts  = sum(1 for r in surv_f if r.get("status") == "alert")
@@ -4659,17 +4667,18 @@ elif active == "historique":
             from collections import defaultdict
             import json as _json_pts
 
-            # ── Calcul des stats (avec J2 / J7 séparés) ──────────────────────
+            # ── Calcul stats par point ────────────────────────────────────────
             pts_stats = defaultdict(lambda: {
                 "total": 0, "positives": 0, "negatives": 0,
+                "alertes": 0, "actions": 0,
                 "germes": defaultdict(int),
                 "ufc_j2_list": [], "ufc_j7_list": [],
             })
             for r in surv_f:
-                pt    = r.get("prelevement", "—")
-                ufc   = int(r.get("ufc", 0) or 0)
-                germ  = r.get("germ_match", "") or ""
-                # J2 = ufc_48h si dispo, sinon ufc ; J7 = ufc_5j si dispo
+                pt   = r.get("prelevement", "—")
+                ufc  = int(r.get("ufc", 0) or 0)
+                germ = r.get("germ_match", "") or ""
+                st_r = r.get("status", "ok")
                 ufc_j2 = int(r.get("ufc_48h", r.get("ufc", 0)) or 0)
                 ufc_j7 = int(r.get("ufc_5j",  r.get("ufc", 0)) or 0)
 
@@ -4679,7 +4688,10 @@ elif active == "historique":
                     pts_stats[pt]["germes"][germ] += 1
                 else:
                     pts_stats[pt]["negatives"] += 1
-
+                if st_r == "alert":
+                    pts_stats[pt]["alertes"] += 1
+                elif st_r == "action":
+                    pts_stats[pt]["actions"] += 1
                 if ufc_j2 > 0:
                     pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
                 if ufc_j7 > 0:
@@ -4691,7 +4703,7 @@ elif active == "historique":
             chart_pos    = [d["positives"] for _, d in sorted_pts]
             chart_data   = {"labels": chart_labels, "neg": chart_neg, "pos": chart_pos}
 
-            # ── Graphique global barres empilées ─────────────────────────────
+            # ── Graphique barres empilées ─────────────────────────────────────
             chart_html = f"""
             <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
@@ -4699,9 +4711,7 @@ elif active == "historique":
               <div style="font-size:.8rem;font-weight:700;color:#1e40af;margin-bottom:10px">
                 📊 Résultats par point de prélèvement
               </div>
-              <div style="width:100%;height:180px">
-                <canvas id="ptChart"></canvas>
-              </div>
+              <div style="width:100%;height:180px"><canvas id="ptChart"></canvas></div>
             </div>
             <script>
             (function(){{
@@ -4718,12 +4728,12 @@ elif active == "historique":
                   ]
                 }},
                 options: {{
-                  responsive: true,
-                  maintainAspectRatio: false,
+                  responsive: true, maintainAspectRatio: false,
                   plugins: {{ legend: {{ position: 'top', labels: {{ font: {{ size: 11 }} }} }} }},
                   scales: {{
                     x: {{ stacked: true, ticks: {{ font: {{ size: 10 }} }} }},
-                    y: {{ stacked: true, beginAtZero: true, ticks: {{ stepSize: 1, font: {{ size: 10 }} }} }}
+                    y: {{ stacked: true, beginAtZero: true,
+                          ticks: {{ stepSize: 1, font: {{ size: 10 }} }} }}
                   }}
                 }}
               }});
@@ -4732,18 +4742,18 @@ elif active == "historique":
             """
             st.components.v1.html(chart_html, height=240)
 
-            # ── Tableau stats par point (avec Moy J2 / Moy J7) ───────────────
+            # ── Tableau avec Moy J2 / Moy J7 ─────────────────────────────────
             st.markdown(
                 "<div style='display:grid;"
-                "grid-template-columns:2fr 0.6fr 0.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1.8fr;"
+                "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
                 "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
                 "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
                 "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
-                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅ Nég.</div>"
-                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🦠 Pos.</div>"
-                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Taux +</div>"
-                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Moy J2</div>"
-                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Moy J7</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🦠</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Taux+</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#7dd3fc;text-align:center'>Moy J2</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#c4b5fd;text-align:center'>Moy J7</div>"
                 "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
                 "</div>",
                 unsafe_allow_html=True)
@@ -4764,16 +4774,16 @@ elif active == "historique":
                 row_bg  = "#f8fafc" if ri % 2 == 0 else "#ffffff"
                 st.markdown(
                     "<div style='display:grid;"
-                    "grid-template-columns:2fr 0.6fr 0.6fr 0.6fr 0.8fr 0.8fr 0.8fr 1.8fr;"
+                    "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
                     "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
                     "padding:9px 14px;align-items:center'>"
                     "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>📍 " + pt_name + "</div>"
                     "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div>"
                     "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(pt_data["negatives"]) + "</div>"
                     "<div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";"
-                    "border:1px solid " + tc + "55;border-radius:6px;padding:2px 8px;"
+                    "border:1px solid " + tc + "55;border-radius:6px;padding:2px 7px;"
                     "font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div>"
-                    "<div style='font-size:.85rem;font-weight:700;color:" + tc + ";text-align:center'>" + str(round(taux, 0)) + "%</div>"
+                    "<div style='font-size:.85rem;font-weight:700;color:" + tc + ";text-align:center'>" + str(round(taux)) + "%</div>"
                     "<div style='font-size:.82rem;font-weight:700;color:#0369a1;text-align:center'>" + moy_j2 + "</div>"
                     "<div style='font-size:.82rem;font-weight:700;color:#7c3aed;text-align:center'>" + moy_j7 + "</div>"
                     "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + germes_str + "</div>"
@@ -4784,8 +4794,8 @@ elif active == "historique":
                 "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                 "<div style='font-size:.78rem;color:#94a3b8'>"
                 + str(len(pts_stats)) + " point(s) — " + str(total_f) + " résultats"
-                + " &nbsp;|&nbsp; <span style='color:#7dd3fc'>Moy J2 = UFC à 48h</span>"
-                + " &nbsp;|&nbsp; <span style='color:#c4b5fd'>Moy J7 = UFC à 5 jours</span>"
+                + " &nbsp;|&nbsp; <span style='color:#7dd3fc'>J2 = 48h</span>"
+                + " &nbsp;|&nbsp; <span style='color:#c4b5fd'>J7 = 5 jours</span>"
                 "</div></div>",
                 unsafe_allow_html=True)
 
@@ -4800,16 +4810,12 @@ elif active == "historique":
             pt_choices = [p for p, _ in sorted_pts]
             if pt_choices:
                 selected_pt = st.selectbox(
-                    "Point de prélèvement",
-                    options=pt_choices,
-                    key="hist_pt_evol",
-                    label_visibility="collapsed")
+                    "Point", options=pt_choices,
+                    key="hist_pt_evol", label_visibility="collapsed")
 
-                # Récupérer les données temporelles pour ce point
                 pt_records = sorted(
                     [r for r in surv_f if r.get("prelevement") == selected_pt],
-                    key=lambda x: _parse_date(x.get("date", "")) or dt_date.min
-                )
+                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
 
                 evol_dates = []
                 evol_j2    = []
@@ -4818,23 +4824,26 @@ elif active == "historique":
                 seuil_action = None
 
                 for r in pt_records:
-                    d = _parse_date(r.get("date", ""))
+                    d = _parse_date(r.get("date",""))
                     if not d:
                         continue
                     evol_dates.append(d.strftime("%d/%m/%y"))
                     evol_j2.append(int(r.get("ufc_48h", r.get("ufc", 0)) or 0))
                     evol_j7.append(int(r.get("ufc_5j",  r.get("ufc", 0)) or 0))
                     if seuil_alerte is None:
-                        seuil_alerte = int(r.get("alert_threshold",  50) or 50)
-                        seuil_action = int(r.get("action_threshold", 100) or 100)
+                        try:
+                            seuil_alerte = int(float(r.get("alert_threshold",  50) or 50))
+                        except (ValueError, TypeError):
+                            seuil_alerte = 50
+                        try:
+                            seuil_action = int(float(r.get("action_threshold", 100) or 100))
+                        except (ValueError, TypeError):
+                            seuil_action = 100
 
                 if evol_dates:
                     evol_data = {
-                        "dates":   evol_dates,
-                        "j2":      evol_j2,
-                        "j7":      evol_j7,
-                        "alerte":  seuil_alerte,
-                        "action":  seuil_action,
+                        "dates": evol_dates, "j2": evol_j2, "j7": evol_j7,
+                        "alerte": seuil_alerte, "action": seuil_action,
                     }
                     evol_html = f"""
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -4843,98 +4852,65 @@ elif active == "historique":
                       <div style="font-size:.78rem;font-weight:700;color:#334155;margin-bottom:10px">
                         📍 {selected_pt} — UFC/m³ au fil du temps
                       </div>
-                      <div style="width:100%;height:220px">
-                        <canvas id="evolChart"></canvas>
-                      </div>
+                      <div style="width:100%;height:220px"><canvas id="evolChart"></canvas></div>
                     </div>
                     <script>
                     (function(){{
                       const d = {_json_pts.dumps(evol_data)};
-                      const alertLine = d.alerte;
-                      const actionLine = d.action;
-
-                      // Plugins pour lignes horizontales de seuil
-                      const thresholdPlugin = {{
-                        id: 'thresholds',
+                      const threshPlugin = {{
+                        id: 'thr',
                         afterDraw(chart) {{
-                          const {{ ctx, chartArea: {{ left, right, top, bottom }}, scales: {{ y }} }} = chart;
+                          const {{ ctx, chartArea: {{ left, right }}, scales: {{ y }} }} = chart;
                           if (!y) return;
-
-                          function drawLine(value, color, label) {{
-                            const yPos = y.getPixelForValue(value);
-                            if (yPos < top || yPos > bottom) return;
+                          function drawLine(val, color, lbl) {{
+                            const yp = y.getPixelForValue(val);
                             ctx.save();
-                            ctx.beginPath();
-                            ctx.setLineDash([6, 4]);
-                            ctx.strokeStyle = color;
-                            ctx.lineWidth = 1.5;
-                            ctx.moveTo(left, yPos);
-                            ctx.lineTo(right, yPos);
-                            ctx.stroke();
-                            ctx.setLineDash([]);
-                            ctx.fillStyle = color;
+                            ctx.beginPath(); ctx.setLineDash([6,4]);
+                            ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+                            ctx.moveTo(left, yp); ctx.lineTo(right, yp); ctx.stroke();
+                            ctx.setLineDash([]); ctx.fillStyle = color;
                             ctx.font = 'bold 10px sans-serif';
-                            ctx.fillText(label, right - 52, yPos - 4);
+                            ctx.fillText(lbl, right - 56, yp - 4);
                             ctx.restore();
                           }}
-
-                          drawLine(alertLine, '#f59e0b', '⚠ Alerte');
-                          drawLine(actionLine, '#ef4444', '🚨 Action');
+                          drawLine(d.alerte, '#f59e0b', '⚠ Alerte');
+                          drawLine(d.action, '#ef4444', '🚨 Action');
                         }}
                       }};
-
                       new Chart(document.getElementById('evolChart'), {{
-                        type: 'line',
-                        plugins: [thresholdPlugin],
+                        type: 'line', plugins: [threshPlugin],
                         data: {{
                           labels: d.dates,
                           datasets: [
-                            {{
-                              label: '🔵 J2 (48h)',
-                              data: d.j2,
-                              borderColor: '#0ea5e9',
-                              backgroundColor: '#0ea5e922',
-                              borderWidth: 2,
-                              pointRadius: 4,
-                              tension: 0.3,
-                              fill: false
-                            }},
-                            {{
-                              label: '🟣 J7 (5 jours)',
-                              data: d.j7,
-                              borderColor: '#8b5cf6',
-                              backgroundColor: '#8b5cf622',
-                              borderWidth: 2,
-                              pointRadius: 4,
-                              tension: 0.3,
-                              fill: false
-                            }}
+                            {{ label: '🔵 J2 (48h)', data: d.j2,
+                               borderColor: '#0ea5e9', backgroundColor: '#0ea5e922',
+                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }},
+                            {{ label: '🟣 J7 (5j)', data: d.j7,
+                               borderColor: '#8b5cf6', backgroundColor: '#8b5cf622',
+                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }}
                           ]
                         }},
                         options: {{
-                          responsive: true,
-                          maintainAspectRatio: false,
+                          responsive: true, maintainAspectRatio: false,
                           interaction: {{ mode: 'index', intersect: false }},
                           plugins: {{
                             legend: {{ position: 'top', labels: {{ font: {{ size: 11 }}, boxWidth: 14 }} }},
                             tooltip: {{
                               callbacks: {{
-                                footer: function(items) {{
+                                footer: items => {{
                                   const v = items[0]?.parsed?.y ?? 0;
-                                  if (v >= actionLine) return '🚨 Seuil ACTION dépassé';
-                                  if (v >= alertLine)  return '⚠️ Seuil ALERTE dépassé';
-                                  return '✅ Conforme';
+                                  return v >= d.action ? '🚨 Seuil ACTION dépassé'
+                                       : v >= d.alerte ? '⚠️ Seuil ALERTE dépassé'
+                                       : '✅ Conforme';
                                 }}
                               }}
                             }}
                           }},
                           scales: {{
                             x: {{ ticks: {{ font: {{ size: 10 }}, maxRotation: 45 }} }},
-                            y: {{
-                              beginAtZero: true,
-                              title: {{ display: true, text: 'UFC/m³', font: {{ size: 10 }} }},
-                              ticks: {{ font: {{ size: 10 }} }}
-                            }}
+                            y: {{ beginAtZero: true,
+                                  title: {{ display: true, text: 'UFC/m³', font: {{ size: 10 }} }},
+                                  ticks: {{ font: {{ size: 10 }} }} }}
                           }}
                         }}
                       }});
@@ -4943,11 +4919,122 @@ elif active == "historique":
                     """
                     st.components.v1.html(evol_html, height=290)
                     st.caption(
-                        f"Seuils : ⚠️ Alerte ≥ {seuil_alerte} UFC/m³ — "
+                        f"Seuils calculés pour ce point : "
+                        f"⚠️ Alerte ≥ {seuil_alerte} UFC/m³ — "
                         f"🚨 Action ≥ {seuil_action} UFC/m³ — "
-                        f"{len(evol_dates)} mesure(s) sur la période")
+                        f"{len(evol_dates)} mesure(s)")
                 else:
                     st.info("Aucune donnée datée pour ce point.")
+
+            st.divider()
+
+            # ── Alertes pondérées ─────────────────────────────────────────────
+            st.markdown(
+                "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:4px'>"
+                "🚨 Alertes pondérées</div>"
+                "<div style='font-size:.72rem;color:#64748b;margin-bottom:10px'>"
+                "Score = criticité du germe (1→5) + dépassement (Alerte +1 / Action +3)</div>",
+                unsafe_allow_html=True)
+
+            alertes_list = []
+            for r in surv_f:
+                germ  = r.get("germ_match", "") or ""
+                st_r  = r.get("status", "ok")
+                ufc   = int(r.get("ufc", 0) or 0)
+                if germ in ("Négatif", "—", "") or ufc == 0:
+                    continue
+                crit  = _get_criticite(germ)
+                if st_r == "ok" and crit < 4:
+                    continue  # seuls les dépassements ou criticité haute sont listés
+                score = crit
+                if st_r == "action":
+                    score += 3
+                    niveau = "ACTION"
+                elif st_r == "alert":
+                    score += 1
+                    niveau = "ALERTE"
+                else:
+                    niveau = "—"
+                if score >= 7:
+                    gravite = "🔴 CRITIQUE"
+                    g_bg    = "#fef2f2"
+                    g_brd   = "#fca5a5"
+                elif score >= 5:
+                    gravite = "🟠 MAJEUR"
+                    g_bg    = "#fff7ed"
+                    g_brd   = "#fed7aa"
+                elif score >= 3:
+                    gravite = "🟡 MODÉRÉ"
+                    g_bg    = "#fefce8"
+                    g_brd   = "#fde68a"
+                else:
+                    gravite = "🟢 LIMITÉ"
+                    g_bg    = "#f0fdf4"
+                    g_brd   = "#bbf7d0"
+                alertes_list.append({
+                    "date":    r.get("date", "—"),
+                    "point":   r.get("prelevement", "—"),
+                    "germ":    germ,
+                    "ufc":     ufc,
+                    "crit":    crit,
+                    "crit_lbl": _crit_label(crit),
+                    "niveau":  niveau,
+                    "score":   score,
+                    "gravite": gravite,
+                    "g_bg":    g_bg,
+                    "g_brd":   g_brd,
+                })
+
+            alertes_list.sort(key=lambda x: -x["score"])
+
+            if not alertes_list:
+                st.success("✅ Aucune alerte pondérée sur la période.")
+            else:
+                st.markdown(
+                    "<div style='display:grid;"
+                    "grid-template-columns:0.8fr 1.5fr 1.8fr 0.6fr 0.7fr 0.6fr 0.5fr 1fr;"
+                    "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Date</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germe</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>UFC</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Criticité</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Niveau</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Score</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Gravité</div>"
+                    "</div>",
+                    unsafe_allow_html=True)
+
+                for ai, a in enumerate(alertes_list[:30]):
+                    row_bg = a["g_bg"] if ai % 2 == 0 else "#ffffff"
+                    st.markdown(
+                        "<div style='display:grid;"
+                        "grid-template-columns:0.8fr 1.5fr 1.8fr 0.6fr 0.7fr 0.6fr 0.5fr 1fr;"
+                        "gap:4px;background:" + row_bg + ";border:1px solid " + a["g_brd"] + ";border-top:none;"
+                        "padding:8px 14px;align-items:center'>"
+                        "<div style='font-size:.75rem;color:#475569'>" + a["date"] + "</div>"
+                        "<div style='font-size:.8rem;font-weight:600;color:#0f172a'>" + a["point"][:20] + "</div>"
+                        "<div style='font-size:.8rem;font-weight:700;color:#1e293b'>🦠 " + a["germ"][:22] + "</div>"
+                        "<div style='font-size:.85rem;font-weight:800;color:#1e40af;text-align:center'>" + str(a["ufc"]) + "</div>"
+                        "<div style='text-align:center'><span style='background:" + _crit_color(a["crit"]) + "22;"
+                        "color:" + _crit_color(a["crit"]) + ";border:1px solid " + _crit_color(a["crit"]) + "55;"
+                        "border-radius:5px;padding:1px 6px;font-size:.72rem;font-weight:700'>"
+                        + a["crit_lbl"] + "</span></div>"
+                        "<div style='font-size:.78rem;font-weight:700;text-align:center;"
+                        "color:" + ("#ef4444" if a["niveau"]=="ACTION" else "#f59e0b" if a["niveau"]=="ALERTE" else "#94a3b8") + "'>"
+                        + a["niveau"] + "</div>"
+                        "<div style='font-size:1.1rem;font-weight:900;text-align:center;color:#1e40af'>" + str(a["score"]) + "</div>"
+                        "<div style='font-size:.85rem;font-weight:700;text-align:center'>" + a["gravite"] + "</div>"
+                        "</div>",
+                        unsafe_allow_html=True)
+
+                st.markdown(
+                    "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+                    "<div style='font-size:.78rem;color:#94a3b8'>"
+                    + str(len(alertes_list)) + " alerte(s)"
+                    + (" — affichage limité aux 30 premières" if len(alertes_list) > 30 else "")
+                    + "</div></div>",
+                    unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 2 : STATS PAR GERME
@@ -4956,28 +5043,31 @@ elif active == "historique":
             from collections import defaultdict
             import json as _json_germs
 
-            germs_stats = defaultdict(lambda: {"count": 0, "ufc_sum": 0, "points": set()})
-            total_pos   = 0
+            germs_stats = defaultdict(lambda: {
+                "count": 0, "ufc_sum": 0, "points": set(), "criticite": 0
+            })
+            total_pos = 0
             for r in surv_f:
                 germ = r.get("germ_match", "") or ""
                 if germ in ("Négatif", "—", "") or int(r.get("ufc", 0) or 0) == 0:
                     continue
                 total_pos += 1
-                germs_stats[germ]["count"]   += 1
-                germs_stats[germ]["ufc_sum"] += int(r.get("ufc", 0) or 0)
+                germs_stats[germ]["count"]    += 1
+                germs_stats[germ]["ufc_sum"]  += int(r.get("ufc", 0) or 0)
                 germs_stats[germ]["points"].add(r.get("prelevement", "—"))
+                if germs_stats[germ]["criticite"] == 0:
+                    germs_stats[germ]["criticite"] = _get_criticite(germ)
 
             if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
             else:
                 sorted_germs = sorted(germs_stats.items(), key=lambda x: -x[1]["count"])
-                palette      = ["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e",
-                                "#06b6d4","#6366f1","#a855f7","#ec4899","#14b8a6"]
+                palette = ["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e",
+                           "#06b6d4","#6366f1","#a855f7","#ec4899","#14b8a6"]
                 g_labels = [g[:28] for g, _ in sorted_germs]
                 g_counts = [d["count"] for _, d in sorted_germs]
                 g_colors = [palette[i % len(palette)] for i in range(len(g_labels))]
 
-                gchart_data = {"labels": g_labels, "counts": g_counts, "colors": g_colors}
                 gchart_html = f"""
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
@@ -4991,7 +5081,7 @@ elif active == "historique":
                 </div>
                 <script>
                 (function(){{
-                  const d = {_json_germs.dumps(gchart_data)};
+                  const d = {_json_germs.dumps({"labels": g_labels, "counts": g_counts, "colors": g_colors})};
                   new Chart(document.getElementById('germDoughnut'), {{
                     type: 'doughnut',
                     data: {{
@@ -4999,14 +5089,9 @@ elif active == "historique":
                       datasets: [{{ data: d.counts, backgroundColor: d.colors, borderWidth: 2 }}]
                     }},
                     options: {{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {{
-                        legend: {{
-                          position: 'bottom',
-                          labels: {{ font: {{ size: 11 }}, boxWidth: 14, padding: 10 }}
-                        }}
-                      }}
+                      responsive: true, maintainAspectRatio: false,
+                      plugins: {{ legend: {{ position: 'bottom',
+                        labels: {{ font: {{ size: 11 }}, boxWidth: 14, padding: 10 }} }} }}
                     }}
                   }});
                 }})();
@@ -5014,13 +5099,16 @@ elif active == "historique":
                 """
                 st.components.v1.html(gchart_html, height=360)
 
+                # Tableau germes avec criticité
                 st.markdown(
-                    "<div style='display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;"
+                    "<div style='display:grid;"
+                    "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
                     "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
                     "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germe</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Cas</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>% positifs</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Moy. UFC</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Criticité</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#fff'>Points touchés</div>"
                     "</div>",
                     unsafe_allow_html=True)
@@ -5030,9 +5118,12 @@ elif active == "historique":
                     avg_ufc = gdata["ufc_sum"] / gdata["count"] if gdata["count"] > 0 else 0
                     pts_str = ", ".join(list(gdata["points"])[:3])
                     bar_w   = int(pct)
+                    crit    = gdata["criticite"]
+                    cc      = _crit_color(crit)
                     row_bg  = "#f8fafc" if gi % 2 == 0 else "#ffffff"
                     st.markdown(
-                        "<div style='display:grid;grid-template-columns:2.5fr 0.7fr 1fr 1fr 2fr;"
+                        "<div style='display:grid;"
+                        "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
                         "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
                         "padding:9px 14px;align-items:center'>"
                         "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>🦠 " + gname + "</div>"
@@ -5041,7 +5132,12 @@ elif active == "historique":
                         "<div style='background:#e2e8f0;border-radius:4px;height:8px;margin-bottom:2px'>"
                         "<div style='background:#ef4444;border-radius:4px;height:8px;width:" + str(bar_w) + "%'></div></div>"
                         "<span style='font-size:.75rem;font-weight:700;color:#ef4444'>" + str(round(pct, 1)) + "%</span></div>"
-                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>" + str(round(avg_ufc, 0)) + "</div>"
+                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>" + str(round(avg_ufc)) + "</div>"
+                        "<div style='text-align:center'>"
+                        + ("<span style='background:" + cc + "22;color:" + cc + ";border:1px solid " + cc + "55;"
+                           "border-radius:5px;padding:1px 7px;font-size:.72rem;font-weight:700'>"
+                           + str(crit) + " – " + _crit_label(crit) + "</span>" if crit > 0 else "<span style='color:#94a3b8'>—</span>")
+                        + "</div>"
                         "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + pts_str + "</div>"
                         "</div>",
                         unsafe_allow_html=True)
@@ -5113,7 +5209,7 @@ elif active == "historique":
                         "<div style='margin-top:10px;background:" + tc + "22;border:1px solid " + tc + "55;"
                         "border-radius:8px;padding:5px'>"
                         "<div style='font-size:.8rem;font-weight:800;color:" + tc + "'>"
-                        + str(round(taux_pos, 0)) + "% positifs</div></div></div>",
+                        + str(round(taux_pos)) + "% positifs</div></div></div>",
                         unsafe_allow_html=True)
 
             st.divider()
@@ -5173,7 +5269,6 @@ elif active == "historique":
                     ic + " " + r["date"] + " — " + r["prelevement"]
                     + " — " + r["germ_match"] + " — " + str(r["ufc"]) + " UFC/m³"
                 ):
-                    # ── Mode édition ──────────────────────────────────────────
                     if st.session_state.get("edit_surv_idx") == real_i:
                         st.markdown("**✏️ Modifier cette entrée**")
                         e1, e2 = st.columns(2)
@@ -5200,14 +5295,14 @@ elif active == "historique":
                             if st.button("✕ Annuler", key=f"es_cancel_{real_i}", use_container_width=True):
                                 st.session_state["edit_surv_idx"] = None
                                 st.rerun()
-
-                    # ── Mode lecture ──────────────────────────────────────────
                     else:
                         c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
+                        crit_r = _get_criticite(r["germ_match"])
                         c1.markdown(
                             "**Germe saisi :** " + r["germ_saisi"]
                             + "\n\n**Correspondance :** " + r["germ_match"]
-                            + " (" + str(r["match_score"]) + ")")
+                            + " (" + str(r["match_score"]) + ")"
+                            + ("\n\n**Criticité :** " + str(crit_r) + " – " + _crit_label(crit_r) if crit_r > 0 else ""))
                         c2.markdown(
                             "**UFC/m³ :** " + str(r["ufc"])
                             + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"])
