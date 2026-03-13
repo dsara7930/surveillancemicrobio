@@ -338,56 +338,81 @@ def _supa_get(key):
         pass
     return None
 
-def load_germs():
-    defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
-    saved = []
-    raw_json = _supa_get('germs')
-    if raw_json:
-        try:
-            saved = json.loads(raw_json)
-        except Exception:
-            saved = []
-    if not saved and os.path.exists(GERMS_FILE):
-        try:
-            with open(GERMS_FILE) as f:
-                saved = json.load(f)
-        except Exception:
-            saved = []
-
-    # Si rien en base → on retourne les défauts tels quels
-    if not saved:
-        return [dict(d) for d in DEFAULT_GERMS], len(DEFAULT_GERMS)
-
-    saved_by_name = {g.get("name", ""): g for g in saved}
-    merged = []
-    new_defaults_added = 0
-
-    for dflt in DEFAULT_GERMS:
-        name = dflt["name"]
-        if name in saved_by_name:
-            # ── Germ existant : on garde TOUT ce qui est sauvegardé ──
-            merged.append(dict(saved_by_name[name]))
-        else:
-            # ── Nouveau germ par défaut absent de la base ──
-            merged.append(dict(dflt))
-            new_defaults_added += 1
-
-    # ── Germes personnalisés (absents de DEFAULT_GERMS) ──
-    for g in saved:
-        name = g.get("name", "")
-        if name and name not in defaults_by_name:
-            merged.append(dict(g))
-
-    return merged, new_defaults_added
-
 def save_germs(germs):
-    js = json.dumps(germs, ensure_ascii=False)
+    # On sauvegarde aussi les noms connus pour différencier
+    # "supprimé intentionnellement" vs "nouveau dans le code"
+    known_default_names = sorted(DEFAULT_GERM_NAMES)
+    payload = {
+        "germs": germs,
+        "known_defaults": known_default_names
+    }
+    js = json.dumps(payload, ensure_ascii=False)
     _supa_upsert('germs', js)
     try:
         with open(GERMS_FILE, "w") as f:
             f.write(js)
     except Exception:
         pass
+
+
+def load_germs():
+    defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
+    saved_germs = []
+    known_defaults = set()  # noms connus lors de la dernière sauvegarde
+
+    raw_json = _supa_get('germs')
+    if raw_json:
+        try:
+            raw = json.loads(raw_json)
+            # Nouveau format : dict avec "germs" et "known_defaults"
+            if isinstance(raw, dict):
+                saved_germs = raw.get("germs", [])
+                known_defaults = set(raw.get("known_defaults", []))
+            # Ancien format : liste simple (rétrocompatibilité)
+            elif isinstance(raw, list):
+                saved_germs = raw
+                known_defaults = set()  # inconnu → comportement sécurisé
+        except Exception:
+            saved_germs = []
+
+    if not saved_germs and os.path.exists(GERMS_FILE):
+        try:
+            with open(GERMS_FILE) as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                saved_germs = raw.get("germs", [])
+                known_defaults = set(raw.get("known_defaults", []))
+            elif isinstance(raw, list):
+                saved_germs = raw
+        except Exception:
+            saved_germs = []
+
+    # Rien en base → on retourne les défauts tels quels
+    if not saved_germs:
+        return [dict(d) for d in DEFAULT_GERMS], len(DEFAULT_GERMS)
+
+    saved_by_name = {g.get("name", ""): g for g in saved_germs}
+    merged = []
+    new_defaults_added = 0
+
+    for dflt in DEFAULT_GERMS:
+        name = dflt["name"]
+        if name in saved_by_name:
+            # Germe existant : on garde la version sauvegardée
+            merged.append(dict(saved_by_name[name]))
+        elif name not in known_defaults:
+            # Genuinement nouveau dans le code (absent de l'ancienne base)
+            merged.append(dict(dflt))
+            new_defaults_added += 1
+        # else : était connu mais absent de saved → intentionnellement supprimé, on skip
+
+    # Germes personnalisés (hors DEFAULT_GERMS)
+    for g in saved_germs:
+        name = g.get("name", "")
+        if name and name not in defaults_by_name:
+            merged.append(dict(g))
+
+    return merged, new_defaults_added
 
 def load_thresholds():
     saved = {}
