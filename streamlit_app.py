@@ -1758,7 +1758,7 @@ if active == "surveillance":
                             with col_val:
                                 if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
                                     st.session_state["_new_prelev_plan_point"] = {
-                                        "x": _px, "y": _py,
+                                        
                                         "label":      selected_point.get("label", ""),
                                         "room_class": selected_point.get("room_class", ""),
                                         "loc_crit":   int(selected_point.get("location_criticality", 1)),
@@ -3461,7 +3461,7 @@ if active == "planning":
         mc5.metric("🔔 En retard", late_all, delta_color="inverse")
 
 
-# ═════════════════════════════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════════════════════
     # ONGLET CHARGE HEBDO
     # ═════════════════════════════════════════════════════════════════════════
     def get_week_start(d):
@@ -3491,16 +3491,12 @@ if active == "planning":
                 ch_cur_idx = _i
                 break
 
-        csel_col1, csel_col2 = st.columns([4, 1])
+        csel_col1 = st.columns([4, 1])
         with csel_col1:
             ch_sel_label = st.selectbox(
                 "Semaine", ch_week_labels, index=ch_cur_idx,
                 label_visibility="collapsed", key="ch_week_sel")
-        with csel_col2:
-            nb_preleveurs = st.number_input(
-                "Nb préleveurs", min_value=1, max_value=20,
-                value=max(1, len(st.session_state.operators)), step=1,
-                key="ch_nb_prev")
+        
 
         ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
         ch_sel_we       = ch_sel_ws + timedelta(days=6)
@@ -3531,7 +3527,7 @@ if active == "planning":
             <div style="color:#fff">
               <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
               <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
-                {nb_jours} jour(s) ouvré(s) · {nb_preleveurs} préleveur(s)</div>
+                {nb_jours} jour(s) ouvré(s) 
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
@@ -3549,8 +3545,8 @@ if active == "planning":
             </div></div>""",
             unsafe_allow_html=True)
 
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("👤 Préleveurs",    nb_preleveurs)
+        m2, m3, m4, m5 = st.columns(5)
+        
         m2.metric("📍 Points actifs", len(st.session_state.points))
         m3.metric("🧪 Prélèv. J0",   len(ch_j0))
         m4.metric("📖 Lectures J2",   len(ch_j2))
