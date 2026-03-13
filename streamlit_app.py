@@ -1718,16 +1718,35 @@ if active == "surveillance":
 
                     with lc_plan:
                         plan_upload_new = st.file_uploader(
-                            "Plan URC (PNG / JPG)",
-                            type=["png", "jpg", "jpeg"],
+                            "Plan URC (PNG / JPG / PDF)",
+                            type=["png", "jpg", "jpeg", "pdf"],
                             key="plan_upload_new_prelev"
                         )
                         if plan_upload_new:
                             import base64 as _b64_np
-                            raw_np = plan_upload_new.read()
-                            b64_np = _b64_np.b64encode(raw_np).decode()
-                            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
-                            st.session_state["_new_prelev_plan_point"] = None
+                            if plan_upload_new.type == "application/pdf":
+                                # Conversion première page PDF → image
+                                try:
+                                    import fitz  # PyMuPDF
+                                    raw_pdf = plan_upload_new.read()
+                                    doc = fitz.open(stream=raw_pdf, filetype="pdf")
+                                    page = doc[0]
+                                    mat = fitz.Matrix(2, 2)  # zoom x2 pour qualité
+                                    pix = page.get_pixmap(matrix=mat)
+                                    img_bytes = pix.tobytes("png")
+                                    b64_np = _b64_np.b64encode(img_bytes).decode()
+                                    st.session_state.map_image = f"data:image/png;base64,{b64_np}"
+                                    st.session_state["_new_prelev_plan_point"] = None
+                                    st.success("✅ PDF converti — première page utilisée comme plan")
+                                except ImportError:
+                                    st.error("❌ PyMuPDF non installé — ajoutez `pymupdf` dans requirements.txt")
+                                except Exception as e:
+                                    st.error(f"❌ Erreur conversion PDF : {e}")
+                            else:
+                                raw_np = plan_upload_new.read()
+                                b64_np = _b64_np.b64encode(raw_np).decode()
+                                st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
+                                st.session_state["_new_prelev_plan_point"] = None
 
                         _cur_pt = st.session_state.get("_new_prelev_plan_point")
 
@@ -1924,177 +1943,6 @@ upd();
                         _mp.update(_np_saved_pt)
             st.session_state["_new_prelev_plan_point"] = None
             st.rerun()
-
-# ── Plan URC : upload + placement point ──────────────────────────────
-with st.expander("🗺️ Localiser sur le plan URC (optionnel)", expanded=False):
-    st.markdown(
-        "<div style='font-size:.75rem;color:#475569;margin-bottom:10px'>"
-        "Uploadez le plan URC une fois, puis placez <b>1 point</b> pour chaque prélèvement. "
-        "Le plan est partagé avec l'onglet <b>Historique → 🗺️ Plan URC</b>.</div>",
-        unsafe_allow_html=True)
-
-    lc_plan, rc_plan = st.columns([1, 2])
-
-    with lc_plan:
-        plan_upload_new = st.file_uploader(
-            "Plan URC (PNG / JPG)",
-            type=["png", "jpg", "jpeg"],
-            key="plan_upload_new_prelev"
-        )
-        if plan_upload_new:
-            import base64 as _b64_np
-            raw_np = plan_upload_new.read()
-            b64_np = _b64_np.b64encode(raw_np).decode()
-            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
-            st.session_state["_new_prelev_plan_point"] = None
-
-        _cur_pt = st.session_state.get("_new_prelev_plan_point")
-
-        if st.session_state.get("map_image"):
-            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
-            if _cur_pt:
-                st.markdown(
-                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
-                    unsafe_allow_html=True)
-            else:
-                st.info("Aucun point placé pour ce prélèvement.")
-
-            st.markdown(
-                "<div style='font-size:.68rem;color:#94a3b8;margin-top:8px;margin-bottom:2px'>"
-                "Position manuelle (fallback) :</div>", unsafe_allow_html=True)
-            _px = st.number_input(
-                "X%", 0.0, 100.0,
-                value=float(_cur_pt["x"]) if _cur_pt else 50.0,
-                step=0.5, format="%.1f",
-                key=f"np_px_{selected_point.get('label','')}")
-            _py = st.number_input(
-                "Y%", 0.0, 100.0,
-                value=float(_cur_pt["y"]) if _cur_pt else 50.0,
-                step=0.5, format="%.1f",
-                key=f"np_py_{selected_point.get('label','')}")
-
-            col_val, col_clr = st.columns(2)
-            with col_val:
-                if st.button("📌 Valider position", key="np_validate_pt", use_container_width=True):
-                    st.session_state["_new_prelev_plan_point"] = {
-                        "x": _px, "y": _py,
-                        "label":      selected_point.get("label", ""),
-                        "room_class": selected_point.get("room_class", ""),
-                        "loc_crit":   int(selected_point.get("location_criticality", 1)),
-                        "survLabel":  None,
-                    }
-                    st.rerun()
-            with col_clr:
-                if st.button("🗑️ Effacer point", key="clear_np_pt", use_container_width=True):
-                    st.session_state["_new_prelev_plan_point"] = None
-                    st.rerun()
-        else:
-            st.markdown(
-                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                "padding:24px;text-align:center;color:#94a3b8;font-size:.72rem'>"
-                "📁 Uploadez d'abord le plan URC</div>",
-                unsafe_allow_html=True)
-
-    with rc_plan:
-        if st.session_state.get("map_image"):
-            _np_img     = st.session_state["map_image"]
-            _np_label   = selected_point.get("label", "Point")
-            _np_point   = st.session_state.get("_new_prelev_plan_point")
-            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
-            _np_lc      = int(selected_point.get("location_criticality", 1))
-            _lc_col_map = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_np_lc), "#3b82f6")
-            _np_rc      = selected_point.get("room_class", "")
-
-            _np_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
-     display:flex;flex-direction:column;overflow:hidden}}
-.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;
-     display:flex;gap:6px;align-items:center;flex-shrink:0}}
-.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;
-      padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
-.btn.active{{background:#2563eb;border-color:#2563eb;color:#fff}}
-#st{{font-size:.62rem;color:#64748b;margin-left:auto;padding-right:4px}}
-.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;
-     align-items:flex-start;justify-content:center}}
-.mi{{position:relative;display:inline-block;margin:8px;
-     box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
-#img{{display:block;max-width:100%;border-radius:4px;user-select:none}}
-.pt{{position:absolute;width:28px;height:28px;border-radius:50%;
-     background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;
-     transform:translate(-50%,-50%);display:flex;align-items:center;
-     justify-content:center;font-size:13px;font-weight:800;color:#fff;
-     box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
-.pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
-.mw.add{{cursor:crosshair}}
-</style></head><body>
-<div class="tb">
-  <button class="btn" id="ab" onclick="tog()">📍 Placer / Déplacer</button>
-  <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
-  <span id="st">—</span>
-</div>
-<div class="mw" id="mw">
-  <div class="mi" id="mi">
-    <img id="img" src="{_np_img}" draggable="false">
-  </div>
-</div>
-<script>
-let add=false;
-let pt={_np_pt_json};
-const lbl="{_np_label}";
-const rc="{_np_rc}";
-const lc={_np_lc};
-
-function upd(){{
-  document.getElementById('st').textContent =
-    pt ? '📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche'
-       : 'Aucun point placé';
-}}
-function render(){{
-  document.querySelectorAll('.pt').forEach(p=>p.remove());
-  if(!pt) return;
-  const d=document.createElement('div');
-  d.className='pt'; d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
-  d.textContent='📍'; d.title=lbl;
-  document.getElementById('mi').appendChild(d);
-  upd();
-}}
-function tog(){{
-  add=!add;
-  document.getElementById('ab').classList.toggle('active',add);
-  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';
-  document.getElementById('mw').classList.toggle('add',add);
-}}
-function clr(){{ pt=null; render(); upd(); }}
-document.getElementById('mi').addEventListener('click',function(e){{
-  if(!add) return;
-  if(e.target.classList.contains('pt')) return;
-  const img=document.getElementById('img');
-  const r=img.getBoundingClientRect();
-  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) return;
-  const x=((e.clientX-r.left)/r.width*100);
-  const y=((e.clientY-r.top)/r.height*100);
-  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
-  render(); tog();
-}});
-const img=document.getElementById('img');
-if(img.complete&&img.naturalWidth>0) render();
-else img.addEventListener('load',render);
-upd();
-</script></body></html>"""
-            st.components.v1.html(_np_html, height=300, scrolling=False)
-            st.caption("💡 Cliquez '📍 Placer / Déplacer', cliquez sur la carte, puis '📌 Valider position' à gauche.")
-        else:
-            st.markdown(
-                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                "padding:60px;text-align:center;color:#94a3b8;font-size:.75rem'>"
-                "🗺️ La carte apparaîtra ici après upload du plan</div>",
-                unsafe_allow_html=True)
-
-st.divider()
 
 # ── Prélèvements actifs ───────────────────────────────────────────────
 for idx, samp in enumerate(st.session_state.prelevements):
@@ -5240,8 +5088,8 @@ elif active == "historique":
  
             # ── Upload plan ──────────────────────────────────────────────────
             plan_up_hist = st.file_uploader(
-                "Plan URC (PNG / JPG) — remplace le plan existant si uploadé",
-                type=["png", "jpg", "jpeg"],
+                "Plan URC (PDF / JPG) — remplace le plan existant si uploadé",
+                type=["pdf", "jpg", "jpeg"],
                 key="hist_plan_upload"
             )
             if plan_up_hist:
