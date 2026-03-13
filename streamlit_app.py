@@ -823,7 +823,6 @@ with st.sidebar:
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
-        ("plan",         "🗺️", "Plan URC"),
         ("historique",   "📋", "Historique"),
         ("parametres",   "⚙️", "Paramètres & Seuils"),
     ]
@@ -1715,54 +1714,236 @@ if active == "surveillance":
                             f"✅ **{sample['label']}** enregistré !\n"
                             f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
                             f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
-                        st.rerun()
+# ── Persiste point carte ─────────────────────────────
+_np_saved_pt = st.session_state.get("_new_prelev_plan_point")
+if _np_saved_pt:
+    if "map_points" not in st.session_state:
+        st.session_state.map_points = []
+    _existing = [p.get("label") for p in st.session_state.map_points]
+    if _np_saved_pt["label"] not in _existing:
+        st.session_state.map_points.append(_np_saved_pt)
+    else:
+        for _mp in st.session_state.map_points:
+            if _mp.get("label") == _np_saved_pt["label"]:
+                _mp.update(_np_saved_pt)
+    st.session_state["_new_prelev_plan_point"] = None
+st.rerun()
 
-        st.divider()
+# ── Plan URC : upload + placement point ──────────────────────────────
+with st.expander("🗺️ Localiser sur le plan URC (optionnel)", expanded=False):
+    st.markdown(
+        "<div style='font-size:.75rem;color:#475569;margin-bottom:10px'>"
+        "Uploadez le plan URC une fois, puis placez <b>1 point</b> pour chaque prélèvement. "
+        "Le plan est partagé avec l'onglet <b>Historique → 🗺️ Plan URC</b>.</div>",
+        unsafe_allow_html=True)
 
-        # ── Prélèvements actifs ───────────────────────────────────────────────
-        for idx, samp in enumerate(st.session_state.prelevements):
-            if samp.get("archived"):
-                continue
-            col_info, col_edit, col_del = st.columns([5, 1, 1])
-            with col_info:
-                loc_c    = int(samp.get("location_criticality", 1))
-                lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
-                room_cl  = samp.get('room_class','') or ''
-                room_badge = (
-                    f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
-                    f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
-                    f"margin-left:4px'>Cl.{room_cl}</span>"
-                    if room_cl else "")
-                _comment_html = (
-                    f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
-                    f"💬 {samp['commentaire']}</div>"
-                    if samp.get('commentaire') else "")
+    lc_plan, rc_plan = st.columns([1, 2])
+
+    with lc_plan:
+        plan_upload_new = st.file_uploader(
+            "Plan URC (PNG / JPG)",
+            type=["png", "jpg", "jpeg"],
+            key="plan_upload_new_prelev"
+        )
+        if plan_upload_new:
+            import base64 as _b64_np
+            raw_np = plan_upload_new.read()
+            b64_np = _b64_np.b64encode(raw_np).decode()
+            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
+            st.session_state["_new_prelev_plan_point"] = None
+
+        _cur_pt = st.session_state.get("_new_prelev_plan_point")
+
+        if st.session_state.get("map_image"):
+            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
+            if _cur_pt:
                 st.markdown(
-                    f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
-                    f"padding:10px 16px;margin-bottom:6px'>"
-                    f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
-                    f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
-                    f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
-                    f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
-                    f"{_comment_html}</div>",
+                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
                     unsafe_allow_html=True)
-            with col_edit:
-                if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
-                    st.session_state["edit_prelev_id"] = samp["id"]
+            else:
+                st.info("Aucun point placé pour ce prélèvement.")
+
+            st.markdown(
+                "<div style='font-size:.68rem;color:#94a3b8;margin-top:8px;margin-bottom:2px'>"
+                "Position manuelle (fallback) :</div>", unsafe_allow_html=True)
+            _px = st.number_input(
+                "X%", 0.0, 100.0,
+                value=float(_cur_pt["x"]) if _cur_pt else 50.0,
+                step=0.5, format="%.1f",
+                key=f"np_px_{selected_point.get('label','')}")
+            _py = st.number_input(
+                "Y%", 0.0, 100.0,
+                value=float(_cur_pt["y"]) if _cur_pt else 50.0,
+                step=0.5, format="%.1f",
+                key=f"np_py_{selected_point.get('label','')}")
+
+            col_val, col_clr = st.columns(2)
+            with col_val:
+                if st.button("📌 Valider position", key="np_validate_pt", use_container_width=True):
+                    st.session_state["_new_prelev_plan_point"] = {
+                        "x": _px, "y": _py,
+                        "label":      selected_point.get("label", ""),
+                        "room_class": selected_point.get("room_class", ""),
+                        "loc_crit":   int(selected_point.get("location_criticality", 1)),
+                        "survLabel":  None,
+                    }
                     st.rerun()
-            with col_del:
-                if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
-                    sid = samp["id"]
-                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
-                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
-                    st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
-                    save_schedules(st.session_state.schedules)
-                    save_prelevements(st.session_state.prelevements)
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    if st.session_state.get("edit_prelev_id") == sid:
-                        st.session_state["edit_prelev_id"] = None
-                    st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
+            with col_clr:
+                if st.button("🗑️ Effacer point", key="clear_np_pt", use_container_width=True):
+                    st.session_state["_new_prelev_plan_point"] = None
                     st.rerun()
+        else:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                "padding:24px;text-align:center;color:#94a3b8;font-size:.72rem'>"
+                "📁 Uploadez d'abord le plan URC</div>",
+                unsafe_allow_html=True)
+
+    with rc_plan:
+        if st.session_state.get("map_image"):
+            _np_img     = st.session_state["map_image"]
+            _np_label   = selected_point.get("label", "Point")
+            _np_point   = st.session_state.get("_new_prelev_plan_point")
+            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
+            _np_lc      = int(selected_point.get("location_criticality", 1))
+            _lc_col_map = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_np_lc), "#3b82f6")
+            _np_rc      = selected_point.get("room_class", "")
+
+            _np_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
+     display:flex;flex-direction:column;overflow:hidden}}
+.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;
+     display:flex;gap:6px;align-items:center;flex-shrink:0}}
+.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;
+      padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
+.btn.active{{background:#2563eb;border-color:#2563eb;color:#fff}}
+#st{{font-size:.62rem;color:#64748b;margin-left:auto;padding-right:4px}}
+.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;
+     align-items:flex-start;justify-content:center}}
+.mi{{position:relative;display:inline-block;margin:8px;
+     box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
+#img{{display:block;max-width:100%;border-radius:4px;user-select:none}}
+.pt{{position:absolute;width:28px;height:28px;border-radius:50%;
+     background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;
+     transform:translate(-50%,-50%);display:flex;align-items:center;
+     justify-content:center;font-size:13px;font-weight:800;color:#fff;
+     box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
+.pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
+.mw.add{{cursor:crosshair}}
+</style></head><body>
+<div class="tb">
+  <button class="btn" id="ab" onclick="tog()">📍 Placer / Déplacer</button>
+  <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
+  <span id="st">—</span>
+</div>
+<div class="mw" id="mw">
+  <div class="mi" id="mi">
+    <img id="img" src="{_np_img}" draggable="false">
+  </div>
+</div>
+<script>
+let add=false;
+let pt={_np_pt_json};
+const lbl="{_np_label}";
+const rc="{_np_rc}";
+const lc={_np_lc};
+
+function upd(){{
+  document.getElementById('st').textContent =
+    pt ? '📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche'
+       : 'Aucun point placé';
+}}
+function render(){{
+  document.querySelectorAll('.pt').forEach(p=>p.remove());
+  if(!pt) return;
+  const d=document.createElement('div');
+  d.className='pt'; d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
+  d.textContent='📍'; d.title=lbl;
+  document.getElementById('mi').appendChild(d);
+  upd();
+}}
+function tog(){{
+  add=!add;
+  document.getElementById('ab').classList.toggle('active',add);
+  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';
+  document.getElementById('mw').classList.toggle('add',add);
+}}
+function clr(){{ pt=null; render(); upd(); }}
+document.getElementById('mi').addEventListener('click',function(e){{
+  if(!add) return;
+  if(e.target.classList.contains('pt')) return;
+  const img=document.getElementById('img');
+  const r=img.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) return;
+  const x=((e.clientX-r.left)/r.width*100);
+  const y=((e.clientY-r.top)/r.height*100);
+  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
+  render(); tog();
+}});
+const img=document.getElementById('img');
+if(img.complete&&img.naturalWidth>0) render();
+else img.addEventListener('load',render);
+upd();
+</script></body></html>"""
+            st.components.v1.html(_np_html, height=300, scrolling=False)
+            st.caption("💡 Cliquez '📍 Placer / Déplacer', cliquez sur la carte, puis '📌 Valider position' à gauche.")
+        else:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                "padding:60px;text-align:center;color:#94a3b8;font-size:.75rem'>"
+                "🗺️ La carte apparaîtra ici après upload du plan</div>",
+                unsafe_allow_html=True)
+
+st.divider()
+
+# ── Prélèvements actifs ───────────────────────────────────────────────
+for idx, samp in enumerate(st.session_state.prelevements):
+    if samp.get("archived"):
+        continue
+    col_info, col_edit, col_del = st.columns([5, 1, 1])
+    with col_info:
+        loc_c    = int(samp.get("location_criticality", 1))
+        lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+        room_cl  = samp.get('room_class','') or ''
+        room_badge = (
+            f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+            f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
+            f"margin-left:4px'>Cl.{room_cl}</span>"
+            if room_cl else "")
+        _comment_html = (
+            f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
+            f"💬 {samp['commentaire']}</div>"
+            if samp.get('commentaire') else "")
+        st.markdown(
+            f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
+            f"padding:10px 16px;margin-bottom:6px'>"
+            f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
+            f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
+            f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
+            f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
+            f"{_comment_html}</div>",
+            unsafe_allow_html=True)
+    with col_edit:
+        if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
+            st.session_state["edit_prelev_id"] = samp["id"]
+            st.rerun()
+    with col_del:
+        if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
+            sid = samp["id"]
+            st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
+            st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+            st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+            save_schedules(st.session_state.schedules)
+            save_prelevements(st.session_state.prelevements)
+            save_pending_identifications(st.session_state.pending_identifications)
+            if st.session_state.get("edit_prelev_id") == sid:
+                st.session_state["edit_prelev_id"] = None
+            st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
+            st.rerun()
 
             if st.session_state.get("edit_prelev_id") == samp["id"]:
                 with st.container():
@@ -2371,10 +2552,20 @@ if active == "surveillance":
                                       int(gobj.get('dissemination',1)))
                                 scored_germs.append({"name": vg["germ"], "score": gs, "ufc": vg["ufc"], "obj": gobj})
 
+                        # ────────────────────────────────────────────────────────────────────────────
+# PATCH 1a : L'aperçu score (section "if valid_germs:")
+# CHERCHER EXACTEMENT :
+#     preview_rows = "".join(
+#         f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
+# ET REMPLACER tout le bloc "if scored_germs:" par :
+# ────────────────────────────────────────────────────────────────────────────
+ 
+# PATCH_1A = 
                         if scored_germs:
                             worst = max(scored_germs, key=lambda x: x["score"])
                             ts_prev = loc_crit * worst["score"]
                             st_prev, _, sc_prev = _evaluate_score(ts_prev)
+                            ufc_total_prev = sum(s["ufc"] for s in scored_germs)
 
                             preview_rows = "".join(
                                 f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
@@ -2385,34 +2576,41 @@ if active == "surveillance":
                                 for s in scored_germs)
 
                             st.markdown(f"""
-                            <div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;
-                            border-radius:8px;padding:10px 14px;margin-top:8px">
-                              <div style="font-size:.6rem;color:#475569;text-transform:uppercase;
-                              font-weight:700;margin-bottom:6px">Aperçu score — germe le plus critique 👑</div>
-                              <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
-                                <tr style="border-bottom:1px solid #e2e8f0">
-                                  <th style="padding:2px 8px;text-align:left;color:#94a3b8">Germe</th>
-                                  <th style="padding:2px 8px;text-align:center;color:#94a3b8">UFC</th>
-                                  <th style="padding:2px 8px;text-align:center;color:#94a3b8">Score germe</th>
-                                </tr>
-                                {preview_rows}
-                              </table>
-                              <div style="display:flex;align-items:center;gap:12px">
-                                <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
-                                <div style="font-size:.72rem;color:#475569">
-                                  Lieu {loc_crit} × Germe le + critique {worst['score']}<br>
-                                  <span style="font-weight:700;color:{sc_prev}">
-                                    {'🚨 ACTION' if st_prev=='action' else '⚠️ ALERTE' if st_prev=='alert' else '✅ Conforme'}
-                                  </span>
+                                <div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;
+                                border-radius:8px;padding:10px 14px;margin-top:8px">
+                                <div style="font-size:.6rem;color:#475569;text-transform:uppercase;
+                                font-weight:700;margin-bottom:6px">Aperçu score — germe le plus critique 👑</div>
+                                <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
+                                    <tr style="border-bottom:1px solid #e2e8f0">
+                                        <th style="padding:2px 8px;text-align:left;color:#94a3b8">Germe</th>
+                                        <th style="padding:2px 8px;text-align:center;color:#94a3b8">UFC</th>
+                                        <th style="padding:2px 8px;text-align:center;color:#94a3b8">Score germe</th>
+                                    </tr>
+                                    {preview_rows}
+                                    <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
+                                        <td style="padding:4px 8px;font-weight:800;color:#166534">Σ UFC TOTAL</td>
+                                        <td style="padding:4px 8px;text-align:center;font-weight:900;
+                                        color:#166534;font-size:.85rem">{ufc_total_prev}</td>
+                                        <td style="padding:4px 8px;text-align:center;font-size:.65rem;
+                                        color:#64748b">somme des germes</td>
+                                    </tr>
+                                </table>
+                                <div style="display:flex;align-items:center;gap:12px">
+                                    <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
+                                    <div style="font-size:.72rem;color:#475569">
+                                        Lieu {loc_crit} × Germe le + critique {worst['score']}<br>
+                                        <span style="font-weight:700;color:{sc_prev}">
+                                            {'🚨 ACTION' if st_prev=='action' else '⚠️ ALERTE' if st_prev=='alert' else '✅ Conforme'}
+                                        </span>
+                                    </div>
                                 </div>
-                              </div>
-                            </div>""", unsafe_allow_html=True)
+                                </div>""", unsafe_allow_html=True)
 
-                    ic1, ic2 = st.columns([3, 1])
-                    with ic1:
-                        remarque = st.text_area("Remarque", height=60, key=f"rem_id_{_key}")
-                    with ic2:
-                        date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{_key}")
+                        ic1, ic2 = st.columns([3, 1])
+                        with ic1:
+                            remarque = st.text_area("Remarque", height=60, key=f"rem_id_{_key}")
+                        with ic2:
+                            date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{_key}")
 
                     idc1, idc2, idc3 = st.columns([2, 2, 1])
                     with idc1:
@@ -2446,6 +2644,7 @@ if active == "surveillance":
                                     worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
                                     total_sc    = loc_crit * worst_entry["germ_score"]
                                     status, status_lbl, status_col = _evaluate_score(total_sc)
+                                    ufc_total = sum(e["ufc"] for e in scored_entries)
 
                                     triggered_by = None
                                     if status in ("alert", "action"):
@@ -2477,6 +2676,7 @@ if active == "surveillance":
                                         "germ_match":         worst_entry["germ_match"],
                                         "match_score":        worst_entry["match_score"],
                                         "ufc":                worst_entry["ufc"],
+                                        "ufc_total":          ufc_total,
                                         "germ_score":         worst_entry["germ_score"],
                                         # Multi-germes
                                         "germs_detail":       germs_detail,
@@ -2527,9 +2727,9 @@ if active == "surveillance":
                                             f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
                                         st.success(
                                             f"✅ {germs_summary} — **Conforme** "
-                                            f"(score {total_sc} = lieu {loc_crit} × germe le + critique {worst_entry['germ_score']})")
+                                            f"(score {total_sc} = lieu {loc_crit} × germe le + critique {worst_entry['germ_score']}) "
+                                            f"| UFC total : **{ufc_total}**")
                                     st.rerun()
-
                     with idc2:
                         if st.button("↩️ Corriger la lecture", use_container_width=True, key=f"cancel_id_{_key}"):
                             for _e in _entries:
@@ -2599,7 +2799,7 @@ if active == "surveillance":
                   </div>
                 </div>""", unsafe_allow_html=True)
     # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET ÉTIQUETTES — tout le contenu est DANS with tab_etiq
+    # ONGLET ÉTIQUETTES — format 45×32 mm, 4 colonnes, planche A4
     # ══════════════════════════════════════════════════════════════════════════
     with tab_etiq:
         import io as _io
@@ -2641,7 +2841,8 @@ if active == "surveillance":
 
             filtered = all_prevs
             if sel_dates:
-                filtered = [p for p in filtered if p.get("date") and datetime.fromisoformat(p["date"]).date() in sel_dates]
+                filtered = [p for p in filtered
+                            if p.get("date") and datetime.fromisoformat(p["date"]).date() in sel_dates]
             if sel_points:
                 filtered = [p for p in filtered if p.get("label") in sel_points]
             if sel_opers:
@@ -2655,15 +2856,17 @@ if active == "surveillance":
                 st.markdown(
                     f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
                     f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;margin-bottom:8px'>"
-                    f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer</div>",
+                    f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer "
+                    f"— format 45×32 mm · 4 colonnes · planche A4</div>",
                     unsafe_allow_html=True)
 
+                # ── Prévisualisation HTML (format 45×32 mm) ──────────────────
                 st.markdown("#### 👁️ Prévisualisation")
 
                 def _preview_card(p: dict) -> str:
-                    risk   = str(p.get("risk_level", ""))
-                    rcol   = _RISK_COLORS_ETQ.get(risk, "#6366f1")
-                    label  = p.get("label", "—")
+                    risk  = str(p.get("risk_level", ""))
+                    rcol  = _RISK_COLORS_ETQ.get(risk, "#6366f1")
+                    label = p.get("label", "—")
                     date_s = ""
                     if p.get("date"):
                         try:    date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
@@ -2673,47 +2876,49 @@ if active == "surveillance":
                         iso = p.get("num_isolateur", "—") or "—"
                         pst = p.get("poste", "—") or "—"
                         classe_a_html = (
-                            f"<div style='font-size:7pt;color:#854d0e;font-weight:700;"
-                            f"background:#fef9c3;border-radius:3px;padding:2px 5px;"
-                            f"margin-bottom:4px;white-space:nowrap;overflow:hidden;"
+                            f"<div style='font-size:5.5pt;color:#854d0e;font-weight:700;"
+                            f"background:#fef9c3;border-radius:2px;padding:1px 4px;"
+                            f"margin-bottom:3px;white-space:nowrap;overflow:hidden;"
                             f"text-overflow:ellipsis'>"
-                            f"🔬 ISO {iso} · {pst}</div>")
+                            f"ISO {iso} · {pst}</div>")
                     risk_band = (
-                        f"<div style='position:absolute;top:0;right:0;bottom:0;width:7px;"
-                        f"background:{rcol};border-radius:0 6px 6px 0'>"
-                        f"<div style='writing-mode:vertical-rl;font-size:5.5pt;font-weight:900;"
-                        f"color:#fff;padding:4px 0;text-align:center;height:100%'>"
+                        f"<div style='position:absolute;top:0;right:0;bottom:0;width:6px;"
+                        f"background:{rcol};border-radius:0 5px 5px 0'>"
+                        f"<div style='writing-mode:vertical-rl;font-size:4.5pt;font-weight:900;"
+                        f"color:#fff;padding:3px 0;text-align:center;height:100%'>"
                         f"{'Nv.' + risk if risk else ''}</div></div>")
                     return (
-                        f"<div style='position:relative;width:6cm;height:4.5cm;"
-                        f"border:1.5px solid {rcol};border-radius:8px;"
-                        f"padding:8px 14px 6px 8px;box-sizing:border-box;"
+                        f"<div style='position:relative;width:4.5cm;height:3.2cm;"
+                        f"border:1.5px solid {rcol};border-radius:5px;"
+                        f"padding:5px 11px 4px 6px;box-sizing:border-box;"
                         f"background:#fff;font-family:Arial,Helvetica,sans-serif;"
                         f"display:flex;flex-direction:column;overflow:hidden;"
-                        f"box-shadow:0 2px 8px rgba(0,0,0,.08)'>"
+                        f"box-shadow:0 1px 6px rgba(0,0,0,.08)'>"
                         f"{risk_band}"
-                        f"<div style='font-size:11pt;font-weight:900;color:#0f172a;"
-                        f"border-bottom:1.5px solid {rcol}33;padding-bottom:4px;margin-bottom:4px;"
+                        f"<div style='font-size:7.5pt;font-weight:900;color:#0f172a;"
+                        f"border-bottom:1px solid {rcol}33;padding-bottom:3px;margin-bottom:3px;"
                         f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                        f"max-width:calc(6cm - 24px)'>{label}</div>"
+                        f"max-width:calc(4.5cm - 20px)'>{label}</div>"
                         f"{classe_a_html}"
-                        f"<div style='display:flex;align-items:center;gap:5px;margin-bottom:4px'>"
-                        f"<span style='font-size:8pt;color:#64748b;font-weight:600;min-width:44px'>📅 Date</span>"
-                        f"<span style='font-size:10pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
-                        f"<div style='display:flex;align-items:center;gap:5px'>"
-                        f"<span style='font-size:8pt;color:#64748b;font-weight:600'>👤 Préleveur :</span></div>"
-                        f"<div style='margin-top:auto;font-size:6.5pt;color:#94a3b8;"
-                        f"text-align:right;padding-top:4px'>URC — MicroSurveillance</div>"
+                        f"<div style='display:flex;align-items:center;gap:4px;margin-bottom:2px'>"
+                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600;min-width:36px'>📅 Date</span>"
+                        f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
+                        f"<div style='display:flex;align-items:center;gap:4px'>"
+                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600'>👤 Préleveur :</span></div>"
+                        f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
+                        f"text-align:right;padding-top:2px'>URC — MicroSurveillance</div>"
                         f"</div>")
 
-                preview_max = min(n_sel, 6)
-                p_cols = st.columns(3)
+                preview_max = min(n_sel, 8)
+                p_cols = st.columns(4)
                 for idx, p in enumerate(filtered[:preview_max]):
-                    with p_cols[idx % 3]:
+                    with p_cols[idx % 4]:
                         st.markdown(_preview_card(p), unsafe_allow_html=True)
-                        st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
+                        st.markdown("<div style='margin-bottom:6px'></div>", unsafe_allow_html=True)
                 if n_sel > preview_max:
-                    st.caption(f"Prévisualisation limitée aux {preview_max} premières — toutes les {n_sel} figureront dans le PDF.")
+                    st.caption(
+                        f"Prévisualisation limitée aux {preview_max} premières — "
+                        f"toutes les {n_sel} figureront dans le PDF.")
 
                 st.markdown("---")
                 if st.button(
@@ -2724,119 +2929,162 @@ if active == "surveillance":
                         from reportlab.lib.units     import cm as rl_cm
                         from reportlab.lib           import colors as rlc
                         from reportlab.platypus      import (SimpleDocTemplate, Table,
-                                                              TableStyle, Paragraph, HRFlowable)
+                                                              TableStyle, Paragraph,
+                                                              HRFlowable)
                         from reportlab.lib.styles    import ParagraphStyle
                         from reportlab.lib.enums     import TA_RIGHT
 
-                        W_ETQ  = 6    * rl_cm
-                        H_ETQ  = 4.5  * rl_cm
-                        N_COLS = 3
-                        GAP    = 0.4  * rl_cm
-                        MARGIN = 0.8  * rl_cm
+                        # ── Dimensions 45×32 mm, 4 colonnes ─────────────────
+                        W_ETQ  = 4.5  * rl_cm
+                        H_ETQ  = 3.2  * rl_cm
+                        N_COLS = 4
+                        GAP    = 0.25 * rl_cm
+                        MARGIN = 0.7  * rl_cm
 
                         buf = _io.BytesIO()
                         doc = SimpleDocTemplate(
                             buf, pagesize=A4,
                             leftMargin=MARGIN, rightMargin=MARGIN,
-                            topMargin=MARGIN, bottomMargin=MARGIN,
+                            topMargin=MARGIN,  bottomMargin=MARGIN,
                             title=f"Étiquettes {_today_etiq.strftime('%d/%m/%Y')}")
 
-                        RISK_RL   = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold", fontSize=11, leading=14, spaceAfter=4)
-                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",      fontSize=8,  leading=9,  textColor=rlc.HexColor("#64748b"))
-                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold", fontSize=10, leading=12, textColor=rlc.HexColor("#0f172a"))
-                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold", fontSize=12, leading=14, textColor=rlc.HexColor("#1e40af"))
-                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",      fontSize=6.5,leading=8,  textColor=rlc.HexColor("#94a3b8"), alignment=TA_RIGHT)
-                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold", fontSize=7.5,leading=9,  textColor=rlc.HexColor("#854d0e"),  backColor=rlc.HexColor("#fef9c3"), spaceAfter=3)
-                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold", fontSize=9,  textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                        RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
+
+                        # ── Styles adaptés au petit format ───────────────────
+                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold",
+                                                   fontSize=7.5,  leading=9,   spaceAfter=2,
+                                                   textColor=rlc.HexColor("#0f172a"))
+                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",
+                                                   fontSize=5.5,  leading=7,
+                                                   textColor=rlc.HexColor("#64748b"))
+                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold",
+                                                   fontSize=7.5,  leading=9,
+                                                   textColor=rlc.HexColor("#0f172a"))
+                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold",
+                                                   fontSize=9,    leading=10,
+                                                   textColor=rlc.HexColor("#1e40af"))
+                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",
+                                                   fontSize=5,    leading=6,
+                                                   textColor=rlc.HexColor("#94a3b8"),
+                                                   alignment=TA_RIGHT)
+                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold",
+                                                   fontSize=6,    leading=7,
+                                                   textColor=rlc.HexColor("#854d0e"),
+                                                   backColor=rlc.HexColor("#fef9c3"),
+                                                   spaceAfter=2)
+                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold",
+                                                   fontSize=8,
+                                                   textColor=rlc.HexColor("#1e40af"),
+                                                   spaceAfter=5)
 
                         def _build_cell(pd):
-                            rv = str(pd.get("risk_level", ""))
-                            rc = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                            lv = pd.get("label", "—")
-                            dv = ""
+                            rv  = str(pd.get("risk_level", ""))
+                            rc  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+                            lv  = pd.get("label", "—")
+                            dv  = ""
                             if pd.get("date"):
                                 try:    dv = datetime.fromisoformat(pd["date"]).strftime("%d/%m/%Y")
                                 except: dv = str(pd["date"])
+
+                            # Largeur utile (intérieur moins bande risque)
+                            W_INNER = W_ETQ - 0.55 * rl_cm
+
                             classea_rows = []
                             if pd.get("room_class") == "A":
                                 iso = pd.get("num_isolateur", "—") or "—"
                                 pst = pd.get("poste", "—") or "—"
-                                classea_rows = [[Paragraph(f"🔬 Isolateur {iso}  ·  {pst}", s_classea)]]
+                                classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
+
                             inner = Table([
                                 [Paragraph(lv, s_titre)],
-                                [HRFlowable(width=W_ETQ - 1.0*rl_cm, thickness=0.8, color=rc, spaceAfter=3)],
+                                [HRFlowable(width=W_INNER, thickness=0.6,
+                                            color=rc, spaceAfter=2)],
                                 *classea_rows,
-                                [Paragraph("📅 Date prélèvement", s_lbl)],
+                                [Paragraph("📅 Date", s_lbl)],
                                 [Paragraph(dv or "—", s_date)],
                                 [Paragraph("👤 Préleveur :", s_lbl)],
                                 [Paragraph("", s_val)],
                                 [Paragraph("URC — MicroSurveillance", s_logo)],
-                            ], colWidths=[W_ETQ - 1.0*rl_cm])
+                            ], colWidths=[W_INNER])
+
                             inner.setStyle(TableStyle([
-                                ("LEFTPADDING",   (0,0),(-1,-1), 0),
-                                ("RIGHTPADDING",  (0,0),(-1,-1), 0),
-                                ("TOPPADDING",    (0,0),(-1,-1), 0),
-                                ("BOTTOMPADDING", (0,0),(-1,-1), 2),
-                                ("TOPPADDING",    (0,-1),(0,-1), 6),
+                                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                                ("TOPPADDING",    (0,-1), ( 0, -1), 4),
                             ]))
-                            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+
+                            outer = Table([[inner]], colWidths=[W_ETQ],
+                                          rowHeights=[H_ETQ])
                             outer.setStyle(TableStyle([
-                                ("BOX",            (0,0),(0,0), 1.5, rc),
-                                ("ROUNDEDCORNERS", (0,0),(0,0), [6]),
-                                ("LINEAFTER",      (0,0),(0,0), 7,  rc),
-                                ("LEFTPADDING",    (0,0),(0,0), 7),
-                                ("RIGHTPADDING",   (0,0),(0,0), 14),
-                                ("TOPPADDING",     (0,0),(0,0), 7),
-                                ("BOTTOMPADDING",  (0,0),(0,0), 5),
-                                ("VALIGN",         (0,0),(0,0), "TOP"),
-                                ("BACKGROUND",     (0,0),(0,0), rlc.white),
+                                ("BOX",            (0, 0), (0, 0), 1.2, rc),
+                                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc),
+                                ("LEFTPADDING",    (0, 0), (0, 0), 5),
+                                ("RIGHTPADDING",   (0, 0), (0, 0), 10),
+                                ("TOPPADDING",     (0, 0), (0, 0), 5),
+                                ("BOTTOMPADDING",  (0, 0), (0, 0), 4),
+                                ("VALIGN",         (0, 0), (0, 0), "TOP"),
+                                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
                             ]))
                             return outer
 
+                        # ── Construction planche ─────────────────────────────
                         rows, row_buf = [], []
                         for p_item in filtered:
                             row_buf.append(_build_cell(p_item))
                             if len(row_buf) == N_COLS:
-                                rows.append(row_buf); row_buf = []
+                                rows.append(row_buf)
+                                row_buf = []
                         if row_buf:
-                            while len(row_buf) < N_COLS: row_buf.append("")
+                            while len(row_buf) < N_COLS:
+                                row_buf.append("")
                             rows.append(row_buf)
 
-                        main_tbl = Table(rows, colWidths=[W_ETQ]*N_COLS, rowHeights=[H_ETQ]*len(rows))
+                        main_tbl = Table(
+                            rows,
+                            colWidths=[W_ETQ] * N_COLS,
+                            rowHeights=[H_ETQ] * len(rows))
                         main_tbl.setStyle(TableStyle([
-                            ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
-                            ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
-                            ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
-                            ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
-                            ("VALIGN",        (0,0),(-1,-1), "TOP"),
+                            ("LEFTPADDING",   (0, 0), (-1, -1), GAP / 2),
+                            ("RIGHTPADDING",  (0, 0), (-1, -1), GAP / 2),
+                            ("TOPPADDING",    (0, 0), (-1, -1), GAP / 2),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), GAP / 2),
+                            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
                         ]))
 
                         doc.build([
                             Paragraph(
-                                f"Étiquettes prélèvements — Imprimé le {_today_etiq.strftime('%d/%m/%Y')} — "
-                                f"{n_sel} étiquette{'s' if n_sel > 1 else ''}",
+                                f"Étiquettes prélèvements — {_today_etiq.strftime('%d/%m/%Y')} — "
+                                f"{n_sel} étiquette{'s' if n_sel > 1 else ''} — 45×32 mm · 4 col.",
                                 s_phdr),
-                            main_tbl
+                            main_tbl,
                         ])
                         buf.seek(0)
 
                         fname = f"etiquettes_{_today_etiq.strftime('%Y%m%d')}.pdf"
                         st.download_button(
                             label=f"⬇️ Télécharger {fname}",
-                            data=buf.getvalue(), file_name=fname,
+                            data=buf.getvalue(),
+                            file_name=fname,
                             mime="application/pdf",
-                            use_container_width=True, key="etiq_dl_btn")
+                            use_container_width=True,
+                            key="etiq_dl_btn")
                         st.markdown(
-                            f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
-                            f"padding:10px 14px;margin-top:6px'>"
-                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>✅ PDF généré avec succès</div>"
+                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                            f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
+                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
+                            f"✅ PDF généré avec succès</div>"
                             f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
-                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · {N_COLS} colonnes · Format A4 · 6×4.5 cm</div></div>",
+                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
+                            f"4 colonnes · Format A4 · 45×32 mm</div></div>",
                             unsafe_allow_html=True)
 
                     except ImportError:
-                        st.error("❌ **ReportLab** non installé.\n\nAjoutez `reportlab` dans **requirements.txt**.")
+                        st.error(
+                            "❌ **ReportLab** non installé.\n\n"
+                            "Ajoutez `reportlab` dans **requirements.txt**.")
                     except Exception as _e:
                         st.error(f"Erreur génération PDF : {_e}")
                         import traceback; st.code(traceback.format_exc())
@@ -4245,7 +4493,7 @@ elif active == "plan":
             for r in surv_points
         )
 
-        map_html = f"""<!DOCTYPE html>
+        map_html = f'''<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -4502,7 +4750,6 @@ function clearAll() {{
   renderPoints();
 }}
 
-// Clic sur la carte pour placer un point
 document.getElementById('mapInner').addEventListener('click', function(e) {{
   if (!addMode) return;
   if (e.target.classList.contains('point')) return;
@@ -4519,7 +4766,6 @@ document.getElementById('mapInner').addEventListener('click', function(e) {{
   toggleAdd();
 }});
 
-// Tooltip suit la souris
 document.addEventListener('mousemove', function(e) {{
   const t = document.getElementById('tooltip');
   if (t.classList.contains('visible')) {{
@@ -4528,12 +4774,11 @@ document.addEventListener('mousemove', function(e) {{
   }}
 }});
 
-// Init
 const img = document.getElementById('planImg');
 if (img.complete && img.naturalWidth > 0) renderPoints();
 else img.addEventListener('load', renderPoints);
 </script>
-</body></html>"""
+</body></html>'''
 
         st.components.v1.html(map_html, height=720, scrolling=False)
 
@@ -4653,13 +4898,14 @@ elif active == "historique":
         c4.metric("🚨 Actions",   actions)
         st.divider()
 
-        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
+        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste, hist_tab_plan = st.tabs([
             "📍 Stats par point",
             "🦠 Stats par germe",
             "👤 Répartition par préleveur",
             "📋 Liste des entrées",
+            "🗺️ Plan URC",
         ])
-
+        
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
@@ -5147,6 +5393,310 @@ elif active == "historique":
                     "<div style='font-size:.78rem;color:#94a3b8'>"
                     + str(len(germs_stats)) + " germe(s) distinct(s) — " + str(total_pos) + " positifs"
                     "</div></div>",
+                    unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # ONGLET 5 : PLAN URC — carte récapitulative + filtres + sous-menus
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_plan:
+            import json as _json_plan
+ 
+            st.markdown(
+                "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
+                "🗺️ Carte récapitulative de tous les points de prélèvement</div>",
+                unsafe_allow_html=True)
+ 
+            # ── Upload plan ──────────────────────────────────────────────────
+            plan_up_hist = st.file_uploader(
+                "Plan URC (PNG / JPG) — remplace le plan existant si uploadé",
+                type=["png", "jpg", "jpeg"],
+                key="hist_plan_upload"
+            )
+            if plan_up_hist:
+                import base64 as _b64h
+                raw_h = plan_up_hist.read()
+                b64_h = _b64h.b64encode(raw_h).decode()
+                st.session_state.map_image = f"data:{plan_up_hist.type};base64,{b64_h}"
+ 
+            # ── Filtres ───────────────────────────────────────────────────────
+            st.markdown(
+                "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
+                "padding:12px 16px;margin:8px 0 4px 0'>"
+                "<div style='font-size:.78rem;font-weight:700;color:#0369a1;margin-bottom:8px'>"
+                "🔍 Filtres applicables sur la carte et les tableaux</div>",
+                unsafe_allow_html=True)
+ 
+            hf1, hf2, hf3 = st.columns(3)
+            with hf1:
+                all_germs_plan = sorted(set(
+                    r.get("germ_match", "") for r in surv_f
+                    if r.get("germ_match") not in ("", "Négatif", None, "—")
+                ))
+                filtre_germ_plan = st.multiselect(
+                    "🦠 Germe", all_germs_plan, key="hist_plan_filtre_germ")
+            with hf2:
+                ufc_min_plan = st.number_input("UFC min", min_value=0, value=0,
+                                               step=1, key="hist_plan_ufc_min")
+                ufc_max_plan = st.number_input("UFC max", min_value=0, value=9999,
+                                               step=1, key="hist_plan_ufc_max")
+            with hf3:
+                all_classes_plan = sorted(set(
+                    r.get("room_class", "") for r in surv_f if r.get("room_class")
+                ))
+                filtre_classe_plan = st.multiselect(
+                    "🏷️ Classe GMP", all_classes_plan, key="hist_plan_filtre_classe")
+            st.markdown("</div>", unsafe_allow_html=True)
+ 
+            # ── Application filtres ───────────────────────────────────────────
+            surv_plan = list(surv_f)
+            if filtre_germ_plan:
+                surv_plan = [r for r in surv_plan if r.get("germ_match") in filtre_germ_plan]
+            if ufc_min_plan > 0:
+                surv_plan = [r for r in surv_plan if int(r.get("ufc", 0) or 0) >= ufc_min_plan]
+            if ufc_max_plan < 9999:
+                surv_plan = [r for r in surv_plan if int(r.get("ufc", 0) or 0) <= ufc_max_plan]
+            if filtre_classe_plan:
+                surv_plan = [r for r in surv_plan if r.get("room_class", "") in filtre_classe_plan]
+ 
+            # ── Points carte avec positions (depuis map_points) ───────────────
+            map_pts_raw = st.session_state.get("map_points", [])
+ 
+            # Données surveillance pour la carte (pire statut par point)
+            surv_by_pt = {}
+            for r in surv_plan:
+                lbl = r.get("prelevement", "")
+                if not lbl:
+                    continue
+                rank = {"action": 3, "alert": 2, "ok": 1}
+                if lbl not in surv_by_pt or rank.get(r.get("status","ok"),0) > rank.get(surv_by_pt[lbl].get("status","ok"),0):
+                    surv_by_pt[lbl] = r
+ 
+            surv_json_plan = _json_plan.dumps([
+                {
+                    "label":     r.get("prelevement", ""),
+                    "germ":      r.get("germ_match", ""),
+                    "ufc":       r.get("ufc", 0),
+                    "ufc_total": r.get("ufc_total", r.get("ufc", 0)),
+                    "date":      r.get("date", ""),
+                    "status":    r.get("status", "ok"),
+                    "room_class":r.get("room_class", ""),
+                    "score":     r.get("total_score", 0),
+                }
+                for r in surv_by_pt.values()
+            ], ensure_ascii=False)
+            pts_pos_json = _json_plan.dumps(map_pts_raw, ensure_ascii=False)
+ 
+            if not st.session_state.get("map_image"):
+                st.markdown("""
+                <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;
+                            padding:48px 32px;text-align:center;color:#64748b;margin-top:8px">
+                  <div style="font-size:3rem;margin-bottom:8px">🗺️</div>
+                  <div style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:4px">Aucun plan chargé</div>
+                  <div style="font-size:.82rem">
+                    Uploadez un plan ci-dessus <strong>ou</strong>
+                    placez des points via <strong>Surveillance → Nouveau prélèvement</strong>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                # ── Carte principale ──────────────────────────────────────────
+                plan_hist_html = f"""<!DOCTYPE html>
+        <html><head><meta charset="utf-8"><style>
+        *{{box-sizing:border-box;margin:0;padding:0}}
+        body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
+            display:flex;flex-direction:column;overflow:hidden}}
+        .tb{{padding:8px 14px;background:#fff;border-bottom:2px solid #e2e8f0;
+            display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
+        .leg{{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:.62rem;color:#64748b}}
+        .ld{{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:3px}}
+        .mw{{flex:1;overflow:auto;background:#1e293b;display:flex;align-items:flex-start;justify-content:center}}
+        .mi{{position:relative;display:inline-block;margin:10px;
+            box-shadow:0 6px 28px rgba(0,0,0,.5);border-radius:4px}}
+        #pi{{display:block;max-width:100%;border-radius:4px;user-select:none}}
+        .pt{{position:absolute;width:30px;height:30px;border-radius:50%;
+            border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);
+            display:flex;align-items:center;justify-content:center;
+            font-size:10px;font-weight:800;color:#fff;
+            box-shadow:0 2px 12px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
+        .pt:hover{{transform:translate(-50%,-50%) scale(1.5)}}
+        .pt.ok{{background:#22c55e}}.pt.alert{{background:#f59e0b}}
+        .pt.action{{background:#ef4444}}.pt.none{{background:#475569}}
+        .tip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;
+            padding:10px 14px;font-size:.72rem;pointer-events:none;z-index:9999;
+            display:none;min-width:240px;box-shadow:0 4px 20px rgba(0,0,0,.15);line-height:1.7}}
+        .tip.v{{display:block}}
+        .tip-ttl{{font-weight:800;font-size:.82rem;color:#1e293b;margin-bottom:5px;
+                border-bottom:1px solid #f1f5f9;padding-bottom:4px}}
+        .tip-r{{color:#475569}}.tip-r b{{color:#1e293b}}
+        .ctr{{font-size:.72rem;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;
+            border-radius:6px;padding:4px 10px;font-weight:600}}
+        </style></head><body>
+        <div class="tb">
+        <span style="font-size:.78rem;font-weight:700;color:#1e40af">🗺️ Plan URC — Tous les points</span>
+        <span class="ctr" id="ctr">0 point(s)</span>
+        <div class="leg">
+            <span><span class="ld" style="background:#475569"></span>Sans résultat</span>
+            <span><span class="ld" style="background:#22c55e"></span>Conforme</span>
+            <span><span class="ld" style="background:#f59e0b"></span>Alerte</span>
+            <span><span class="ld" style="background:#ef4444"></span>Action</span>
+        </div>
+        </div>
+        <div class="mw"><div class="mi" id="mi">
+        <img id="pi" src="{st.session_state.map_image}" draggable="false">
+        </div></div>
+        <div id="tip" class="tip"></div>
+        <script>
+        const pts={pts_pos_json};
+        const surv={surv_json_plan};
+        function gS(lbl){{return surv.find(s=>s.label===lbl);}}
+        function render(){{
+        document.querySelectorAll('.pt').forEach(p=>p.remove());
+        const mi=document.getElementById('mi');
+        pts.forEach((pt,i)=>{{
+            const s=gS(pt.label);
+            const st_=s?s.status:'none';
+            const d=document.createElement('div');
+            d.className='pt '+st_;
+            d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
+            d.textContent=i+1; d.title=pt.label;
+            d.addEventListener('mouseenter',e=>showT(e,pt,s));
+            d.addEventListener('mouseleave',hideT);
+            mi.appendChild(d);
+        }});
+        document.getElementById('ctr').textContent=pts.length+' point(s)';
+        }}
+        function showT(e,pt,s){{
+        const t=document.getElementById('tip');
+        const cls=pt.room_class||'';
+        const stTxt=s?(s.status==='ok'?'✅ Conforme':s.status==='alert'?'⚠️ Alerte':'🚨 Action'):null;
+        const ufcTot=s&&s.ufc_total&&s.ufc_total!==s.ufc?' (total : <b>'+s.ufc_total+'</b>)':'';
+        t.innerHTML='<div class="tip-ttl">📍 '+pt.label
+            +(cls?'&nbsp;<span style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 5px;font-size:.6rem">Cl.'+cls+'</span>':'')
+            +'</div>'
+            +(s
+            ?'<div class="tip-r">🦠 <b>'+s.germ+'</b></div>'
+            +'<div class="tip-r">🔢 UFC : <b>'+s.ufc+'</b>'+ufcTot+'</div>'
+            +'<div class="tip-r">📅 <b>'+s.date+'</b></div>'
+            +'<div class="tip-r">📊 Score : <b>'+(s.score||'—')+'</b></div>'
+            +'<div class="tip-r" style="margin-top:4px">Statut : <b>'+stTxt+'</b></div>'
+            :'<div class="tip-r" style="color:#94a3b8;font-style:italic">Pas de résultat sur la période filtrée</div>');
+        t.style.left=(e.clientX+16)+'px'; t.style.top=(e.clientY-12)+'px';
+        t.classList.add('v');
+        }}
+        function hideT(){{document.getElementById('tip').classList.remove('v');}}
+        document.addEventListener('mousemove',e=>{{
+        const t=document.getElementById('tip');
+        if(t.classList.contains('v')){{t.style.left=(e.clientX+16)+'px';t.style.top=(e.clientY-12)+'px';}}
+        }});
+        const img=document.getElementById('pi');
+        if(img.complete&&img.naturalWidth>0)render();
+        else img.addEventListener('load',render);
+        </script></body></html>"""
+                st.components.v1.html(plan_hist_html, height=580, scrolling=False)
+
+                st.divider()
+ 
+                # ── Sous-menus par classe GMP ─────────────────────────────────
+                classes_present = sorted(set(
+                    p.get("room_class", "") for p in map_pts_raw if p.get("room_class")
+                ))
+ 
+                if classes_present:
+                    st.markdown(
+                        "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
+                        "📊 Détail par classe GMP</div>",
+                        unsafe_allow_html=True)
+                    class_colors = {"A":"#ef4444","B":"#f59e0b","C":"#22c55e","D":"#3b82f6"}
+ 
+                    class_tabs_plan = st.tabs([f"Classe {c}" for c in classes_present])
+                    for ci, cl in enumerate(classes_present):
+                        with class_tabs_plan[ci]:
+                            cl_col  = class_colors.get(cl, "#6366f1")
+                            cl_pts  = [p for p in map_pts_raw if p.get("room_class") == cl]
+                            cl_surv = [r for r in surv_plan if r.get("room_class") == cl]
+ 
+                            cl_neg     = sum(1 for r in cl_surv if int(r.get("ufc",0) or 0) == 0)
+                            cl_pos     = sum(1 for r in cl_surv if int(r.get("ufc",0) or 0) > 0)
+                            cl_alerts  = sum(1 for r in cl_surv if r.get("status") == "alert")
+                            cl_actions = sum(1 for r in cl_surv if r.get("status") == "action")
+ 
+                            cmc1, cmc2, cmc3, cmc4, cmc5 = st.columns(5)
+                            cmc1.metric("Points sur carte",  len(cl_pts))
+                            cmc2.metric("Résultats période", len(cl_surv))
+                            cmc3.metric("✅ Négatifs",        cl_neg)
+                            cmc4.metric("⚠️ Alertes",        cl_alerts)
+                            cmc5.metric("🚨 Actions",        cl_actions)
+ 
+                            if not cl_pts:
+                                st.info(f"Aucun point de classe {cl} placé sur la carte.")
+                            else:
+                                st.markdown(
+                                    f"<div style='display:grid;"
+                                    f"grid-template-columns:2fr 0.7fr 1.1fr 1.8fr 1.3fr 1.1fr;"
+                                    f"gap:4px;background:{cl_col};border-radius:10px 10px 0 0;padding:9px 12px'>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Classe</div>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Position</div>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff'>Dernier germe (filtré)</div>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>UFC · UFC total</div>"
+                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Statut</div>"
+                                    f"</div>",
+                                    unsafe_allow_html=True)
+ 
+                                for pi, clpt in enumerate(cl_pts):
+                                    clpt_surv = [r for r in cl_surv if r.get("prelevement") == clpt.get("label")]
+                                    last_r = clpt_surv[-1] if clpt_surv else None
+                                    germ_str = (last_r.get("germ_match") or "—") if last_r else "—"
+                                    ufc_val  = int(last_r.get("ufc", 0) or 0) if last_r else 0
+                                    ufc_tot  = int(last_r.get("ufc_total", ufc_val) or ufc_val) if last_r else 0
+                                    ufc_str  = f"{ufc_val}" if ufc_val == ufc_tot or ufc_tot == 0 else f"{ufc_val} · {ufc_tot}"
+                                    st_r     = (last_r.get("status", "none") or "none") if last_r else "none"
+                                    sc = {"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}.get(st_r,"#94a3b8")
+                                    st_lbl = {"action":"🚨 Action","alert":"⚠️ Alerte","ok":"✅ OK","none":"—"}.get(st_r,"—")
+                                    row_bg = "#f8fafc" if pi % 2 == 0 else "#ffffff"
+ 
+                                    st.markdown(
+                                        f"<div style='display:grid;"
+                                        f"grid-template-columns:2fr 0.7fr 1.1fr 1.8fr 1.3fr 1.1fr;"
+                                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
+                                        f"padding:8px 12px;align-items:center'>"
+                                        f"<div style='font-size:.85rem;font-weight:700;color:#0f172a'>"
+                                        f"📍 {clpt.get('label','')}</div>"
+                                        f"<div style='text-align:center'>"
+                                        f"<span style='background:{cl_col}22;color:{cl_col};"
+                                        f"border:1px solid {cl_col}55;border-radius:4px;padding:1px 7px;"
+                                        f"font-size:.72rem;font-weight:800'>{cl}</span></div>"
+                                        f"<div style='font-size:.68rem;color:#64748b;text-align:center'>"
+                                        f"{clpt.get('x',0):.1f}% / {clpt.get('y',0):.1f}%</div>"
+                                        f"<div style='font-size:.78rem;font-weight:600;color:#1e293b'>"
+                                        f"🦠 {germ_str[:24]}</div>"
+                                        f"<div style='font-size:.82rem;font-weight:700;color:#1e40af;text-align:center'>"
+                                        f"{'—' if not last_r else ufc_str}</div>"
+                                        f"<div style='text-align:center'>"
+                                        f"<span style='background:{sc}22;color:{sc};"
+                                        f"border:1px solid {sc}55;border-radius:6px;padding:2px 8px;"
+                                        f"font-size:.72rem;font-weight:700'>{st_lbl}</span></div>"
+                                        f"</div>",
+                                        unsafe_allow_html=True)
+ 
+                                st.markdown(
+                                    f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                                    f"padding:7px 12px'><div style='font-size:.72rem;color:#94a3b8'>"
+                                    f"{len(cl_pts)} point(s) · {len(cl_surv)} résultat(s) sur la période</div></div>",
+                                    unsafe_allow_html=True)
+ 
+                else:
+                    st.info(
+                        "Aucun point avec classe GMP détecté. "
+                        "Assignez une classe aux points via **Paramètres → Points de prélèvement**, "
+                        "puis placez-les depuis **Surveillance → Nouveau prélèvement**.")
+ 
+            if not map_pts_raw:
+                st.markdown(
+                    "<div style='background:#fef9c3;border:1px solid #fde047;border-radius:10px;"
+                    "padding:12px 16px;margin-top:8px;font-size:.78rem;color:#854d0e'>"
+                    "💡 <b>Aucun point localisé sur la carte.</b> "
+                    "Pour commencer, allez dans <b>Surveillance → Nouveau prélèvement</b>, "
+                    "uploadez le plan URC et cliquez pour placer le point de chaque prélèvement.</div>",
                     unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
