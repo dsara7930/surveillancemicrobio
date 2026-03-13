@@ -855,19 +855,21 @@ with st.sidebar:
         st.markdown('<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">⚠️ Sans Supabase, exportez régulièrement vos données !</p>', unsafe_allow_html=True)
 
     # ── 🍄 Champignon dansant ─────────────────────────────────────────────
-    st.markdown("""
-    <div style="text-align:center;margin-top:18px;padding-bottom:8px">
-      <img
-        src="https://media.giphy.com/media/l0MYEqEzwMWFCg8rm/giphy.gif"
-        alt="🍄 dancing mushroom"
-        style="width:80px;border-radius:12px;opacity:.92"
-        onerror="this.src='https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif'"
-      />
-      <div style="font-size:.6rem;color:#94a3b8;margin-top:4px;font-style:italic">
+    st.components.v1.html("""
+    <div style="text-align:center;margin-top:14px;padding-bottom:6px">
+      <iframe
+        src="https://giphy.com/embed/9PgxWeMeUw4TjNGfes"
+        width="90" height="90"
+        style="border:none;border-radius:12px;pointer-events:none"
+        frameBorder="0"
+        allowFullScreen>
+      </iframe>
+      <div style="font-size:10px;color:#94a3b8;margin-top:2px;font-style:italic;
+                  font-family:'Segoe UI',sans-serif">
         bonne surveillance 🍄
       </div>
     </div>
-    """, unsafe_allow_html=True)
+    """, height=115, scrolling=False)
 
 active = st.session_state.active_tab
 today = datetime.today().date()
