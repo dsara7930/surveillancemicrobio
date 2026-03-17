@@ -977,23 +977,595 @@ if due_global and not st.session_state.due_alert_shown:
 st.markdown('<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>', unsafe_allow_html=True)
 st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# UTILISATION dans vos onglets (à coller en tête de chaque onglet protégé) :
-#
-#   if active == "parametres":
-#       can_edit = check_access_protege("Paramètres & Seuils")
-#       # si lecture seule → st.stop() est appelé dans la fonction,
-#       # donc la suite ne s'exécute que si can_edit == True
-#       ... reste du code paramètres ...
-#
-#   if active == "logigramme":
-#       can_edit = check_access_protege("Logigramme")
-#       ... reste du code logigramme ...
-# ─────────────────────────────────────────────────────────────────────────────
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
-# Criticité germe = Pathogénicité × Résistance × Dissémination (score 1–27)
+# Criticité germe = Pathogénicité × Résistance × Dissémination 
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if active == "logigramme":
+    can_edit = check_access_protege("Logigramme")
+
+    # ── Constantes ─────────────────────────────────────────────────────────────
+    PATHO_OPTS = [
+        "1 — Non pathogène",
+        "2 — Pathogène opportuniste",
+        "3 — Pathogène opportuniste multirésistant / Pathogène primaire",
+    ]
+    RESIST_OPTS = [
+        "1 — Sensible",
+        "2 — Résistant au Surfa'Safe",
+        "3 — Résistant au Surfa'Safe et Acide Peracétique",
+    ]
+    DISSEM_OPTS = [
+        "1 — Environnemental",
+        "2 — Manuporté",
+        "3 — Aéroporté",
+    ]
+
+    def _risk_color(score):
+        if score <= 4:   return "#22c55e"
+        if score <= 8:   return "#84cc16"
+        if score <= 12:  return "#f59e0b"
+        if score <= 18:  return "#f97316"
+        return "#ef4444"
+
+    def _risk_label(score):
+        if score <= 4:   return "Faible"
+        if score <= 8:   return "Modéré"
+        if score <= 12:  return "Important"
+        if score <= 18:  return "Majeur"
+        return "Critique"
+
+    def _infer_resistance(surfa, apa):
+        """Migration : déduit la résistance depuis surfa/apa existants."""
+        s = (surfa or "").lower()
+        a = (apa  or "").lower()
+        if "risque" in s and "risque" in a:
+            return 3
+        if "risque" in s:
+            return 2
+        return 1
+
+    def _germ_score(g):
+        if all(k in g for k in ("pathogenicity", "resistance", "dissemination")):
+            return int(g["pathogenicity"]) * int(g["resistance"]) * int(g["dissemination"])
+        # Migration ancien modèle
+        old = g.get("risk", 1)
+        return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
+
+    # ── Bandeau récapitulatif ───────────────────────────────────────────────────
+    _synced        = st.session_state.get("germs_synced_count", 0)
+    _total_default = len(DEFAULT_GERMS)
+    _total_germs   = len(st.session_state.germs)
+    _custom_count  = max(0, _total_germs - _total_default)
+
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+    border-radius:12px;padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;
+    justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span style="font-size:1.4rem">🦠</span>
+        <div>
+          <div style="font-weight:800;color:#1e40af;font-size:.88rem">Base de données germes</div>
+          <div style="font-size:.7rem;color:#3b82f6;margin-top:2px">
+            {_total_default} standards · {_custom_count} personnalisé(s) · {_total_germs} au total
+          </div>
+          <div style="font-size:.65rem;color:#64748b;margin-top:1px">
+            Score criticité = Pathogénicité × Résistance × Dissémination (1–27)
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="background:#fff;border:1px solid #93c5fd;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;font-weight:700">Standard</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#1e40af">{_total_default}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #86efac;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#166534;text-transform:uppercase;font-weight:700">Custom</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#166534">{_custom_count}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;text-align:center">
+          <div style="font-size:.6rem;color:#92400e;text-transform:uppercase;font-weight:700">Total</div>
+          <div style="font-size:1.1rem;font-weight:800;color:#92400e">{_total_germs}</div>
+        </div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    if _synced > 0:
+        st.success(f"✅ Synchronisation : {_synced} germe(s) mis à jour depuis la base de référence.")
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if can_edit:
+            if st.button("➕ Ajouter un germe", use_container_width=True):
+                st.session_state.show_add = not st.session_state.show_add
+                st.session_state.edit_idx = None
+    with col_btn2:
+        if can_edit:
+            if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
+                save_germs(st.session_state.germs)
+                st.success("✅ Germes sauvegardés !")
+
+    if not can_edit:
+        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les germes.")
+
+    # ── Formulaire ajout / modification ────────────────────────────────────────
+    def germ_form(existing=None, idx=None):
+        is_edit = existing is not None
+        with st.container():
+            st.markdown(
+                f"<div style='background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;"
+                f"padding:18px;margin-bottom:12px'>",
+                unsafe_allow_html=True)
+            st.markdown(f"### {'✏️ Modifier' if is_edit else '➕ Ajouter'} un germe")
+
+            c1, c2, c3 = st.columns(3)
+
+            # ── Col 1 : taxonomie ────────────────────────────────────────────
+            with c1:
+                st.markdown(
+                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
+                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
+                    "📋 Identification</div>", unsafe_allow_html=True)
+
+                new_name = st.text_input(
+                    "Nom du germe *",
+                    value=existing["name"] if is_edit else "",
+                    placeholder="Ex: Listeria spp.",
+                    disabled=not can_edit)
+
+                new_famille = st.selectbox(
+                    "Famille *", ["Bactéries", "Champignons"],
+                    index=["Bactéries", "Champignons"].index(existing["path"][1])
+                          if is_edit else 0,
+                    disabled=not can_edit)
+
+                new_origine = st.selectbox(
+                    "Origine *", ["Humains ", "Environnemental"],
+                    index=0 if (not is_edit or existing["path"][2] in ["Humains", "Humain"]) else 1,
+                    disabled=not can_edit)
+
+                if new_famille == "Bactéries":
+                    cats = (["Peau / Muqueuse", "Oropharynx / Gouttelettes", "Flore fécale"]
+                            if "Humain" in new_origine
+                            else ["Humidité", "Sol / Carton / Surface sèche"])
+                else:
+                    cats = (["Peau / Muqueuse"]
+                            if "Humain" in new_origine
+                            else ["Humidité", "Sol / Carton / Surface sèche", "Air"])
+
+                cur_cat = existing["path"][3] if is_edit and existing["path"][3] in cats else cats[0]
+                new_cat = st.selectbox(
+                    "Catégorie *", cats,
+                    index=cats.index(cur_cat) if cur_cat in cats else 0,
+                    disabled=not can_edit)
+
+
+            # ── Col 2 : critères de criticité ────────────────────────────────
+            with c2:
+                st.markdown(
+                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
+                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
+                    "🔬 Critères de criticité</div>", unsafe_allow_html=True)
+
+                # Pathogénicité
+                cur_patho = int(existing.get("pathogenicity", 1)) if is_edit else 1
+                patho_lbl = st.selectbox(
+                    "🧬 Pathogénicité *", PATHO_OPTS,
+                    index=min(cur_patho - 1, 2),
+                    key="form_patho", disabled=not can_edit)
+                patho_num = int(patho_lbl[0])
+
+                # Résistance aux désinfectants
+                if is_edit:
+                    cur_resist = int(existing.get(
+                        "resistance",
+                        _infer_resistance(existing.get("surfa"), existing.get("apa"))))
+                else:
+                    cur_resist = 1
+                resist_lbl = st.selectbox(
+                    "🧴 Résistance aux désinfectants *", RESIST_OPTS,
+                    index=min(cur_resist - 1, 2),
+                    key="form_resist", disabled=not can_edit)
+                resist_num = int(resist_lbl[0])
+
+                # Mode de dissémination
+                cur_dissem = int(existing.get("dissemination", 1)) if is_edit else 1
+                dissem_lbl = st.selectbox(
+                    "💨 Mode de dissémination *", DISSEM_OPTS,
+                    index=min(cur_dissem - 1, 2),
+                    key="form_dissem", disabled=not can_edit)
+                dissem_num = int(dissem_lbl[0])
+
+                # ── Score calculé ────────────────────────────────────────────              
+                risk_num = patho_num * resist_num * dissem_num
+                rc = _risk_color(risk_num)
+                rl = _risk_label(risk_num)
+
+                if risk_num > 36:
+                    status_txt = "🚨 Action probable si lieu ≥ critique"
+                    status_bg  = "#fef2f2"
+                    status_c   = "#991b1b"
+                elif risk_num >= 24:
+                    status_txt = "⚠️ Alerte probable si lieu ≥ semi-critique"
+                    status_bg  = "#fffbeb"
+                    status_c   = "#92400e"
+                else:
+                    status_txt = "✅ Conforme selon lieu de prélèvement"
+                    status_bg  = "#f0fdf4"
+                    status_c   = "#166534"
+
+                st.markdown(f"""
+                <div style="background:{rc}12;border:2px solid {rc}55;border-radius:12px;
+                padding:14px;margin-top:8px;text-align:center">
+                  <div style="font-size:.62rem;color:#475569;text-transform:uppercase;
+                  letter-spacing:.1em;margin-bottom:6px;font-weight:700">Score de criticité</div>
+                  <div style="font-size:2.8rem;font-weight:900;color:{rc};line-height:1">
+                    {risk_num}
+                  </div>
+                  <div style="font-size:.78rem;font-weight:700;color:{rc};margin-top:4px">
+                    {rl}
+                  </div>
+                  <div style="font-size:.62rem;color:#64748b;margin-top:8px;
+                  background:#fff;border-radius:6px;padding:5px 8px;display:inline-block">
+                    {patho_num} (patho) × {resist_num} (résist.) × {dissem_num} (dissém.) = {risk_num}
+                  </div>
+                  <div style="font-size:.65rem;font-weight:600;padding:5px 8px;border-radius:6px;
+                  margin-top:8px;background:{status_bg};color:{status_c}">
+                    {status_txt}
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+            # col 3 Notes
+                       
+            with c3:
+                st.markdown(
+                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
+                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
+                    "Information supplémentaire</div>", unsafe_allow_html=True)
+                                
+                new_notes = st.text_area(
+                    "📝 Notes",
+                    value=existing.get("notes", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                new_comment = st.text_area(
+                    "💬 Commentaire détaillé",
+                    value=existing.get("comment", "") or "" if is_edit else "",
+                    height=70, disabled=not can_edit)
+
+                                    
+                                           
+            # ── Boutons ──────────────────────────────────────────────────────
+            st.markdown("</div>", unsafe_allow_html=True)
+            cb1, cb2 = st.columns(2)
+            with cb1:
+                if can_edit:
+                    if st.button(
+                        "✅ " + ("Modifier" if is_edit else "Ajouter"),
+                        use_container_width=True, key="form_submit"):
+                        if not new_name.strip():
+                            st.error("Le nom est obligatoire.")
+                            return
+                        origine_node = (
+                            ("Humains" if new_famille == "Bactéries" else "Humain")
+                            if "Humain" in new_origine else "Environnemental")
+                        new_germ = dict(
+                            name=new_name.strip(),
+                            path=["Germes", new_famille, origine_node, new_cat],
+                            pathogenicity=patho_num,
+                            resistance=resist_num,
+                            dissemination=dissem_num,
+                            risk=risk_num,
+                            notes=new_notes.strip() or None,
+                            comment=new_comment.strip() or None,
+                        )
+                        if is_edit:
+                            st.session_state.germs[idx] = new_germ
+                            st.session_state.edit_idx   = None
+                        else:
+                            if any(g["name"].lower() == new_name.strip().lower()
+                                   for g in st.session_state.germs):
+                                st.error("Ce germe existe déjà.")
+                                return
+                            st.session_state.germs.append(new_germ)
+                            st.session_state.show_add = False
+                        save_germs(st.session_state.germs)
+                        st.rerun()
+            with cb2:
+                if can_edit:
+                    if st.button("Annuler", use_container_width=True, key="form_cancel"):
+                        st.session_state.show_add = False
+                        st.session_state.edit_idx = None
+                        st.rerun()
+
+    if can_edit and st.session_state.show_add and st.session_state.edit_idx is None:
+        germ_form()
+    if can_edit and st.session_state.edit_idx is not None:
+        germ_form(
+            existing=st.session_state.germs[st.session_state.edit_idx],
+            idx=st.session_state.edit_idx)
+
+    st.divider()
+
+    # ── Logigramme interactif HTML/D3 ─────────────────────────────────────────
+    germs_json         = json.dumps(st.session_state.germs, ensure_ascii=False)
+    default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
+
+    tree_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:95vh;overflow:hidden}}
+.app{{display:flex;height:95vh}}
+.tree-wrap{{flex:1;overflow:auto;padding:8px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}}
+svg{{min-width:900px;width:100%;height:100%}}
+.node rect{{fill:#fff;stroke:#e2e8f0;stroke-width:1.5;transition:all .2s;cursor:pointer}}
+.node.highlighted rect{{stroke-width:2.5;filter:drop-shadow(0 0 4px rgba(0,0,0,.15))}}
+.node text{{font-size:11px;fill:#0f172a;pointer-events:none;font-family:'Courier New',monospace}}
+.link{{fill:none;stroke:#e2e8f0;stroke-width:1.5;transition:all .3s}}
+.link.highlighted{{stroke-width:2.5}}
+.right-panel{{width:490px;border-left:2px solid #e2e8f0;display:flex;flex-direction:column;background:#f1f5f9;flex-shrink:0}}
+.sbox{{padding:12px 14px;border-bottom:1px solid #e2e8f0}}
+.sbox input{{width:100%;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;color:#1e293b;font-size:.9rem;outline:none}}
+.sbox input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
+.germ-list{{flex:1;overflow-y:auto;padding:6px;scrollbar-width:thin}}
+.germ-item{{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .15s;font-size:.85rem;color:#0f172a;border:1px solid transparent;margin-bottom:3px}}
+.germ-item:hover{{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08)}}
+.germ-item.active{{background:#fff;border-color:#2563eb;box-shadow:0 1px 6px rgba(37,99,235,.2)}}
+.risk-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
+.germ-count{{font-size:.72rem;color:#64748b;padding:6px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-weight:600}}
+.group-header{{font-size:.65rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#475569;padding:8px 12px 3px;background:#e2e8f0;margin:4px -6px 3px;border-radius:3px}}
+.info-panel{{border-top:2px solid #e2e8f0;padding:14px;background:#fff;display:none;max-height:600px;overflow-y:auto}}
+.info-panel.visible{{display:block}}
+.info-name{{font-size:.92rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:3px}}
+.info-path{{font-size:.6rem;color:#2563eb;opacity:.85;margin-bottom:8px;font-family:monospace}}
+.info-badge{{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;padding:3px 10px;border-radius:20px;border:1px solid;margin-bottom:10px;font-weight:600}}
+.info-lbl{{font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:2px;margin-top:8px;font-weight:700}}
+.info-val{{font-size:.78rem;color:#1e293b;line-height:1.4}}
+.score-grid{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:6px}}
+.score-cell{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:7px 5px;text-align:center}}
+.score-cell .lbl{{font-size:.52rem;color:#64748b;text-transform:uppercase;margin-bottom:3px;line-height:1.3}}
+.score-cell .val{{font-size:1.2rem;font-weight:900}}
+.score-total{{background:#1e293b;border-radius:8px;padding:8px;text-align:center;margin-top:6px}}
+.alert-row{{padding:5px 10px;border-radius:6px;font-size:.68rem;font-weight:700;margin-top:5px}}
+.sens{{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:6px;border:1px solid #e2e8f0;font-size:.72rem;margin-top:3px}}
+.ok{{color:#22c55e;font-weight:700}}.warn{{color:#f97316;font-weight:700}}.crit{{color:#ef4444;font-weight:700}}
+.notes-box{{margin-top:6px;padding:7px 10px;border-radius:6px;background:rgba(37,99,235,.04);border:1px solid rgba(37,99,235,.18);font-size:.72rem;color:#0f172a;line-height:1.5}}
+</style></head><body>
+<div class="app">
+  <div class="tree-wrap"><svg id="svg"></svg></div>
+  <div class="right-panel">
+    <div class="sbox"><input type="text" id="sbox" placeholder="🔍 Rechercher un germe..." oninput="filterList()"></div>
+    <div class="germ-count" id="germCount">Chargement...</div>
+    <div class="germ-list" id="germList"></div>
+    <div class="info-panel" id="infoPanel"></div>
+  </div>
+</div>
+<script>
+const GERMS={germs_json};
+const DEFAULT_NAMES=new Set({default_names_json});
+const NODE_W=190,NODE_H=28,H_GAP=28,V_GAP=10;
+const LEVEL_COLS=["#38bdf8","#818cf8","#fb923c","#34d399","#a3e635"];
+const PATHO_LBL=["","Non pathogène","Pathogène opportuniste","Pathogène opp. MR / Primaire"];
+const RESIST_LBL=["","Sensible","Résistant Surfa'Safe","Résistant Surfa'Safe + APA"];
+const DISSEM_LBL=["","Environnemental","Manuporté","Aéroporté"];
+
+function riskColor(s){{
+  if(s<=4)return"#22c55e";if(s<=8)return"#84cc16";
+  if(s<=12)return"#f59e0b";if(s<=18)return"#f97316";return"#ef4444";
+}}
+function riskLabel(s){{
+  if(s<=4)return"Faible";if(s<=8)return"Modéré";
+  if(s<=12)return"Important";if(s<=18)return"Majeur";return"Critique";
+}}
+function germScore(g){{
+  if(g.pathogenicity&&g.resistance&&g.dissemination)
+    return g.pathogenicity*g.resistance*g.dissemination;
+  const m={{1:1,2:2,3:6,4:12,5:18}};return m[g.risk]||g.risk||1;
+}}
+
+function buildTree(){{
+  const root={{name:"Germes",children:[]}};
+  GERMS.forEach(g=>{{
+    let cur=root;
+    g.path.slice(1).forEach(n=>{{
+      let c=cur.children&&cur.children.find(x=>x.name===n);
+      if(!c){{c={{name:n,children:[]}};if(!cur.children)cur.children=[];cur.children.push(c);}}
+      cur=c;
+    }});
+  }});
+  function clean(n){{if(n.children&&!n.children.length)delete n.children;else if(n.children)n.children.forEach(clean);}}
+  clean(root);return root;
+}}
+function computeLayout(node,depth=0,y=0){{
+  node.depth=depth;node.x=depth*(NODE_W+H_GAP);
+  if(!node.children||!node.children.length){{node.y=y;return y+NODE_H;}}
+  let cy=y;node.children.forEach(c=>{{cy=computeLayout(c,depth+1,cy);cy+=V_GAP;}});
+  cy-=V_GAP;node.y=(y+cy)/2;return cy+V_GAP;
+}}
+function allNodes(n){{return[n,...(n.children||[]).flatMap(allNodes)];}}
+function allLinks(n){{return(n.children||[]).flatMap(c=>[{{source:n,target:c}},...allLinks(c)]);}}
+function buildPaths(n,p=[]){{n.fullPath=[...p,n.name];(n.children||[]).forEach(c=>buildPaths(c,n.fullPath));}}
+
+function renderTree(){{
+  const tree=buildTree();computeLayout(tree);buildPaths(tree);
+  const nodes=allNodes(tree),links=allLinks(tree);
+  const maxY=Math.max(...nodes.map(n=>n.y))+NODE_H+20;
+  const maxX=Math.max(...nodes.map(n=>n.x))+NODE_W+20;
+  const svg=document.getElementById('svg');
+  svg.innerHTML='';
+  svg.setAttribute('viewBox',`0 0 ${{maxX}} ${{maxY}}`);
+  svg.setAttribute('height',maxY);svg.setAttribute('width',maxX);
+  links.forEach(l=>{{
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    const x1=l.source.x+NODE_W,y1=l.source.y+NODE_H/2,x2=l.target.x,y2=l.target.y+NODE_H/2,mx=(x1+x2)/2;
+    p.setAttribute('d',`M${{x1}},${{y1}} C${{mx}},${{y1}} ${{mx}},${{y2}} ${{x2}},${{y2}}`);
+    p.setAttribute('class','link');
+    p.dataset.sourcefull=l.source.fullPath.join('|||');
+    p.dataset.targetfull=l.target.fullPath.join('|||');
+    svg.appendChild(p);
+  }});
+  nodes.forEach(node=>{{
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','node');
+    g.setAttribute('transform',`translate(${{node.x}},${{node.y}})`);
+    g.dataset.fullpath=node.fullPath.join('|||');
+    const col=LEVEL_COLS[node.depth]||"#0f172a";
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('width',NODE_W);rect.setAttribute('height',NODE_H);
+    rect.setAttribute('rx',5);rect.setAttribute('stroke',col);
+    const text=document.createElementNS('http://www.w3.org/2000/svg','text');
+    text.setAttribute('x',NODE_W/2);text.setAttribute('y',NODE_H/2+4);
+    text.setAttribute('text-anchor','middle');
+    text.textContent=node.name.length>27?node.name.substring(0,25)+'...':node.name;
+    g.appendChild(rect);g.appendChild(text);
+    g.addEventListener('mouseenter',()=>highlightPath(node.fullPath));
+    g.addEventListener('mouseleave',clearHighlight);
+    svg.appendChild(g);
+  }});
+}}
+let selectedPath=null;
+function highlightPath(exactPath){{
+  const vp=new Set();for(let i=1;i<=exactPath.length;i++)vp.add(exactPath.slice(0,i).join('|||'));
+  document.querySelectorAll('.node').forEach(n=>n.classList.toggle('highlighted',vp.has(n.dataset.fullpath||'')));
+  document.querySelectorAll('.link').forEach(l=>{{
+    const on=vp.has(l.dataset.sourcefull||'')&&vp.has(l.dataset.targetfull||'');
+    l.classList.toggle('highlighted',on);
+    if(on){{const d=(l.dataset.sourcefull||'').split('|||').length-1;l.style.stroke=LEVEL_COLS[d]||'#38bdf8';}}
+    else l.style.stroke='';
+  }});
+}}
+function clearHighlight(){{
+  if(selectedPath){{highlightPath(selectedPath);return;}}
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlighted'));
+  document.querySelectorAll('.link').forEach(l=>{{l.classList.remove('highlighted');l.style.stroke=''}});
+}}
+function renderList(filter=''){{
+  const list=document.getElementById('germList');
+  const countEl=document.getElementById('germCount');
+  list.innerHTML='';
+  const filtered=GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase()));
+  countEl.textContent=filter?`${{filtered.length}} / ${{GERMS.length}} germe(s)`:`${{GERMS.length}} germe(s) — cliquez pour détails`;
+  const groups={{}};
+  filtered.forEach(g=>{{const cat=(g.path&&g.path[3])||'Autres';if(!groups[cat])groups[cat]=[];groups[cat].push(g);}});
+  Object.keys(groups).sort().forEach(cat=>{{
+    const header=document.createElement('div');header.className='group-header';header.textContent=cat;list.appendChild(header);
+    groups[cat].forEach(g=>{{
+      const score=germScore(g);const col=riskColor(score);
+      const isCustom=!DEFAULT_NAMES.has(g.name);
+      const isAir=(g.dissemination||0)===3;
+      const hasResist=(g.resistance||0)>=2;
+      let badges='';
+      if(isAir)badges+='<span style="font-size:.48rem;background:#eff6ff;color:#1e40af;border-radius:3px;padding:0 4px;margin-left:2px">✈</span>';
+      if(hasResist)badges+='<span style="font-size:.48rem;background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 4px;margin-left:2px">⚠</span>';
+      if(isCustom)badges+='<span style="font-size:.48rem;background:rgba(56,189,248,.15);color:#2563eb;border-radius:3px;padding:0 4px;margin-left:2px">★</span>';
+      const div=document.createElement('div');div.className='germ-item';div.dataset.name=g.name;
+      div.innerHTML=`<span class="risk-dot" style="background:${{col}}"></span><span style="flex:1;line-height:1.3">${{g.name}}${{badges}}</span><span style="font-size:.62rem;color:${{col}};font-weight:800;flex-shrink:0">${{score}}</span>`;
+      div.addEventListener('click',()=>selectGerm(g));
+      list.appendChild(div);
+    }});
+  }});
+}}
+function filterList(){{renderList(document.getElementById('sbox').value);}}
+function selectGerm(g){{
+  selectedPath=g.path;highlightPath(g.path);
+  document.querySelectorAll('.germ-item').forEach(el=>el.classList.toggle('active',el.dataset.name===g.name));
+  showInfo(g);
+}}
+function showInfo(g){{
+  const panel=document.getElementById('infoPanel');panel.classList.add('visible');
+  const score=germScore(g);const col=riskColor(score);
+  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
+  
+  const alertRow=score>24?`<div class="alert-row" style="background:#fef2f2;color:#991b1b">🚨 Action (score germe seul &gt; 24)</div>`
+    :score>=16?`<div class="alert-row" style="background:#fffbeb;color:#92400e">⚠️ Alerte probable selon criticité du lieu</div>`
+    :`<div class="alert-row" style="background:#f0fdf4;color:#166534">✅ Conforme à score germe seul</div>`;
+  const nh=g.notes?`<div class="info-lbl">📝 Notes</div><div class="notes-box">${{g.notes}}</div>`:'';
+  const ch=g.comment?`<div class="info-lbl" style="color:#fb923c">💬 Commentaire</div><div class="notes-box" style="color:#ea580c;background:rgba(251,146,60,.06);border-color:rgba(251,146,60,.3)">${{g.comment}}</div>`:'';
+  panel.innerHTML=`
+    <div class="info-name">${{g.name}}</div>
+    <div class="info-path">${{g.path.join(' › ')}}</div>
+    <div class="info-badge" style="color:${{col}};background:${{col}}22;border-color:${{col}}55">
+      <span style="width:8px;height:8px;border-radius:50%;background:${{col}};display:inline-block"></span>
+      Score ${{score}} — ${{riskLabel(score)}}
+    </div>
+    <div class="info-lbl">Critères de criticité</div>
+    <div class="score-grid">
+      <div class="score-cell">
+        <div class="lbl">🧬 Pathogénicité</div>
+        <div class="val" style="color:${{riskColor(g.pathogenicity||1)}}">${{g.pathogenicity||1}}</div>
+        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{PATHO_LBL[g.pathogenicity||1]||'—'}}</div>
+      </div>
+      <div class="score-cell">
+        <div class="lbl">🧴 Résistance</div>
+        <div class="val" style="color:${{riskColor(g.resistance||1)}}">${{g.resistance||1}}</div>
+        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{RESIST_LBL[g.resistance||1]||'—'}}</div>
+      </div>
+      <div class="score-cell">
+        <div class="lbl">💨 Dissémination</div>
+        <div class="val" style="color:${{riskColor(g.dissemination||1)}}">${{g.dissemination||1}}</div>
+        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{DISSEM_LBL[g.dissemination||1]||'—'}}</div>
+      </div>
+    </div>
+    <div class="score-total">
+      <div style="font-size:.58rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em">Score calculé</div>
+      <div style="font-size:1.8rem;font-weight:900;color:${{col}};line-height:1.1">${{score}}</div>
+      <div style="font-size:.6rem;color:#94a3b8">${{g.pathogenicity||'?'}} × ${{g.resistance||'?'}} × ${{g.dissemination||'?'}}</div>
+    </div>
+    ${{alertRow}}
+    
+    ${{nh}}${{ch}}`;
+}}
+renderTree();
+renderList();
+</script></body></html>"""
+
+    st.components.v1.html(tree_html, height=1200, scrolling=False)
+
+    # ── Liste de gestion ───────────────────────────────────────────────────────
+    st.markdown("### ✏️ Gérer les germes")
+    search_edit = st.text_input(
+        "Filtrer", placeholder="Rechercher un germe...", label_visibility="collapsed")
+    filtered = ([g for g in st.session_state.germs
+                 if search_edit.lower() in g["name"].lower()]
+                if search_edit else st.session_state.germs)
+
+    for i, g in enumerate(filtered):
+        real_idx = st.session_state.germs.index(g)
+        score    = _germ_score(g)
+        c        = _risk_color(score)
+        rl       = _risk_label(score)
+
+        col_n, col_s, col_rl, col_e, col_d = st.columns([4, 0.6, 1, 0.6, 0.6])
+        with col_n:
+            st.markdown(
+                f'<span style="color:{c};font-size:.75rem">●</span> '
+                f'<span style="font-size:.82rem;font-style:italic">{g["name"]}</span>',
+                unsafe_allow_html=True)
+        with col_s:
+            st.markdown(
+                f'<span style="font-size:.75rem;color:{c};font-weight:800">{score}</span>',
+                unsafe_allow_html=True)
+        with col_rl:
+            st.markdown(
+                f'<span style="font-size:.65rem;color:{c};font-weight:700">{rl}</span>',
+                unsafe_allow_html=True)
+        with col_e:
+            if can_edit:
+                if st.button("✏️", key=f"edit_{real_idx}_{i}"):
+                    st.session_state.edit_idx = real_idx
+                    st.session_state.show_add = False
+                    st.rerun()
+        with col_d:
+            if can_edit:
+                if st.button("🗑️", key=f"del_{real_idx}_{i}"):
+                    st.session_state.germs.pop(real_idx)
+                    save_germs(st.session_state.germs)
+                    st.rerun()
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB : LOGIGRAMME — COMPLET
+# Criticité germe = Pathogénicité × Résistance × Dissémination 
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "logigramme":
@@ -1578,216 +2150,201 @@ renderList();
                     st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : SURVEILLANCE — COMPLET
-# score_total = location_criticality (1–3) × germ_score (1–27)
-# ⚠️ Alerte : 24 ≤ score ≤ 36  |  🚨 Action : score > 36
+# TAB : SURVEILLANCE — 4 SOUS-ONGLETS
+# Nouveau prélèvement | Lecture J2 | Lecture J7 | Identifications en attente
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    
-
-    tab_surv, tab_etiq = st.tabs(["🔬 Surveillance", "🏷️ Étiquettes"])
+    tab_nouveau, tab_j2, tab_j7, tab_ident = st.tabs([
+        "🧪 Nouveau prélèvement",
+        "📖 Lecture J2",
+        "📗 Lecture J7",
+        "🔴 Identifications en attente",
+    ])
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET SURVEILLANCE
+    # ONGLET 1 — NOUVEAU PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_surv:
+    with tab_nouveau:
+        if not st.session_state.points:
+            st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement**.")
+        else:
+            p_col1, p_col2 = st.columns([3, 2])
+            with p_col1:
+                point_labels = [
+                    f"{pt['label']} — {pt.get('type','?')} — "
+                    f"{'Critique' if pt.get('location_criticality',1)==3 else 'Semi-critique' if pt.get('location_criticality',1)==2 else 'Non critique'}"
+                    for pt in st.session_state.points
+                ]
+                sel_idx = st.selectbox(
+                    "Point de prélèvement",
+                    list(range(len(point_labels))),
+                    format_func=lambda i: point_labels[i],
+                    key="new_prelev_point")
+                selected_point = st.session_state.points[sel_idx]
+                pt_type      = selected_point.get('type', '—')
+                pt_loc_crit  = int(selected_point.get('location_criticality', 1))
+                pt_gelose    = selected_point.get('gelose', '—')
+                pt_room      = selected_point.get('room_class', '—')
+                type_icon    = "💨" if pt_type == "Air" else "🧴"
+                lc_col       = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#94a3b8")
+                lc_lbl       = _loc_crit_label(pt_loc_crit)
 
-        # ── Nouveau prélèvement ───────────────────────────────────────────────
-        with st.expander("🧪 Nouveau prélèvement", expanded=False):
-            if not st.session_state.points:
-                st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement**.")
-            else:
-                # ── Ligne 1 : point + opérateur + date ──────────────────────
-                p_col1, p_col2 = st.columns([3, 2])
-                with p_col1:
-                    point_labels = [
-                        f"{pt['label']} — {pt.get('type','?')} — "
-                        f"{'Critique' if pt.get('location_criticality',1)==3 else 'Semi-critique' if pt.get('location_criticality',1)==2 else 'Non critique'}"
-                        for pt in st.session_state.points
-                    ]
-                    sel_idx = st.selectbox(
-                        "Point de prélèvement",
-                        list(range(len(point_labels))),
-                        format_func=lambda i: point_labels[i],
-                        key="new_prelev_point")
-                    selected_point = st.session_state.points[sel_idx]
-                    pt_type      = selected_point.get('type', '—')
-                    pt_loc_crit  = int(selected_point.get('location_criticality', 1))
-                    pt_gelose    = selected_point.get('gelose', '—')
-                    pt_room      = selected_point.get('room_class', '—')
-                    type_icon    = "💨" if pt_type == "Air" else "🧴"
-                    lc_col       = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#94a3b8")
-                    lc_lbl       = _loc_crit_label(pt_loc_crit)
+                st.markdown(f"""
+                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
+                  <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
+                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
+                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
+                    </div>
+                    <div style="background:#dbeafe;border-radius:6px;padding:8px;border:1px solid #93c5fd">
+                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe ISO / GMP</div>
+                      <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:2px">{pt_room if pt_room and pt_room != '—' else '—'}</div>
+                    </div>
+                    <div style="background:{lc_col}11;border-radius:6px;padding:8px;border:1px solid {lc_col}44">
+                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
+                      <div style="font-size:.85rem;font-weight:700;color:{lc_col};margin-top:2px">Nv.{pt_loc_crit} — {lc_lbl}</div>
+                    </div>
+                    <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
+                      <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                      <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
+                    </div>
+                  </div>
+                  <div style="background:#f8fafc;border-radius:6px;padding:7px 10px;margin-top:6px;
+                  font-size:.68rem;color:#475569;border:1px solid #e2e8f0">
+                    <strong>Grille seuils :</strong>
+                    score = criticité lieu ({pt_loc_crit}) × score germe &nbsp;·&nbsp;
+                    ⚠️ Alerte 24–36 &nbsp;·&nbsp; 🚨 Action &gt; 36
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
-                    st.markdown(f"""
-                    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
-                      <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
-                        </div>
-                        <div style="background:#dbeafe;border-radius:6px;padding:8px;border:1px solid #93c5fd">
-                          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe ISO / GMP</div>
-                          <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:2px">{pt_room if pt_room and pt_room != '—' else '—'}</div>
-                        </div>
-                        <div style="background:{lc_col}11;border-radius:6px;padding:8px;border:1px solid {lc_col}44">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
-                          <div style="font-size:.85rem;font-weight:700;color:{lc_col};margin-top:2px">
-                            Nv.{pt_loc_crit} — {lc_lbl}
-                          </div>
-                        </div>
-                        <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
-                        </div>
-                      </div>
-                      <div style="background:#f8fafc;border-radius:6px;padding:7px 10px;margin-top:6px;
-                      font-size:.68rem;color:#475569;border:1px solid #e2e8f0">
-                        <strong>Grille seuils :</strong>
-                        score = criticité lieu ({pt_loc_crit}) × score germe &nbsp;·&nbsp;
-                        ⚠️ Alerte 24–36 &nbsp;·&nbsp; 🚨 Action &gt; 36
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+            with p_col2:
+                oper_list = [
+                    o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                    for o in st.session_state.operators
+                ]
+                if oper_list:
+                    oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
+                    p_oper   = oper_sel if oper_sel != "— Sélectionner —" else ""
+                else:
+                    st.info("Aucun opérateur — ajoutez-en dans Paramètres")
+                    p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
+                p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
+                j2_date_calc = next_working_day_offset(p_date, 2)
+                j7_date_calc = next_working_day_offset(p_date, 5)
+                st.markdown(f"""
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
+                padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+                  📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
+                  📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
+                </div>""", unsafe_allow_html=True)
+                p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
-                with p_col2:
-                    oper_list = [
-                        o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
-                        for o in st.session_state.operators
-                    ]
-                    if oper_list:
-                        oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
-                        p_oper   = oper_sel if oper_sel != "— Sélectionner —" else ""
-                    else:
-                        st.info("Aucun opérateur — ajoutez-en dans Paramètres")
-                        p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
-                    p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
-                    j2_date_calc = next_working_day_offset(p_date, 2)
-                    j7_date_calc = next_working_day_offset(p_date, 5)
-                    st.markdown(f"""
-                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
-                    padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                      📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
-                      📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
-                    </div>""", unsafe_allow_html=True)
-                    p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
+            # Classe A
+            p_isolateur = ""
+            p_poste     = "Poste 1"
+            if str(pt_room).strip().upper() == "A":
+                st.markdown(
+                    "<div style='background:#fef9c3;border:1px solid #fde047;"
+                    "border-radius:8px;padding:10px 14px;margin-top:8px'>"
+                    "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:8px'>"
+                    "🔬 Paramètres Zone Classe A</div>",
+                    unsafe_allow_html=True)
+                iso_col, poste_col = st.columns(2)
+                with iso_col:
+                    p_isolateur = st.radio(
+                        "Isolateur", ["Iso 16/0724","Iso 14/07169"],
+                        horizontal=True, key="new_prelev_isolateur")
+                with poste_col:
+                    p_poste = st.radio(
+                        "Poste", ["Poste 1","Poste 2","Commun"],
+                        horizontal=True, key="new_prelev_poste")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                # ── Classe A uniquement : isolateur + poste ──────────────────
-                p_isolateur = ""
-                p_poste     = "Poste 1"
-                if str(pt_room).strip().upper() == "A":
-                    st.markdown(
-                        "<div style='background:#fef9c3;border:1px solid #fde047;"
-                        "border-radius:8px;padding:10px 14px;margin-top:8px'>"
-                        "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:8px'>"
-                        "🔬 Paramètres Zone Classe A</div>",
-                        unsafe_allow_html=True)
-                    iso_col, poste_col = st.columns(2)
-                    with iso_col:
-                        p_isolateur = st.radio(
-                            "Isolateur", ["Iso 16/0724","Iso 14/07169"],
-                            horizontal=True, key="new_prelev_isolateur")
-                    with poste_col:
-                        p_poste = st.radio(
-                            "Poste", ["Poste 1","Poste 2","Commun"],
-                            horizontal=True, key="new_prelev_poste")
-                    st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-                # ── Ligne 2 : plan URC + bouton enregistrer ──────────────────
-                map_col, btn_col = st.columns([5, 1])
-
-                with map_col:
-                    st.markdown(
-                        "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
-                        "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
-                        unsafe_allow_html=True)
-
-                    lc_plan, rc_plan = st.columns([1, 2])
-
-                    with lc_plan:
-                        plan_upload_new = st.file_uploader(
-                            "Plan URC (PNG / JPG / PDF)",
-                            type=["png", "jpg", "jpeg", "pdf"],
-                            key="plan_upload_new_prelev"
-                        )
-                        if plan_upload_new:
-                            import base64 as _b64_np
-                            if plan_upload_new.type == "application/pdf":
-                                # Conversion première page PDF → image
-                                try:
-                                    import fitz  # PyMuPDF
-                                    raw_pdf = plan_upload_new.read()
-                                    doc = fitz.open(stream=raw_pdf, filetype="pdf")
-                                    page = doc[0]
-                                    mat = fitz.Matrix(2, 2)  # zoom x2 pour qualité
-                                    pix = page.get_pixmap(matrix=mat)
-                                    img_bytes = pix.tobytes("png")
-                                    b64_np = _b64_np.b64encode(img_bytes).decode()
-                                    st.session_state.map_image = f"data:image/png;base64,{b64_np}"
-                                    st.session_state["_new_prelev_plan_point"] = None
-                                    st.success("✅ PDF converti — première page utilisée comme plan")
-                                except ImportError:
-                                    st.error("❌ PyMuPDF non installé — ajoutez `pymupdf` dans requirements.txt")
-                                except Exception as e:
-                                    st.error(f"❌ Erreur conversion PDF : {e}")
-                            else:
-                                raw_np = plan_upload_new.read()
-                                b64_np = _b64_np.b64encode(raw_np).decode()
-                                st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
+            map_col, btn_col = st.columns([5, 1])
+            with map_col:
+                st.markdown(
+                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
+                    "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                    unsafe_allow_html=True)
+                lc_plan, rc_plan = st.columns([1, 2])
+                with lc_plan:
+                    plan_upload_new = st.file_uploader(
+                        "Plan URC (PNG / JPG / PDF)", type=["png","jpg","jpeg","pdf"],
+                        key="plan_upload_new_prelev")
+                    if plan_upload_new:
+                        import base64 as _b64_np
+                        if plan_upload_new.type == "application/pdf":
+                            try:
+                                import fitz
+                                raw_pdf = plan_upload_new.read()
+                                doc = fitz.open(stream=raw_pdf, filetype="pdf")
+                                page = doc[0]
+                                mat  = fitz.Matrix(2, 2)
+                                pix  = page.get_pixmap(matrix=mat)
+                                img_bytes = pix.tobytes("png")
+                                b64_np = _b64_np.b64encode(img_bytes).decode()
+                                st.session_state.map_image = f"data:image/png;base64,{b64_np}"
                                 st.session_state["_new_prelev_plan_point"] = None
-
-                        _cur_pt = st.session_state.get("_new_prelev_plan_point")
-
-                        if st.session_state.get("map_image"):
-                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
-                            if _cur_pt:
-                                st.markdown(
-                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
-                                    unsafe_allow_html=True)
-                            else:
-                                st.info("Aucun point placé.")
-                            
-                            col_val, col_clr = st.columns(2)
-                            with col_val:
-                                if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
-                                    st.session_state["_new_prelev_plan_point"] = {
-                                        
-                                        "label":      selected_point.get("label", ""),
-                                        "room_class": selected_point.get("room_class", ""),
-                                        "loc_crit":   int(selected_point.get("location_criticality", 1)),
-                                        "survLabel":  None,
-                                    }
-                                    st.rerun()
-                            with col_clr:
-                                if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
-                                    st.session_state["_new_prelev_plan_point"] = None
-                                    st.rerun()
+                                st.success("✅ PDF converti — première page utilisée comme plan")
+                            except ImportError:
+                                st.error("❌ PyMuPDF non installé — ajoutez `pymupdf` dans requirements.txt")
+                            except Exception as e:
+                                st.error(f"❌ Erreur conversion PDF : {e}")
                         else:
+                            raw_np = plan_upload_new.read()
+                            b64_np = _b64_np.b64encode(raw_np).decode()
+                            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
+                            st.session_state["_new_prelev_plan_point"] = None
+
+                    _cur_pt = st.session_state.get("_new_prelev_plan_point")
+                    if st.session_state.get("map_image"):
+                        st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
+                        if _cur_pt:
                             st.markdown(
-                                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                                "padding:16px;text-align:center;color:#94a3b8;font-size:.72rem'>"
-                                "📁 Uploadez d'abord le plan URC</div>",
+                                f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                                f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                                f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
                                 unsafe_allow_html=True)
+                        else:
+                            st.info("Aucun point placé.")
+                        col_val, col_clr = st.columns(2)
+                        with col_val:
+                            if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
+                                st.session_state["_new_prelev_plan_point"] = {
+                                    "label":      selected_point.get("label",""),
+                                    "room_class": selected_point.get("room_class",""),
+                                    "loc_crit":   int(selected_point.get("location_criticality",1)),
+                                    "survLabel":  None,
+                                }
+                                st.rerun()
+                        with col_clr:
+                            if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
+                                st.session_state["_new_prelev_plan_point"] = None
+                                st.rerun()
+                    else:
+                        st.markdown(
+                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                            "padding:16px;text-align:center;color:#94a3b8;font-size:.72rem'>"
+                            "📁 Uploadez d'abord le plan URC</div>",
+                            unsafe_allow_html=True)
 
-                    with rc_plan:
-                        if st.session_state.get("map_image"):
-                            _np_img     = st.session_state["map_image"]
-                            _np_label   = selected_point.get("label", "Point")
-                            _np_point   = st.session_state.get("_new_prelev_plan_point")
-                            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
-                            _np_lc      = int(selected_point.get("location_criticality", 1))
-                            _lc_col_map = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_np_lc), "#3b82f6")
-                            _np_rc      = selected_point.get("room_class", "")
+                with rc_plan:
+                    if st.session_state.get("map_image"):
+                        _np_img     = st.session_state["map_image"]
+                        _np_label   = selected_point.get("label","Point")
+                        _np_point   = st.session_state.get("_new_prelev_plan_point")
+                        _np_pt_json = json.dumps(_np_point) if _np_point else "null"
+                        _np_lc      = int(selected_point.get("location_criticality",1))
+                        _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
+                        _np_rc      = selected_point.get("room_class","")
 
-                            _np_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
+                        _np_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
      display:flex;flex-direction:column;overflow:hidden}}
@@ -1863,432 +2420,491 @@ if(img.complete&&img.naturalWidth>0) render();
 else img.addEventListener('load',render);
 upd();
 </script></body></html>"""
-                            st.components.v1.html(_np_html, height=280, scrolling=False)
-                            st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
-                        else:
-                            st.markdown(
-                                "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                                "padding:40px;text-align:center;color:#94a3b8;font-size:.75rem'>"
-                                "🗺️ La carte apparaîtra ici après upload du plan</div>",
-                                unsafe_allow_html=True)
-
-                with btn_col:
-                    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-                    if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
-                        pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                        sample = {
-                            "id":                   pid,
-                            "label":                selected_point['label'],
-                            "type":                 selected_point.get('type'),
-                            "gelose":               selected_point.get('gelose', '—'),
-                            "room_class":           selected_point.get('room_class', ''),
-                            "location_criticality": pt_loc_crit,
-                            "operateur":            p_oper,
-                            "date":                 str(p_date),
-                            "archived":             False,
-                            "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                            "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
-                            "commentaire":          p_commentaire
-                        }
-                        st.session_state.prelevements.append(sample)
-                        save_prelevements(st.session_state.prelevements)
-                        st.session_state.schedules.append({
-                            "id": f"sch_{pid}_J2", "sample_id": pid,
-                            "label": sample['label'], "due_date": j2_date_calc.isoformat(),
-                            "when": "J2", "status": "pending"
-                        })
-                        st.session_state.schedules.append({
-                            "id": f"sch_{pid}_J7", "sample_id": pid,
-                            "label": sample['label'], "due_date": j7_date_calc.isoformat(),
-                            "when": "J7", "status": "pending"
-                        })
-                        save_schedules(st.session_state.schedules)
-                        st.success(
-                            f"✅ **{sample['label']}** enregistré !\n"
-                            f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                            f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
-
-        # ── Persiste point carte ──────────────────────────────────────────────
-        _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
-        if _np_saved_pt:
-            if "map_points" not in st.session_state:
-                st.session_state.map_points = []
-            _existing = [p.get("label") for p in st.session_state.map_points]
-            if _np_saved_pt["label"] not in _existing:
-                st.session_state.map_points.append(_np_saved_pt)
-            else:
-                for _mp in st.session_state.map_points:
-                    if _mp.get("label") == _np_saved_pt["label"]:
-                        _mp.update(_np_saved_pt)
-            st.session_state["_new_prelev_plan_point"] = None
-            st.rerun()
-
-# ── Prélèvements actifs ───────────────────────────────────────────────
-        for idx, samp in enumerate(st.session_state.prelevements):
-            if samp.get("archived"):
-                continue
-            col_info, col_edit, col_del = st.columns([5, 1, 1])
-            with col_info:
-                loc_c    = int(samp.get("location_criticality", 1))
-                lc_col   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
-                room_cl  = samp.get('room_class','') or ''
-                room_badge = (
-                    f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
-                    f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
-                    f"margin-left:4px'>Cl.{room_cl}</span>"
-                    if room_cl else "")
-                _comment_html = (
-                    f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
-                    f"💬 {samp['commentaire']}</div>"
-                    if samp.get('commentaire') else "")
-                st.markdown(
-                    f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
-                    f"padding:10px 16px;margin-bottom:6px'>"
-                    f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
-                    f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
-                    f"· <span style='color:{lc_col};font-weight:600'>Nv.{loc_c}</span>"
-                    f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
-                    f"{_comment_html}</div>",
-                    unsafe_allow_html=True)
-            with col_edit:
-                if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
-                    st.session_state["edit_prelev_id"] = samp["id"]
-                    st.rerun()
-            with col_del:
-                if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
-                    sid = samp["id"]
-                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
-                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
-                    st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
-                    save_schedules(st.session_state.schedules)
-                    save_prelevements(st.session_state.prelevements)
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    if st.session_state.get("edit_prelev_id") == sid:
-                        st.session_state["edit_prelev_id"] = None
-                    st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
-                    st.rerun()
-
-            # ── Formulaire modification ── (niveau boucle for, hors col_del)
-            if st.session_state.get("edit_prelev_id") == samp["id"]:
-                with st.container():
-                    st.markdown(
-                        "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
-                        "border-radius:10px;padding:16px;margin-bottom:12px'>",
-                        unsafe_allow_html=True)
-                    st.markdown(f"**✏️ Modifier — {samp['label']}**")
-                    e_col1, e_col2 = st.columns(2)
-                    with e_col1:
-                        oper_list_e = [
-                            o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
-                            for o in st.session_state.operators
-                        ]
-                        current_oper = samp.get("operateur","")
-                        if oper_list_e:
-                            oper_options = ["— Sélectionner —"] + oper_list_e
-                            oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
-                            new_oper = st.selectbox("Opérateur", oper_options, index=oper_idx, key=f"edit_oper_{samp['id']}")
-                            new_oper = new_oper if new_oper != "— Sélectionner —" else ""
-                        else:
-                            new_oper = st.text_input("Opérateur", value=current_oper, key=f"edit_oper_{samp['id']}")
-                        try:
-                            current_date = datetime.fromisoformat(samp["date"]).date()
-                        except Exception:
-                            current_date = datetime.today().date()
-                        new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
-                    with e_col2:
-                        new_gelose      = st.text_input("Gélose", value=samp.get("gelose",""), key=f"edit_gelose_{samp['id']}")
-                        new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
-                        new_isolateur = ""
-                        new_poste = "Poste 1"
-                        if str(samp.get("room_class","")).strip().upper() == "A":
-                            new_isolateur = st.text_input("Numéro isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
-                            new_poste = st.radio(
-                                "Poste", ["Poste 1","Poste 2","Commun"],
-                                index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1"))
-                                      if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
-                                horizontal=True, key=f"edit_poste_{samp['id']}")
-                    new_j2 = next_working_day_offset(new_date, 2)
-                    new_j7 = next_working_day_offset(new_date, 5)
-                    if new_date != current_date:
+                        st.components.v1.html(_np_html, height=280, scrolling=False)
+                        st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
+                    else:
                         st.markdown(
-                            f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
-                            f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
-                            f"⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
-                            f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>",
+                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
+                            "padding:40px;text-align:center;color:#94a3b8;font-size:.75rem'>"
+                            "🗺️ La carte apparaîtra ici après upload du plan</div>",
                             unsafe_allow_html=True)
-                    btn_c1, btn_c2 = st.columns(2)
-                    with btn_c1:
-                        if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
-                            st.session_state.prelevements[idx]["operateur"]   = new_oper
-                            st.session_state.prelevements[idx]["date"]        = str(new_date)
-                            st.session_state.prelevements[idx]["gelose"]      = new_gelose
-                            st.session_state.prelevements[idx]["commentaire"] = new_commentaire
-                            if str(samp.get("room_class","")).strip().upper() == "A":
-                                st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
-                                st.session_state.prelevements[idx]["poste"]         = new_poste
-                            if new_date != current_date:
-                                for sch in st.session_state.schedules:
-                                    if sch["sample_id"] == samp["id"]:
-                                        if sch["when"] == "J2": sch["due_date"] = new_j2.isoformat()
-                                        elif sch["when"] == "J7": sch["due_date"] = new_j7.isoformat()
-                                save_schedules(st.session_state.schedules)
-                            save_prelevements(st.session_state.prelevements)
-                            st.session_state["edit_prelev_id"] = None
-                            st.success("✅ Prélèvement mis à jour !")
-                            st.rerun()
-                    with btn_c2:
-                        if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
-                            st.session_state["edit_prelev_id"] = None
-                            st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Lectures en attente ── (hors boucle for) ──────────────────────────
-        st.divider()
-        st.markdown("#### 📅 Lectures en attente")
-        pending_schedules = [s for s in st.session_state.schedules if s["status"] == "pending"]
-        overdue  = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming = [s for s in pending_schedules if datetime.fromisoformat(s["due_date"]).date() > today]
+            with btn_col:
+                st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+                if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
+                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                    sample = {
+                        "id":                   pid,
+                        "label":                selected_point['label'],
+                        "type":                 selected_point.get('type'),
+                        "gelose":               selected_point.get('gelose','—'),
+                        "room_class":           selected_point.get('room_class',''),
+                        "location_criticality": pt_loc_crit,
+                        "operateur":            p_oper,
+                        "date":                 str(p_date),
+                        "archived":             False,
+                        "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                        "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
+                        "commentaire":          p_commentaire
+                    }
+                    st.session_state.prelevements.append(sample)
+                    save_prelevements(st.session_state.prelevements)
+                    st.session_state.schedules.append({
+                        "id": f"sch_{pid}_J2", "sample_id": pid,
+                        "label": sample['label'], "due_date": j2_date_calc.isoformat(),
+                        "when": "J2", "status": "pending"
+                    })
+                    st.session_state.schedules.append({
+                        "id": f"sch_{pid}_J7", "sample_id": pid,
+                        "label": sample['label'], "due_date": j7_date_calc.isoformat(),
+                        "when": "J7", "status": "pending"
+                    })
+                    save_schedules(st.session_state.schedules)
+                    st.success(
+                        f"✅ **{sample['label']}** enregistré !\n"
+                        f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
+                        f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
-        if overdue:
-            st.markdown(
-                f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                f'padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">'
-                f'🔔 {len(overdue)} lecture(s) en retard — à traiter dès que possible</span></div>',
-                unsafe_allow_html=True)
-        if upcoming:
-            st.markdown(
-                f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
-                f'padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">'
-                f'📆 {len(upcoming)} lecture(s) à venir</span></div>',
-                unsafe_allow_html=True)
-        if not pending_schedules:
-            st.info("Aucune lecture planifiée — tous les prélèvements sont à jour.")
+            # Persiste point carte
+            _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
+            if _np_saved_pt:
+                if "map_points" not in st.session_state:
+                    st.session_state.map_points = []
+                _existing = [p.get("label") for p in st.session_state.map_points]
+                if _np_saved_pt["label"] not in _existing:
+                    st.session_state.map_points.append(_np_saved_pt)
+                else:
+                    for _mp in st.session_state.map_points:
+                        if _mp.get("label") == _np_saved_pt["label"]:
+                            _mp.update(_np_saved_pt)
+                st.session_state["_new_prelev_plan_point"] = None
+                st.rerun()
 
-        def _should_show(s, all_schedules):
-            if s['when'] == 'J2': return True
-            j2 = next((x for x in all_schedules if x['sample_id'] == s['sample_id'] and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
-
-        for s in [s for s in (overdue + upcoming) if _should_show(s, st.session_state.schedules)]:
-            sched_date  = datetime.fromisoformat(s["due_date"]).date()
-            is_late     = sched_date <= today
-            border_col  = "#ef4444" if is_late else "#3b82f6"
-            bg_col      = "#fef2f2" if is_late else "#eff6ff"
-            badge_col   = "#dc2626" if is_late else "#1d4ed8"
-            status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-            smp         = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
-            pt_type     = smp.get('type', '?')       if smp else '?'
-            pt_gelose   = smp.get('gelose', '?')     if smp else '?'
-            pt_oper     = smp.get('operateur', '?')  if smp else '?'
-            pt_room_cl  = smp.get('room_class', '')  if smp else ''
-            loc_crit    = _get_location_criticality(smp) if smp else 1
-            lc_col_s    = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-            lc_lbl_s    = _loc_crit_label(loc_crit)
-            room_cl_badge = (
-                f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
-                f"border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:800;"
-                f"margin-left:6px'>Cl.{pt_room_cl}</span>"
-                if pt_room_cl else "")
-
-            extra_info = ""
-            if smp and str(smp.get("room_class","")).strip().upper() == "A":
-                iso = smp.get("num_isolateur","—") or "—"
-                pst = smp.get("poste","—") or "—"
-                extra_info = (
-                    f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
-                    f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
-                    f"font-weight:600;margin-top:6px'>"
-                    f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
-
-            with st.container():
-                st.markdown(f"""
-                <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
-                padding:14px 16px;margin-bottom:8px">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                    <div>
-                      <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
-                      {room_cl_badge}
-                      <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
-                      padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
-                      <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
-                    </div>
-                    <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
-                  </div>
-                  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
-                    </div>
-                    <div style="background:#dbeafe;border-radius:6px;padding:6px 8px;border:1px solid #93c5fd">
-                      <div style="font-size:.55rem;color:#1e40af;text-transform:uppercase">Classe</div>
-                      <div style="font-size:.75rem;font-weight:800;color:#1e40af">{pt_room_cl or '—'}</div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
-                    </div>
-                    <div style="background:{lc_col_s}11;border-radius:6px;padding:6px 8px;border:1px solid {lc_col_s}44">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
-                      <div style="font-size:.75rem;font-weight:600;color:{lc_col_s}">Nv.{loc_crit} — {lc_lbl_s}</div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                      <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
-                      <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
-                    </div>
-                  </div>
-                  {extra_info}
-                </div>""", unsafe_allow_html=True)
-
-                bc1, bc2 = st.columns([3, 1])
-                with bc1:
-                    if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
-                        st.session_state.current_process = s['id']
+            # ── Prélèvements actifs ────────────────────────────────────────────
+            st.divider()
+            st.markdown("#### 📋 Prélèvements en cours")
+            for idx, samp in enumerate(st.session_state.prelevements):
+                if samp.get("archived"):
+                    continue
+                col_info, col_edit, col_del = st.columns([5, 1, 1])
+                with col_info:
+                    loc_c    = int(samp.get("location_criticality",1))
+                    lc_col_r = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+                    room_cl  = samp.get('room_class','') or ''
+                    room_badge = (
+                        f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+                        f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
+                        f"margin-left:4px'>Cl.{room_cl}</span>"
+                        if room_cl else "")
+                    _comment_html = (
+                        f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
+                        f"💬 {samp['commentaire']}</div>"
+                        if samp.get('commentaire') else "")
+                    st.markdown(
+                        f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
+                        f"padding:10px 16px;margin-bottom:6px'>"
+                        f"<span style='font-weight:700'>{samp['label']}</span>{room_badge} "
+                        f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} "
+                        f"· <span style='color:{lc_col_r};font-weight:600'>Nv.{loc_c}</span>"
+                        f" · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
+                        f"{_comment_html}</div>",
+                        unsafe_allow_html=True)
+                with col_edit:
+                    if st.button("✏️ Modifier", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
+                        st.session_state["edit_prelev_id"] = samp["id"]
                         st.rerun()
-                with bc2:
-                    if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
-                        sid = s.get('sample_id')
-                        st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
+                with col_del:
+                    if st.button("🗑️ Supprimer", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
+                        sid = samp["id"]
+                        st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
                         st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
                         st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
                         save_schedules(st.session_state.schedules)
                         save_prelevements(st.session_state.prelevements)
                         save_pending_identifications(st.session_state.pending_identifications)
-                        st.success("Prélèvement, lectures et identifications supprimés.")
+                        if st.session_state.get("edit_prelev_id") == sid:
+                            st.session_state["edit_prelev_id"] = None
+                        st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                         st.rerun()
 
-        # ── Traitement d'une lecture ──────────────────────────────────────────
-        if st.session_state.current_process:
-            proc_id = st.session_state.current_process
-            proc    = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
-            if proc:
-                smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
-                pt_type   = smp.get('type', '?')       if smp else '?'
-                pt_gelose = smp.get('gelose', '?')     if smp else '?'
-                pt_oper   = smp.get('operateur', '?')  if smp else '?'
-                pt_date   = smp.get('date', '?')       if smp else '?'
-                pt_room_p = smp.get('room_class', '')  if smp else ''
-                loc_crit  = _get_location_criticality(smp) if smp else 1
-                lc_col_p  = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-
-                classea_band = ""
-                if smp and str(smp.get("room_class","")).strip().upper() == "A":
-                    iso = smp.get("num_isolateur","—") or "—"
-                    pst = smp.get("poste","—") or "—"
-                    classea_band = (
-                        f"<div style='background:#fef9c3;border:1px solid #fde047;"
-                        f"border-radius:8px;padding:8px 12px;margin-top:10px;"
-                        f"font-size:.75rem;font-weight:700;color:#854d0e'>"
-                        f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
-
-                st.markdown("---")
-                st.markdown(f"""
-                <div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;
-                padding:16px;margin-bottom:16px">
-                  <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">
-                    🔬 Traitement lecture —
-                    <span style="font-style:italic">{proc['label']}</span>
-                    <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;
-                    padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
-                  </div>
-                  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
-                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">
-                        {'💨' if pt_type=='Air' else '🧴'} {pt_type}
-                      </div>
-                    </div>
-                    <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;
-                    border:1px solid #93c5fd">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div>
-                      <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:3px">{pt_room_p or '—'}</div>
-                    </div>
-                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div>
-                    </div>
-                    <div style="background:{lc_col_p}11;border-radius:8px;padding:10px;text-align:center;
-                    border:1px solid {lc_col_p}44">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Criticité lieu</div>
-                      <div style="font-size:.85rem;font-weight:700;color:{lc_col_p};margin-top:3px">
-                        Nv.{loc_crit}
-                      </div>
-                    </div>
-                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div>
-                    </div>
-                    <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
-                      <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div>
-                      <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div>
-                    </div>
-                  </div>
-                  {classea_band}
-                </div>""", unsafe_allow_html=True)
-
-                lc1, lc2 = st.columns([2, 2])
-                with lc1:
-                    res = st.radio(
-                        "Résultat",
-                        ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"],
-                        index=0, key=f"res_{proc_id}")
-                with lc2:
-                    ncol = (st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
-                            if "Positif" in res else 0)
-
-                vc1, vc2 = st.columns(2)
-                with vc1:
-                    if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
-                        proc['status'] = 'done'
-                        save_schedules(st.session_state.schedules)
-                        if "Négatif" in res:
-                            j7_sch = next((x for x in st.session_state.schedules
-                                if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
-                            if proc['when'] == 'J7' or (proc['when'] == 'J2' and not j7_sch):
-                                if smp:
-                                    smp['archived'] = True
-                                    st.session_state.archived_samples.append(smp)
-                                    save_archived_samples(st.session_state.archived_samples)
-                                    save_prelevements(st.session_state.prelevements)
-                                st.success("✅ Lecture négative — prélèvement archivé.")
+                if st.session_state.get("edit_prelev_id") == samp["id"]:
+                    with st.container():
+                        st.markdown(
+                            "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                            "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                            unsafe_allow_html=True)
+                        st.markdown(f"**✏️ Modifier — {samp['label']}**")
+                        e_col1, e_col2 = st.columns(2)
+                        with e_col1:
+                            oper_list_e = [
+                                o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                                for o in st.session_state.operators
+                            ]
+                            current_oper = samp.get("operateur","")
+                            if oper_list_e:
+                                oper_options = ["— Sélectionner —"] + oper_list_e
+                                oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
+                                new_oper = st.selectbox("Opérateur", oper_options, index=oper_idx, key=f"edit_oper_{samp['id']}")
+                                new_oper = new_oper if new_oper != "— Sélectionner —" else ""
                             else:
-                                st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
-                            st.session_state.surveillance.append({
-                                "date": str(today), "prelevement": proc['label'],
-                                "sample_id": proc.get('sample_id',''),
-                                "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
-                                "ufc": 0, "germ_score": 0, "location_criticality": loc_crit,
-                                "total_score": 0, "risk": 0,
-                                "room_class": smp.get('room_class','') if smp else '',
-                                "alert_threshold": "Score ≥ 24", "action_threshold": "Score > 36",
-                                "triggered_by": None, "status": "ok",
-                                "operateur": pt_oper,
-                                "remarque": f"Lecture {proc['when']} négative"
-                            })
-                            save_surveillance(st.session_state.surveillance)
-                        else:
-                            st.session_state.pending_identifications.append({
-                                "sample_id": proc['sample_id'], "label": proc['label'],
-                                "when": proc['when'], "colonies": int(ncol),
-                                "date": str(today), "status": "pending"
-                            })
-                            save_pending_identifications(st.session_state.pending_identifications)
-                            if proc['when'] == 'J2':
-                                j7_sch = next((x for x in st.session_state.schedules
-                                    if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7'), None)
-                                if j7_sch:
-                                    j7_sch['status'] = 'skipped'
+                                new_oper = st.text_input("Opérateur", value=current_oper, key=f"edit_oper_{samp['id']}")
+                            try:
+                                current_date = datetime.fromisoformat(samp["date"]).date()
+                            except Exception:
+                                current_date = datetime.today().date()
+                            new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
+                        with e_col2:
+                            new_gelose      = st.text_input("Gélose", value=samp.get("gelose",""), key=f"edit_gelose_{samp['id']}")
+                            new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
+                            new_isolateur = ""
+                            new_poste     = "Poste 1"
+                            if str(samp.get("room_class","")).strip().upper() == "A":
+                                new_isolateur = st.text_input("Numéro isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
+                                new_poste = st.radio(
+                                    "Poste", ["Poste 1","Poste 2","Commun"],
+                                    index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1"))
+                                          if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
+                                    horizontal=True, key=f"edit_poste_{samp['id']}")
+                        new_j2 = next_working_day_offset(new_date, 2)
+                        new_j7 = next_working_day_offset(new_date, 5)
+                        if new_date != current_date:
+                            st.markdown(
+                                f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
+                                f"padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>"
+                                f"⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · "
+                                f"J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>",
+                                unsafe_allow_html=True)
+                        btn_c1, btn_c2 = st.columns(2)
+                        with btn_c1:
+                            if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
+                                st.session_state.prelevements[idx]["operateur"]   = new_oper
+                                st.session_state.prelevements[idx]["date"]        = str(new_date)
+                                st.session_state.prelevements[idx]["gelose"]      = new_gelose
+                                st.session_state.prelevements[idx]["commentaire"] = new_commentaire
+                                if str(samp.get("room_class","")).strip().upper() == "A":
+                                    st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
+                                    st.session_state.prelevements[idx]["poste"]         = new_poste
+                                if new_date != current_date:
+                                    for sch in st.session_state.schedules:
+                                        if sch["sample_id"] == samp["id"]:
+                                            if sch["when"] == "J2": sch["due_date"] = new_j2.isoformat()
+                                            elif sch["when"] == "J7": sch["due_date"] = new_j7.isoformat()
                                     save_schedules(st.session_state.schedules)
-                                st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
-                            else:
-                                st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
-                        st.session_state.current_process = None
-                        st.rerun()
-                with vc2:
-                    if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
-                        st.session_state.current_process = None
-                        st.rerun()
+                                save_prelevements(st.session_state.prelevements)
+                                st.session_state["edit_prelev_id"] = None
+                                st.success("✅ Prélèvement mis à jour !")
+                                st.rerun()
+                        with btn_c2:
+                            if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
+                                st.session_state["edit_prelev_id"] = None
+                                st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Carte d'alerte mesures correctives ────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER PARTAGÉ — rendu carte schedule + traitement lecture
+    # ══════════════════════════════════════════════════════════════════════════
+    def _render_lecture_card(s):
+        sched_date  = datetime.fromisoformat(s["due_date"]).date()
+        is_late     = sched_date <= today
+        border_col  = "#ef4444" if is_late else "#3b82f6"
+        bg_col      = "#fef2f2" if is_late else "#eff6ff"
+        badge_col   = "#dc2626" if is_late else "#1d4ed8"
+        status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
+        smp         = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
+        pt_type     = smp.get('type','?')       if smp else '?'
+        pt_gelose   = smp.get('gelose','?')     if smp else '?'
+        pt_oper     = smp.get('operateur','?')  if smp else '?'
+        pt_room_cl  = smp.get('room_class','')  if smp else ''
+        loc_crit    = _get_location_criticality(smp) if smp else 1
+        lc_col_s    = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
+        lc_lbl_s    = _loc_crit_label(loc_crit)
+        room_cl_badge = (
+            f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
+            f"border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:800;"
+            f"margin-left:6px'>Cl.{pt_room_cl}</span>"
+            if pt_room_cl else "")
+        extra_info = ""
+        if smp and str(smp.get("room_class","")).strip().upper() == "A":
+            iso = smp.get("num_isolateur","—") or "—"
+            pst = smp.get("poste","—") or "—"
+            extra_info = (
+                f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
+                f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
+                f"font-weight:600;margin-top:6px'>"
+                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
+
+        with st.container():
+            st.markdown(f"""
+            <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
+            padding:14px 16px;margin-bottom:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div>
+                  <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                  {room_cl_badge}
+                  <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
+                  padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
+                  <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
+                </div>
+                <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+                </div>
+                <div style="background:#dbeafe;border-radius:6px;padding:6px 8px;border:1px solid #93c5fd">
+                  <div style="font-size:.55rem;color:#1e40af;text-transform:uppercase">Classe</div>
+                  <div style="font-size:.75rem;font-weight:800;color:#1e40af">{pt_room_cl or '—'}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
+                </div>
+                <div style="background:{lc_col_s}11;border-radius:6px;padding:6px 8px;border:1px solid {lc_col_s}44">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
+                  <div style="font-size:.75rem;font-weight:600;color:{lc_col_s}">Nv.{loc_crit} — {lc_lbl_s}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                  <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
+                  <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
+                </div>
+              </div>
+              {extra_info}
+            </div>""", unsafe_allow_html=True)
+
+            bc1, bc2 = st.columns([3, 1])
+            with bc1:
+                if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
+                    st.session_state.current_process = s['id']
+                    st.rerun()
+            with bc2:
+                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
+                    sid = s.get('sample_id')
+                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+                    st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+                    save_schedules(st.session_state.schedules)
+                    save_prelevements(st.session_state.prelevements)
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    st.success("Prélèvement, lectures et identifications supprimés.")
+                    st.rerun()
+
+    def _render_traitement_lecture(proc_id):
+        """Affiche le formulaire de traitement d'une lecture (J2 ou J7)."""
+        proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
+        if not proc:
+            return
+        smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+        pt_type   = smp.get('type','?')       if smp else '?'
+        pt_gelose = smp.get('gelose','?')     if smp else '?'
+        pt_oper   = smp.get('operateur','?')  if smp else '?'
+        pt_date   = smp.get('date','?')       if smp else '?'
+        pt_room_p = smp.get('room_class','')  if smp else ''
+        loc_crit  = _get_location_criticality(smp) if smp else 1
+        lc_col_p  = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
+
+        classea_band = ""
+        if smp and str(smp.get("room_class","")).strip().upper() == "A":
+            iso = smp.get("num_isolateur","—") or "—"
+            pst = smp.get("poste","—") or "—"
+            classea_band = (
+                f"<div style='background:#fef9c3;border:1px solid #fde047;"
+                f"border-radius:8px;padding:8px 12px;margin-top:10px;"
+                f"font-size:.75rem;font-weight:700;color:#854d0e'>"
+                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>")
+
+        st.markdown("---")
+        st.markdown(f"""
+        <div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;
+        padding:16px;margin-bottom:16px">
+          <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">
+            🔬 Traitement lecture —
+            <span style="font-style:italic">{proc['label']}</span>
+            <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;
+            padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div>
+              <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">
+                {'💨' if pt_type=='Air' else '🧴'} {pt_type}
+              </div>
+            </div>
+            <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;
+            border:1px solid #93c5fd">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div>
+              <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:3px">{pt_room_p or '—'}</div>
+            </div>
+            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div>
+              <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div>
+            </div>
+            <div style="background:{lc_col_p}11;border-radius:8px;padding:10px;text-align:center;
+            border:1px solid {lc_col_p}44">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Criticité lieu</div>
+              <div style="font-size:.85rem;font-weight:700;color:{lc_col_p};margin-top:3px">Nv.{loc_crit}</div>
+            </div>
+            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div>
+              <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div>
+            </div>
+            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div>
+              <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div>
+            </div>
+          </div>
+          {classea_band}
+        </div>""", unsafe_allow_html=True)
+
+        lc1, lc2 = st.columns([2, 2])
+        with lc1:
+            res = st.radio(
+                "Résultat",
+                ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"],
+                index=0, key=f"res_{proc_id}")
+        with lc2:
+            ncol = (st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
+                    if "Positif" in res else 0)
+
+        vc1, vc2 = st.columns(2)
+        with vc1:
+            if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
+                proc['status'] = 'done'
+                save_schedules(st.session_state.schedules)
+                if "Négatif" in res:
+                    j7_sch = next((x for x in st.session_state.schedules
+                        if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7' and x['status'] == 'pending'), None)
+                    if proc['when'] == 'J7' or (proc['when'] == 'J2' and not j7_sch):
+                        if smp:
+                            smp['archived'] = True
+                            st.session_state.archived_samples.append(smp)
+                            save_archived_samples(st.session_state.archived_samples)
+                            save_prelevements(st.session_state.prelevements)
+                        st.success("✅ Lecture négative — prélèvement archivé.")
+                    else:
+                        st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
+                    st.session_state.surveillance.append({
+                        "date": str(today), "prelevement": proc['label'],
+                        "sample_id": proc.get('sample_id',''),
+                        "germ_saisi": "", "germ_match": "Négatif", "match_score": "—",
+                        "ufc": 0, "germ_score": 0, "location_criticality": loc_crit,
+                        "total_score": 0, "risk": 0,
+                        "room_class": smp.get('room_class','') if smp else '',
+                        "alert_threshold": "Score ≥ 24", "action_threshold": "Score > 36",
+                        "triggered_by": None, "status": "ok",
+                        "operateur": pt_oper,
+                        "remarque": f"Lecture {proc['when']} négative"
+                    })
+                    save_surveillance(st.session_state.surveillance)
+                else:
+                    st.session_state.pending_identifications.append({
+                        "sample_id": proc['sample_id'], "label": proc['label'],
+                        "when": proc['when'], "colonies": int(ncol),
+                        "date": str(today), "status": "pending"
+                    })
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    if proc['when'] == 'J2':
+                        j7_sch = next((x for x in st.session_state.schedules
+                            if x['sample_id'] == proc['sample_id'] and x['when'] == 'J7'), None)
+                        if j7_sch:
+                            j7_sch['status'] = 'skipped'
+                            save_schedules(st.session_state.schedules)
+                        st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
+                    else:
+                        st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
+                st.session_state.current_process = None
+                st.rerun()
+        with vc2:
+            if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
+                st.session_state.current_process = None
+                st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ONGLET 2 — LECTURE J2
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_j2:
+        st.markdown("#### 📖 Lectures J2 en attente")
+        _active_sids = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+        pending_j2  = [s for s in st.session_state.schedules
+                       if s["when"] == "J2" and s["status"] == "pending"
+                       and s.get("sample_id") in _active_sids]
+        overdue_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming_j2 = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
+
+        if not pending_j2:
+            st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
+        else:
+            if overdue_j2:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                    f'padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">'
+                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible</span></div>',
+                    unsafe_allow_html=True)
+            if upcoming_j2:
+                st.markdown(
+                    f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
+                    f'padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">'
+                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>',
+                    unsafe_allow_html=True)
+            for s in overdue_j2 + upcoming_j2:
+                _render_lecture_card(s)
+
+        if st.session_state.current_process:
+            proc_check = next((x for x in st.session_state.schedules
+                               if x['id'] == st.session_state.current_process
+                               and x['when'] == 'J2'), None)
+            if proc_check:
+                _render_traitement_lecture(st.session_state.current_process)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ONGLET 3 — LECTURE J7
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_j7:
+        st.markdown("#### 📗 Lectures J7 en attente")
+        _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+
+        def _j2_done_for(sample_id):
+            j2 = next((x for x in st.session_state.schedules
+                        if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+            return j2 is None or j2['status'] == 'done'
+
+        pending_j7  = [s for s in st.session_state.schedules
+                       if s["when"] == "J7" and s["status"] == "pending"
+                       and s.get("sample_id") in _active_sids_j7
+                       and _j2_done_for(s["sample_id"])]
+        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+
+        if not pending_j7:
+            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
+        else:
+            if overdue_j7:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                    f'padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">'
+                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible</span></div>',
+                    unsafe_allow_html=True)
+            if upcoming_j7:
+                st.markdown(
+                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                    f'padding:10px 16px;margin-bottom:12px"><span style="color:#1d4ed8;font-size:.8rem">'
+                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
+                    unsafe_allow_html=True)
+            for s in overdue_j7 + upcoming_j7:
+                _render_lecture_card(s)
+
+        if st.session_state.current_process:
+            proc_check = next((x for x in st.session_state.schedules
+                               if x['id'] == st.session_state.current_process
+                               and x['when'] == 'J7'), None)
+            if proc_check:
+                _render_traitement_lecture(st.session_state.current_process)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_ident:
+        # ── Carte alerte mesures correctives ──────────────────────────────────
         def _render_alerte_mesures(pop_data, key_suffix):
             _is_action   = pop_data["status"] == "action"
             _border      = "#ef4444" if _is_action else "#f59e0b"
@@ -2296,19 +2912,18 @@ upd();
             _hd_col      = "#991b1b" if _is_action else "#92400e"
             _ic          = "🚨" if _is_action else "⚠️"
             _txt         = "ACTION REQUISE" if _is_action else "ALERTE"
-            _germ_sc     = pop_data.get("germ_score", "—")
-            _loc_c       = pop_data.get("loc_criticality", "—")
-            _total       = pop_data.get("total_score", "—")
-
-            type_colors = {"action":"#ef4444","alert":"#f59e0b","both":"#818cf8"}
-            type_labels = {"action":"🚨 Action","alert":"⚠️ Alerte","both":"⚠️🚨 Les deux"}
+            _germ_sc     = pop_data.get("germ_score","—")
+            _loc_c       = pop_data.get("loc_criticality","—")
+            _total       = pop_data.get("total_score","—")
+            type_colors  = {"action":"#ef4444","alert":"#f59e0b","both":"#818cf8"}
+            type_labels  = {"action":"🚨 Action","alert":"⚠️ Alerte","both":"⚠️🚨 Les deux"}
 
             def _match(m):
                 if pop_data["status"]=="alert"  and m.get("type") not in ("alert","both"):  return False
                 if pop_data["status"]=="action" and m.get("type") not in ("action","both"): return False
                 mr = m.get("risk","all")
                 if mr != "all":
-                    gr = pop_data.get("risk", 1)
+                    gr = pop_data.get("risk",1)
                     if isinstance(mr, list): return gr in mr
                     return mr == gr
                 return True
@@ -2335,9 +2950,7 @@ upd();
                   padding:12px 18px;text-align:center;min-width:130px">
                     <div style="font-size:.58rem;color:#475569;text-transform:uppercase;font-weight:700">Score total</div>
                     <div style="font-size:2.2rem;font-weight:900;color:{_border};line-height:1.1">{_total}</div>
-                    <div style="font-size:.6rem;color:#64748b;margin-top:2px">
-                      Lieu {_loc_c} × Germe {_germ_sc}
-                    </div>
+                    <div style="font-size:.6rem;color:#64748b;margin-top:2px">Lieu {_loc_c} × Germe {_germ_sc}</div>
                     <div style="font-size:.62rem;font-weight:700;color:{_hd_col};margin-top:4px">
                       {'Seuil action (> 36)' if _is_action else 'Seuil alerte (24–36)'}
                     </div>
@@ -2351,8 +2964,8 @@ upd();
 
             if mesures:
                 for _m in mesures:
-                    _tc = type_colors.get(_m["type"], "#94a3b8")
-                    _tl = type_labels.get(_m["type"], _m["type"])
+                    _tc = type_colors.get(_m["type"],"#94a3b8")
+                    _tl = type_labels.get(_m["type"],_m["type"])
                     st.markdown(
                         f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
                         f"border-left:4px solid {_tc};border-radius:0 8px 8px 0;"
@@ -2442,7 +3055,9 @@ upd();
                     st.session_state["_last_mesures_popup"] = None
                     st.rerun()
 
-        # ── Identifications en attente ────────────────────────────────────────
+        # ── Identifications en attente ─────────────────────────────────────────
+        st.markdown("#### 🔴 Identifications en attente")
+
         def _j7_done_or_absent(sample_id):
             j7 = next((x for x in st.session_state.schedules
                         if x['sample_id'] == sample_id and x['when'] == 'J7'), None)
@@ -2466,9 +3081,9 @@ upd();
                 _seen_sids[_sid]["colonies"] = _p['colonies']
         pending_ids_grouped = list(_seen_sids.values())
 
-        if pending_ids_grouped:
-            st.markdown("---")
-            st.markdown("#### 🔴 Identifications en attente")
+        if not pending_ids_grouped:
+            st.success("✅ Aucune identification en attente.")
+        else:
             germ_names = sorted([g['name'] for g in st.session_state.germs])
 
             for pg in pending_ids_grouped:
@@ -2491,7 +3106,6 @@ upd();
                 ]
                 _key = _sid.replace("-","_")
 
-                # ── Init liste germes en session state ──────────────────
                 germs_list_key = f"germs_list_{_key}"
                 if germs_list_key not in st.session_state:
                     st.session_state[germs_list_key] = [{"germ": "— Sélectionner un germe —", "ufc": 0}]
@@ -2500,7 +3114,6 @@ upd();
                     f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}",
                     expanded=True):
 
-                    # Bandeau criticité lieu
                     st.markdown(f"""
                     <div style="background:{lc_col_id}11;border:1px solid {lc_col_id}44;
                     border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.75rem;
@@ -2519,14 +3132,13 @@ upd();
                             f"requise · {_ufc_detail}</div>",
                             unsafe_allow_html=True)
 
-                    # ── Liste dynamique des germes ───────────────────────
                     st.markdown(
                         "<div style='font-size:.8rem;font-weight:700;color:#475569;"
                         "margin-bottom:6px'>🧫 Germes identifiés</div>",
                         unsafe_allow_html=True)
 
                     germs_to_remove = []
-                    current_germs = st.session_state[germs_list_key]
+                    current_germs   = st.session_state[germs_list_key]
 
                     for gi, germ_entry in enumerate(current_germs):
                         cols = st.columns([3, 1, 0.4])
@@ -2540,11 +3152,9 @@ upd();
                             current_germs[gi]["germ"] = selected
                         with cols[1]:
                             ufc_val = st.number_input(
-                                "UFC",
-                                min_value=0,
+                                "UFC", min_value=0,
                                 value=int(germ_entry["ufc"]) if germ_entry["ufc"] else 0,
-                                step=1,
-                                key=f"germ_ufc_{_key}_{gi}")
+                                step=1, key=f"germ_ufc_{_key}_{gi}")
                             current_germs[gi]["ufc"] = ufc_val
                         with cols[2]:
                             st.markdown("<div style='margin-top:22px'>", unsafe_allow_html=True)
@@ -2553,16 +3163,15 @@ upd();
                                     germs_to_remove.append(gi)
                             st.markdown("</div>", unsafe_allow_html=True)
 
-                    # Appliquer suppressions
-                    for idx in sorted(germs_to_remove, reverse=True):
-                        st.session_state[germs_list_key].pop(idx)
+                    for idx_r in sorted(germs_to_remove, reverse=True):
+                        st.session_state[germs_list_key].pop(idx_r)
                         st.rerun()
 
                     if st.button("➕ Ajouter un germe", key=f"add_germ_{_key}", use_container_width=False):
                         st.session_state[germs_list_key].append({"germ": "— Sélectionner un germe —", "ufc": 0})
                         st.rerun()
 
-                    # ── Aperçu score multi-germes ────────────────────────
+                    # Aperçu score
                     valid_germs = [
                         g for g in current_germs
                         if g["germ"] and g["germ"] != "— Sélectionner un germe —"
@@ -2577,21 +3186,11 @@ upd();
                                       int(gobj.get('dissemination',1)))
                                 scored_germs.append({"name": vg["germ"], "score": gs, "ufc": vg["ufc"], "obj": gobj})
 
-                        # ────────────────────────────────────────────────────────────────────────────
-# PATCH 1a : L'aperçu score (section "if valid_germs:")
-# CHERCHER EXACTEMENT :
-#     preview_rows = "".join(
-#         f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
-# ET REMPLACER tout le bloc "if scored_germs:" par :
-# ────────────────────────────────────────────────────────────────────────────
- 
-# PATCH_1A = 
                         if scored_germs:
-                            worst = max(scored_germs, key=lambda x: x["score"])
-                            ts_prev = loc_crit * worst["score"]
+                            worst       = max(scored_germs, key=lambda x: x["score"])
+                            ts_prev     = loc_crit * worst["score"]
                             st_prev, _, sc_prev = _evaluate_score(ts_prev)
                             ufc_total_prev = sum(s["ufc"] for s in scored_germs)
-
                             preview_rows = "".join(
                                 f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
                                 f"<td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td>"
@@ -2599,7 +3198,6 @@ upd();
                                 f"font-weight:700;color:{'#ef4444' if s['name']==worst['name'] else '#64748b'}'>"
                                 f"{s['score']}{'  👑' if s['name']==worst['name'] else ''}</td></tr>"
                                 for s in scored_germs)
-
                             st.markdown(f"""
                                 <div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;
                                 border-radius:8px;padding:10px 14px;margin-top:8px">
@@ -2647,7 +3245,6 @@ upd();
                             if not valid_entries:
                                 st.error("Veuillez sélectionner au moins un germe.")
                             else:
-                                # Calcul scores pour chaque germe
                                 scored_entries = []
                                 for ve in valid_entries:
                                     match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
@@ -2661,25 +3258,20 @@ upd();
                                             "germ_score":  gs,
                                             "match_obj":   match,
                                         })
-
                                 if not scored_entries:
                                     st.warning("⚠️ Aucune correspondance trouvée pour les germes saisis.")
                                 else:
-                                    # Germe avec score le plus élevé → détermine le statut
                                     worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
                                     total_sc    = loc_crit * worst_entry["germ_score"]
                                     status, status_lbl, status_col = _evaluate_score(total_sc)
                                     ufc_total = sum(e["ufc"] for e in scored_entries)
-
                                     triggered_by = None
-                                    if status in ("alert", "action"):
+                                    if status in ("alert","action"):
                                         triggered_by = (
                                             f"lieu {loc_crit} × germe {worst_entry['germ_score']} "
                                             f"({worst_entry['germ_match']})"
                                             if loc_crit > 1
                                             else f"germe {worst_entry['germ_match']} (score {worst_entry['germ_score']})")
-
-                                    # Sérialisation liste germes pour stockage
                                     germs_detail = [
                                         {
                                             "name":        e["germ_match"],
@@ -2691,19 +3283,16 @@ upd();
                                         }
                                         for e in scored_entries
                                     ]
-
                                     st.session_state.surveillance.append({
                                         "date":               str(date_id),
                                         "prelevement":        _label,
                                         "sample_id":          _sid,
-                                        # Compatibilité champs mono-germe (germe le + critique)
                                         "germ_saisi":         worst_entry["germ_saisi"],
                                         "germ_match":         worst_entry["germ_match"],
                                         "match_score":        worst_entry["match_score"],
                                         "ufc":                worst_entry["ufc"],
                                         "ufc_total":          ufc_total,
                                         "germ_score":         worst_entry["germ_score"],
-                                        # Multi-germes
                                         "germs_detail":       germs_detail,
                                         "multi_germ":         len(scored_entries) > 1,
                                         "location_criticality": loc_crit,
@@ -2719,20 +3308,15 @@ upd();
                                         "readings":           _when_str,
                                     })
                                     save_surveillance(st.session_state.surveillance)
-
                                     for _ri in real_indices:
                                         st.session_state.pending_identifications[_ri]['status'] = 'done'
-
                                     if smp and not smp.get('archived'):
                                         smp['archived'] = True
                                         st.session_state.archived_samples.append(smp)
                                         save_archived_samples(st.session_state.archived_samples)
                                         save_prelevements(st.session_state.prelevements)
-
-                                    # Nettoyage liste germes temporaire
                                     del st.session_state[germs_list_key]
-
-                                    if status in ("alert", "action"):
+                                    if status in ("alert","action"):
                                         st.session_state["_show_mesures_popup"] = {
                                             "status":          status,
                                             "germ":            worst_entry["germ_match"],
@@ -2777,18 +3361,17 @@ upd();
                                 del st.session_state[germs_list_key]
                             st.rerun()
 
-        # ── Derniers résultats ────────────────────────────────────────────────
+        # ── Derniers résultats ─────────────────────────────────────────────────
         if st.session_state.surveillance:
-            st.markdown("---")
+            st.divider()
             st.markdown("### 📋 Derniers résultats")
             for r in reversed(st.session_state.surveillance[-10:]):
                 sc  = "#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
                 ic  = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
-                ufc_display  = f"{r['ufc']} UFC" if r.get('ufc') else "—"
-                total_score  = r.get("total_score")
-                germ_score   = r.get("germ_score")
-                loc_crit_r   = r.get("location_criticality")
-
+                ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
+                total_score = r.get("total_score")
+                germ_score  = r.get("germ_score")
+                loc_crit_r  = r.get("location_criticality")
                 score_badge = ""
                 if total_score is not None:
                     score_badge = (
@@ -2796,14 +3379,12 @@ upd();
                         f"border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700;"
                         f"margin-left:6px'>Score {total_score} "
                         f"(Nv.{loc_crit_r}×{germ_score})</span>")
-
                 trig = r.get("triggered_by")
                 trig_badge = (
                     f"<span style='background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;"
                     f"border-radius:4px;padding:1px 6px;font-size:.6rem;font-weight:600;"
                     f"margin-left:4px'>⚡ {trig}</span>"
                     if trig else "")
-
                 st.markdown(f"""
                 <div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;
                     padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
@@ -2823,326 +3404,33 @@ upd();
                     <span style="font-size:.75rem;color:{sc};font-weight:800">{ufc_display}</span>
                   </div>
                 </div>""", unsafe_allow_html=True)
-    # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET ÉTIQUETTES — format 45×32 mm, 4 colonnes, planche A4
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_etiq:
-        import io as _io
 
-        st.markdown("### 🏷️ Étiquettes de prélèvement")
 
-        _today_etiq = datetime.today().date()
-        _RISK_COLORS_ETQ = {
-            "1": "#22c55e", "2": "#84cc16",
-            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
-        }
-
-        all_prevs = [p for p in st.session_state.prelevements if not p.get("archived", False)]
-
-        if not all_prevs:
-            st.info("Aucun prélèvement enregistré. Créez-en d'abord dans **Nouveau prélèvement**.")
-        else:
-            with st.expander("🔍 Filtres", expanded=True):
-                fc1, fc2, fc3 = st.columns(3)
-                with fc1:
-                    dates_dispo = sorted(
-                        {datetime.fromisoformat(p["date"]).date() for p in all_prevs if p.get("date")},
-                        reverse=True)
-                    sel_dates = st.multiselect(
-                        "Date(s)", dates_dispo,
-                        default=[dates_dispo[0]] if dates_dispo else [],
-                        format_func=lambda d: d.strftime("%d/%m/%Y"),
-                        key="etiq_dates")
-                with fc2:
-                    sel_points = st.multiselect(
-                        "Point(s) de prélèvement",
-                        sorted({p.get("label", "") for p in all_prevs if p.get("label")}),
-                        key="etiq_points")
-                with fc3:
-                    sel_opers = st.multiselect(
-                        "Opérateur(s)",
-                        sorted({p.get("operateur", "") for p in all_prevs if p.get("operateur")}),
-                        key="etiq_opers")
-
-            filtered = all_prevs
-            if sel_dates:
-                filtered = [p for p in filtered
-                            if p.get("date") and datetime.fromisoformat(p["date"]).date() in sel_dates]
-            if sel_points:
-                filtered = [p for p in filtered if p.get("label") in sel_points]
-            if sel_opers:
-                filtered = [p for p in filtered if p.get("operateur") in sel_opers]
-
-            n_sel = len(filtered)
-
-            if n_sel == 0:
-                st.warning("Aucun prélèvement ne correspond aux filtres.")
-            else:
-                st.markdown(
-                    f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
-                    f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;margin-bottom:8px'>"
-                    f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer "
-                    f"— format 45×32 mm · 4 colonnes · planche A4</div>",
-                    unsafe_allow_html=True)
-
-                # ── Prévisualisation HTML (format 45×32 mm) ──────────────────
-                st.markdown("#### 👁️ Prévisualisation")
-
-                def _preview_card(p: dict) -> str:
-                    risk  = str(p.get("risk_level", ""))
-                    rcol  = _RISK_COLORS_ETQ.get(risk, "#6366f1")
-                    label = p.get("label", "—")
-                    date_s = ""
-                    if p.get("date"):
-                        try:    date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
-                        except: date_s = str(p["date"])
-                    classe_a_html = ""
-                    if p.get("room_class") == "A":
-                        iso = p.get("num_isolateur", "—") or "—"
-                        pst = p.get("poste", "—") or "—"
-                        classe_a_html = (
-                            f"<div style='font-size:5.5pt;color:#854d0e;font-weight:700;"
-                            f"background:#fef9c3;border-radius:2px;padding:1px 4px;"
-                            f"margin-bottom:3px;white-space:nowrap;overflow:hidden;"
-                            f"text-overflow:ellipsis'>"
-                            f"ISO {iso} · {pst}</div>")
-                    risk_band = (
-                        f"<div style='position:absolute;top:0;right:0;bottom:0;width:6px;"
-                        f"background:{rcol};border-radius:0 5px 5px 0'>"
-                        f"<div style='writing-mode:vertical-rl;font-size:4.5pt;font-weight:900;"
-                        f"color:#fff;padding:3px 0;text-align:center;height:100%'>"
-                        f"{'Nv.' + risk if risk else ''}</div></div>")
-                    return (
-                        f"<div style='position:relative;width:4.5cm;height:3.2cm;"
-                        f"border:1.5px solid {rcol};border-radius:5px;"
-                        f"padding:5px 11px 4px 6px;box-sizing:border-box;"
-                        f"background:#fff;font-family:Arial,Helvetica,sans-serif;"
-                        f"display:flex;flex-direction:column;overflow:hidden;"
-                        f"box-shadow:0 1px 6px rgba(0,0,0,.08)'>"
-                        f"{risk_band}"
-                        f"<div style='font-size:7.5pt;font-weight:900;color:#0f172a;"
-                        f"border-bottom:1px solid {rcol}33;padding-bottom:3px;margin-bottom:3px;"
-                        f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                        f"max-width:calc(4.5cm - 20px)'>{label}</div>"
-                        f"{classe_a_html}"
-                        f"<div style='display:flex;align-items:center;gap:4px;margin-bottom:2px'>"
-                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600;min-width:36px'>📅 Date</span>"
-                        f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
-                        f"<div style='display:flex;align-items:center;gap:4px'>"
-                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600'>👤 Préleveur :</span></div>"
-                        f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
-                        f"text-align:right;padding-top:2px'>URC — MicroSurveillance</div>"
-                        f"</div>")
-
-                preview_max = min(n_sel, 8)
-                p_cols = st.columns(4)
-                for idx, p in enumerate(filtered[:preview_max]):
-                    with p_cols[idx % 4]:
-                        st.markdown(_preview_card(p), unsafe_allow_html=True)
-                        st.markdown("<div style='margin-bottom:6px'></div>", unsafe_allow_html=True)
-                if n_sel > preview_max:
-                    st.caption(
-                        f"Prévisualisation limitée aux {preview_max} premières — "
-                        f"toutes les {n_sel} figureront dans le PDF.")
-
-                st.markdown("---")
-                if st.button(
-                    f"📄 Générer le PDF — {n_sel} étiquette{'s' if n_sel > 1 else ''}",
-                    use_container_width=True, key="etiq_gen_pdf", type="primary"):
-                    try:
-                        from reportlab.lib.pagesizes import A4
-                        from reportlab.lib.units     import cm as rl_cm
-                        from reportlab.lib           import colors as rlc
-                        from reportlab.platypus      import (SimpleDocTemplate, Table,
-                                                              TableStyle, Paragraph,
-                                                              HRFlowable)
-                        from reportlab.lib.styles    import ParagraphStyle
-                        from reportlab.lib.enums     import TA_RIGHT
-
-                        # ── Dimensions 45×32 mm, 4 colonnes ─────────────────
-                        W_ETQ  = 4.5  * rl_cm
-                        H_ETQ  = 3.2  * rl_cm
-                        N_COLS = 4
-                        GAP    = 0.25 * rl_cm
-                        MARGIN = 0.7  * rl_cm
-
-                        buf = _io.BytesIO()
-                        doc = SimpleDocTemplate(
-                            buf, pagesize=A4,
-                            leftMargin=MARGIN, rightMargin=MARGIN,
-                            topMargin=MARGIN,  bottomMargin=MARGIN,
-                            title=f"Étiquettes {_today_etiq.strftime('%d/%m/%Y')}")
-
-                        RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-
-                        # ── Styles adaptés au petit format ───────────────────
-                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold",
-                                                   fontSize=7.5,  leading=9,   spaceAfter=2,
-                                                   textColor=rlc.HexColor("#0f172a"))
-                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",
-                                                   fontSize=5.5,  leading=7,
-                                                   textColor=rlc.HexColor("#64748b"))
-                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold",
-                                                   fontSize=7.5,  leading=9,
-                                                   textColor=rlc.HexColor("#0f172a"))
-                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold",
-                                                   fontSize=9,    leading=10,
-                                                   textColor=rlc.HexColor("#1e40af"))
-                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",
-                                                   fontSize=5,    leading=6,
-                                                   textColor=rlc.HexColor("#94a3b8"),
-                                                   alignment=TA_RIGHT)
-                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold",
-                                                   fontSize=6,    leading=7,
-                                                   textColor=rlc.HexColor("#854d0e"),
-                                                   backColor=rlc.HexColor("#fef9c3"),
-                                                   spaceAfter=2)
-                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold",
-                                                   fontSize=8,
-                                                   textColor=rlc.HexColor("#1e40af"),
-                                                   spaceAfter=5)
-
-                        def _build_cell(pd):
-                            rv  = str(pd.get("risk_level", ""))
-                            rc  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                            lv  = pd.get("label", "—")
-                            dv  = ""
-                            if pd.get("date"):
-                                try:    dv = datetime.fromisoformat(pd["date"]).strftime("%d/%m/%Y")
-                                except: dv = str(pd["date"])
-
-                            # Largeur utile (intérieur moins bande risque)
-                            W_INNER = W_ETQ - 0.55 * rl_cm
-
-                            classea_rows = []
-                            if pd.get("room_class") == "A":
-                                iso = pd.get("num_isolateur", "—") or "—"
-                                pst = pd.get("poste", "—") or "—"
-                                classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
-
-                            inner = Table([
-                                [Paragraph(lv, s_titre)],
-                                [HRFlowable(width=W_INNER, thickness=0.6,
-                                            color=rc, spaceAfter=2)],
-                                *classea_rows,
-                                [Paragraph("📅 Date", s_lbl)],
-                                [Paragraph(dv or "—", s_date)],
-                                [Paragraph("👤 Préleveur :", s_lbl)],
-                                [Paragraph("", s_val)],
-                                [Paragraph("URC — MicroSurveillance", s_logo)],
-                            ], colWidths=[W_INNER])
-
-                            inner.setStyle(TableStyle([
-                                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-                                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-                                ("TOPPADDING",    (0, 0), (-1, -1), 0),
-                                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                                ("TOPPADDING",    (0,-1), ( 0, -1), 4),
-                            ]))
-
-                            outer = Table([[inner]], colWidths=[W_ETQ],
-                                          rowHeights=[H_ETQ])
-                            outer.setStyle(TableStyle([
-                                ("BOX",            (0, 0), (0, 0), 1.2, rc),
-                                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
-                                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc),
-                                ("LEFTPADDING",    (0, 0), (0, 0), 5),
-                                ("RIGHTPADDING",   (0, 0), (0, 0), 10),
-                                ("TOPPADDING",     (0, 0), (0, 0), 5),
-                                ("BOTTOMPADDING",  (0, 0), (0, 0), 4),
-                                ("VALIGN",         (0, 0), (0, 0), "TOP"),
-                                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
-                            ]))
-                            return outer
-
-                        # ── Construction planche ─────────────────────────────
-                        rows, row_buf = [], []
-                        for p_item in filtered:
-                            row_buf.append(_build_cell(p_item))
-                            if len(row_buf) == N_COLS:
-                                rows.append(row_buf)
-                                row_buf = []
-                        if row_buf:
-                            while len(row_buf) < N_COLS:
-                                row_buf.append("")
-                            rows.append(row_buf)
-
-                        main_tbl = Table(
-                            rows,
-                            colWidths=[W_ETQ] * N_COLS,
-                            rowHeights=[H_ETQ] * len(rows))
-                        main_tbl.setStyle(TableStyle([
-                            ("LEFTPADDING",   (0, 0), (-1, -1), GAP / 2),
-                            ("RIGHTPADDING",  (0, 0), (-1, -1), GAP / 2),
-                            ("TOPPADDING",    (0, 0), (-1, -1), GAP / 2),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), GAP / 2),
-                            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-                        ]))
-
-                        doc.build([
-                            Paragraph(
-                                f"Étiquettes prélèvements — {_today_etiq.strftime('%d/%m/%Y')} — "
-                                f"{n_sel} étiquette{'s' if n_sel > 1 else ''} — 45×32 mm · 4 col.",
-                                s_phdr),
-                            main_tbl,
-                        ])
-                        buf.seek(0)
-
-                        fname = f"etiquettes_{_today_etiq.strftime('%Y%m%d')}.pdf"
-                        st.download_button(
-                            label=f"⬇️ Télécharger {fname}",
-                            data=buf.getvalue(),
-                            file_name=fname,
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="etiq_dl_btn")
-                        st.markdown(
-                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                            f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
-                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
-                            f"✅ PDF généré avec succès</div>"
-                            f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
-                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
-                            f"4 colonnes · Format A4 · 45×32 mm</div></div>",
-                            unsafe_allow_html=True)
-
-                    except ImportError:
-                        st.error(
-                            "❌ **ReportLab** non installé.\n\n"
-                            "Ajoutez `reportlab` dans **requirements.txt**.")
-                    except Exception as _e:
-                        st.error(f"Erreur génération PDF : {_e}")
-                        import traceback; st.code(traceback.format_exc())
-                        
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3 : PLANNING
+# TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
+# Calendrier supprimé.
+# Algorithme : max prélèvements/classe/semaine → répartition mensuelle
+#              jamais 2× le même point le même jour (sauf freq > 1/jour)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 if active == "planning":
     st.markdown("### 📅 Planning des prélèvements & lectures")
 
     _today_dt      = datetime.today().date()
     MOIS_FR        = ["","Janvier","Février","Mars","Avril","Mai","Juin",
                       "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
-    JOURS_FR_COURT = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
     JOURS_FR_LONG  = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # PERSISTANCE
-    # ═════════════════════════════════════════════════════════════════════════
+    # ── Persistance overrides manuels ─────────────────────────────────────────
     def _load_planning_overrides():
         for k, v in st.session_state.get("planning_overrides", {}).items():
             if k not in st.session_state:
-                try:
-                    st.session_state[k] = int(v)
-                except Exception:
-                    pass
+                try: st.session_state[k] = int(v)
+                except: pass
 
     def _persist_overrides():
-        overrides = {
-            k: int(v)
-            for k, v in st.session_state.items()
-            if isinstance(k, str) and k.startswith("ch_prevu_")
-        }
+        overrides = {k: int(v) for k, v in st.session_state.items()
+                     if isinstance(k, str) and k.startswith("ch_prevu_")}
         st.session_state["planning_overrides"] = overrides
         _supa_upsert('planning_overrides', json.dumps(overrides, ensure_ascii=False))
 
@@ -3150,320 +3438,84 @@ if active == "planning":
         _load_planning_overrides()
         st.session_state["planning_overrides_loaded"] = True
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # HELPERS FRÉQUENCE
-    # ═════════════════════════════════════════════════════════════════════════
+    # ── Helpers fréquence ─────────────────────────────────────────────────────
     def _frc_default(rc):
         rc = (rc or '').strip().upper()
         if 'A' in rc: return 20
         if 'D' in rc: return 10
         return 2
 
+    def _freq_en_semaine(pt, nb_jours_ouvres=5):
+        """Fréquence hebdomadaire d'un point (float)."""
+        fr = pt.get('frequency'); u = pt.get('frequency_unit','/ semaine')
+        try: fr = float(fr)
+        except: fr = 0.0
+        if fr <= 0:
+            return float(_frc_default((pt.get('room_class') or '').strip()))
+        if '/ jour' in u:  return fr * nb_jours_ouvres
+        if '/ mois' in u:  return fr / 4.33
+        return fr
+
+    def _freq_par_jour(pt):
+        """Fréquence journalière brute si unité = /jour, sinon 0."""
+        u = pt.get('frequency_unit','/ semaine')
+        if '/ jour' in u:
+            try: return float(pt.get('frequency') or 0)
+            except: return 0.0
+        return 0.0
+
     def _semaines_du_mois(year, month):
         import calendar as _c
         _, n_days = _c.monthrange(year, month)
         first = date_type(year, month, 1)
         last  = date_type(year, month, n_days)
-        mondays = []
-        cur = first - timedelta(days=first.weekday())
+        cur   = first - timedelta(days=first.weekday())
+        ms    = []
         while cur <= last:
-            mondays.append(cur)
-            cur += timedelta(weeks=1)
-        return mondays
+            ms.append(cur); cur += timedelta(weeks=1)
+        return ms
 
     def _doit_prelever_cette_semaine_mensuel(freq_mois, week_monday):
-        """
-        Pour freq_mois prélèvements/mois, détermine si cette semaine
-        est une semaine active. Répartit sur les premières semaines du mois.
-        Retourne (actif: bool, nb: int).
-        """
-        # Identifier le mois de la semaine (vendredi comme référence)
         vendredi = week_monday + timedelta(days=4)
-        month = vendredi.month
-        year  = vendredi.year
-
+        month    = vendredi.month; year = vendredi.year
         semaines = _semaines_du_mois(year, month)
         nb_sem   = len(semaines)
-        try:
-            idx = semaines.index(week_monday)
-        except ValueError:
-            return False, 0
-
+        try: idx = semaines.index(week_monday)
+        except: return False, 0
         freq_mois = max(1, min(int(freq_mois), nb_sem))
-        if freq_mois >= nb_sem:
-            return True, 1
-        step = nb_sem / freq_mois
-        semaines_actives = {int(i * step) for i in range(freq_mois)}
-        if idx in semaines_actives:
-            return True, 1
-        return False, 0
+        if freq_mois >= nb_sem: return True, 1
+        step    = nb_sem / freq_mois
+        actives = {int(i * step) for i in range(freq_mois)}
+        return idx in actives, 1
 
-    def _get_prevu_semaine(pt, week_monday, nb_wd, class_override=None):
-        """
-        Retourne (nb_prevu_cette_semaine, freq_label_display, sess_key).
-        Priorité :
-          1. Override manuel (ch_prevu_<id>_<lundi ISO>)
-          2. Override de classe (class_override)
-          3. Fréquence propre au point
-          4. Fallback par classe
-        """
-        pt_id     = pt.get('id', '')
+    def _get_prevu_semaine(pt, week_monday, nb_wd, class_override_alloc=None):
+        pt_id     = pt.get('id','')
         rc        = (pt.get('room_class') or '').strip()
         sess_key  = f"ch_prevu_{pt_id}_{week_monday.isoformat()}"
-        freq_raw  = pt.get('frequency')
-        freq_unit = pt.get('frequency_unit', '/ semaine')
-
-        # Calcul valeur par défaut
-        if class_override is not None:
-            default_nb  = int(class_override)
-            freq_label  = f"{default_nb} / sem. (classe)"
+        freq_raw  = pt.get('frequency'); freq_unit = pt.get('frequency_unit','/ semaine')
+        if class_override_alloc is not None:
+            default_nb = int(class_override_alloc); freq_label = f"{default_nb}/sem. (réparti classe)"
         elif freq_raw is not None:
-            try:
-                freq_int = int(freq_raw)
-            except (ValueError, TypeError):
-                freq_int = 0
+            try: freq_int = int(freq_raw)
+            except: freq_int = 0
             if freq_int > 0:
                 if freq_unit == '/ jour':
-                    default_nb = freq_int * nb_wd
-                    freq_label = f"{freq_int}/j → {default_nb}/sem."
+                    default_nb = freq_int * nb_wd; freq_label = f"{freq_int}/j → {default_nb}/sem."
                 elif freq_unit == '/ semaine':
-                    default_nb = freq_int
-                    freq_label = f"{freq_int} / semaine"
+                    default_nb = freq_int; freq_label = f"{freq_int} / semaine"
                 elif freq_unit == '/ mois':
                     actif, nb  = _doit_prelever_cette_semaine_mensuel(freq_int, week_monday)
-                    default_nb = nb if actif else 0
-                    freq_label = f"{freq_int} / mois"
+                    default_nb = nb if actif else 0; freq_label = f"{freq_int} / mois"
                 else:
-                    default_nb = freq_int
-                    freq_label = f"{freq_int} {freq_unit}"
+                    default_nb = freq_int; freq_label = f"{freq_int} {freq_unit}"
             else:
-                default_nb = _frc_default(rc)
-                freq_label = f"{default_nb}/sem. (défaut)"
+                default_nb = _frc_default(rc); freq_label = f"{default_nb}/sem. (défaut)"
         else:
-            default_nb = _frc_default(rc)
-            freq_label = f"{default_nb}/sem. (défaut)"
-
+            default_nb = _frc_default(rc); freq_label = f"{default_nb}/sem. (défaut)"
         if sess_key not in st.session_state:
             st.session_state[sess_key] = default_nb
-
         return int(st.session_state[sess_key]), freq_label, sess_key
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLETS
-    # ═════════════════════════════════════════════════════════════════════════
-    plan_tab_view, plan_tab_charge, plan_tab_export = st.tabs([
-        "📅 Calendrier", "📊 Charge hebdo", "📥 Export Excel"
-    ])
-
-# ═════════════════════════════════════════════════════════════════════════
-    # ONGLET CALENDRIER
-    # ═════════════════════════════════════════════════════════════════════════
-    with plan_tab_view:
-
-        # ── Navigation mois ───────────────────────────────────────────────────
-        nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
-        with nav_c1:
-            if st.button("◀◀", use_container_width=True, key="cal_prev_year"):
-                st.session_state.cal_year -= 1; st.rerun()
-        with nav_c2:
-            if st.button("◀", use_container_width=True, key="cal_prev_month"):
-                if st.session_state.cal_month == 1:
-                    st.session_state.cal_month = 12; st.session_state.cal_year -= 1
-                else:
-                    st.session_state.cal_month -= 1
-                st.rerun()
-        with nav_c3:
-            st.markdown(
-                f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
-                f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
-                f"📅 {MOIS_FR[st.session_state.cal_month]} {st.session_state.cal_year}</div>",
-                unsafe_allow_html=True)
-        with nav_c4:
-            if st.button("▶", use_container_width=True, key="cal_next_month"):
-                if st.session_state.cal_month == 12:
-                    st.session_state.cal_month = 1; st.session_state.cal_year += 1
-                else:
-                    st.session_state.cal_month += 1
-                st.rerun()
-        with nav_c5:
-            if st.button("▶▶", use_container_width=True, key="cal_next_year"):
-                st.session_state.cal_year += 1; st.rerun()
-
-        if st.button("📍 Aujourd'hui", key="cal_today"):
-            st.session_state.cal_year  = _today_dt.year
-            st.session_state.cal_month = _today_dt.month
-            st.rerun()
-
-        cal_year  = st.session_state.cal_year
-        cal_month = st.session_state.cal_month
-        holidays_this_month = get_holidays_cached(cal_year)
-
-        import calendar as _cal3
-        _, n_days_m = _cal3.monthrange(cal_year, cal_month)
-        cal_weeks   = _cal3.monthcalendar(cal_year, cal_month)
-
-       # ── Snapshot session_state pour le rendu ──────────────────────────────
-        _prevs       = [p for p in st.session_state.prelevements if not p.get("archived", False)]
-        _active_sids = {p['id'] for p in _prevs}  # IDs des prélèvements actifs uniquement
-
-        def _get_day_cal(d):
-            # On filtre strictement : seuls les schedules dont le sample existe encore et n'est pas archivé
-            j0r = [p for p in _prevs
-                   if p.get('date') and datetime.fromisoformat(p['date']).date() == d]
-            j2r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J2'
-                   and s.get('sample_id') in _active_sids
-                   and datetime.fromisoformat(s['due_date']).date() == d]
-            j7r = [s for s in st.session_state.schedules
-                   if s['when'] == 'J7'
-                   and s.get('sample_id') in _active_sids
-                   and datetime.fromisoformat(s['due_date']).date() == d]
-            return j0r, j2r, j7r
-
-        # ── Légende ───────────────────────────────────────────────────────────
-        st.markdown("""
-        <div style="display:flex;gap:12px;margin:12px 0;flex-wrap:wrap;
-                    background:#f8fafc;border-radius:10px;padding:10px 14px;
-                    border:1px solid #e2e8f0">
-          <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:12px;height:12px;border-radius:3px;background:#7c3aed"></div>
-            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Prélèv. réel (J0)</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:12px;height:12px;border-radius:3px;background:#d97706"></div>
-            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Lecture J2 à faire</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:12px;height:12px;border-radius:3px;background:#0369a1"></div>
-            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Lecture J7 à faire</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:12px;height:12px;border-radius:3px;background:#ef4444"></div>
-            <span style="font-size:.72rem;color:#1e293b;font-weight:600">En retard</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:5px">
-            <div style="width:12px;height:12px;border-radius:3px;background:#22c55e"></div>
-            <span style="font-size:.72rem;color:#1e293b;font-weight:600">Faite ✅</span>
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-        # ── En-tête colonnes jours ────────────────────────────────────────────
-        hdr = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">'
-        for i, jour in enumerate(JOURS_FR_COURT):
-            cc = "#ef4444" if i >= 5 else "#1e40af"
-            hdr += (f'<div style="text-align:center;padding:8px 4px;font-weight:800;'
-                    f'font-size:.78rem;color:{cc};border-radius:6px;background:#eff6ff">{jour}</div>')
-        hdr += '</div>'
-
-        # ── Grille des jours ─────────────────────────────────────────────────
-        day_has_content = {}
-        grid = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">'
-
-        for week in cal_weeks:
-            for day_idx, day_num in enumerate(week):
-                is_weekend = day_idx >= 5
-                if day_num == 0:
-                    grid += '<div style="background:#f8fafc;border-radius:8px;min-height:95px"></div>'
-                    continue
-
-                d = date_type(cal_year, cal_month, day_num)
-                is_today       = d == _today_dt
-                is_holiday     = d in holidays_this_month
-                is_non_working = is_weekend or is_holiday
-                is_past        = d < _today_dt
-                j0r, j2r, j7r  = _get_day_cal(d)
-
-                # Couleurs de fond
-                if is_today:
-                    bg  = "#dbeafe"
-                    bdr = "2px solid #2563eb"
-                elif is_non_working:
-                    bg  = "#f1f5f9"
-                    bdr = "1px solid #e2e8f0"
-                else:
-                    bg  = "#ffffff"
-                    bdr = "1px solid #e2e8f0"
-
-                dnc = "#2563eb" if is_today else ("#94a3b8" if is_non_working else "#0f172a")
-                op  = "0.6" if is_past and not is_today and not j0r and not j2r and not j7r else "1"
-
-                badges = ""
-
-                # J0 — prélèvements réels
-                if j0r:
-                    badges += (
-                        f'<div style="background:#7c3aed;color:#fff;border-radius:4px;'
-                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
-                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-                        f'🧪 {len(j0r)} J0</div>')
-
-                # J2 — lectures
-                for s in j2r:
-                    done = s['status'] == 'done'
-                    late = not done and d <= _today_dt
-                    sc   = "#22c55e" if done else ("#ef4444" if late else "#d97706")
-                    si   = "✅" if done else ("🔔" if late else "📖")
-                    lbl  = "✅ J2 faite" if done else ("⚠️ J2 retard" if late else "📖 J2")
-                    badges += (
-                        f'<div style="background:{sc};color:#fff;border-radius:4px;'
-                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
-                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-                        f'{lbl}</div>')
-
-                # J7 — lectures
-                for s in j7r:
-                    done = s['status'] == 'done'
-                    late = not done and d <= _today_dt
-                    sc   = "#22c55e" if done else ("#ef4444" if late else "#0369a1")
-                    lbl  = "✅ J7 faite" if done else ("⚠️ J7 retard" if late else "📗 J7")
-                    badges += (
-                        f'<div style="background:{sc};color:#fff;border-radius:4px;'
-                        f'padding:2px 6px;font-size:.6rem;font-weight:700;margin-top:3px;'
-                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-                        f'{lbl}</div>')
-
-                # Label week-end / férié
-                hlbl = ""
-                if is_holiday and not is_weekend:
-                    hlbl = '<div style="font-size:.5rem;color:#ef4444;font-weight:600;margin-top:2px">🔴 Férié</div>'
-                elif is_weekend:
-                    hlbl = '<div style="font-size:.5rem;color:#94a3b8;margin-top:2px">Repos</div>'
-
-                day_has_content[d] = {"j0r": j0r, "j2r": j2r, "j7r": j7r}
-
-                grid += (
-                    f'<div style="background:{bg};border:{bdr};border-radius:8px;padding:6px 5px;'
-                    f'min-height:95px;opacity:{op};display:flex;flex-direction:column">'
-                    f'<div style="font-weight:800;font-size:.88rem;color:{dnc}">{day_num}</div>'
-                    f'{hlbl}{badges}</div>')
-
-        grid += '</div>'
-        st.markdown(hdr + grid, unsafe_allow_html=True)
-
-        # ── Stats du mois ─────────────────────────────────────────────────────
-        total_j0  = sum(len(v["j0r"]) for v in day_has_content.values())
-        total_j2  = sum(len(v["j2r"]) for v in day_has_content.values())
-        total_j7  = sum(len(v["j7r"]) for v in day_has_content.values())
-        done_j2   = sum(1 for v in day_has_content.values() for s in v["j2r"] if s["status"] == "done")
-        done_j7   = sum(1 for v in day_has_content.values() for s in v["j7r"] if s["status"] == "done")
-        late_all  = sum(
-            1 for v in day_has_content.values()
-            for s in v["j2r"] + v["j7r"]
-            if s["status"] != "done" and datetime.fromisoformat(s["due_date"]).date() <= _today_dt
-        )
-
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        mc1, mc2, mc3, mc4, mc5 = st.columns(5)
-        mc1.metric("🧪 Prélèv. J0", total_j0)
-        mc2.metric("📖 Lectures J2", total_j2, f"✅ {done_j2} faites")
-        mc3.metric("📗 Lectures J7", total_j7, f"✅ {done_j7} faites")
-        mc4.metric("✅ Taux J2", f"{int(done_j2/total_j2*100)}%" if total_j2 else "—")
-        mc5.metric("🔔 En retard", late_all, delta_color="inverse")
-
-
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET CHARGE HEBDO
-    # ═════════════════════════════════════════════════════════════════════════
     def get_week_start(d):
         return d - timedelta(days=d.weekday())
 
@@ -3471,16 +3523,256 @@ if active == "planning":
         we = ws + timedelta(days=6)
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
 
+    # ── Algorithme central : planning mensuel ─────────────────────────────────
+    # Contrainte :  max N prélèvements / classe / semaine
+    #               répartition proportionnelle au poids (fréquence individuelle)
+    #               jamais 2× le même point le même jour (sauf freq > 1/jour)
+    def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
+        """
+        Retourne {date: [{"label","type","risk","room_class"}, ...]}
+        class_max_dict = {classe: max_prelev_par_semaine}  (0 = pas de limite)
+        """
+        import calendar as _cm
+        import random   as _rnd
+
+        _, n_days = _cm.monthrange(year, month)
+        first     = date_type(year, month, 1)
+        last      = date_type(year, month, n_days)
+        cur       = first - timedelta(days=first.weekday())
+        mondays   = []
+        while cur <= last:
+            mondays.append(cur); cur += timedelta(weeks=1)
+
+        planning = {}
+
+        for week_idx, week_monday in enumerate(mondays):
+            # 5 jours ouvrés complets de la semaine (sans limite de mois)
+            wd_week = [
+                week_monday + timedelta(days=i)
+                for i in range(5)
+                if (week_monday + timedelta(days=i)) not in holidays_set
+            ]
+            if not wd_week: continue
+            nb_wd = len(wd_week)
+            for d in wd_week:
+                if d not in planning: planning[d] = []
+
+            all_classes = sorted({
+                (pt.get('room_class') or '').strip()
+                for pt in st.session_state.points
+                if (pt.get('room_class') or '').strip()
+            })
+
+            tasks = []  # {label, type, risk, room_class, alloc, max_per_day}
+
+            for cls in all_classes:
+                pts_cls     = [pt for pt in st.session_state.points
+                               if (pt.get('room_class') or '').strip() == cls]
+                freqs_sem   = [max(0.01, _freq_en_semaine(pt, nb_wd)) for pt in pts_cls]
+                total_poids = sum(freqs_sem) or 1
+                max_cls     = int(class_max_dict.get(cls, 0))
+
+                for i, (pt, f_sem) in enumerate(zip(pts_cls, freqs_sem)):
+                    fpj = _freq_par_jour(pt)  # >0 si unité = /jour
+
+                    if max_cls > 0:
+                        # Répartition proportionnelle dans le plafond de la classe
+                        if i < len(pts_cls) - 1:
+                            alloc = round(f_sem / total_poids * max_cls)
+                        else:
+                            # Dernier point : ajuste pour ne pas dépasser le total
+                            already = sum(round(freqs_sem[j] / total_poids * max_cls)
+                                          for j in range(i))
+                            alloc   = max(0, max_cls - already)
+                    else:
+                        # Pas de contrainte : fréquence individuelle
+                        nb_man, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd, None)
+                        alloc = nb_man
+
+                    # Passages max autorisés par jour pour ce point
+                    max_pd = max(1, int(fpj)) if fpj > 1 else 1
+
+                    tasks.append({
+                        "label":       pt['label'],
+                        "type":        pt.get('type','—'),
+                        "risk":        int(pt.get('risk_level', 1)),
+                        "room_class":  cls,
+                        "alloc":       alloc,
+                        "max_per_day": max_pd,
+                    })
+
+            # Répartition sur les jours ouvrés
+            day_counts = {d: 0   for d in wd_week}
+            day_labels = {d: {}  for d in wd_week}  # {label: count}
+
+            # Tri déterministe : risque décroissant puis label alphabétique
+            tasks_sorted = sorted(tasks, key=lambda x: (-x["risk"], x["label"]))
+            rng = _rnd.Random(year * 10000 + month * 100 + week_idx)
+
+            for task in tasks_sorted:
+                remaining    = task["alloc"]
+                mpd          = task["max_per_day"]
+                max_attempts = max(remaining * nb_wd * 4, 50)
+                attempts     = 0
+
+                while remaining > 0 and attempts < max_attempts:
+                    attempts += 1
+                    # Candidats : jours où le point n'a pas encore atteint sa limite journalière
+                    candidates = [
+                        d for d in wd_week
+                        if day_labels[d].get(task["label"], 0) < mpd
+                    ]
+                    if not candidates: break  # Plus de place possible cette semaine
+
+                    # Jour le moins chargé parmi les candidats (+ léger bruit pour l'étalement)
+                    best = min(candidates, key=lambda d: (day_counts[d], rng.random()))
+                    planning[best].append({
+                        "label":      task["label"],
+                        "type":       task["type"],
+                        "risk":       task["risk"],
+                        "room_class": task["room_class"],
+                    })
+                    day_counts[best] += 1
+                    day_labels[best][task["label"]] = day_labels[best].get(task["label"], 0) + 1
+                    remaining -= 1
+
+        return planning
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ONGLETS Planning
+    # ═════════════════════════════════════════════════════════════════════════
+    plan_tab_charge, plan_tab_export, tab_etiq = st.tabs([
+        "📊 Charge hebdo & Planning mensuel",
+        "📥 Export Excel",
+        "🏷️ Étiquettes",
+    ])
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ONGLET : CHARGE HEBDO & PLANNING MENSUEL
+    # ═════════════════════════════════════════════════════════════════════════
     with plan_tab_charge:
         st.markdown("### 📊 Charge hebdomadaire")
 
-        ch_ws_set = set()
-        ch_ws_set.add(get_week_start(_today_dt))
+        # Navigation mois
+        nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1,1,3,1,1])
+        with nav_c1:
+            if st.button("◀◀", use_container_width=True, key="ch_prev_year"):
+                st.session_state.cal_year -= 1; st.rerun()
+        with nav_c2:
+            if st.button("◀",  use_container_width=True, key="ch_prev_month"):
+                if st.session_state.cal_month == 1:
+                    st.session_state.cal_month = 12; st.session_state.cal_year -= 1
+                else: st.session_state.cal_month -= 1
+                st.rerun()
+        with nav_c3:
+            _ch_year  = st.session_state.get("cal_year",  _today_dt.year)
+            _ch_month = st.session_state.get("cal_month", _today_dt.month)
+            st.markdown(
+                f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
+                f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
+                f"📅 {MOIS_FR[_ch_month]} {_ch_year}</div>",
+                unsafe_allow_html=True)
+        with nav_c4:
+            if st.button("▶",  use_container_width=True, key="ch_next_month"):
+                if st.session_state.cal_month == 12:
+                    st.session_state.cal_month = 1; st.session_state.cal_year += 1
+                else: st.session_state.cal_month += 1
+                st.rerun()
+        with nav_c5:
+            if st.button("▶▶", use_container_width=True, key="ch_next_year"):
+                st.session_state.cal_year += 1; st.rerun()
+        if st.button("📍 Mois courant", key="ch_today_btn"):
+            st.session_state.cal_year  = _today_dt.year
+            st.session_state.cal_month = _today_dt.month
+            st.rerun()
+
+        _ch_year     = st.session_state.get("cal_year",  _today_dt.year)
+        _ch_month    = st.session_state.get("cal_month", _today_dt.month)
+        _ch_holidays = get_holidays_cached(_ch_year)
+
+        st.divider()
+
+        # ── Contraintes max / classe / semaine ────────────────────────────────
+        st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
+        st.caption(
+            "**0 = pas de limite** (fréquence individuelle de chaque point). "
+            "Sinon, le total hebdomadaire de la classe est plafonné, puis réparti "
+            "proportionnellement aux fréquences individuelles (utilisées comme poids). "
+            "**Un même point ne peut pas apparaître 2× le même jour**, "
+            "sauf si sa fréquence est définie en > 1/jour.")
+
+        CLASS_MAX_KEY = "class_max_per_week"
+        if CLASS_MAX_KEY not in st.session_state:
+            st.session_state[CLASS_MAX_KEY] = {}
+
+        all_classes = sorted({
+            (pt.get('room_class') or '').strip()
+            for pt in st.session_state.points
+            if (pt.get('room_class') or '').strip()
+        })
+        class_max_dict = {}
+
+        if all_classes:
+            rc_colors = {"A":"#22c55e","B":"#84cc16","C":"#f59e0b","D":"#f97316","E":"#ef4444"}
+            cls_cols  = st.columns(min(len(all_classes), 6))
+            for ci, cls in enumerate(all_classes):
+                rc_col  = rc_colors.get(cls.replace(' ','').upper()[:1],"#6366f1")
+                pts_cls = [pt for pt in st.session_state.points
+                           if (pt.get('room_class') or '').strip() == cls]
+                cur_max = int(st.session_state[CLASS_MAX_KEY].get(cls, 0))
+                with cls_cols[ci % len(cls_cols)]:
+                    st.markdown(
+                        f"<div style='background:{rc_col}15;border:1.5px solid {rc_col}55;"
+                        f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
+                        f"<div style='font-size:.9rem;font-weight:900;color:{rc_col}'>Classe {cls}</div>"
+                        f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls)} point(s)</div>"
+                        f"</div>",
+                        unsafe_allow_html=True)
+                    new_max = st.number_input(
+                        f"Max/sem Cl.{cls}", min_value=0, max_value=500,
+                        value=cur_max, step=1, key=f"class_max_{cls}",
+                        label_visibility="collapsed",
+                        help=f"0 = fréquences individuelles · >0 = plafond hebdomadaire classe {cls}")
+                    st.session_state[CLASS_MAX_KEY][cls] = new_max
+                    class_max_dict[cls] = new_max
+
+                    if new_max > 0:
+                        freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls]
+                        tot_p    = sum(freqs_p) or 1
+                        allocs   = []
+                        assigned = 0
+                        for ii, (pt, f) in enumerate(zip(pts_cls, freqs_p)):
+                            if ii < len(pts_cls) - 1:
+                                a = round(f / tot_p * new_max)
+                            else:
+                                a = max(0, new_max - assigned)
+                            assigned += a; allocs.append(a)
+                        preview = "".join(
+                            f"<div style='font-size:.6rem;color:#1e40af'>"
+                            f"{pt['label'][:20]}: <b>{a}×/sem</b></div>"
+                            for pt, a in zip(pts_cls, allocs))
+                        st.markdown(
+                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
+                            f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
+                            f"border-radius:6px;padding:6px 8px;margin-top:2px;"
+                            f"font-size:.6rem;color:#94a3b8;text-align:center'>"
+                            f"Fréquences individuelles</div>",
+                            unsafe_allow_html=True)
+        else:
+            st.info("Aucune classe de salle définie sur les points de prélèvement.")
+            class_max_dict = {}
+
+        st.divider()
+
+        # ── Sélecteur semaine ─────────────────────────────────────────────────
+        ch_ws_set = {get_week_start(_today_dt)}
         for _p in st.session_state.prelevements:
-            try:
-                ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
-            except:
-                pass
+            try: ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
+            except: pass
         for _i in range(1, 9):
             ch_ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
         ch_week_starts = sorted(ch_ws_set)
@@ -3488,16 +3780,10 @@ if active == "planning":
         ch_cur_idx = 0
         for _i, _ws in enumerate(ch_week_starts):
             if _ws <= _today_dt < _ws + timedelta(days=7):
-                ch_cur_idx = _i
-                break
+                ch_cur_idx = _i; break
 
-        csel_col1 = st.columns([4, 1])
-        with csel_col1:
-            ch_sel_label = st.selectbox(
-                "Semaine", ch_week_labels, index=ch_cur_idx,
-                label_visibility="collapsed", key="ch_week_sel")
-        
-
+        ch_sel_label = st.selectbox(
+            "Semaine à détailler", ch_week_labels, index=ch_cur_idx, key="ch_week_sel")
         ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
         ch_sel_we       = ch_sel_ws + timedelta(days=6)
         ch_holidays     = get_holidays_cached(ch_sel_ws.year)
@@ -3515,9 +3801,8 @@ if active == "planning":
         ch_j7 = [s for s in st.session_state.schedules
                  if s['when'] == 'J7'
                  and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
-
         total_actes    = len(ch_j0) + len(ch_j2) + len(ch_j7)
-        actes_par_jour = total_actes / nb_jours      if nb_jours      > 0 else 0
+        actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
         actes_par_prev = total_actes / nb_preleveurs if nb_preleveurs > 0 else 0
 
         st.markdown(
@@ -3527,7 +3812,8 @@ if active == "planning":
             <div style="color:#fff">
               <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
               <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
-                {nb_jours} jour(s) ouvré(s) 
+                {nb_jours} jour(s) ouvré(s)
+              </div>
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
@@ -3545,279 +3831,80 @@ if active == "planning":
             </div></div>""",
             unsafe_allow_html=True)
 
-        m2, m3, m4, m5 = st.columns(5)
-        
+        m2, m3, m4, m5 = st.columns(4)
         m2.metric("📍 Points actifs", len(st.session_state.points))
         m3.metric("🧪 Prélèv. J0",   len(ch_j0))
-        m4.metric("📖 Lectures J2",   len(ch_j2))
-        m5.metric("📗 Lectures J7",   len(ch_j7))
+        m4.metric("📖 Lectures J2",  len(ch_j2))
+        m5.metric("📗 Lectures J7",  len(ch_j7))
 
         st.divider()
 
-        # ══════════════════════════════════════════════════════════════════
-        # TABLEAU DÉDIÉ : FRÉQUENCES PAR CLASSE
-        # ══════════════════════════════════════════════════════════════════
-        st.markdown("#### 🏷️ Fréquences par classe de salle")
-        st.caption(
-            "L'**override** définit le **total de prélèvements par semaine pour toute la classe**. "
-            "Les points sont répartis proportionnellement à leur fréquence individuelle (utilisée comme poids). "
-            "Laissez **0** pour utiliser la fréquence propre à chaque point sans contrainte de classe.")
-
-        all_classes = sorted({
-            (pt.get('room_class') or '').strip()
-            for pt in st.session_state.points
-            if (pt.get('room_class') or '').strip()
-        })
-
-        class_override_key = f"class_override_{ch_sel_ws.isoformat()}"
-        if class_override_key not in st.session_state:
-            st.session_state[class_override_key] = {}
-
-        if not all_classes:
-            st.info("Aucune classe de salle définie sur les points de prélèvement.")
-        else:
-            hdr_cl = st.columns([1, 1, 2, 1, 3])
-            for _hc, _hl in zip(hdr_cl,
-                                 ["Classe", "Points", "Fréq. individuelle (poids)",
-                                  "Total /sem ✏️", "Répartition proportionnelle"]):
-                _hc.markdown(
-                    f"<div style='background:#1e40af;border-radius:6px;padding:7px 10px;"
-                    f"font-size:.7rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
-                    unsafe_allow_html=True)
-
-            for rc in all_classes:
-                pts_rc  = [pt for pt in st.session_state.points
-                           if (pt.get('room_class') or '').strip() == rc]
-                nb_pts  = len(pts_rc)
-                rc_color = {"A": "#22c55e", "B": "#84cc16", "C": "#f59e0b", "D": "#f97316"}.get(
-                    rc.replace(' ', '').upper()[:1], "#6366f1")
-
-                # Calcul poids (fréquence individuelle normalisée en /semaine)
-                pt_freqs = []
-                for pt in pts_rc:
-                    try:
-                        f = int(pt.get('frequency') or 1)
-                        u = pt.get('frequency_unit', '/ semaine')
-                        if '/ mois' in u:
-                            f_week = round(f / 4.33)
-                        elif '/ jour' in u:
-                            f_week = f * nb_jours
-                        else:
-                            f_week = f
-                        pt_freqs.append(max(1, f_week))
-                    except Exception:
-                        pt_freqs.append(1)
-                total_poids = sum(pt_freqs) or 1
-
-                cur_override = int(st.session_state[class_override_key].get(rc, 0))
-
-                rc_cols = st.columns([1, 1, 2, 1, 3])
-                with rc_cols[0]:
-                    st.markdown(
-                        f"<div style='background:{rc_color}22;border:1.5px solid {rc_color}55;"
-                        f"border-radius:8px;padding:10px;text-align:center;font-weight:800;"
-                        f"font-size:.95rem;color:{rc_color}'>{rc}</div>",
-                        unsafe_allow_html=True)
-                with rc_cols[1]:
-                    st.markdown(
-                        f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:10px;text-align:center;font-size:.85rem;color:#475569'>"
-                        f"<b>{nb_pts}</b></div>",
-                        unsafe_allow_html=True)
-                with rc_cols[2]:
-                    freq_lines = "".join(
-                        f"<div style='font-size:.68rem;color:#475569'>• {pt['label']} : {f}×/sem</div>"
-                        for pt, f in zip(pts_rc, pt_freqs)
-                    )
-                    st.markdown(
-                        f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px 10px'>{freq_lines}</div>",
-                        unsafe_allow_html=True)
-                with rc_cols[3]:
-                    new_val = st.number_input(
-                        f"Override {rc}", min_value=0, max_value=500,
-                        value=cur_override, step=1,
-                        label_visibility="collapsed",
-                        key=f"class_ov_{rc}_{ch_sel_ws.isoformat()}",
-                        help="0 = fréquence individuelle · sinon = total hebdo pour toute la classe")
-                    st.session_state[class_override_key][rc] = new_val
-                with rc_cols[4]:
-                    if new_val > 0:
-                        alloc_lines   = []
-                        total_assigned = 0
-                        for i, (pt, poids) in enumerate(zip(pts_rc, pt_freqs)):
-                            if i < len(pts_rc) - 1:
-                                alloc = round(poids / total_poids * new_val)
-                            else:
-                                alloc = new_val - total_assigned
-                            total_assigned += alloc
-                            alloc_lines.append(
-                                f"<div style='font-size:.68rem;color:#1e40af;font-weight:600'>"
-                                f"• {pt['label']} : <b>{alloc}×/sem</b></div>")
-                        st.markdown(
-                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                            f"border-radius:6px;padding:8px 10px'>{''.join(alloc_lines)}</div>",
-                            unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
-                            f"border-radius:6px;padding:10px;text-align:center;"
-                            f"font-size:.78rem;color:#94a3b8;font-style:italic'>"
-                            f"Fréquences individuelles</div>",
-                            unsafe_allow_html=True)
-
-        st.divider()
-
-        def _dispatch_to_days(alloc, working_days):
-            """Répartit les prélèvements sur les jours ouvrés de façon uniforme.
-            Règle : étalement round-robin pour éviter les concentrations en début de semaine."""
-            from collections import defaultdict
-            nb_j     = len(working_days)
-            schedule = defaultdict(list)
-
-            # Trier par label pour un résultat déterministe
-            for label in sorted(alloc.keys()):
-                weekly = alloc[label]
-                if weekly <= 0 or nb_j == 0:
-                    continue
-
-                if weekly <= nb_j:
-                    # Étalement uniforme : on espace les passages équitablement
-                    # Ex : 2 fois en 5 jours → jours 0 et 2 (pas 0 et 1)
-                    indices = []
-                    for k in range(weekly):
-                        idx = round(k * nb_j / weekly)
-                        idx = min(idx, nb_j - 1)
-                        # Éviter doublons
-                        while idx in indices:
-                            idx = (idx + 1) % nb_j
-                        indices.append(idx)
-                    for idx in indices:
-                        schedule[working_days[idx]].append(label)
-                else:
-                    # Plus de passages que de jours → répartir équitablement
-                    per_day = weekly // nb_j
-                    extra   = weekly % nb_j
-                    # Distribuer l'extra de façon espacée (pas jours 0,1,2...)
-                    extra_days = set()
-                    for k in range(extra):
-                        eidx = round(k * nb_j / extra) if extra > 0 else 0
-                        eidx = min(eidx, nb_j - 1)
-                        while eidx in extra_days:
-                            eidx = (eidx + 1) % nb_j
-                        extra_days.add(eidx)
-                    for i, d in enumerate(working_days):
-                        count = per_day + (1 if i in extra_days else 0)
-                        for _ in range(count):
-                            schedule[d].append(label)
-
-            return schedule
-
-        # ══════════════════════════════════════════════════════════════════
-        # TABLEAU DÉTAIL PAR POINT
-        # ══════════════════════════════════════════════════════════════════
-        st.markdown("#### 📍 Détail par point de prélèvement")
+        # ── Tableau détail par point (semaine sélectionnée) ───────────────────
+        st.markdown("#### 📍 Détail par point — semaine sélectionnée")
         risk_colors_ch = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
 
-        if not st.session_state.points:
-            st.info("Aucun point défini. Créez-en dans **Paramètres → Points de prélèvement**.")
-        else:
-            hdr_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.5, 1.3, 0.8, 1.4])
+        if st.session_state.points:
+            hdr_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
             for _hc, _hl in zip(hdr_cols,
                                   ["Point","Type","Classe","Risque",
-                                   "Fréquence du point","Prévu cette sem. ✏️","Réalisé","Statut"]):
+                                   "Fréquence / poids","Prévu cette sem. ✏️","Réalisé","Statut"]):
                 _hc.markdown(
                     f"<div style='background:#1e40af;border-radius:6px;padding:7px 8px;"
                     f"font-size:.68rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
                     unsafe_allow_html=True)
 
             total_prevu = 0; total_realise = 0
-
             for pt_i, pt in enumerate(st.session_state.points):
                 rc        = (pt.get('room_class') or '').strip()
                 row_bg    = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
-                risk_val  = str(pt.get('risk_level', '—'))
-                risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
+                risk_val  = str(pt.get('risk_level','—'))
+                risk_col  = risk_colors_ch.get(risk_val,"#94a3b8")
                 type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
 
-                class_ov_dict  = st.session_state.get(class_override_key, {})
-                co_val         = class_ov_dict.get(rc, 0)
-                class_override = int(co_val) if co_val and int(co_val) > 0 else None
+                max_cls   = int(class_max_dict.get(rc, 0))
+                pts_cls_w = [p for p in st.session_state.points
+                             if (p.get('room_class') or '').strip() == rc]
+                freqs_cls = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_w]
+                tot_cls   = sum(freqs_cls) or 1
+                my_f      = max(0.01, _freq_en_semaine(pt, nb_jours))
+                class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else None
 
                 nb_prevu, freq_label, sess_key = _get_prevu_semaine(
-                    pt, ch_sel_ws, nb_jours, class_override)
-
+                    pt, ch_sel_ws, nb_jours, class_alloc)
                 realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
 
                 if nb_prevu == 0:
-                    st_bg="#f8fafc"; st_border="#e2e8f0"; st_txt="#94a3b8"
-                    st_icon="⏸️"; st_label="Non planifié"
+                    st_bg="#f8fafc"; st_border="#e2e8f0"; st_txt="#94a3b8"; st_icon="⏸️"; st_label="Non planifié"
                 elif realise >= nb_prevu:
-                    st_bg="#f0fdf4"; st_border="#86efac"; st_txt="#166534"
-                    st_icon="✅"; st_label="Complet"
+                    st_bg="#f0fdf4"; st_border="#86efac"; st_txt="#166534"; st_icon="✅"; st_label="Complet"
                 elif realise > 0:
-                    pct = int(realise / nb_prevu * 100)
-                    st_bg="#fffbeb"; st_border="#fcd34d"; st_txt="#92400e"
-                    st_icon="⏳"; st_label=f"{pct}%"
+                    pct=int(realise/nb_prevu*100); st_bg="#fffbeb"; st_border="#fcd34d"
+                    st_txt="#92400e"; st_icon="⏳"; st_label=f"{pct}%"
                 else:
                     st_bg="#fef2f2"; st_border="#fca5a5"; st_txt="#991b1b"
                     st_icon="🔴"; st_label=f"0/{nb_prevu}"
 
-                total_prevu   += nb_prevu
-                total_realise += realise
+                total_prevu += nb_prevu; total_realise += realise
 
-                row_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.5, 1.3, 0.8, 1.4])
+                row_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
                 with row_cols[0]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px 12px;font-size:.85rem;font-weight:700;color:#0f172a'>"
-                        f"{type_icon} {pt['label']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:.85rem;font-weight:700;color:#0f172a'>{type_icon} {pt['label']}</div>", unsafe_allow_html=True)
                 with row_cols[1]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px;font-size:.78rem;color:#475569;text-align:center'>"
-                        f"{pt.get('type','—')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:.78rem;color:#475569;text-align:center'>{pt.get('type','—')}</div>", unsafe_allow_html=True)
                 with row_cols[2]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px;font-size:.78rem;color:#475569;text-align:center'>"
-                        f"{rc or '—'}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:.78rem;color:#475569;text-align:center'>{rc or '—'}</div>", unsafe_allow_html=True)
                 with row_cols[3]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px;text-align:center'>"
-                        f"<span style='background:{risk_col}22;color:{risk_col};"
-                        f"border:1px solid {risk_col}55;border-radius:6px;"
-                        f"padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>",
-                        unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px;text-align:center'><span style='background:{risk_col}22;color:{risk_col};border:1px solid {risk_col}55;border-radius:6px;padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>", unsafe_allow_html=True)
                 with row_cols[4]:
-                    badge = ""
-                    if class_override is not None:
-                        badge = (" <span style='background:#dbeafe;color:#1e40af;"
-                                 "border-radius:4px;padding:1px 4px;font-size:.58rem'>"
-                                 "▲ classe</span>")
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px;font-size:.72rem;color:#475569;text-align:center'>"
-                        f"{freq_label}{badge}</div>", unsafe_allow_html=True)
+                    badge = " <span style='background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 4px;font-size:.58rem'>▲ classe</span>" if max_cls > 0 else ""
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:.72rem;color:#475569;text-align:center'>{freq_label}{badge}</div>", unsafe_allow_html=True)
                 with row_cols[5]:
-                    st.number_input(
-                        "Prévu", min_value=0, max_value=100,
-                        value=nb_prevu, step=1,
-                        key=sess_key,
-                        label_visibility="collapsed",
-                        on_change=_persist_overrides)
+                    st.number_input("Prévu", min_value=0, max_value=100, value=nb_prevu, step=1,
+                                    key=sess_key, label_visibility="collapsed", on_change=_persist_overrides)
                 with row_cols[6]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;"
-                        f"padding:8px;font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>"
-                        f"{realise}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{row_bg};border:1px solid #e2e8f0;border-radius:6px;padding:8px;font-size:1rem;font-weight:800;color:#0f172a;text-align:center'>{realise}</div>", unsafe_allow_html=True)
                 with row_cols[7]:
-                    st.markdown(
-                        f"<div style='background:{st_bg};border:1px solid {st_border};"
-                        f"border-radius:8px;padding:8px;text-align:center;"
-                        f"font-size:.78rem;font-weight:700;color:{st_txt}'>"
-                        f"{st_icon} {st_label}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background:{st_bg};border:1px solid {st_border};border-radius:8px;padding:8px;text-align:center;font-size:.78rem;font-weight:700;color:{st_txt}'>{st_icon} {st_label}</div>", unsafe_allow_html=True)
 
             st.divider()
             taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
@@ -3835,355 +3922,201 @@ if active == "planning":
                 f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
                 f"<div style='background:rgba(255,255,255,.15);border-radius:8px;padding:8px 16px;"
                 f"font-size:1rem;font-weight:800;color:{taux_col}'>{taux}% réalisé</div>"
-                f"</div></div>", unsafe_allow_html=True)
+                f"</div></div>",
+                unsafe_allow_html=True)
 
-            st.divider()
+        st.divider()
 
-            # ── Planning mensuel automatique — semaine par semaine ────────
-            st.markdown("#### 📅 Planning automatique — vue mensuelle")
+        # ── Planning mensuel automatique ──────────────────────────────────────
+        st.markdown("#### 📅 Planning mensuel automatique")
+        st.caption(
+            "Répartition basée sur les contraintes max/classe/semaine définies ci-dessus. "
+            "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
 
-            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
-            _pm_month = st.session_state.get("cal_month", _today_dt.month)
+        monthly_plan = _compute_monthly_planning(_ch_year, _ch_month, class_max_dict, _ch_holidays)
 
-            pm_nav1, pm_nav2, pm_nav3, pm_nav4, pm_nav5 = st.columns([1,1,3,1,1])
-            with pm_nav1:
-                if st.button("◄◄", key="pm_prev_year",  use_container_width=True):
-                    st.session_state.cal_year -= 1; st.rerun()
-            with pm_nav2:
-                if st.button("◄",  key="pm_prev_month", use_container_width=True):
-                    if st.session_state.cal_month == 1:
-                        st.session_state.cal_month = 12; st.session_state.cal_year -= 1
-                    else:
-                        st.session_state.cal_month -= 1
-                    st.rerun()
-            with pm_nav3:
-                _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
-                _pm_month = st.session_state.get("cal_month", _today_dt.month)
-                st.markdown(
-                    "<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
-                    "border-radius:10px;padding:8px;color:#fff;font-weight:800;font-size:1rem'>"
-                    + MOIS_FR[_pm_month] + " " + str(_pm_year) + "</div>",
-                    unsafe_allow_html=True)
-            with pm_nav4:
-                if st.button("►",  key="pm_next_month", use_container_width=True):
-                    if st.session_state.cal_month == 12:
-                        st.session_state.cal_month = 1; st.session_state.cal_year += 1
-                    else:
-                        st.session_state.cal_month += 1
-                    st.rerun()
-            with pm_nav5:
-                if st.button("►►", key="pm_next_year",  use_container_width=True):
-                    st.session_state.cal_year += 1; st.rerun()
-            if st.button("📍 Mois courant", key="pm_today"):
-                st.session_state.cal_year  = _today_dt.year
-                st.session_state.cal_month = _today_dt.month
-                st.rerun()
+        import calendar as _cal_pm
+        _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
+        _pm_start    = date_type(_ch_year, _ch_month, 1)
+        _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
+        cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
+        pm_mondays   = []
+        while cur_pm <= _pm_end:
+            pm_mondays.append(cur_pm); cur_pm += timedelta(weeks=1)
 
-            import calendar as _cal_pm
-            import random  as _rnd_pm
+        if "pm_selected_day" not in st.session_state:
+            st.session_state["pm_selected_day"] = None
 
-            _pm_year  = st.session_state.get("cal_year",  _today_dt.year)
-            _pm_month = st.session_state.get("cal_month", _today_dt.month)
-            _, _pm_ndays  = _cal_pm.monthrange(_pm_year, _pm_month)
-            _pm_start     = date_type(_pm_year, _pm_month, 1)
-            _pm_end       = date_type(_pm_year, _pm_month, _pm_ndays)
-            _pm_holidays  = get_holidays_cached(_pm_year)
+        rcp_pm = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
 
-            # Semaines qui touchent le mois (lundi de la semaine inclus si vendredi dans le mois)
-            _pm_mondays = []
-            _cur = _pm_start - timedelta(days=_pm_start.weekday())
-            while _cur <= _pm_end:
-                _pm_mondays.append(_cur)
-                _cur += timedelta(weeks=1)
+        for week_idx, week_monday in enumerate(pm_mondays):
+            wd_week = [
+                week_monday + timedelta(days=i)
+                for i in range(5)
+                if (week_monday + timedelta(days=i)) not in _ch_holidays
+            ]
+            if not wd_week: continue
 
-            if "pm_selected_day" not in st.session_state:
-                st.session_state["pm_selected_day"] = None
+            _we_end    = week_monday + timedelta(days=6)
+            _total_sem = sum(len(monthly_plan.get(wd, [])) for wd in wd_week)
 
-            rcp_pm = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+            st.markdown(
+                f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
+                f"display:flex;justify-content:space-between;align-items:center;"
+                f"margin-top:14px;margin-bottom:6px'>"
+                f"<span style='color:#fff;font-weight:800;font-size:.88rem'>"
+                f"Semaine {week_monday.isocalendar()[1]} — "
+                f"{week_monday.strftime('%d/%m')} → {_we_end.strftime('%d/%m')}</span>"
+                f"<span style='background:rgba(255,255,255,.15);color:#93c5fd;"
+                f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
+                f"📋 {_total_sem} prélèv. planifiés</span>"
+                f"</div>",
+                unsafe_allow_html=True)
 
-            for week_idx, week_monday in enumerate(_pm_mondays):
-                # ── CORRECTION PRINCIPALE : 5 jours ouvrés complets sans limite de mois ──
-                _wd_week = [
-                    week_monday + timedelta(days=i)
-                    for i in range(5)
-                    if (week_monday + timedelta(days=i)) not in _pm_holidays
-                ]
-                if not _wd_week:
-                    continue
+            _day_cols = st.columns(len(wd_week))
+            for di, wd in enumerate(wd_week):
+                taches_j   = monthly_plan.get(wd, [])
+                prevu_j    = len(taches_j)
+                is_today_d = (wd == _today_dt)
+                is_past_d  = (wd < _today_dt)
+                is_other_m = (wd.month != _ch_month)
+                realise_j  = sum(
+                    1 for p in st.session_state.prelevements
+                    if p.get("date") and not p.get("archived",False)
+                    and datetime.fromisoformat(p["date"]).date() == wd)
+                j2_j = [s for s in st.session_state.schedules
+                         if s["when"]=="J2" and datetime.fromisoformat(s["due_date"]).date()==wd]
+                j7_j = [s for s in st.session_state.schedules
+                         if s["when"]=="J7" and datetime.fromisoformat(s["due_date"]).date()==wd]
 
-                nb_wd_week = len(_wd_week)
-                _plan_week   = {wd: [] for wd in _wd_week}
-                _charge_week = {wd: 0  for wd in _wd_week}
-                _to_repartir = []
+                bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
+                border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
+                jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
+                op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
 
-                for pt in st.session_state.points:
-                    rc_pt_pm  = (pt.get("room_class") or "").strip()
-                    co_val_pm = st.session_state.get(class_override_key, {}).get(rc_pt_pm, 0)
-                    # ── Seulement l'override de classe, ignorer fréquence individuelle si override actif ──
-                    co_pm = int(co_val_pm) if co_val_pm and int(co_val_pm) > 0 else None
-                    fu_pm = pt.get("frequency_unit", "/ semaine")
-                    fr_pm = pt.get("frequency")
-                    tache_pm = {
-                        "label":      pt["label"],
-                        "type":       pt.get("type", "—"),
-                        "risk":       int(pt.get("risk_level", 1)),
-                        "room_class": rc_pt_pm,
-                    }
-                    is_daily_pm = (
-                        fu_pm == "/ jour" and co_pm is None
-                        and fr_pm is not None and int(fr_pm or 0) > 0
-                    )
-                    if is_daily_pm:
-                        for wd in _wd_week:
-                            _plan_week[wd].append(tache_pm)
-                            _charge_week[wd] += 1
-                    else:
-                        nb_pm, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd_week, co_pm)
-                        for _ in range(nb_pm):
-                            _to_repartir.append(tache_pm)
+                if realise_j >= prevu_j and prevu_j > 0:
+                    stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅"
+                elif realise_j > 0:
+                    stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳{realise_j}/{prevu_j}"
+                elif prevu_j > 0:
+                    stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴{prevu_j}"
+                else:
+                    stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="—"
 
-                # Répartition équilibrée sur les 5 jours (sans limite de mois)
-                _rng_pm = _rnd_pm.Random(_pm_year * 10000 + _pm_month * 100 + week_idx)
-                _rng_pm.shuffle(_to_repartir)
-                for t in _to_repartir:
-                    wd_c = min(_wd_week, key=lambda d: _charge_week[d])
-                    _plan_week[wd_c].append(t)
-                    _charge_week[wd_c] += 1
-
-                _we_end    = week_monday + timedelta(days=6)
-                _total_sem = sum(len(v) for v in _plan_week.values())
-                st.markdown(
-                    f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
-                    f"display:flex;justify-content:space-between;align-items:center;"
-                    f"margin-top:14px;margin-bottom:6px'>"
-                    f"<span style='color:#fff;font-weight:800;font-size:.88rem'>"
-                    f"Semaine {week_monday.isocalendar()[1]} — "
-                    f"{week_monday.strftime('%d/%m')} → {_we_end.strftime('%d/%m')}</span>"
-                    f"<span style='background:rgba(255,255,255,.15);color:#93c5fd;"
-                    f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
-                    f"📋 {_total_sem} prélèv. planifiés</span>"
-                    f"</div>",
-                    unsafe_allow_html=True)
-
-                _day_cols = st.columns(len(_wd_week))
-                for di, wd in enumerate(_wd_week):
-                    taches_j   = _plan_week[wd]
-                    prevu_j    = len(taches_j)
-                    is_today_d = (wd == _today_dt)
-                    is_past_d  = (wd < _today_dt)
-                    # Grisé si hors du mois affiché
-                    is_other_month = (wd.month != _pm_month)
-                    realise_j  = sum(
-                        1 for p in st.session_state.prelevements
-                        if p.get("date")
-                        and datetime.fromisoformat(p["date"]).date() == wd
-                        and not p.get("archived", False)
-                    )
-                    j2_j = [s for s in st.session_state.schedules
-                             if s["when"] == "J2"
-                             and datetime.fromisoformat(s["due_date"]).date() == wd]
-                    j7_j = [s for s in st.session_state.schedules
-                             if s["when"] == "J7"
-                             and datetime.fromisoformat(s["due_date"]).date() == wd]
-
-                    bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_month else ("#f8fafc" if is_past_d else "#ffffff"))
-                    border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_month else "1.5px solid #e2e8f0")
-                    jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_month or is_past_d else "#475569")
-                    op_d     = "0.6" if is_other_month else ("0.7" if is_past_d and not is_today_d else "1")
-
-                    if realise_j >= prevu_j and prevu_j > 0:
-                        stat_bg="#f0fdf4"; stat_col="#166534"; stat_lbl="✅"
-                    elif realise_j > 0:
-                        stat_bg="#fffbeb"; stat_col="#92400e"; stat_lbl=f"⏳{realise_j}/{prevu_j}"
-                    elif prevu_j > 0:
-                        stat_bg="#fef2f2"; stat_col="#991b1b"; stat_lbl=f"🔴{prevu_j}"
-                    else:
-                        stat_bg="#f8fafc"; stat_col="#94a3b8"; stat_lbl="—"
-
-                    pts_html = ""
-                    for t in taches_j[:5]:
-                        rc_t = rcp_pm.get(str(t["risk"]), "#94a3b8")
-                        icon = "💨" if t["type"] == "Air" else "🧴"
-                        lbl  = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
-                        pts_html += (
-                            f"<div style='border-left:2px solid {rc_t};padding:1px 5px;"
-                            f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>"
-                            f"{icon} {lbl}</div>")
-                    if len(taches_j) > 5:
-                        pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
-
-                    lect_html = ""
-                    if j2_j:
-                        lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
-                    if j7_j:
-                        lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
-
-                    # Badge "autre mois"
-                    autre_mois_badge = ""
-                    if is_other_month:
-                        autre_mois_badge = f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>{wd.strftime('%b')}</div>"
-
-                    is_selected = (st.session_state.get("pm_selected_day") == wd)
-                    sel_border  = "2.5px solid #7c3aed" if is_selected else border_d
-                    sel_bg      = "#faf5ff" if is_selected else bg_d
-
-                    card_html = (
-                        f"<div style='background:{sel_bg};border:{sel_border};border-radius:10px;"
-                        f"padding:8px 6px;opacity:{op_d};min-height:100px'>"
-                        f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
-                        f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
-                        f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
-                        f"{wd.strftime('%d/%m')}</div>"
-                        f"{autre_mois_badge}"
-                        f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
-                        f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
-                        f"margin-bottom:4px'>{stat_lbl}</div>"
-                        f"{pts_html}{lect_html}</div>")
-
-                    with _day_cols[di]:
-                        st.markdown(card_html, unsafe_allow_html=True)
-                        btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
-                        if st.button(btn_lbl, key=f"pm_btn_{wd.isoformat()}", use_container_width=True):
-                            if is_selected:
-                                st.session_state["pm_selected_day"] = None
-                            else:
-                                st.session_state["pm_selected_day"] = wd
-                            st.rerun()
-
-            # Panel fixe bas de page : détail du jour sélectionné
-            _sel = st.session_state.get("pm_selected_day")
-            if _sel:
-                import random as _rnd_fix
-                _sel_monday  = _sel - timedelta(days=_sel.weekday())
-                # Semaine complète sans limite de mois
-                _wd_sel_week = [
-                    _sel_monday + timedelta(days=i)
-                    for i in range(5)
-                    if (_sel_monday + timedelta(days=i)) not in _pm_holidays
-                ]
-                _plan_fix   = {wd: [] for wd in _wd_sel_week}
-                _charge_fix = {wd: 0  for wd in _wd_sel_week}
-                _torep_fix  = []
-                _wi_fix = _pm_mondays.index(_sel_monday) if _sel_monday in _pm_mondays else 0
-                for pt in st.session_state.points:
-                    _rc_f = (pt.get("room_class") or "").strip()
-                    _co_v = st.session_state.get(class_override_key, {}).get(_rc_f, 0)
-                    _co_f = int(_co_v) if _co_v and int(_co_v) > 0 else None
-                    _fu_f = pt.get("frequency_unit", "/ semaine")
-                    _fr_f = pt.get("frequency")
-                    _t_f  = {"label": pt["label"], "type": pt.get("type","—"),
-                             "risk": int(pt.get("risk_level",1)), "room_class": _rc_f}
-                    _is_d = (_fu_f == "/ jour" and _co_f is None
-                             and _fr_f is not None and int(_fr_f or 0) > 0)
-                    if _is_d:
-                        for wd in _wd_sel_week:
-                            _plan_fix[wd].append(_t_f); _charge_fix[wd] += 1
-                    else:
-                        _nb_f, _, _ = _get_prevu_semaine(pt, _sel_monday, len(_wd_sel_week), _co_f)
-                        for _ in range(_nb_f): _torep_fix.append(_t_f)
-                _rng_fix = _rnd_fix.Random(_pm_year * 10000 + _pm_month * 100 + _wi_fix)
-                _rng_fix.shuffle(_torep_fix)
-                for t in _torep_fix:
-                    _wdc = min(_wd_sel_week, key=lambda d: _charge_fix[d])
-                    _plan_fix[_wdc].append(t); _charge_fix[_wdc] += 1
-                taches_sel_list = _plan_fix.get(_sel, [])
-
-                j0r_sel = [p for p in st.session_state.prelevements
-                            if p.get("date") and not p.get("archived",False)
-                            and datetime.fromisoformat(p["date"]).date() == _sel]
-                j2r_sel = [s for s in st.session_state.schedules
-                            if s["when"]=="J2" and datetime.fromisoformat(s["due_date"]).date()==_sel]
-                j7r_sel = [s for s in st.session_state.schedules
-                            if s["when"]=="J7" and datetime.fromisoformat(s["due_date"]).date()==_sel]
-
-                _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
-                _nb_t     = len(taches_sel_list)
-                _nb_j0    = len(j0r_sel)
-                _nb_j2    = len(j2r_sel)
-                _nb_j7    = len(j7r_sel)
-                rcp_fix   = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
-
-                _cards = ""
-                for t in taches_sel_list:
-                    _c = rcp_fix.get(str(t["risk"]),"#94a3b8")
+                pts_html = ""
+                for t in taches_j[:5]:
+                    _c  = rcp_pm.get(str(t["risk"]),"#94a3b8")
                     _ic = "💨" if t["type"]=="Air" else "🧴"
-                    _dn = any(p.get("label")==t["label"] for p in j0r_sel)
-                    _bg = "#f0fdf4" if _dn else "#fff"
-                    _bd = "#86efac" if _dn else _c+"44"
-                    _cards += (f"<div style=background:{_bg};border:1px solid {_bd};"
-                               f"border-left:3px solid {_c};border-radius:7px;"
-                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
-                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
-                               f"<div style=font-size:.63rem;color:#64748b>Cl. {t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
-                for s in j2r_sel:
-                    _dn = s["status"]=="done"
-                    _lt = not _dn and _sel < _today_dt
-                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
-                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
-                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
-                               f"border-left:3px solid {_c};border-radius:7px;"
-                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
-                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📖 J2 — {s['label'][:22]}</div>"
-                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-                for s in j7r_sel:
-                    _dn = s["status"]=="done"
-                    _lt = not _dn and _sel < _today_dt
-                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
-                    _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
-                    _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-                    _cards += (f"<div style=background:{_bg};border:1px solid {_c}44;"
-                               f"border-left:3px solid {_c};border-radius:7px;"
-                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
-                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>📗 J7 — {s['label'][:22]}</div>"
-                               f"<div style=font-size:.63rem;color:{_c};font-weight:700>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-                for p in j0r_sel:
-                    _cards += (f"<div style=background:#faf5ff;border:1px solid #e9d5ff;"
-                               f"border-left:3px solid #7c3aed;border-radius:7px;"
-                               f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px>"
-                               f"<div style=font-size:.77rem;font-weight:700;color:#0f172a>🧪 {p['label'][:22]}</div>"
-                               f"<div style=font-size:.63rem;color:#64748b>{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>")
-                if not _cards:
-                    _cards = "<div style=color:#94a3b8;font-size:.82rem;padding:8px 0;align-self:center>Aucune activité ce jour.</div>"
-                _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
-                st.markdown(
-                    "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
-                    "background:linear-gradient(135deg,#0f172a,#1e293b);"
-                    "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
-                    "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
-                    "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
-                    f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
-                    f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
-                    "<span style='font-size:.7rem;color:#475569;font-style:italic'>Cliquez à nouveau sur le jour pour fermer</span>"
-                    "</div>"
-                    f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>{_cards}</div>"
-                    "</div>"
-                    "<div style='height:170px'></div>",
-                    unsafe_allow_html=True)
+                    _lb = t["label"][:18] + ("…" if len(t["label"])>18 else "")
+                    pts_html += (
+                        f"<div style='border-left:2px solid {_c};padding:1px 5px;"
+                        f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
+                if len(taches_j) > 5:
+                    pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
+                lect_html = ""
+                if j2_j: lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
+                if j7_j: lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
+                autre_mois_badge = (
+                    f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>{wd.strftime('%b')}</div>"
+                    if is_other_m else "")
 
-            st.divider()
-            taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
-            taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
+                is_selected = (st.session_state.get("pm_selected_day") == wd)
+                card_html = (
+                    f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
+                    f"border:{'2.5px solid #7c3aed' if is_selected else border_d};border-radius:10px;"
+                    f"padding:8px 6px;opacity:{op_d};min-height:100px'>"
+                    f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
+                    f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
+                    f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>{wd.strftime('%d/%m')}</div>"
+                    f"{autre_mois_badge}"
+                    f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
+                    f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};margin-bottom:4px'>{stat_lbl}</div>"
+                    f"{pts_html}{lect_html}</div>")
+
+                with _day_cols[di]:
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                    if st.button(btn_lbl, key=f"pm_btn_{wd.isoformat()}", use_container_width=True):
+                        st.session_state["pm_selected_day"] = None if is_selected else wd
+                        st.rerun()
+
+        # Panel bas de page : détail du jour sélectionné
+        _sel = st.session_state.get("pm_selected_day")
+        if _sel:
+            taches_sel = monthly_plan.get(_sel, [])
+            j0r_sel    = [p for p in st.session_state.prelevements
+                           if p.get("date") and not p.get("archived",False)
+                           and datetime.fromisoformat(p["date"]).date() == _sel]
+            j2r_sel    = [s for s in st.session_state.schedules
+                           if s["when"]=="J2" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+            j7r_sel    = [s for s in st.session_state.schedules
+                           if s["when"]=="J7" and datetime.fromisoformat(s["due_date"]).date()==_sel]
+            _day_lbl   = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+            rcp_fix    = {"1":"#22c55e","2":"#84cc16","3":"#f59e0b","4":"#f97316","5":"#ef4444"}
+
+            _cards = ""
+            for t in taches_sel:
+                _c  = rcp_fix.get(str(t["risk"]),"#94a3b8")
+                _ic = "💨" if t["type"]=="Air" else "🧴"
+                _dn = any(p.get("label")==t["label"] for p in j0r_sel)
+                _bg = "#f0fdf4" if _dn else "#fff"
+                _bd = "#86efac" if _dn else _c+"44"
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_bd};"
+                    f"border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                    f"{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
+                    f"<div style='font-size:.63rem;color:#64748b'>Cl.{t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
+            for s in j2r_sel:
+                _dn=s["status"]=="done"; _lt=not _dn and _sel < _today_dt
+                _c="#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                _bg="#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
+                _st="✅" if _dn else ("⚠️" if _lt else "⏳")
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_c}44;border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>📖 J2 — {s['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+            for s in j7r_sel:
+                _dn=s["status"]=="done"; _lt=not _dn and _sel < _today_dt
+                _c="#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                _bg="#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
+                _st="✅" if _dn else ("⚠️" if _lt else "⏳")
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_c}44;border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>📗 J7 — {s['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+            for p in j0r_sel:
+                _cards += (
+                    f"<div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:3px solid #7c3aed;border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>🧪 {p['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:#64748b'>{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>")
+            if not _cards:
+                _cards = "<div style='color:#94a3b8;font-size:.82rem;padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
+
+            _nb_t = len(taches_sel); _nb_j0=len(j0r_sel); _nb_j2=len(j2r_sel); _nb_j7=len(j7r_sel)
+            _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
             st.markdown(
-                f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
-                f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
-                f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
-                f"<div style='display:flex;gap:20px;align-items:center'>"
-                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;"
-                f"text-transform:uppercase'>Prévu</div>"
-                f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
-                f"<div style='text-align:center'><div style='font-size:.65rem;color:#94a3b8;"
-                f"text-transform:uppercase'>Réalisé</div>"
-                f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
-                f"<div style='background:rgba(255,255,255,.15);border-radius:8px;padding:8px 16px;"
-                f"font-size:1rem;font-weight:800;color:{taux_col}'>{taux}% réalisé</div>"
-                f"</div></div>", unsafe_allow_html=True)
-
-            st.divider()
-
+                "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
+                "background:linear-gradient(135deg,#0f172a,#1e293b);"
+                "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
+                "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
+                "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"
+                f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
+                f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>"
+                f"{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
+                "<span style='font-size:.7rem;color:#475569;font-style:italic'>Cliquez à nouveau sur le jour pour fermer</span>"
+                "</div>"
+                f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>{_cards}</div>"
+                "</div>"
+                "<div style='height:170px'></div>",
+                unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET EXPORT EXCEL
+    # ONGLET : EXPORT EXCEL
     # ═════════════════════════════════════════════════════════════════════════
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
@@ -4217,6 +4150,7 @@ if active == "planning":
 
             exp_today = _today_dt
             if exp_scope == "Mois en cours":
+                import calendar as cal_module
                 first = exp_today.replace(day=1)
                 last  = exp_today.replace(
                     day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
@@ -4293,13 +4227,11 @@ if active == "planning":
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
                         c.fill=fill(C_PURPLE_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_PURPLE)
+                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_PURPLE)
                     ws1.row_dimensions[row].height = 18; row += 1
 
                 for sch in day_j2:
-                    samp    = next((p for p in st.session_state.prelevements
-                                    if p['id'] == sch['sample_id']), None)
+                    samp    = next((p for p in st.session_state.prelevements if p['id'] == sch['sample_id']), None)
                     is_done = sch['status'] == 'done'
                     rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()], "Oui" if is_h else "",
                           "Lecture J2", sch['label'],
@@ -4310,16 +4242,13 @@ if active == "planning":
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
                         c.fill=fill(C_YELLOW_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_YELLOW)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
+                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_YELLOW)
+                    ws1.cell(row=row, column=9).font = Font(name="Arial", size=10, bold=True,
                         color=C_GREEN if is_done else C_YELLOW)
                     ws1.row_dimensions[row].height = 18; row += 1
 
                 for sch in day_j7:
-                    samp    = next((p for p in st.session_state.prelevements
-                                    if p['id'] == sch['sample_id']), None)
+                    samp    = next((p for p in st.session_state.prelevements if p['id'] == sch['sample_id']), None)
                     is_done = sch['status'] == 'done'
                     rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()], "Oui" if is_h else "",
                           "Lecture J7", sch['label'],
@@ -4330,10 +4259,8 @@ if active == "planning":
                     for ci, val in enumerate(rd, 1):
                         c = ws1.cell(row=row, column=ci, value=val)
                         c.fill=fill(C_TEAL_L); c.alignment=al_l(); c.border=border; c.font=font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_TEAL)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
+                    ws1.cell(row=row, column=4).font = Font(name="Arial", size=10, bold=True, color=C_TEAL)
+                    ws1.cell(row=row, column=9).font = Font(name="Arial", size=10, bold=True,
                         color=C_GREEN if is_done else C_TEAL)
                     ws1.row_dimensions[row].height = 18; row += 1
 
@@ -4345,8 +4272,279 @@ if active == "planning":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.success(f"✅ Fichier **{fname}** généré")
-            
 
+    # ═════════════════════════════════════════════════════════════════════════
+    # ONGLET : ÉTIQUETTES (déplacé depuis Surveillance)
+    # ═════════════════════════════════════════════════════════════════════════
+    with tab_etiq:
+        import io as _io
+
+        st.markdown("### 🏷️ Étiquettes de prélèvement")
+
+        _today_etiq = datetime.today().date()
+        _RISK_COLORS_ETQ = {
+            "1": "#22c55e", "2": "#84cc16",
+            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+        }
+
+        all_prevs = [p for p in st.session_state.prelevements if not p.get("archived", False)]
+
+        if not all_prevs:
+            st.info("Aucun prélèvement enregistré. Créez-en d'abord dans **Surveillance → Nouveau prélèvement**.")
+        else:
+            with st.expander("🔍 Filtres", expanded=True):
+                fc1, fc2, fc3 = st.columns(3)
+                with fc1:
+                    dates_dispo = sorted(
+                        {datetime.fromisoformat(p["date"]).date() for p in all_prevs if p.get("date")},
+                        reverse=True)
+                    sel_dates = st.multiselect(
+                        "Date(s)", dates_dispo,
+                        default=[dates_dispo[0]] if dates_dispo else [],
+                        format_func=lambda d: d.strftime("%d/%m/%Y"),
+                        key="etiq_dates")
+                with fc2:
+                    sel_points = st.multiselect(
+                        "Point(s) de prélèvement",
+                        sorted({p.get("label","") for p in all_prevs if p.get("label")}),
+                        key="etiq_points")
+                with fc3:
+                    sel_opers = st.multiselect(
+                        "Opérateur(s)",
+                        sorted({p.get("operateur","") for p in all_prevs if p.get("operateur")}),
+                        key="etiq_opers")
+
+            filtered = all_prevs
+            if sel_dates:
+                filtered = [p for p in filtered
+                            if p.get("date") and datetime.fromisoformat(p["date"]).date() in sel_dates]
+            if sel_points:
+                filtered = [p for p in filtered if p.get("label") in sel_points]
+            if sel_opers:
+                filtered = [p for p in filtered if p.get("operateur") in sel_opers]
+
+            n_sel = len(filtered)
+
+            if n_sel == 0:
+                st.warning("Aucun prélèvement ne correspond aux filtres.")
+            else:
+                st.markdown(
+                    f"<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
+                    f"padding:8px 16px;font-size:.9rem;color:#1e40af;font-weight:700;margin-bottom:8px'>"
+                    f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer "
+                    f"— format 45×32 mm · 4 colonnes · planche A4</div>",
+                    unsafe_allow_html=True)
+
+                st.markdown("#### 👁️ Prévisualisation")
+
+                def _preview_card(p: dict) -> str:
+                    risk  = str(p.get("risk_level",""))
+                    rcol  = _RISK_COLORS_ETQ.get(risk,"#6366f1")
+                    label = p.get("label","—")
+                    date_s = ""
+                    if p.get("date"):
+                        try:    date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
+                        except: date_s = str(p["date"])
+                    classe_a_html = ""
+                    if p.get("room_class") == "A":
+                        iso = p.get("num_isolateur","—") or "—"
+                        pst = p.get("poste","—") or "—"
+                        classe_a_html = (
+                            f"<div style='font-size:5.5pt;color:#854d0e;font-weight:700;"
+                            f"background:#fef9c3;border-radius:2px;padding:1px 4px;"
+                            f"margin-bottom:3px;white-space:nowrap;overflow:hidden;"
+                            f"text-overflow:ellipsis'>"
+                            f"ISO {iso} · {pst}</div>")
+                    risk_band = (
+                        f"<div style='position:absolute;top:0;right:0;bottom:0;width:6px;"
+                        f"background:{rcol};border-radius:0 5px 5px 0'>"
+                        f"<div style='writing-mode:vertical-rl;font-size:4.5pt;font-weight:900;"
+                        f"color:#fff;padding:3px 0;text-align:center;height:100%'>"
+                        f"{'Nv.' + risk if risk else ''}</div></div>")
+                    return (
+                        f"<div style='position:relative;width:4.5cm;height:3.2cm;"
+                        f"border:1.5px solid {rcol};border-radius:5px;"
+                        f"padding:5px 11px 4px 6px;box-sizing:border-box;"
+                        f"background:#fff;font-family:Arial,Helvetica,sans-serif;"
+                        f"display:flex;flex-direction:column;overflow:hidden;"
+                        f"box-shadow:0 1px 6px rgba(0,0,0,.08)'>"
+                        f"{risk_band}"
+                        f"<div style='font-size:7.5pt;font-weight:900;color:#0f172a;"
+                        f"border-bottom:1px solid {rcol}33;padding-bottom:3px;margin-bottom:3px;"
+                        f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                        f"max-width:calc(4.5cm - 20px)'>{label}</div>"
+                        f"{classe_a_html}"
+                        f"<div style='display:flex;align-items:center;gap:4px;margin-bottom:2px'>"
+                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600;min-width:36px'>📅 Date</span>"
+                        f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>{date_s or '—'}</span></div>"
+                        f"<div style='display:flex;align-items:center;gap:4px'>"
+                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600'>👤 Préleveur :</span></div>"
+                        f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
+                        f"text-align:right;padding-top:2px'>URC — MicroSurveillance</div>"
+                        f"</div>")
+
+                preview_max = min(n_sel, 8)
+                p_cols = st.columns(4)
+                for idx, p in enumerate(filtered[:preview_max]):
+                    with p_cols[idx % 4]:
+                        st.markdown(_preview_card(p), unsafe_allow_html=True)
+                        st.markdown("<div style='margin-bottom:6px'></div>", unsafe_allow_html=True)
+                if n_sel > preview_max:
+                    st.caption(
+                        f"Prévisualisation limitée aux {preview_max} premières — "
+                        f"toutes les {n_sel} figureront dans le PDF.")
+
+                st.markdown("---")
+                if st.button(
+                    f"📄 Générer le PDF — {n_sel} étiquette{'s' if n_sel > 1 else ''}",
+                    use_container_width=True, key="etiq_gen_pdf", type="primary"):
+                    try:
+                        from reportlab.lib.pagesizes import A4
+                        from reportlab.lib.units     import cm as rl_cm
+                        from reportlab.lib           import colors as rlc
+                        from reportlab.platypus      import (SimpleDocTemplate, Table,
+                                                              TableStyle, Paragraph,
+                                                              HRFlowable)
+                        from reportlab.lib.styles    import ParagraphStyle
+                        from reportlab.lib.enums     import TA_RIGHT
+
+                        W_ETQ  = 4.5  * rl_cm
+                        H_ETQ  = 3.2  * rl_cm
+                        N_COLS = 4
+                        GAP    = 0.25 * rl_cm
+                        MARGIN = 0.7  * rl_cm
+
+                        buf = _io.BytesIO()
+                        doc = SimpleDocTemplate(
+                            buf, pagesize=A4,
+                            leftMargin=MARGIN, rightMargin=MARGIN,
+                            topMargin=MARGIN,  bottomMargin=MARGIN,
+                            title=f"Étiquettes {_today_etiq.strftime('%d/%m/%Y')}")
+
+                        RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
+
+                        s_titre   = ParagraphStyle("etiq_titre",  fontName="Helvetica-Bold",
+                                                   fontSize=7.5, leading=9, spaceAfter=2,
+                                                   textColor=rlc.HexColor("#0f172a"))
+                        s_lbl     = ParagraphStyle("etiq_lbl",    fontName="Helvetica",
+                                                   fontSize=5.5, leading=7,
+                                                   textColor=rlc.HexColor("#64748b"))
+                        s_date    = ParagraphStyle("etiq_date",   fontName="Helvetica-Bold",
+                                                   fontSize=9,   leading=10,
+                                                   textColor=rlc.HexColor("#1e40af"))
+                        s_logo    = ParagraphStyle("etiq_logo",   fontName="Helvetica",
+                                                   fontSize=5,   leading=6,
+                                                   textColor=rlc.HexColor("#94a3b8"),
+                                                   alignment=TA_RIGHT)
+                        s_classea = ParagraphStyle("etiq_classea",fontName="Helvetica-Bold",
+                                                   fontSize=6,   leading=7,
+                                                   textColor=rlc.HexColor("#854d0e"),
+                                                   backColor=rlc.HexColor("#fef9c3"),
+                                                   spaceAfter=2)
+                        s_val     = ParagraphStyle("etiq_val",    fontName="Helvetica-Bold",
+                                                   fontSize=7.5, leading=9,
+                                                   textColor=rlc.HexColor("#0f172a"))
+                        s_phdr    = ParagraphStyle("page_hdr",    fontName="Helvetica-Bold",
+                                                   fontSize=8,
+                                                   textColor=rlc.HexColor("#1e40af"),
+                                                   spaceAfter=5)
+
+                        def _build_cell(pd):
+                            rv  = str(pd.get("risk_level",""))
+                            rc  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+                            lv  = pd.get("label","—")
+                            dv  = ""
+                            if pd.get("date"):
+                                try:    dv = datetime.fromisoformat(pd["date"]).strftime("%d/%m/%Y")
+                                except: dv = str(pd["date"])
+                            W_INNER = W_ETQ - 0.55 * rl_cm
+                            classea_rows = []
+                            if pd.get("room_class") == "A":
+                                iso = pd.get("num_isolateur","—") or "—"
+                                pst = pd.get("poste","—") or "—"
+                                classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
+                            inner = Table([
+                                [Paragraph(lv, s_titre)],
+                                [HRFlowable(width=W_INNER, thickness=0.6, color=rc, spaceAfter=2)],
+                                *classea_rows,
+                                [Paragraph("📅 Date", s_lbl)],
+                                [Paragraph(dv or "—", s_date)],
+                                [Paragraph("👤 Préleveur :", s_lbl)],
+                                [Paragraph("", s_val)],
+                                [Paragraph("URC — MicroSurveillance", s_logo)],
+                            ], colWidths=[W_INNER])
+                            inner.setStyle(TableStyle([
+                                ("LEFTPADDING",   (0,0),(-1,-1), 0),
+                                ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+                                ("TOPPADDING",    (0,0),(-1,-1), 0),
+                                ("BOTTOMPADDING", (0,0),(-1,-1), 1),
+                                ("TOPPADDING",    (0,-1),(0,-1), 4),
+                            ]))
+                            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+                            outer.setStyle(TableStyle([
+                                ("BOX",            (0,0),(0,0), 1.2, rc),
+                                ("ROUNDEDCORNERS", (0,0),(0,0), [5]),
+                                ("LINEAFTER",      (0,0),(0,0), 5.5, rc),
+                                ("LEFTPADDING",    (0,0),(0,0), 5),
+                                ("RIGHTPADDING",   (0,0),(0,0), 10),
+                                ("TOPPADDING",     (0,0),(0,0), 5),
+                                ("BOTTOMPADDING",  (0,0),(0,0), 4),
+                                ("VALIGN",         (0,0),(0,0), "TOP"),
+                                ("BACKGROUND",     (0,0),(0,0), rlc.white),
+                            ]))
+                            return outer
+
+                        rows, row_buf = [], []
+                        for p_item in filtered:
+                            row_buf.append(_build_cell(p_item))
+                            if len(row_buf) == N_COLS:
+                                rows.append(row_buf); row_buf = []
+                        if row_buf:
+                            while len(row_buf) < N_COLS: row_buf.append("")
+                            rows.append(row_buf)
+
+                        main_tbl = Table(
+                            rows,
+                            colWidths=[W_ETQ] * N_COLS,
+                            rowHeights=[H_ETQ] * len(rows))
+                        main_tbl.setStyle(TableStyle([
+                            ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
+                            ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
+                            ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
+                            ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
+                            ("VALIGN",        (0,0),(-1,-1), "TOP"),
+                        ]))
+
+                        doc.build([
+                            Paragraph(
+                                f"Étiquettes prélèvements — {_today_etiq.strftime('%d/%m/%Y')} — "
+                                f"{n_sel} étiquette{'s' if n_sel > 1 else ''} — 45×32 mm · 4 col.",
+                                s_phdr),
+                            main_tbl,
+                        ])
+                        buf.seek(0)
+                        fname = f"etiquettes_{_today_etiq.strftime('%Y%m%d')}.pdf"
+                        st.download_button(
+                            label=f"⬇️ Télécharger {fname}",
+                            data=buf.getvalue(), file_name=fname,
+                            mime="application/pdf",
+                            use_container_width=True, key="etiq_dl_btn")
+                        st.markdown(
+                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                            f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
+                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
+                            f"✅ PDF généré avec succès</div>"
+                            f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
+                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
+                            f"4 colonnes · Format A4 · 45×32 mm</div></div>",
+                            unsafe_allow_html=True)
+                    except ImportError:
+                        st.error(
+                            "❌ **ReportLab** non installé.\n\n"
+                            "Ajoutez `reportlab` dans **requirements.txt**.")
+                    except Exception as _e:
+                        st.error(f"Erreur génération PDF : {_e}")
+                        import traceback; st.code(traceback.format_exc())
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
