@@ -2820,7 +2820,239 @@ upd();
                 </div>""", unsafe_allow_html=True)
 
 
-# ═════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
+# Calendrier supprimé.
+# Algorithme : max prélèvements/classe/semaine → répartition mensuelle
+#              jamais 2× le même point le même jour (sauf freq > 1/jour)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if active == "planning":
+    st.markdown("### 📅 Planning des prélèvements & lectures")
+
+    _today_dt      = datetime.today().date()
+    MOIS_FR        = ["","Janvier","Février","Mars","Avril","Mai","Juin",
+                      "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    JOURS_FR_LONG  = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+
+    # ── Persistance overrides manuels ─────────────────────────────────────────
+    def _load_planning_overrides():
+        for k, v in st.session_state.get("planning_overrides", {}).items():
+            if k not in st.session_state:
+                try: st.session_state[k] = int(v)
+                except: pass
+
+    def _persist_overrides():
+        overrides = {k: int(v) for k, v in st.session_state.items()
+                     if isinstance(k, str) and k.startswith("ch_prevu_")}
+        st.session_state["planning_overrides"] = overrides
+        _supa_upsert('planning_overrides', json.dumps(overrides, ensure_ascii=False))
+
+    if "planning_overrides_loaded" not in st.session_state:
+        _load_planning_overrides()
+        st.session_state["planning_overrides_loaded"] = True
+
+    # ── Helpers fréquence ─────────────────────────────────────────────────────
+    def _frc_default(rc):
+        rc = (rc or '').strip().upper()
+        if 'A' in rc: return 20
+        if 'D' in rc: return 10
+        return 2
+
+    def _freq_en_semaine(pt, nb_jours_ouvres=5):
+        """Fréquence hebdomadaire d'un point (float)."""
+        fr = pt.get('frequency'); u = pt.get('frequency_unit','/ semaine')
+        try: fr = float(fr)
+        except: fr = 0.0
+        if fr <= 0:
+            return float(_frc_default((pt.get('room_class') or '').strip()))
+        if '/ jour' in u:  return fr * nb_jours_ouvres
+        if '/ mois' in u:  return fr / 4.33
+        return fr
+
+    def _freq_par_jour(pt):
+        """Fréquence journalière brute si unité = /jour, sinon 0."""
+        u = pt.get('frequency_unit','/ semaine')
+        if '/ jour' in u:
+            try: return float(pt.get('frequency') or 0)
+            except: return 0.0
+        return 0.0
+
+    def _semaines_du_mois(year, month):
+        import calendar as _c
+        _, n_days = _c.monthrange(year, month)
+        first = date_type(year, month, 1)
+        last  = date_type(year, month, n_days)
+        cur   = first - timedelta(days=first.weekday())
+        ms    = []
+        while cur <= last:
+            ms.append(cur); cur += timedelta(weeks=1)
+        return ms
+
+    def _doit_prelever_cette_semaine_mensuel(freq_mois, week_monday):
+        vendredi = week_monday + timedelta(days=4)
+        month    = vendredi.month; year = vendredi.year
+        semaines = _semaines_du_mois(year, month)
+        nb_sem   = len(semaines)
+        try: idx = semaines.index(week_monday)
+        except: return False, 0
+        freq_mois = max(1, min(int(freq_mois), nb_sem))
+        if freq_mois >= nb_sem: return True, 1
+        step    = nb_sem / freq_mois
+        actives = {int(i * step) for i in range(freq_mois)}
+        return idx in actives, 1
+
+    def _get_prevu_semaine(pt, week_monday, nb_wd, class_override_alloc=None):
+        pt_id     = pt.get('id','')
+        rc        = (pt.get('room_class') or '').strip()
+        sess_key  = f"ch_prevu_{pt_id}_{week_monday.isoformat()}"
+        freq_raw  = pt.get('frequency'); freq_unit = pt.get('frequency_unit','/ semaine')
+        if class_override_alloc is not None:
+            default_nb = int(class_override_alloc); freq_label = f"{default_nb}/sem. (réparti classe)"
+        elif freq_raw is not None:
+            try: freq_int = int(freq_raw)
+            except: freq_int = 0
+            if freq_int > 0:
+                if freq_unit == '/ jour':
+                    default_nb = freq_int * nb_wd; freq_label = f"{freq_int}/j → {default_nb}/sem."
+                elif freq_unit == '/ semaine':
+                    default_nb = freq_int; freq_label = f"{freq_int} / semaine"
+                elif freq_unit == '/ mois':
+                    actif, nb  = _doit_prelever_cette_semaine_mensuel(freq_int, week_monday)
+                    default_nb = nb if actif else 0; freq_label = f"{freq_int} / mois"
+                else:
+                    default_nb = freq_int; freq_label = f"{freq_int} {freq_unit}"
+            else:
+                default_nb = _frc_default(rc); freq_label = f"{default_nb}/sem. (défaut)"
+        else:
+            default_nb = _frc_default(rc); freq_label = f"{default_nb}/sem. (défaut)"
+        if sess_key not in st.session_state:
+            st.session_state[sess_key] = default_nb
+        return int(st.session_state[sess_key]), freq_label, sess_key
+
+    def get_week_start(d):
+        return d - timedelta(days=d.weekday())
+
+    def fmt_week(ws):
+        we = ws + timedelta(days=6)
+        return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
+
+    # ── Algorithme central : planning mensuel ─────────────────────────────────
+    # Contrainte :  max N prélèvements / classe / semaine
+    #               répartition proportionnelle au poids (fréquence individuelle)
+    #               jamais 2× le même point le même jour (sauf freq > 1/jour)
+    def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
+        """
+        Retourne {date: [{"label","type","risk","room_class"}, ...]}
+        class_max_dict = {classe: max_prelev_par_semaine}  (0 = pas de limite)
+        """
+        import calendar as _cm
+        import random   as _rnd
+
+        _, n_days = _cm.monthrange(year, month)
+        first     = date_type(year, month, 1)
+        last      = date_type(year, month, n_days)
+        cur       = first - timedelta(days=first.weekday())
+        mondays   = []
+        while cur <= last:
+            mondays.append(cur); cur += timedelta(weeks=1)
+
+        planning = {}
+
+        for week_idx, week_monday in enumerate(mondays):
+            # 5 jours ouvrés complets de la semaine (sans limite de mois)
+            wd_week = [
+                week_monday + timedelta(days=i)
+                for i in range(5)
+                if (week_monday + timedelta(days=i)) not in holidays_set
+            ]
+            if not wd_week: continue
+            nb_wd = len(wd_week)
+            for d in wd_week:
+                if d not in planning: planning[d] = []
+
+            all_classes = sorted({
+                (pt.get('room_class') or '').strip()
+                for pt in st.session_state.points
+                if (pt.get('room_class') or '').strip()
+            })
+
+            tasks = []  # {label, type, risk, room_class, alloc, max_per_day}
+
+            for cls in all_classes:
+                pts_cls     = [pt for pt in st.session_state.points
+                               if (pt.get('room_class') or '').strip() == cls]
+                freqs_sem   = [max(0.01, _freq_en_semaine(pt, nb_wd)) for pt in pts_cls]
+                total_poids = sum(freqs_sem) or 1
+                max_cls     = int(class_max_dict.get(cls, 0))
+
+                for i, (pt, f_sem) in enumerate(zip(pts_cls, freqs_sem)):
+                    fpj = _freq_par_jour(pt)  # >0 si unité = /jour
+
+                    if max_cls > 0:
+                        # Répartition proportionnelle dans le plafond de la classe
+                        if i < len(pts_cls) - 1:
+                            alloc = round(f_sem / total_poids * max_cls)
+                        else:
+                            # Dernier point : ajuste pour ne pas dépasser le total
+                            already = sum(round(freqs_sem[j] / total_poids * max_cls)
+                                          for j in range(i))
+                            alloc   = max(0, max_cls - already)
+                    else:
+                        # Pas de contrainte : fréquence individuelle
+                        nb_man, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd, None)
+                        alloc = nb_man
+
+                    # Passages max autorisés par jour pour ce point
+                    max_pd = max(1, int(fpj)) if fpj > 1 else 1
+
+                    tasks.append({
+                        "label":       pt['label'],
+                        "type":        pt.get('type','—'),
+                        "risk":        int(pt.get('risk_level', 1)),
+                        "room_class":  cls,
+                        "alloc":       alloc,
+                        "max_per_day": max_pd,
+                    })
+
+            # Répartition sur les jours ouvrés
+            day_counts = {d: 0   for d in wd_week}
+            day_labels = {d: {}  for d in wd_week}  # {label: count}
+
+            # Tri déterministe : risque décroissant puis label alphabétique
+            tasks_sorted = sorted(tasks, key=lambda x: (-x["risk"], x["label"]))
+            rng = _rnd.Random(year * 10000 + month * 100 + week_idx)
+
+            for task in tasks_sorted:
+                remaining    = task["alloc"]
+                mpd          = task["max_per_day"]
+                max_attempts = max(remaining * nb_wd * 4, 50)
+                attempts     = 0
+
+                while remaining > 0 and attempts < max_attempts:
+                    attempts += 1
+                    # Candidats : jours où le point n'a pas encore atteint sa limite journalière
+                    candidates = [
+                        d for d in wd_week
+                        if day_labels[d].get(task["label"], 0) < mpd
+                    ]
+                    if not candidates: break  # Plus de place possible cette semaine
+
+                    # Jour le moins chargé parmi les candidats (+ léger bruit pour l'étalement)
+                    best = min(candidates, key=lambda d: (day_counts[d], rng.random()))
+                    planning[best].append({
+                        "label":      task["label"],
+                        "type":       task["type"],
+                        "risk":       task["risk"],
+                        "room_class": task["room_class"],
+                    })
+                    day_counts[best] += 1
+                    day_labels[best][task["label"]] = day_labels[best].get(task["label"], 0) + 1
+                    remaining -= 1
+
+        return planning
+
+    # ═════════════════════════════════════════════════════════════════════════
     # ONGLETS Planning
     # ═════════════════════════════════════════════════════════════════════════
     try:
