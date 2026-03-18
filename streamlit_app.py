@@ -3062,7 +3062,7 @@ if active == "planning":
     except ImportError:
         _openpyxl_ok = False
 
-    plan_tab_charge, plan_tab_export, tab_etiq = st.tabs([
+    plan_tab_charge, plan_tab_export = st.tabs([
         "📊 Charge hebdo & Planning mensuel",
         "📥 Export Excel",
     ])
