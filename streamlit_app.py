@@ -3217,7 +3217,7 @@ if active == "planning":
                  and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we]
         total_actes    = len(ch_j0) + len(ch_j2) + len(ch_j7)
         actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
-        actes_par_prev = total_actes / nb_preleveurs if nb_preleveurs > 0 else 0
+        
 
         st.markdown(
             f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
