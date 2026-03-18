@@ -3052,7 +3052,7 @@ if active == "planning":
 
         return planning
 
-    # ═════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
     # ONGLETS Planning
     # ═════════════════════════════════════════════════════════════════════════
     try:
@@ -3123,9 +3123,9 @@ if active == "planning":
         # ── Contraintes max / classe / semaine ────────────────────────────────
         st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
         st.caption(
-            "**0 = pas de limite** (fréquences individuelles de chaque point utilisées). "
-            "Sinon, le total hebdomadaire de la classe est plafonné, puis réparti "
-            "proportionnellement aux fréquences individuelles (utilisées comme poids). "
+            "**0 = aucun prélèvement** pour cette classe (tous les points sont désactivés). "
+            "**> 0** = le total hebdomadaire de la classe est plafonné à cette valeur, "
+            "puis réparti proportionnellement aux fréquences individuelles (utilisées comme poids). "
             "**Un même point ne peut pas apparaître 2× le même jour**, "
             "sauf si sa fréquence est définie en > 1/jour.")
 
@@ -3189,18 +3189,16 @@ if active == "planning":
                             f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
                             unsafe_allow_html=True)
                     else:
-                        # 0 = pas de limite → fréquences individuelles
-                        freqs_p = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls]
-                        preview_indiv = "".join(
-                            f"<div style='font-size:.6rem;color:#475569'>"
-                            f"{pt['label'][:20]}: <b>{round(f)}×/sem</b></div>"
-                            for pt, f in zip(pts_cls, freqs_p))
+                        # 0 = aucun prélèvement pour cette classe
                         st.markdown(
-                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
-                            f"border-radius:6px;padding:6px 8px;margin-top:2px'>"
-                            f"<div style='font-size:.58rem;color:#94a3b8;margin-bottom:2px'>"
-                            f"Fréquences individuelles (pas de plafond)</div>"
-                            f"{preview_indiv}</div>",
+                            f"<div style='background:#fef2f2;border:1px solid #fca5a5;"
+                            f"border-radius:6px;padding:6px 8px;margin-top:2px;"
+                            f"text-align:center'>"
+                            f"<div style='font-size:.62rem;font-weight:700;color:#991b1b'>"
+                            f"🚫 Aucun prélèvement planifié</div>"
+                            f"<div style='font-size:.58rem;color:#b91c1c;margin-top:1px'>"
+                            f"Définissez une valeur &gt; 0 pour activer</div>"
+                            f"</div>",
                             unsafe_allow_html=True)
         else:
             st.info("Aucune classe de salle définie sur les points de prélèvement.")
@@ -3322,8 +3320,9 @@ if active == "planning":
                 tot_cls   = sum(freqs_cls) or 1
                 my_f      = max(0.01, _freq_en_semaine(pt, nb_jours))
 
-                # CORRECTION : 0 = pas de limite → class_alloc = None → fréquence individuelle
-                class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else None
+                # CORRECTION : 0 = aucun prélèvement → class_alloc = 0
+                # > 0 = plafond hebdomadaire réparti proportionnellement
+                class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else 0
 
                 nb_prevu, freq_label, sess_key = _get_prevu_semaine(
                     pt, ch_sel_ws, nb_jours, class_alloc)
@@ -3428,7 +3427,7 @@ if active == "planning":
         st.markdown("#### 📅 Planning mensuel automatique")
         st.caption(
             "Répartition basée sur les contraintes max/classe/semaine définies ci-dessus. "
-            "**0 = pas de limite** : les fréquences individuelles sont utilisées directement. "
+            "**0 = aucun prélèvement** pour la classe concernée. "
             "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
 
         monthly_plan = _compute_monthly_planning(
