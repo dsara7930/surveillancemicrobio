@@ -2999,9 +2999,8 @@ if active == "planning":
                                           for j in range(i))
                             alloc   = max(0, max_cls - already)
                     else:
-                        # Pas de contrainte : fréquence individuelle
-                        nb_man, _, _ = _get_prevu_semaine(pt, week_monday, nb_wd, None)
-                        alloc = nb_man
+                        # 0 = aucun prélèvement pour cette classe
+                        alloc = 0
 
                     # Passages max autorisés par jour pour ce point
                     max_pd = max(1, int(fpj)) if fpj > 1 else 1
