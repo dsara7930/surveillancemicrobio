@@ -3065,7 +3065,6 @@ if active == "planning":
     plan_tab_charge, plan_tab_export, tab_etiq = st.tabs([
         "📊 Charge hebdo & Planning mensuel",
         "📥 Export Excel",
-        "🏷️ Étiquettes",
     ])
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -3895,323 +3894,309 @@ if active == "planning":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.success(f"✅ Fichier **{fname}** généré avec succès.")
+# ── Panel détail du jour sélectionné + génération étiquettes ────────
+        _sel = st.session_state.get("pm_selected_day")
+        if _sel:
+            taches_sel = monthly_plan.get(_sel, [])
+            j0r_sel    = [
+                p for p in st.session_state.prelevements
+                if p.get("date") and not p.get("archived", False)
+                and datetime.fromisoformat(p["date"]).date() == _sel
+            ]
+            j2r_sel = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J2"
+                and datetime.fromisoformat(s["due_date"]).date() == _sel
+            ]
+            j7r_sel = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J7"
+                and datetime.fromisoformat(s["due_date"]).date() == _sel
+            ]
+            _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+            rcp_fix  = {
+                "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+                "4": "#f97316", "5": "#ef4444",
+            }
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET : ÉTIQUETTES
-    # ═════════════════════════════════════════════════════════════════════════
-    with tab_etiq:
-        import io as _io
+            st.divider()
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
+                f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
+                f"<div style='color:#fff;font-weight:800;font-size:1rem'>📋 {_day_lbl}</div>"
+                f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
+                f"{len(taches_sel)} prélèv. planifiés · {len(j2r_sel)} J2 · {len(j7r_sel)} J7"
+                f"{'  · 🧪 ' + str(len(j0r_sel)) + ' réalisé(s)' if j0r_sel else ''}"
+                f"</div></div>",
+                unsafe_allow_html=True)
 
-        st.markdown("### 🏷️ Étiquettes de prélèvement")
+            # ── Activités du jour (J2 / J7 / réalisés) ───────────────────────
+            if j2r_sel or j7r_sel or j0r_sel:
+                with st.expander("📖 Lectures & réalisés du jour", expanded=False):
+                    act_cols = st.columns(3)
+                    ci = 0
+                    for s in j2r_sel:
+                        _dn = s["status"] == "done"
+                        _lt = not _dn and _sel < _today_dt
+                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#fffbeb;border:1px solid {_c}44;"
+                                f"border-left:3px solid {_c};border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>📖 J2 — {s['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
+                    for s in j7r_sel:
+                        _dn = s["status"] == "done"
+                        _lt = not _dn and _sel < _today_dt
+                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#eff6ff;border:1px solid {_c}44;"
+                                f"border-left:3px solid {_c};border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>📗 J7 — {s['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
+                    for p in j0r_sel:
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                                f"border-left:3px solid #7c3aed;border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>🧪 {p['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:#64748b'>"
+                                f"{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
 
-        _today_etiq = datetime.today().date()
-        _RISK_COLORS_ETQ = {
-            "1": "#22c55e", "2": "#84cc16",
-            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
-        }
-
-        all_prevs = [p for p in st.session_state.prelevements
-                     if not p.get("archived", False)]
-
-        if not all_prevs:
-            st.info(
-                "Aucun prélèvement enregistré. "
-                "Créez-en d'abord dans **Surveillance → Nouveau prélèvement**.")
-        else:
-            with st.expander("🔍 Filtres", expanded=True):
-                fc1, fc2, fc3 = st.columns(3)
-                with fc1:
-                    dates_dispo = sorted(
-                        {datetime.fromisoformat(p["date"]).date()
-                         for p in all_prevs if p.get("date")},
-                        reverse=True)
-                    sel_dates = st.multiselect(
-                        "Date(s)", dates_dispo,
-                        default=[dates_dispo[0]] if dates_dispo else [],
-                        format_func=lambda d: d.strftime("%d/%m/%Y"),
-                        key="etiq_dates")
-                with fc2:
-                    sel_points = st.multiselect(
-                        "Point(s) de prélèvement",
-                        sorted({p.get("label", "") for p in all_prevs if p.get("label")}),
-                        key="etiq_points")
-                with fc3:
-                    sel_opers = st.multiselect(
-                        "Opérateur(s)",
-                        sorted({p.get("operateur", "") for p in all_prevs
-                                if p.get("operateur")}),
-                        key="etiq_opers")
-
-            filtered = all_prevs
-            if sel_dates:
-                filtered = [
-                    p for p in filtered
-                    if p.get("date")
-                    and datetime.fromisoformat(p["date"]).date() in sel_dates
-                ]
-            if sel_points:
-                filtered = [p for p in filtered if p.get("label") in sel_points]
-            if sel_opers:
-                filtered = [p for p in filtered if p.get("operateur") in sel_opers]
-
-            n_sel = len(filtered)
-
-            if n_sel == 0:
-                st.warning("Aucun prélèvement ne correspond aux filtres.")
-            else:
+            # ── Sélection des prélèvements pour étiquettes ────────────────────
+            if taches_sel:
                 st.markdown(
-                    f"<div style='background:#eff6ff;border:1px solid #bfdbfe;"
-                    f"border-radius:8px;padding:8px 16px;font-size:.9rem;"
-                    f"color:#1e40af;font-weight:700;margin-bottom:8px'>"
-                    f"🏷️ {n_sel} étiquette{'s' if n_sel > 1 else ''} à générer "
-                    f"— format 45×32 mm · 4 colonnes · planche A4</div>",
+                    "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
+                    "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
+                    "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
+                    "🏷️ Générer les étiquettes pour ce jour</span></div>",
                     unsafe_allow_html=True)
 
-                st.markdown("#### 👁️ Prévisualisation")
+                # Boutons sélectionner tout / aucun
+                _sel_key_all = f"etiq_sel_all_{_sel.isoformat()}"
+                col_sa, col_sn, _ = st.columns([1, 1, 4])
+                with col_sa:
+                    if st.button("☑️ Tout sélectionner", key=f"etiq_all_{_sel.isoformat()}",
+                                 use_container_width=True):
+                        for _t in taches_sel:
+                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
+                        st.rerun()
+                with col_sn:
+                    if st.button("⬜ Tout désélectionner", key=f"etiq_none_{_sel.isoformat()}",
+                                 use_container_width=True):
+                        for _t in taches_sel:
+                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
+                        st.rerun()
 
-                def _preview_card(p: dict) -> str:
-                    risk  = str(p.get("risk_level", ""))
-                    rcol  = _RISK_COLORS_ETQ.get(risk, "#6366f1")
-                    label = p.get("label", "—")
-                    date_s = ""
-                    if p.get("date"):
-                        try:
-                            date_s = datetime.fromisoformat(p["date"]).strftime("%d/%m/%Y")
-                        except Exception:
-                            date_s = str(p["date"])
-                    classe_a_html = ""
-                    if p.get("room_class") == "A":
-                        iso = p.get("num_isolateur", "—") or "—"
-                        pst = p.get("poste", "—") or "—"
-                        classe_a_html = (
-                            f"<div style='font-size:5.5pt;color:#854d0e;font-weight:700;"
-                            f"background:#fef9c3;border-radius:2px;padding:1px 4px;"
-                            f"margin-bottom:3px;white-space:nowrap;overflow:hidden;"
-                            f"text-overflow:ellipsis'>"
-                            f"ISO {iso} · {pst}</div>")
-                    risk_band = (
-                        f"<div style='position:absolute;top:0;right:0;bottom:0;width:6px;"
-                        f"background:{rcol};border-radius:0 5px 5px 0'>"
-                        f"<div style='writing-mode:vertical-rl;font-size:4.5pt;"
-                        f"font-weight:900;color:#fff;padding:3px 0;"
-                        f"text-align:center;height:100%'>"
-                        f"{'Nv.' + risk if risk else ''}</div></div>")
-                    return (
-                        f"<div style='position:relative;width:4.5cm;height:3.2cm;"
-                        f"border:1.5px solid {rcol};border-radius:5px;"
-                        f"padding:5px 11px 4px 6px;box-sizing:border-box;"
-                        f"background:#fff;font-family:Arial,Helvetica,sans-serif;"
-                        f"display:flex;flex-direction:column;overflow:hidden;"
-                        f"box-shadow:0 1px 6px rgba(0,0,0,.08)'>"
-                        f"{risk_band}"
-                        f"<div style='font-size:7.5pt;font-weight:900;color:#0f172a;"
-                        f"border-bottom:1px solid {rcol}33;padding-bottom:3px;"
-                        f"margin-bottom:3px;white-space:nowrap;overflow:hidden;"
-                        f"text-overflow:ellipsis;max-width:calc(4.5cm - 20px)'>{label}</div>"
-                        f"{classe_a_html}"
-                        f"<div style='display:flex;align-items:center;gap:4px;margin-bottom:2px'>"
-                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600;"
-                        f"min-width:36px'>📅 Date</span>"
-                        f"<span style='font-size:8pt;font-weight:800;color:#1e40af'>"
-                        f"{date_s or '—'}</span></div>"
-                        f"<div style='display:flex;align-items:center;gap:4px'>"
-                        f"<span style='font-size:5.5pt;color:#64748b;font-weight:600'>"
-                        f"👤 Préleveur :</span></div>"
-                        f"<div style='margin-top:auto;font-size:5pt;color:#94a3b8;"
-                        f"text-align:right;padding-top:2px'>URC — MicroSurveillance</div>"
-                        f"</div>")
-
-                preview_max = min(n_sel, 8)
-                p_cols = st.columns(4)
-                for idx, p in enumerate(filtered[:preview_max]):
-                    with p_cols[idx % 4]:
-                        st.markdown(_preview_card(p), unsafe_allow_html=True)
+                # Grille de cases à cocher
+                _chk_cols = st.columns(3)
+                _selected_tasks = []
+                for _ti, _t in enumerate(taches_sel):
+                    _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
+                    if _chk_key not in st.session_state:
+                        st.session_state[_chk_key] = True  # coché par défaut
+                    _rc  = rcp_fix.get(str(_t["risk"]), "#94a3b8")
+                    _ic  = "💨" if _t["type"] == "Air" else "🧴"
+                    _dn  = any(p.get("label") == _t["label"] for p in j0r_sel)
+                    with _chk_cols[_ti % 3]:
                         st.markdown(
-                            "<div style='margin-bottom:6px'></div>",
+                            f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
+                            f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
+                            f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
+                            f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
+                            f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
+                            f"<span style='font-size:.6rem;color:#64748b'>"
+                            f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
                             unsafe_allow_html=True)
-                if n_sel > preview_max:
-                    st.caption(
-                        f"Prévisualisation limitée aux {preview_max} premières — "
-                        f"toutes les {n_sel} figureront dans le PDF.")
+                        checked = st.checkbox(
+                            "Inclure", value=st.session_state[_chk_key],
+                            key=_chk_key, label_visibility="collapsed")
+                        if checked:
+                            _selected_tasks.append(_t)
 
-                st.markdown("---")
-                if st.button(
-                    f"📄 Générer le PDF — "
-                    f"{n_sel} étiquette{'s' if n_sel > 1 else ''}",
-                    use_container_width=True,
-                    key="etiq_gen_pdf",
-                    type="primary"
-                ):
-                    try:
-                        from reportlab.lib.pagesizes import A4
-                        from reportlab.lib.units     import cm as rl_cm
-                        from reportlab.lib           import colors as rlc
-                        from reportlab.platypus      import (
-                            SimpleDocTemplate, Table, TableStyle,
-                            Paragraph, HRFlowable)
-                        from reportlab.lib.styles    import ParagraphStyle
-                        from reportlab.lib.enums     import TA_RIGHT
+                _n_sel_etiq = len(_selected_tasks)
+                st.markdown(
+                    f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
+                    f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
+                    unsafe_allow_html=True)
 
-                        W_ETQ  = 4.5  * rl_cm
-                        H_ETQ  = 3.2  * rl_cm
-                        N_COLS = 4
-                        GAP    = 0.25 * rl_cm
-                        MARGIN = 0.7  * rl_cm
-
-                        buf = _io.BytesIO()
-                        doc = SimpleDocTemplate(
-                            buf, pagesize=A4,
-                            leftMargin=MARGIN, rightMargin=MARGIN,
-                            topMargin=MARGIN,  bottomMargin=MARGIN,
-                            title=f"Étiquettes {_today_etiq.strftime('%d/%m/%Y')}")
-
-                        RISK_RL = {
-                            k: rlc.HexColor(v)
-                            for k, v in _RISK_COLORS_ETQ.items()
+                if _n_sel_etiq > 0:
+                    if st.button(
+                        f"📄 Générer {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
+                        use_container_width=True,
+                        key=f"etiq_gen_{_sel.isoformat()}",
+                        type="primary"
+                    ):
+                        import io as _io
+                        _RISK_COLORS_ETQ = {
+                            "1": "#22c55e", "2": "#84cc16",
+                            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
                         }
+                        try:
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.lib.units     import cm as rl_cm
+                            from reportlab.lib           import colors as rlc
+                            from reportlab.platypus      import (
+                                SimpleDocTemplate, Table, TableStyle,
+                                Paragraph, HRFlowable)
+                            from reportlab.lib.styles    import ParagraphStyle
+                            from reportlab.lib.enums     import TA_RIGHT
 
-                        s_titre   = ParagraphStyle(
-                            "etiq_titre", fontName="Helvetica-Bold",
-                            fontSize=7.5, leading=9, spaceAfter=2,
-                            textColor=rlc.HexColor("#0f172a"))
-                        s_lbl     = ParagraphStyle(
-                            "etiq_lbl", fontName="Helvetica",
-                            fontSize=5.5, leading=7,
-                            textColor=rlc.HexColor("#64748b"))
-                        s_date    = ParagraphStyle(
-                            "etiq_date", fontName="Helvetica-Bold",
-                            fontSize=9, leading=10,
-                            textColor=rlc.HexColor("#1e40af"))
-                        s_logo    = ParagraphStyle(
-                            "etiq_logo", fontName="Helvetica",
-                            fontSize=5, leading=6,
-                            textColor=rlc.HexColor("#94a3b8"),
-                            alignment=TA_RIGHT)
-                        s_classea = ParagraphStyle(
-                            "etiq_classea", fontName="Helvetica-Bold",
-                            fontSize=6, leading=7,
-                            textColor=rlc.HexColor("#854d0e"),
-                            backColor=rlc.HexColor("#fef9c3"),
-                            spaceAfter=2)
-                        s_val     = ParagraphStyle(
-                            "etiq_val", fontName="Helvetica-Bold",
-                            fontSize=7.5, leading=9,
-                            textColor=rlc.HexColor("#0f172a"))
-                        s_phdr    = ParagraphStyle(
-                            "page_hdr", fontName="Helvetica-Bold",
-                            fontSize=8,
-                            textColor=rlc.HexColor("#1e40af"),
-                            spaceAfter=5)
+                            W_ETQ  = 4.5  * rl_cm
+                            H_ETQ  = 3.2  * rl_cm
+                            N_COLS = 4
+                            GAP    = 0.25 * rl_cm
+                            MARGIN = 0.7  * rl_cm
 
-                        def _build_cell(pd):
-                            rv  = str(pd.get("risk_level", ""))
-                            rc  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                            lv  = pd.get("label", "—")
-                            dv  = ""
-                            if pd.get("date"):
-                                try:
-                                    dv = datetime.fromisoformat(
-                                        pd["date"]).strftime("%d/%m/%Y")
-                                except Exception:
-                                    dv = str(pd["date"])
-                            W_INNER = W_ETQ - 0.55 * rl_cm
-                            classea_rows = []
-                            if pd.get("room_class") == "A":
-                                iso = pd.get("num_isolateur", "—") or "—"
-                                pst = pd.get("poste", "—") or "—"
-                                classea_rows = [
-                                    [Paragraph(f"ISO {iso} · {pst}", s_classea)]
-                                ]
-                            inner = Table([
-                                [Paragraph(lv, s_titre)],
-                                [HRFlowable(
-                                    width=W_INNER, thickness=0.6,
-                                    color=rc, spaceAfter=2)],
-                                *classea_rows,
-                                [Paragraph("📅 Date", s_lbl)],
-                                [Paragraph(dv or "—", s_date)],
-                                [Paragraph("👤 Préleveur :", s_lbl)],
-                                [Paragraph("", s_val)],
-                                [Paragraph("URC — MicroSurveillance", s_logo)],
-                            ], colWidths=[W_INNER])
-                            inner.setStyle(TableStyle([
-                                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-                                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-                                ("TOPPADDING",    (0, 0), (-1, -1), 0),
-                                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                                ("TOPPADDING",    (0, -1), (0, -1), 4),
+                            buf_etiq = _io.BytesIO()
+                            doc_etiq = SimpleDocTemplate(
+                                buf_etiq, pagesize=A4,
+                                leftMargin=MARGIN, rightMargin=MARGIN,
+                                topMargin=MARGIN,  bottomMargin=MARGIN,
+                                title=f"Étiquettes {_sel.strftime('%d/%m/%Y')}")
+
+                            RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
+
+                            s_titre   = ParagraphStyle("etiq_titre2", fontName="Helvetica-Bold",
+                                                       fontSize=7.5, leading=9, spaceAfter=2,
+                                                       textColor=rlc.HexColor("#0f172a"))
+                            s_lbl     = ParagraphStyle("etiq_lbl2",   fontName="Helvetica",
+                                                       fontSize=5.5, leading=7,
+                                                       textColor=rlc.HexColor("#64748b"))
+                            s_date    = ParagraphStyle("etiq_date2",  fontName="Helvetica-Bold",
+                                                       fontSize=9, leading=10,
+                                                       textColor=rlc.HexColor("#1e40af"))
+                            s_logo    = ParagraphStyle("etiq_logo2",  fontName="Helvetica",
+                                                       fontSize=5, leading=6,
+                                                       textColor=rlc.HexColor("#94a3b8"),
+                                                       alignment=TA_RIGHT)
+                            s_classea = ParagraphStyle("etiq_ca2",    fontName="Helvetica-Bold",
+                                                       fontSize=6, leading=7,
+                                                       textColor=rlc.HexColor("#854d0e"),
+                                                       backColor=rlc.HexColor("#fef9c3"),
+                                                       spaceAfter=2)
+                            s_val     = ParagraphStyle("etiq_val2",   fontName="Helvetica-Bold",
+                                                       fontSize=7.5, leading=9,
+                                                       textColor=rlc.HexColor("#0f172a"))
+                            s_phdr    = ParagraphStyle("page_hdr2",   fontName="Helvetica-Bold",
+                                                       fontSize=8,
+                                                       textColor=rlc.HexColor("#1e40af"),
+                                                       spaceAfter=5)
+
+                            def _build_etiq_cell(task, date_obj):
+                                rv      = str(task.get("risk", ""))
+                                rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+                                lv      = task.get("label", "—")
+                                dv      = date_obj.strftime("%d/%m/%Y")
+                                W_INNER = W_ETQ - 0.55 * rl_cm
+
+                                # Chercher les infos complémentaires dans les points
+                                _pt_data = next(
+                                    (p for p in st.session_state.points
+                                     if p.get("label") == lv), None)
+                                classea_rows = []
+                                if task.get("room_class") == "A" and _pt_data:
+                                    iso = _pt_data.get("num_isolateur", "—") or "—"
+                                    pst = _pt_data.get("poste", "—") or "—"
+                                    classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
+
+                                inner = Table([
+                                    [Paragraph(lv, s_titre)],
+                                    [HRFlowable(width=W_INNER, thickness=0.6,
+                                                color=rc_etiq, spaceAfter=2)],
+                                    *classea_rows,
+                                    [Paragraph("📅 Date", s_lbl)],
+                                    [Paragraph(dv, s_date)],
+                                    [Paragraph("👤 Préleveur :", s_lbl)],
+                                    [Paragraph("", s_val)],
+                                    [Paragraph("URC — MicroSurveillance", s_logo)],
+                                ], colWidths=[W_INNER])
+                                inner.setStyle(TableStyle([
+                                    ("LEFTPADDING",   (0,0),(-1,-1), 0),
+                                    ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+                                    ("TOPPADDING",    (0,0),(-1,-1), 0),
+                                    ("BOTTOMPADDING", (0,0),(-1,-1), 1),
+                                    ("TOPPADDING",    (0,-1),(0,-1), 4),
+                                ]))
+                                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+                                outer.setStyle(TableStyle([
+                                    ("BOX",            (0,0),(0,0), 1.2, rc_etiq),
+                                    ("ROUNDEDCORNERS", (0,0),(0,0), [5]),
+                                    ("LINEAFTER",      (0,0),(0,0), 5.5, rc_etiq),
+                                    ("LEFTPADDING",    (0,0),(0,0), 5),
+                                    ("RIGHTPADDING",   (0,0),(0,0), 10),
+                                    ("TOPPADDING",     (0,0),(0,0), 5),
+                                    ("BOTTOMPADDING",  (0,0),(0,0), 4),
+                                    ("VALIGN",         (0,0),(0,0), "TOP"),
+                                    ("BACKGROUND",     (0,0),(0,0), rlc.white),
+                                ]))
+                                return outer
+
+                            rows_etiq, row_buf_etiq = [], []
+                            for _task in _selected_tasks:
+                                row_buf_etiq.append(_build_etiq_cell(_task, _sel))
+                                if len(row_buf_etiq) == N_COLS:
+                                    rows_etiq.append(row_buf_etiq)
+                                    row_buf_etiq = []
+                            if row_buf_etiq:
+                                while len(row_buf_etiq) < N_COLS:
+                                    row_buf_etiq.append("")
+                                rows_etiq.append(row_buf_etiq)
+
+                            main_tbl_etiq = Table(
+                                rows_etiq,
+                                colWidths=[W_ETQ] * N_COLS,
+                                rowHeights=[H_ETQ] * len(rows_etiq))
+                            main_tbl_etiq.setStyle(TableStyle([
+                                ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
+                                ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
+                                ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
+                                ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
+                                ("VALIGN",        (0,0),(-1,-1), "TOP"),
                             ]))
-                            outer = Table(
-                                [[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-                            outer.setStyle(TableStyle([
-                                ("BOX",            (0, 0), (0, 0), 1.2, rc),
-                                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
-                                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc),
-                                ("LEFTPADDING",    (0, 0), (0, 0), 5),
-                                ("RIGHTPADDING",   (0, 0), (0, 0), 10),
-                                ("TOPPADDING",     (0, 0), (0, 0), 5),
-                                ("BOTTOMPADDING",  (0, 0), (0, 0), 4),
-                                ("VALIGN",         (0, 0), (0, 0), "TOP"),
-                                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
-                            ]))
-                            return outer
 
-                        rows, row_buf = [], []
-                        for p_item in filtered:
-                            row_buf.append(_build_cell(p_item))
-                            if len(row_buf) == N_COLS:
-                                rows.append(row_buf)
-                                row_buf = []
-                        if row_buf:
-                            while len(row_buf) < N_COLS:
-                                row_buf.append("")
-                            rows.append(row_buf)
-
-                        main_tbl = Table(
-                            rows,
-                            colWidths=[W_ETQ] * N_COLS,
-                            rowHeights=[H_ETQ] * len(rows))
-                        main_tbl.setStyle(TableStyle([
-                            ("LEFTPADDING",   (0, 0), (-1, -1), GAP / 2),
-                            ("RIGHTPADDING",  (0, 0), (-1, -1), GAP / 2),
-                            ("TOPPADDING",    (0, 0), (-1, -1), GAP / 2),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), GAP / 2),
-                            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-                        ]))
-
-                        doc.build([
-                            Paragraph(
-                                f"Étiquettes prélèvements — "
-                                f"{_today_etiq.strftime('%d/%m/%Y')} — "
-                                f"{n_sel} étiquette{'s' if n_sel > 1 else ''} — "
-                                f"45×32 mm · 4 col.",
-                                s_phdr),
-                            main_tbl,
-                        ])
-                        buf.seek(0)
-                        fname = f"etiquettes_{_today_etiq.strftime('%Y%m%d')}.pdf"
-                        st.download_button(
-                            label=f"⬇️ Télécharger {fname}",
-                            data=buf.getvalue(), file_name=fname,
-                            mime="application/pdf",
-                            use_container_width=True, key="etiq_dl_btn")
-                        st.markdown(
-                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                            f"border-radius:8px;padding:10px 14px;margin-top:6px'>"
-                            f"<div style='font-size:.88rem;font-weight:800;color:#166534'>"
-                            f"✅ PDF généré avec succès</div>"
-                            f"<div style='font-size:.78rem;color:#475569;margin-top:3px'>"
-                            f"{n_sel} étiquette{'s' if n_sel > 1 else ''} · "
-                            f"4 colonnes · Format A4 · 45×32 mm</div></div>",
-                            unsafe_allow_html=True)
-                    except ImportError:
-                        st.error(
-                            "❌ **ReportLab** non installé.\n\n"
-                            "Ajoutez `reportlab` dans **requirements.txt**.")
-                    except Exception as _e:
-                        st.error(f"Erreur génération PDF : {_e}")
-                        import traceback
-                        st.code(traceback.format_exc())
+                            doc_etiq.build([
+                                Paragraph(
+                                    f"Étiquettes — {_day_lbl} — "
+                                    f"{_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} — "
+                                    f"45×32 mm · 4 col.",
+                                    s_phdr),
+                                main_tbl_etiq,
+                            ])
+                            buf_etiq.seek(0)
+                            fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
+                            st.download_button(
+                                label=f"⬇️ Télécharger {fname_etiq}",
+                                data=buf_etiq.getvalue(),
+                                file_name=fname_etiq,
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key=f"etiq_dl_{_sel.isoformat()}")
+                            st.success(
+                                f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
+                                f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
+                        except ImportError:
+                            st.error(
+                                "❌ **ReportLab** non installé.\n\n"
+                                "Ajoutez `reportlab` dans **requirements.txt**.")
+                        except Exception as _e:
+                            st.error(f"Erreur génération PDF : {_e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+            else:
+                st.info("Aucun prélèvement planifié ce jour.")
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
