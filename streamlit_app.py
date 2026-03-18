@@ -3219,7 +3219,7 @@ if active == "planning":
         actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
         
 
-        st.markdown(
+    st.markdown(
             f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
             padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
             justify-content:space-between;flex-wrap:wrap;gap:10px">
@@ -3237,10 +3237,6 @@ if active == "planning":
               <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
                 <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
                 <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
-              </div>
-              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ préleveur</div>
-                <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_prev:.1f}</div>
               </div>
             </div></div>""",
             unsafe_allow_html=True)
