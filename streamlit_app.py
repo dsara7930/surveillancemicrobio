@@ -3429,11 +3429,16 @@ if active == "planning":
             "**0 = aucun prélèvement** pour la classe concernée. "
             "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
 
-        # Convertir en tuple trié pour garantir la réévaluation si la fonction est cachée
-        _class_max_tuple = tuple(sorted(class_max_dict.items()))
+        # Reconstruction FORCÉE de class_max_dict depuis les clés widget session_state
+        # Garantit la synchronisation immédiate avec les number_input
+        class_max_dict = {
+            cls: int(st.session_state.get(f"class_max_{cls}", 0))
+            for cls in all_classes
+        }
+
         monthly_plan = _compute_monthly_planning(
             _ch_year, _ch_month,
-            dict(_class_max_tuple),
+            class_max_dict,
             _ch_holidays)
 
         import calendar as _cal_pm
