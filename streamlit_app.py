@@ -3129,15 +3129,16 @@ if active == "planning":
             "**Un même point ne peut pas apparaître 2× le même jour**, "
             "sauf si sa fréquence est définie en > 1/jour.")
 
-        CLASS_MAX_KEY = "class_max_per_week"
-        if CLASS_MAX_KEY not in st.session_state:
-            st.session_state[CLASS_MAX_KEY] = {}
-
         all_classes = sorted({
             (pt.get('room_class') or '').strip()
             for pt in st.session_state.points
             if (pt.get('room_class') or '').strip()
         })
+        # Initialiser les valeurs par défaut si absent
+        for _cls in all_classes:
+            _key = f"class_max_{_cls}"
+            if _key not in st.session_state:
+                st.session_state[_key] = 0
         class_max_dict = {}
 
         if all_classes:
@@ -3150,7 +3151,6 @@ if active == "planning":
                 rc_col  = rc_colors.get(cls.replace(' ', '').upper()[:1], "#6366f1")
                 pts_cls = [pt for pt in st.session_state.points
                            if (pt.get('room_class') or '').strip() == cls]
-                cur_max = int(st.session_state[CLASS_MAX_KEY].get(cls, 0))
                 with cls_cols[ci % len(cls_cols)]:
                     st.markdown(
                         f"<div style='background:{rc_col}15;border:1.5px solid {rc_col}55;"
@@ -3159,12 +3159,12 @@ if active == "planning":
                         f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls)} point(s)</div>"
                         f"</div>",
                         unsafe_allow_html=True)
-                    new_max = st.number_input(
+                    st.number_input(
                         f"Max/sem Cl.{cls}", min_value=0, max_value=500,
-                        value=cur_max, step=1, key=f"class_max_{cls}",
+                        step=1, key=f"class_max_{cls}",
                         label_visibility="collapsed",
-                        help=f"0 = fréquences individuelles · >0 = plafond hebdomadaire classe {cls}")
-                    st.session_state[CLASS_MAX_KEY][cls] = new_max
+                        help=f"0 = aucun prélèvement · >0 = plafond hebdomadaire classe {cls}")
+                    new_max = int(st.session_state.get(f"class_max_{cls}", 0))
                     class_max_dict[cls] = new_max
 
                     if new_max > 0:
@@ -3430,8 +3430,12 @@ if active == "planning":
             "**0 = aucun prélèvement** pour la classe concernée. "
             "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
 
+        # Convertir en tuple trié pour garantir la réévaluation si la fonction est cachée
+        _class_max_tuple = tuple(sorted(class_max_dict.items()))
         monthly_plan = _compute_monthly_planning(
-            _ch_year, _ch_month, class_max_dict, _ch_holidays)
+            _ch_year, _ch_month,
+            dict(_class_max_tuple),
+            _ch_holidays)
 
         import calendar as _cal_pm
         _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
