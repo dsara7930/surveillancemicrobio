@@ -3428,8 +3428,6 @@ if active == "planning":
             "**0 = aucun prélèvement** pour la classe concernée. "
             "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
 
-        # Reconstruction FORCÉE de class_max_dict depuis les clés widget session_state
-        # Garantit la synchronisation immédiate avec les number_input
         class_max_dict = {
             cls: int(st.session_state.get(f"class_max_{cls}", 0))
             for cls in all_classes
@@ -3458,6 +3456,143 @@ if active == "planning":
             "4": "#f97316", "5": "#ef4444",
         }
 
+        def _generate_pdf_etiquettes(tasks, date_obj):
+            """Génère le PDF d'étiquettes et retourne les bytes."""
+            import io as _io
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units     import cm as rl_cm
+            from reportlab.lib           import colors as rlc
+            from reportlab.platypus      import (
+                SimpleDocTemplate, Table, TableStyle,
+                Paragraph, HRFlowable)
+            from reportlab.lib.styles    import ParagraphStyle
+            from reportlab.lib.enums     import TA_RIGHT
+
+            _RISK_COLORS_ETQ = {
+                "1": "#22c55e", "2": "#84cc16",
+                "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+            }
+            W_ETQ  = 4.5  * rl_cm
+            H_ETQ  = 3.2  * rl_cm
+            N_COLS = 4
+            GAP    = 0.25 * rl_cm
+            MARGIN = 0.7  * rl_cm
+
+            buf      = _io.BytesIO()
+            day_lbl  = f"{JOURS_FR_LONG[date_obj.weekday()]} {date_obj.strftime('%d/%m/%Y')}"
+            doc      = SimpleDocTemplate(
+                buf, pagesize=A4,
+                leftMargin=MARGIN, rightMargin=MARGIN,
+                topMargin=MARGIN,  bottomMargin=MARGIN,
+                title=f"Étiquettes {date_obj.strftime('%d/%m/%Y')}")
+
+            RISK_RL   = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
+            s_titre   = ParagraphStyle("et_t", fontName="Helvetica-Bold",
+                                       fontSize=7.5, leading=9, spaceAfter=2,
+                                       textColor=rlc.HexColor("#0f172a"))
+            s_lbl     = ParagraphStyle("et_l", fontName="Helvetica",
+                                       fontSize=5.5, leading=7,
+                                       textColor=rlc.HexColor("#64748b"))
+            s_date    = ParagraphStyle("et_d", fontName="Helvetica-Bold",
+                                       fontSize=9, leading=10,
+                                       textColor=rlc.HexColor("#1e40af"))
+            s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
+                                       fontSize=5, leading=6,
+                                       textColor=rlc.HexColor("#94a3b8"),
+                                       alignment=TA_RIGHT)
+            s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
+                                       fontSize=6, leading=7,
+                                       textColor=rlc.HexColor("#854d0e"),
+                                       backColor=rlc.HexColor("#fef9c3"),
+                                       spaceAfter=2)
+            s_val     = ParagraphStyle("et_v", fontName="Helvetica-Bold",
+                                       fontSize=7.5, leading=9,
+                                       textColor=rlc.HexColor("#0f172a"))
+            s_phdr    = ParagraphStyle("et_h", fontName="Helvetica-Bold",
+                                       fontSize=8,
+                                       textColor=rlc.HexColor("#1e40af"),
+                                       spaceAfter=5)
+
+            def _build_cell(task, d_obj):
+                rv       = str(task.get("risk", ""))
+                rc_etiq  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+                lv       = task.get("label", "—")
+                dv       = d_obj.strftime("%d/%m/%Y")
+                W_INNER  = W_ETQ - 0.55 * rl_cm
+                _pt_data = next(
+                    (p for p in st.session_state.points
+                     if p.get("label") == lv), None)
+                classea_rows = []
+                if task.get("room_class") == "A" and _pt_data:
+                    iso = _pt_data.get("num_isolateur", "—") or "—"
+                    pst = _pt_data.get("poste", "—") or "—"
+                    classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
+                inner = Table([
+                    [Paragraph(lv, s_titre)],
+                    [HRFlowable(width=W_INNER, thickness=0.6,
+                                color=rc_etiq, spaceAfter=2)],
+                    *classea_rows,
+                    [Paragraph("📅 Date", s_lbl)],
+                    [Paragraph(dv, s_date)],
+                    [Paragraph("👤 Préleveur :", s_lbl)],
+                    [Paragraph("", s_val)],
+                    [Paragraph("URC — MicroSurveillance", s_logo)],
+                ], colWidths=[W_INNER])
+                inner.setStyle(TableStyle([
+                    ("LEFTPADDING",   (0,0),(-1,-1), 0),
+                    ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+                    ("TOPPADDING",    (0,0),(-1,-1), 0),
+                    ("BOTTOMPADDING", (0,0),(-1,-1), 1),
+                    ("TOPPADDING",    (0,-1),(0,-1), 4),
+                ]))
+                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+                outer.setStyle(TableStyle([
+                    ("BOX",            (0,0),(0,0), 1.2, rc_etiq),
+                    ("ROUNDEDCORNERS", (0,0),(0,0), [5]),
+                    ("LINEAFTER",      (0,0),(0,0), 5.5, rc_etiq),
+                    ("LEFTPADDING",    (0,0),(0,0), 5),
+                    ("RIGHTPADDING",   (0,0),(0,0), 10),
+                    ("TOPPADDING",     (0,0),(0,0), 5),
+                    ("BOTTOMPADDING",  (0,0),(0,0), 4),
+                    ("VALIGN",         (0,0),(0,0), "TOP"),
+                    ("BACKGROUND",     (0,0),(0,0), rlc.white),
+                ]))
+                return outer
+
+            rows_etiq, row_buf = [], []
+            for _task in tasks:
+                row_buf.append(_build_cell(_task, date_obj))
+                if len(row_buf) == N_COLS:
+                    rows_etiq.append(row_buf)
+                    row_buf = []
+            if row_buf:
+                while len(row_buf) < N_COLS:
+                    row_buf.append("")
+                rows_etiq.append(row_buf)
+
+            main_tbl = Table(
+                rows_etiq,
+                colWidths=[W_ETQ] * N_COLS,
+                rowHeights=[H_ETQ] * len(rows_etiq))
+            main_tbl.setStyle(TableStyle([
+                ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
+                ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
+                ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
+                ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
+                ("VALIGN",        (0,0),(-1,-1), "TOP"),
+            ]))
+            n = len(tasks)
+            doc.build([
+                Paragraph(
+                    f"Étiquettes — {day_lbl} — "
+                    f"{n} étiquette{'s' if n > 1 else ''} — "
+                    f"45×32 mm · 4 col.", s_phdr),
+                main_tbl,
+            ])
+            buf.seek(0)
+            return buf.getvalue()
+
+        # ── Rendu du calendrier semaine par semaine ───────────────────────────
         for week_idx, week_monday in enumerate(pm_mondays):
             wd_week = [
                 week_monday + timedelta(days=i)
@@ -3558,21 +3693,63 @@ if active == "planning":
                     f"margin-bottom:4px'>{stat_lbl}</div>"
                     f"{pts_html}{lect_html}</div>")
 
+                _pdf_key  = f"pdf_quick_{wd.isoformat()}"
+                _pdf_ready = st.session_state.get(_pdf_key)
+
                 with _day_cols[di]:
                     st.markdown(card_html, unsafe_allow_html=True)
-                    btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
-                    if st.button(
-                        btn_lbl, key=f"pm_btn_{wd.isoformat()}",
-                        use_container_width=True
-                    ):
-                        st.session_state["pm_selected_day"] = None if is_selected else wd
-                        st.rerun()
 
-        # Panel bas de page : détail du jour sélectionné
+                    # ── Boutons Détail + Imprimer ─────────────────────────────
+                    _bcol1, _bcol2 = st.columns([3, 1])
+                    with _bcol1:
+                        btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                        if st.button(
+                            btn_lbl,
+                            key=f"pm_btn_{wd.isoformat()}",
+                            use_container_width=True
+                        ):
+                            st.session_state["pm_selected_day"] = (
+                                None if is_selected else wd)
+                            st.rerun()
+
+                    with _bcol2:
+                        # Si le PDF est déjà généré → bouton téléchargement direct
+                        if _pdf_ready:
+                            st.download_button(
+                                label="⬇️",
+                                data=_pdf_ready["data"],
+                                file_name=_pdf_ready["fname"],
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key=f"pm_dl_{wd.isoformat()}",
+                                help=f"Télécharger {_pdf_ready['fname']}")
+                        else:
+                            # Bouton imprimer → génère le PDF au clic
+                            if st.button(
+                                "🖨️",
+                                key=f"pm_print_{wd.isoformat()}",
+                                use_container_width=True,
+                                disabled=not prevu_j,
+                                help="Générer et télécharger les étiquettes"
+                            ):
+                                try:
+                                    _pdf_bytes = _generate_pdf_etiquettes(taches_j, wd)
+                                    st.session_state[_pdf_key] = {
+                                        "data":  _pdf_bytes,
+                                        "fname": f"etiquettes_{wd.strftime('%Y%m%d')}.pdf",
+                                    }
+                                    st.rerun()
+                                except ImportError:
+                                    st.error("❌ **ReportLab** non installé. "
+                                             "Ajoutez `reportlab` dans requirements.txt.")
+                                except Exception as _e:
+                                    st.error(f"Erreur PDF : {_e}")
+
+        # ── Panel fixe bas de page : détail du jour sélectionné ──────────────
         _sel = st.session_state.get("pm_selected_day")
         if _sel:
             taches_sel = monthly_plan.get(_sel, [])
-            j0r_sel    = [
+            j0r_sel = [
                 p for p in st.session_state.prelevements
                 if p.get("date") and not p.get("archived", False)
                 and datetime.fromisoformat(p["date"]).date() == _sel
@@ -3674,43 +3851,18 @@ if active == "planning":
                 "<div style='height:170px'></div>",
                 unsafe_allow_html=True)
 
-# ── Panel détail du jour sélectionné + génération étiquettes ────────
-        _sel = st.session_state.get("pm_selected_day")
-        if _sel:
-            taches_sel = monthly_plan.get(_sel, [])
-            j0r_sel    = [
-                p for p in st.session_state.prelevements
-                if p.get("date") and not p.get("archived", False)
-                and datetime.fromisoformat(p["date"]).date() == _sel
-            ]
-            j2r_sel = [
-                s for s in st.session_state.schedules
-                if s["when"] == "J2"
-                and datetime.fromisoformat(s["due_date"]).date() == _sel
-            ]
-            j7r_sel = [
-                s for s in st.session_state.schedules
-                if s["when"] == "J7"
-                and datetime.fromisoformat(s["due_date"]).date() == _sel
-            ]
-            _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
-            rcp_fix  = {
-                "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-                "4": "#f97316", "5": "#ef4444",
-            }
-
             st.divider()
             st.markdown(
                 f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
                 f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
                 f"<div style='color:#fff;font-weight:800;font-size:1rem'>📋 {_day_lbl}</div>"
                 f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
-                f"{len(taches_sel)} prélèv. planifiés · {len(j2r_sel)} J2 · {len(j7r_sel)} J7"
-                f"{'  · 🧪 ' + str(len(j0r_sel)) + ' réalisé(s)' if j0r_sel else ''}"
+                f"{_nb_t} prélèv. planifiés · {_nb_j2} J2 · {_nb_j7} J7"
+                f"{'  · 🧪 ' + str(_nb_j0) + ' réalisé(s)' if j0r_sel else ''}"
                 f"</div></div>",
                 unsafe_allow_html=True)
 
-            # ── Activités du jour (J2 / J7 / réalisés) ───────────────────────
+            # ── Activités du jour ─────────────────────────────────────────────
             if j2r_sel or j7r_sel or j0r_sel:
                 with st.expander("📖 Lectures & réalisés du jour", expanded=False):
                     act_cols = st.columns(3)
@@ -3755,7 +3907,7 @@ if active == "planning":
                                 unsafe_allow_html=True)
                         ci += 1
 
-            # ── Sélection des prélèvements pour étiquettes ────────────────────
+            # ── Sélection & génération étiquettes ────────────────────────────
             if taches_sel:
                 st.markdown(
                     "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
@@ -3817,142 +3969,17 @@ if active == "planning":
                         key=f"etiq_gen_{_sel.isoformat()}",
                         type="primary"
                     ):
-                        import io as _io
-                        _RISK_COLORS_ETQ = {
-                            "1": "#22c55e", "2": "#84cc16",
-                            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
-                        }
                         try:
-                            from reportlab.lib.pagesizes import A4
-                            from reportlab.lib.units     import cm as rl_cm
-                            from reportlab.lib           import colors as rlc
-                            from reportlab.platypus      import (
-                                SimpleDocTemplate, Table, TableStyle,
-                                Paragraph, HRFlowable)
-                            from reportlab.lib.styles    import ParagraphStyle
-                            from reportlab.lib.enums     import TA_RIGHT
-
-                            W_ETQ  = 4.5  * rl_cm
-                            H_ETQ  = 3.2  * rl_cm
-                            N_COLS = 4
-                            GAP    = 0.25 * rl_cm
-                            MARGIN = 0.7  * rl_cm
-
-                            buf_etiq = _io.BytesIO()
-                            doc_etiq = SimpleDocTemplate(
-                                buf_etiq, pagesize=A4,
-                                leftMargin=MARGIN, rightMargin=MARGIN,
-                                topMargin=MARGIN,  bottomMargin=MARGIN,
-                                title=f"Étiquettes {_sel.strftime('%d/%m/%Y')}")
-
-                            RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-
-                            s_titre   = ParagraphStyle("etiq_titre2", fontName="Helvetica-Bold",
-                                                       fontSize=7.5, leading=9, spaceAfter=2,
-                                                       textColor=rlc.HexColor("#0f172a"))
-                            s_lbl     = ParagraphStyle("etiq_lbl2", fontName="Helvetica",
-                                                       fontSize=5.5, leading=7,
-                                                       textColor=rlc.HexColor("#64748b"))
-                            s_date    = ParagraphStyle("etiq_date2", fontName="Helvetica-Bold",
-                                                       fontSize=9, leading=10,
-                                                       textColor=rlc.HexColor("#1e40af"))
-                            s_logo    = ParagraphStyle("etiq_logo2", fontName="Helvetica",
-                                                       fontSize=5, leading=6,
-                                                       textColor=rlc.HexColor("#94a3b8"),
-                                                       alignment=TA_RIGHT)
-                            s_classea = ParagraphStyle("etiq_ca2", fontName="Helvetica-Bold",
-                                                       fontSize=6, leading=7,
-                                                       textColor=rlc.HexColor("#854d0e"),
-                                                       backColor=rlc.HexColor("#fef9c3"),
-                                                       spaceAfter=2)
-                            s_val     = ParagraphStyle("etiq_val2", fontName="Helvetica-Bold",
-                                                       fontSize=7.5, leading=9,
-                                                       textColor=rlc.HexColor("#0f172a"))
-                            s_phdr    = ParagraphStyle("page_hdr2", fontName="Helvetica-Bold",
-                                                       fontSize=8,
-                                                       textColor=rlc.HexColor("#1e40af"),
-                                                       spaceAfter=5)
-
-                            def _build_etiq_cell(task, date_obj):
-                                rv      = str(task.get("risk", ""))
-                                rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                                lv      = task.get("label", "—")
-                                dv      = date_obj.strftime("%d/%m/%Y")
-                                W_INNER = W_ETQ - 0.55 * rl_cm
-                                _pt_data = next(
-                                    (p for p in st.session_state.points
-                                     if p.get("label") == lv), None)
-                                classea_rows = []
-                                if task.get("room_class") == "A" and _pt_data:
-                                    iso = _pt_data.get("num_isolateur", "—") or "—"
-                                    pst = _pt_data.get("poste", "—") or "—"
-                                    classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
-                                inner = Table([
-                                    [Paragraph(lv, s_titre)],
-                                    [HRFlowable(width=W_INNER, thickness=0.6,
-                                                color=rc_etiq, spaceAfter=2)],
-                                    *classea_rows,
-                                    [Paragraph("📅 Date", s_lbl)],
-                                    [Paragraph(dv, s_date)],
-                                    [Paragraph("👤 Préleveur :", s_lbl)],
-                                    [Paragraph("", s_val)],
-                                    [Paragraph("URC — MicroSurveillance", s_logo)],
-                                ], colWidths=[W_INNER])
-                                inner.setStyle(TableStyle([
-                                    ("LEFTPADDING",   (0,0),(-1,-1), 0),
-                                    ("RIGHTPADDING",  (0,0),(-1,-1), 0),
-                                    ("TOPPADDING",    (0,0),(-1,-1), 0),
-                                    ("BOTTOMPADDING", (0,0),(-1,-1), 1),
-                                    ("TOPPADDING",    (0,-1),(0,-1), 4),
-                                ]))
-                                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-                                outer.setStyle(TableStyle([
-                                    ("BOX",            (0,0),(0,0), 1.2, rc_etiq),
-                                    ("ROUNDEDCORNERS", (0,0),(0,0), [5]),
-                                    ("LINEAFTER",      (0,0),(0,0), 5.5, rc_etiq),
-                                    ("LEFTPADDING",    (0,0),(0,0), 5),
-                                    ("RIGHTPADDING",   (0,0),(0,0), 10),
-                                    ("TOPPADDING",     (0,0),(0,0), 5),
-                                    ("BOTTOMPADDING",  (0,0),(0,0), 4),
-                                    ("VALIGN",         (0,0),(0,0), "TOP"),
-                                    ("BACKGROUND",     (0,0),(0,0), rlc.white),
-                                ]))
-                                return outer
-
-                            rows_etiq, row_buf_etiq = [], []
-                            for _task in _selected_tasks:
-                                row_buf_etiq.append(_build_etiq_cell(_task, _sel))
-                                if len(row_buf_etiq) == N_COLS:
-                                    rows_etiq.append(row_buf_etiq)
-                                    row_buf_etiq = []
-                            if row_buf_etiq:
-                                while len(row_buf_etiq) < N_COLS:
-                                    row_buf_etiq.append("")
-                                rows_etiq.append(row_buf_etiq)
-
-                            main_tbl_etiq = Table(
-                                rows_etiq,
-                                colWidths=[W_ETQ] * N_COLS,
-                                rowHeights=[H_ETQ] * len(rows_etiq))
-                            main_tbl_etiq.setStyle(TableStyle([
-                                ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
-                                ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
-                                ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
-                                ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
-                                ("VALIGN",        (0,0),(-1,-1), "TOP"),
-                            ]))
-                            doc_etiq.build([
-                                Paragraph(
-                                    f"Étiquettes — {_day_lbl} — "
-                                    f"{_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} — "
-                                    f"45×32 mm · 4 col.", s_phdr),
-                                main_tbl_etiq,
-                            ])
-                            buf_etiq.seek(0)
+                            _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
+                            _pdf_key_sel = f"pdf_quick_{_sel.isoformat()}"
+                            st.session_state[_pdf_key_sel] = {
+                                "data":  _pdf_bytes,
+                                "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
+                            }
                             fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
                             st.download_button(
                                 label=f"⬇️ Télécharger {fname_etiq}",
-                                data=buf_etiq.getvalue(),
+                                data=_pdf_bytes,
                                 file_name=fname_etiq,
                                 mime="application/pdf",
                                 use_container_width=True,
