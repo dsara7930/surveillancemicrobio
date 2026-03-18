@@ -1564,592 +1564,6 @@ renderList();
                     save_germs(st.session_state.germs)
                     st.rerun()
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : LOGIGRAMME — COMPLET
-# Criticité germe = Pathogénicité × Résistance × Dissémination 
-# ═══════════════════════════════════════════════════════════════════════════════
-
-if active == "logigramme":
-    can_edit = check_access_protege("Logigramme")
-
-    # ── Constantes ─────────────────────────────────────────────────────────────
-    PATHO_OPTS = [
-        "1 — Non pathogène",
-        "2 — Pathogène opportuniste",
-        "3 — Pathogène opportuniste multirésistant / Pathogène primaire",
-    ]
-    RESIST_OPTS = [
-        "1 — Sensible",
-        "2 — Résistant au Surfa'Safe",
-        "3 — Résistant au Surfa'Safe et Acide Peracétique",
-    ]
-    DISSEM_OPTS = [
-        "1 — Environnemental",
-        "2 — Manuporté",
-        "3 — Aéroporté",
-    ]
-
-    def _risk_color(score):
-        if score <= 4:   return "#22c55e"
-        if score <= 8:   return "#84cc16"
-        if score <= 12:  return "#f59e0b"
-        if score <= 18:  return "#f97316"
-        return "#ef4444"
-
-    def _risk_label(score):
-        if score <= 4:   return "Faible"
-        if score <= 8:   return "Modéré"
-        if score <= 12:  return "Important"
-        if score <= 18:  return "Majeur"
-        return "Critique"
-
-    def _infer_resistance(surfa, apa):
-        """Migration : déduit la résistance depuis surfa/apa existants."""
-        s = (surfa or "").lower()
-        a = (apa  or "").lower()
-        if "risque" in s and "risque" in a:
-            return 3
-        if "risque" in s:
-            return 2
-        return 1
-
-    def _germ_score(g):
-        if all(k in g for k in ("pathogenicity", "resistance", "dissemination")):
-            return int(g["pathogenicity"]) * int(g["resistance"]) * int(g["dissemination"])
-        # Migration ancien modèle
-        old = g.get("risk", 1)
-        return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
-
-    # ── Bandeau récapitulatif ───────────────────────────────────────────────────
-    _synced        = st.session_state.get("germs_synced_count", 0)
-    _total_default = len(DEFAULT_GERMS)
-    _total_germs   = len(st.session_state.germs)
-    _custom_count  = max(0, _total_germs - _total_default)
-
-    st.markdown(f"""
-    <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
-    border-radius:12px;padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;
-    justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <span style="font-size:1.4rem">🦠</span>
-        <div>
-          <div style="font-weight:800;color:#1e40af;font-size:.88rem">Base de données germes</div>
-          <div style="font-size:.7rem;color:#3b82f6;margin-top:2px">
-            {_total_default} standards · {_custom_count} personnalisé(s) · {_total_germs} au total
-          </div>
-          <div style="font-size:.65rem;color:#64748b;margin-top:1px">
-            Score criticité = Pathogénicité × Résistance × Dissémination (1–27)
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <div style="background:#fff;border:1px solid #93c5fd;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase;font-weight:700">Standard</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#1e40af">{_total_default}</div>
-        </div>
-        <div style="background:#fff;border:1px solid #86efac;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#166534;text-transform:uppercase;font-weight:700">Custom</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#166534">{_custom_count}</div>
-        </div>
-        <div style="background:#fff;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;text-align:center">
-          <div style="font-size:.6rem;color:#92400e;text-transform:uppercase;font-weight:700">Total</div>
-          <div style="font-size:1.1rem;font-weight:800;color:#92400e">{_total_germs}</div>
-        </div>
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-    if _synced > 0:
-        st.success(f"✅ Synchronisation : {_synced} germe(s) mis à jour depuis la base de référence.")
-
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if can_edit:
-            if st.button("➕ Ajouter un germe", use_container_width=True):
-                st.session_state.show_add = not st.session_state.show_add
-                st.session_state.edit_idx = None
-    with col_btn2:
-        if can_edit:
-            if st.button("💾 Sauvegarder", use_container_width=True, key="save_germs_btn"):
-                save_germs(st.session_state.germs)
-                st.success("✅ Germes sauvegardés !")
-
-    if not can_edit:
-        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les germes.")
-
-    # ── Formulaire ajout / modification ────────────────────────────────────────
-    def germ_form(existing=None, idx=None):
-        is_edit = existing is not None
-        with st.container():
-            st.markdown(
-                f"<div style='background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;"
-                f"padding:18px;margin-bottom:12px'>",
-                unsafe_allow_html=True)
-            st.markdown(f"### {'✏️ Modifier' if is_edit else '➕ Ajouter'} un germe")
-
-            c1, c2, c3 = st.columns(3)
-
-            # ── Col 1 : taxonomie ────────────────────────────────────────────
-            with c1:
-                st.markdown(
-                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
-                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
-                    "📋 Identification</div>", unsafe_allow_html=True)
-
-                new_name = st.text_input(
-                    "Nom du germe *",
-                    value=existing["name"] if is_edit else "",
-                    placeholder="Ex: Listeria spp.",
-                    disabled=not can_edit)
-
-                new_famille = st.selectbox(
-                    "Famille *", ["Bactéries", "Champignons"],
-                    index=["Bactéries", "Champignons"].index(existing["path"][1])
-                          if is_edit else 0,
-                    disabled=not can_edit)
-
-                new_origine = st.selectbox(
-                    "Origine *", ["Humains ", "Environnemental"],
-                    index=0 if (not is_edit or existing["path"][2] in ["Humains", "Humain"]) else 1,
-                    disabled=not can_edit)
-
-                if new_famille == "Bactéries":
-                    cats = (["Peau / Muqueuse", "Oropharynx / Gouttelettes", "Flore fécale"]
-                            if "Humain" in new_origine
-                            else ["Humidité", "Sol / Carton / Surface sèche"])
-                else:
-                    cats = (["Peau / Muqueuse"]
-                            if "Humain" in new_origine
-                            else ["Humidité", "Sol / Carton / Surface sèche", "Air"])
-
-                cur_cat = existing["path"][3] if is_edit and existing["path"][3] in cats else cats[0]
-                new_cat = st.selectbox(
-                    "Catégorie *", cats,
-                    index=cats.index(cur_cat) if cur_cat in cats else 0,
-                    disabled=not can_edit)
-
-
-            # ── Col 2 : critères de criticité ────────────────────────────────
-            with c2:
-                st.markdown(
-                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
-                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
-                    "🔬 Critères de criticité</div>", unsafe_allow_html=True)
-
-                # Pathogénicité
-                cur_patho = int(existing.get("pathogenicity", 1)) if is_edit else 1
-                patho_lbl = st.selectbox(
-                    "🧬 Pathogénicité *", PATHO_OPTS,
-                    index=min(cur_patho - 1, 2),
-                    key="form_patho", disabled=not can_edit)
-                patho_num = int(patho_lbl[0])
-
-                # Résistance aux désinfectants
-                if is_edit:
-                    cur_resist = int(existing.get(
-                        "resistance",
-                        _infer_resistance(existing.get("surfa"), existing.get("apa"))))
-                else:
-                    cur_resist = 1
-                resist_lbl = st.selectbox(
-                    "🧴 Résistance aux désinfectants *", RESIST_OPTS,
-                    index=min(cur_resist - 1, 2),
-                    key="form_resist", disabled=not can_edit)
-                resist_num = int(resist_lbl[0])
-
-                # Mode de dissémination
-                cur_dissem = int(existing.get("dissemination", 1)) if is_edit else 1
-                dissem_lbl = st.selectbox(
-                    "💨 Mode de dissémination *", DISSEM_OPTS,
-                    index=min(cur_dissem - 1, 2),
-                    key="form_dissem", disabled=not can_edit)
-                dissem_num = int(dissem_lbl[0])
-
-                # ── Score calculé ────────────────────────────────────────────              
-                risk_num = patho_num * resist_num * dissem_num
-                rc = _risk_color(risk_num)
-                rl = _risk_label(risk_num)
-
-                if risk_num > 36:
-                    status_txt = "🚨 Action probable si lieu ≥ critique"
-                    status_bg  = "#fef2f2"
-                    status_c   = "#991b1b"
-                elif risk_num >= 24:
-                    status_txt = "⚠️ Alerte probable si lieu ≥ semi-critique"
-                    status_bg  = "#fffbeb"
-                    status_c   = "#92400e"
-                else:
-                    status_txt = "✅ Conforme selon lieu de prélèvement"
-                    status_bg  = "#f0fdf4"
-                    status_c   = "#166534"
-
-                st.markdown(f"""
-                <div style="background:{rc}12;border:2px solid {rc}55;border-radius:12px;
-                padding:14px;margin-top:8px;text-align:center">
-                  <div style="font-size:.62rem;color:#475569;text-transform:uppercase;
-                  letter-spacing:.1em;margin-bottom:6px;font-weight:700">Score de criticité</div>
-                  <div style="font-size:2.8rem;font-weight:900;color:{rc};line-height:1">
-                    {risk_num}
-                  </div>
-                  <div style="font-size:.78rem;font-weight:700;color:{rc};margin-top:4px">
-                    {rl}
-                  </div>
-                  <div style="font-size:.62rem;color:#64748b;margin-top:8px;
-                  background:#fff;border-radius:6px;padding:5px 8px;display:inline-block">
-                    {patho_num} (patho) × {resist_num} (résist.) × {dissem_num} (dissém.) = {risk_num}
-                  </div>
-                  <div style="font-size:.65rem;font-weight:600;padding:5px 8px;border-radius:6px;
-                  margin-top:8px;background:{status_bg};color:{status_c}">
-                    {status_txt}
-                  </div>
-                </div>""", unsafe_allow_html=True)
-
-            # col 3 Notes
-                       
-            with c3:
-                st.markdown(
-                    "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
-                    "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
-                    "Information supplémentaire</div>", unsafe_allow_html=True)
-                                
-                new_notes = st.text_area(
-                    "📝 Notes",
-                    value=existing.get("notes", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                new_comment = st.text_area(
-                    "💬 Commentaire détaillé",
-                    value=existing.get("comment", "") or "" if is_edit else "",
-                    height=70, disabled=not can_edit)
-
-                                    
-                                           
-            # ── Boutons ──────────────────────────────────────────────────────
-            st.markdown("</div>", unsafe_allow_html=True)
-            cb1, cb2 = st.columns(2)
-            with cb1:
-                if can_edit:
-                    if st.button(
-                        "✅ " + ("Modifier" if is_edit else "Ajouter"),
-                        use_container_width=True, key="form_submit"):
-                        if not new_name.strip():
-                            st.error("Le nom est obligatoire.")
-                            return
-                        origine_node = (
-                            ("Humains" if new_famille == "Bactéries" else "Humain")
-                            if "Humain" in new_origine else "Environnemental")
-                        new_germ = dict(
-                            name=new_name.strip(),
-                            path=["Germes", new_famille, origine_node, new_cat],
-                            pathogenicity=patho_num,
-                            resistance=resist_num,
-                            dissemination=dissem_num,
-                            risk=risk_num,
-                            notes=new_notes.strip() or None,
-                            comment=new_comment.strip() or None,
-                        )
-                        if is_edit:
-                            st.session_state.germs[idx] = new_germ
-                            st.session_state.edit_idx   = None
-                        else:
-                            if any(g["name"].lower() == new_name.strip().lower()
-                                   for g in st.session_state.germs):
-                                st.error("Ce germe existe déjà.")
-                                return
-                            st.session_state.germs.append(new_germ)
-                            st.session_state.show_add = False
-                        save_germs(st.session_state.germs)
-                        st.rerun()
-            with cb2:
-                if can_edit:
-                    if st.button("Annuler", use_container_width=True, key="form_cancel"):
-                        st.session_state.show_add = False
-                        st.session_state.edit_idx = None
-                        st.rerun()
-
-    if can_edit and st.session_state.show_add and st.session_state.edit_idx is None:
-        germ_form()
-    if can_edit and st.session_state.edit_idx is not None:
-        germ_form(
-            existing=st.session_state.germs[st.session_state.edit_idx],
-            idx=st.session_state.edit_idx)
-
-    st.divider()
-
-    # ── Logigramme interactif HTML/D3 ─────────────────────────────────────────
-    germs_json         = json.dumps(st.session_state.germs, ensure_ascii=False)
-    default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
-
-    tree_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#f8fafc;color:#1e293b;font-family:'Segoe UI',sans-serif;height:95vh;overflow:hidden}}
-.app{{display:flex;height:95vh}}
-.tree-wrap{{flex:1;overflow:auto;padding:8px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}}
-svg{{min-width:900px;width:100%;height:100%}}
-.node rect{{fill:#fff;stroke:#e2e8f0;stroke-width:1.5;transition:all .2s;cursor:pointer}}
-.node.highlighted rect{{stroke-width:2.5;filter:drop-shadow(0 0 4px rgba(0,0,0,.15))}}
-.node text{{font-size:11px;fill:#0f172a;pointer-events:none;font-family:'Courier New',monospace}}
-.link{{fill:none;stroke:#e2e8f0;stroke-width:1.5;transition:all .3s}}
-.link.highlighted{{stroke-width:2.5}}
-.right-panel{{width:490px;border-left:2px solid #e2e8f0;display:flex;flex-direction:column;background:#f1f5f9;flex-shrink:0}}
-.sbox{{padding:12px 14px;border-bottom:1px solid #e2e8f0}}
-.sbox input{{width:100%;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;color:#1e293b;font-size:.9rem;outline:none}}
-.sbox input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
-.germ-list{{flex:1;overflow-y:auto;padding:6px;scrollbar-width:thin}}
-.germ-item{{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;transition:background .15s;font-size:.85rem;color:#0f172a;border:1px solid transparent;margin-bottom:3px}}
-.germ-item:hover{{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08)}}
-.germ-item.active{{background:#fff;border-color:#2563eb;box-shadow:0 1px 6px rgba(37,99,235,.2)}}
-.risk-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
-.germ-count{{font-size:.72rem;color:#64748b;padding:6px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:#f8fafc;font-weight:600}}
-.group-header{{font-size:.65rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#475569;padding:8px 12px 3px;background:#e2e8f0;margin:4px -6px 3px;border-radius:3px}}
-.info-panel{{border-top:2px solid #e2e8f0;padding:14px;background:#fff;display:none;max-height:600px;overflow-y:auto}}
-.info-panel.visible{{display:block}}
-.info-name{{font-size:.92rem;font-weight:700;font-style:italic;color:#1e293b;margin-bottom:3px}}
-.info-path{{font-size:.6rem;color:#2563eb;opacity:.85;margin-bottom:8px;font-family:monospace}}
-.info-badge{{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;padding:3px 10px;border-radius:20px;border:1px solid;margin-bottom:10px;font-weight:600}}
-.info-lbl{{font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:2px;margin-top:8px;font-weight:700}}
-.info-val{{font-size:.78rem;color:#1e293b;line-height:1.4}}
-.score-grid{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:6px}}
-.score-cell{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:7px 5px;text-align:center}}
-.score-cell .lbl{{font-size:.52rem;color:#64748b;text-transform:uppercase;margin-bottom:3px;line-height:1.3}}
-.score-cell .val{{font-size:1.2rem;font-weight:900}}
-.score-total{{background:#1e293b;border-radius:8px;padding:8px;text-align:center;margin-top:6px}}
-.alert-row{{padding:5px 10px;border-radius:6px;font-size:.68rem;font-weight:700;margin-top:5px}}
-.sens{{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:6px;border:1px solid #e2e8f0;font-size:.72rem;margin-top:3px}}
-.ok{{color:#22c55e;font-weight:700}}.warn{{color:#f97316;font-weight:700}}.crit{{color:#ef4444;font-weight:700}}
-.notes-box{{margin-top:6px;padding:7px 10px;border-radius:6px;background:rgba(37,99,235,.04);border:1px solid rgba(37,99,235,.18);font-size:.72rem;color:#0f172a;line-height:1.5}}
-</style></head><body>
-<div class="app">
-  <div class="tree-wrap"><svg id="svg"></svg></div>
-  <div class="right-panel">
-    <div class="sbox"><input type="text" id="sbox" placeholder="🔍 Rechercher un germe..." oninput="filterList()"></div>
-    <div class="germ-count" id="germCount">Chargement...</div>
-    <div class="germ-list" id="germList"></div>
-    <div class="info-panel" id="infoPanel"></div>
-  </div>
-</div>
-<script>
-const GERMS={germs_json};
-const DEFAULT_NAMES=new Set({default_names_json});
-const NODE_W=190,NODE_H=28,H_GAP=28,V_GAP=10;
-const LEVEL_COLS=["#38bdf8","#818cf8","#fb923c","#34d399","#a3e635"];
-const PATHO_LBL=["","Non pathogène","Pathogène opportuniste","Pathogène opp. MR / Primaire"];
-const RESIST_LBL=["","Sensible","Résistant Surfa'Safe","Résistant Surfa'Safe + APA"];
-const DISSEM_LBL=["","Environnemental","Manuporté","Aéroporté"];
-
-function riskColor(s){{
-  if(s<=4)return"#22c55e";if(s<=8)return"#84cc16";
-  if(s<=12)return"#f59e0b";if(s<=18)return"#f97316";return"#ef4444";
-}}
-function riskLabel(s){{
-  if(s<=4)return"Faible";if(s<=8)return"Modéré";
-  if(s<=12)return"Important";if(s<=18)return"Majeur";return"Critique";
-}}
-function germScore(g){{
-  if(g.pathogenicity&&g.resistance&&g.dissemination)
-    return g.pathogenicity*g.resistance*g.dissemination;
-  const m={{1:1,2:2,3:6,4:12,5:18}};return m[g.risk]||g.risk||1;
-}}
-
-function buildTree(){{
-  const root={{name:"Germes",children:[]}};
-  GERMS.forEach(g=>{{
-    let cur=root;
-    g.path.slice(1).forEach(n=>{{
-      let c=cur.children&&cur.children.find(x=>x.name===n);
-      if(!c){{c={{name:n,children:[]}};if(!cur.children)cur.children=[];cur.children.push(c);}}
-      cur=c;
-    }});
-  }});
-  function clean(n){{if(n.children&&!n.children.length)delete n.children;else if(n.children)n.children.forEach(clean);}}
-  clean(root);return root;
-}}
-function computeLayout(node,depth=0,y=0){{
-  node.depth=depth;node.x=depth*(NODE_W+H_GAP);
-  if(!node.children||!node.children.length){{node.y=y;return y+NODE_H;}}
-  let cy=y;node.children.forEach(c=>{{cy=computeLayout(c,depth+1,cy);cy+=V_GAP;}});
-  cy-=V_GAP;node.y=(y+cy)/2;return cy+V_GAP;
-}}
-function allNodes(n){{return[n,...(n.children||[]).flatMap(allNodes)];}}
-function allLinks(n){{return(n.children||[]).flatMap(c=>[{{source:n,target:c}},...allLinks(c)]);}}
-function buildPaths(n,p=[]){{n.fullPath=[...p,n.name];(n.children||[]).forEach(c=>buildPaths(c,n.fullPath));}}
-
-function renderTree(){{
-  const tree=buildTree();computeLayout(tree);buildPaths(tree);
-  const nodes=allNodes(tree),links=allLinks(tree);
-  const maxY=Math.max(...nodes.map(n=>n.y))+NODE_H+20;
-  const maxX=Math.max(...nodes.map(n=>n.x))+NODE_W+20;
-  const svg=document.getElementById('svg');
-  svg.innerHTML='';
-  svg.setAttribute('viewBox',`0 0 ${{maxX}} ${{maxY}}`);
-  svg.setAttribute('height',maxY);svg.setAttribute('width',maxX);
-  links.forEach(l=>{{
-    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
-    const x1=l.source.x+NODE_W,y1=l.source.y+NODE_H/2,x2=l.target.x,y2=l.target.y+NODE_H/2,mx=(x1+x2)/2;
-    p.setAttribute('d',`M${{x1}},${{y1}} C${{mx}},${{y1}} ${{mx}},${{y2}} ${{x2}},${{y2}}`);
-    p.setAttribute('class','link');
-    p.dataset.sourcefull=l.source.fullPath.join('|||');
-    p.dataset.targetfull=l.target.fullPath.join('|||');
-    svg.appendChild(p);
-  }});
-  nodes.forEach(node=>{{
-    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('class','node');
-    g.setAttribute('transform',`translate(${{node.x}},${{node.y}})`);
-    g.dataset.fullpath=node.fullPath.join('|||');
-    const col=LEVEL_COLS[node.depth]||"#0f172a";
-    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('width',NODE_W);rect.setAttribute('height',NODE_H);
-    rect.setAttribute('rx',5);rect.setAttribute('stroke',col);
-    const text=document.createElementNS('http://www.w3.org/2000/svg','text');
-    text.setAttribute('x',NODE_W/2);text.setAttribute('y',NODE_H/2+4);
-    text.setAttribute('text-anchor','middle');
-    text.textContent=node.name.length>27?node.name.substring(0,25)+'...':node.name;
-    g.appendChild(rect);g.appendChild(text);
-    g.addEventListener('mouseenter',()=>highlightPath(node.fullPath));
-    g.addEventListener('mouseleave',clearHighlight);
-    svg.appendChild(g);
-  }});
-}}
-let selectedPath=null;
-function highlightPath(exactPath){{
-  const vp=new Set();for(let i=1;i<=exactPath.length;i++)vp.add(exactPath.slice(0,i).join('|||'));
-  document.querySelectorAll('.node').forEach(n=>n.classList.toggle('highlighted',vp.has(n.dataset.fullpath||'')));
-  document.querySelectorAll('.link').forEach(l=>{{
-    const on=vp.has(l.dataset.sourcefull||'')&&vp.has(l.dataset.targetfull||'');
-    l.classList.toggle('highlighted',on);
-    if(on){{const d=(l.dataset.sourcefull||'').split('|||').length-1;l.style.stroke=LEVEL_COLS[d]||'#38bdf8';}}
-    else l.style.stroke='';
-  }});
-}}
-function clearHighlight(){{
-  if(selectedPath){{highlightPath(selectedPath);return;}}
-  document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlighted'));
-  document.querySelectorAll('.link').forEach(l=>{{l.classList.remove('highlighted');l.style.stroke=''}});
-}}
-function renderList(filter=''){{
-  const list=document.getElementById('germList');
-  const countEl=document.getElementById('germCount');
-  list.innerHTML='';
-  const filtered=GERMS.filter(g=>g.name.toLowerCase().includes(filter.toLowerCase()));
-  countEl.textContent=filter?`${{filtered.length}} / ${{GERMS.length}} germe(s)`:`${{GERMS.length}} germe(s) — cliquez pour détails`;
-  const groups={{}};
-  filtered.forEach(g=>{{const cat=(g.path&&g.path[3])||'Autres';if(!groups[cat])groups[cat]=[];groups[cat].push(g);}});
-  Object.keys(groups).sort().forEach(cat=>{{
-    const header=document.createElement('div');header.className='group-header';header.textContent=cat;list.appendChild(header);
-    groups[cat].forEach(g=>{{
-      const score=germScore(g);const col=riskColor(score);
-      const isCustom=!DEFAULT_NAMES.has(g.name);
-      const isAir=(g.dissemination||0)===3;
-      const hasResist=(g.resistance||0)>=2;
-      let badges='';
-      if(isAir)badges+='<span style="font-size:.48rem;background:#eff6ff;color:#1e40af;border-radius:3px;padding:0 4px;margin-left:2px">✈</span>';
-      if(hasResist)badges+='<span style="font-size:.48rem;background:#fee2e2;color:#991b1b;border-radius:3px;padding:0 4px;margin-left:2px">⚠</span>';
-      if(isCustom)badges+='<span style="font-size:.48rem;background:rgba(56,189,248,.15);color:#2563eb;border-radius:3px;padding:0 4px;margin-left:2px">★</span>';
-      const div=document.createElement('div');div.className='germ-item';div.dataset.name=g.name;
-      div.innerHTML=`<span class="risk-dot" style="background:${{col}}"></span><span style="flex:1;line-height:1.3">${{g.name}}${{badges}}</span><span style="font-size:.62rem;color:${{col}};font-weight:800;flex-shrink:0">${{score}}</span>`;
-      div.addEventListener('click',()=>selectGerm(g));
-      list.appendChild(div);
-    }});
-  }});
-}}
-function filterList(){{renderList(document.getElementById('sbox').value);}}
-function selectGerm(g){{
-  selectedPath=g.path;highlightPath(g.path);
-  document.querySelectorAll('.germ-item').forEach(el=>el.classList.toggle('active',el.dataset.name===g.name));
-  showInfo(g);
-}}
-function showInfo(g){{
-  const panel=document.getElementById('infoPanel');panel.classList.add('visible');
-  const score=germScore(g);const col=riskColor(score);
-  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
-  
-  const alertRow=score>24?`<div class="alert-row" style="background:#fef2f2;color:#991b1b">🚨 Action (score germe seul &gt; 24)</div>`
-    :score>=16?`<div class="alert-row" style="background:#fffbeb;color:#92400e">⚠️ Alerte probable selon criticité du lieu</div>`
-    :`<div class="alert-row" style="background:#f0fdf4;color:#166534">✅ Conforme à score germe seul</div>`;
-  const nh=g.notes?`<div class="info-lbl">📝 Notes</div><div class="notes-box">${{g.notes}}</div>`:'';
-  const ch=g.comment?`<div class="info-lbl" style="color:#fb923c">💬 Commentaire</div><div class="notes-box" style="color:#ea580c;background:rgba(251,146,60,.06);border-color:rgba(251,146,60,.3)">${{g.comment}}</div>`:'';
-  panel.innerHTML=`
-    <div class="info-name">${{g.name}}</div>
-    <div class="info-path">${{g.path.join(' › ')}}</div>
-    <div class="info-badge" style="color:${{col}};background:${{col}}22;border-color:${{col}}55">
-      <span style="width:8px;height:8px;border-radius:50%;background:${{col}};display:inline-block"></span>
-      Score ${{score}} — ${{riskLabel(score)}}
-    </div>
-    <div class="info-lbl">Critères de criticité</div>
-    <div class="score-grid">
-      <div class="score-cell">
-        <div class="lbl">🧬 Pathogénicité</div>
-        <div class="val" style="color:${{riskColor(g.pathogenicity||1)}}">${{g.pathogenicity||1}}</div>
-        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{PATHO_LBL[g.pathogenicity||1]||'—'}}</div>
-      </div>
-      <div class="score-cell">
-        <div class="lbl">🧴 Résistance</div>
-        <div class="val" style="color:${{riskColor(g.resistance||1)}}">${{g.resistance||1}}</div>
-        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{RESIST_LBL[g.resistance||1]||'—'}}</div>
-      </div>
-      <div class="score-cell">
-        <div class="lbl">💨 Dissémination</div>
-        <div class="val" style="color:${{riskColor(g.dissemination||1)}}">${{g.dissemination||1}}</div>
-        <div style="font-size:.5rem;color:#64748b;margin-top:2px">${{DISSEM_LBL[g.dissemination||1]||'—'}}</div>
-      </div>
-    </div>
-    <div class="score-total">
-      <div style="font-size:.58rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em">Score calculé</div>
-      <div style="font-size:1.8rem;font-weight:900;color:${{col}};line-height:1.1">${{score}}</div>
-      <div style="font-size:.6rem;color:#94a3b8">${{g.pathogenicity||'?'}} × ${{g.resistance||'?'}} × ${{g.dissemination||'?'}}</div>
-    </div>
-    ${{alertRow}}
-    
-    ${{nh}}${{ch}}`;
-}}
-renderTree();
-renderList();
-</script></body></html>"""
-
-    st.components.v1.html(tree_html, height=1200, scrolling=False)
-
-    # ── Liste de gestion ───────────────────────────────────────────────────────
-    st.markdown("### ✏️ Gérer les germes")
-    search_edit = st.text_input(
-        "Filtrer", placeholder="Rechercher un germe...", label_visibility="collapsed")
-    filtered = ([g for g in st.session_state.germs
-                 if search_edit.lower() in g["name"].lower()]
-                if search_edit else st.session_state.germs)
-
-    for i, g in enumerate(filtered):
-        real_idx = st.session_state.germs.index(g)
-        score    = _germ_score(g)
-        c        = _risk_color(score)
-        rl       = _risk_label(score)
-
-        col_n, col_s, col_rl, col_e, col_d = st.columns([4, 0.6, 1, 0.6, 0.6])
-        with col_n:
-            st.markdown(
-                f'<span style="color:{c};font-size:.75rem">●</span> '
-                f'<span style="font-size:.82rem;font-style:italic">{g["name"]}</span>',
-                unsafe_allow_html=True)
-        with col_s:
-            st.markdown(
-                f'<span style="font-size:.75rem;color:{c};font-weight:800">{score}</span>',
-                unsafe_allow_html=True)
-        with col_rl:
-            st.markdown(
-                f'<span style="font-size:.65rem;color:{c};font-weight:700">{rl}</span>',
-                unsafe_allow_html=True)
-        with col_e:
-            if can_edit:
-                if st.button("✏️", key=f"edit_{real_idx}_{i}"):
-                    st.session_state.edit_idx = real_idx
-                    st.session_state.show_add = False
-                    st.rerun()
-        with col_d:
-            if can_edit:
-                if st.button("🗑️", key=f"del_{real_idx}_{i}"):
-                    st.session_state.germs.pop(real_idx)
-                    save_germs(st.session_state.germs)
-                    st.rerun()
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE — 4 SOUS-ONGLETS
 # Nouveau prélèvement | Lecture J2 | Lecture J7 | Identifications en attente
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4545,8 +3959,7 @@ if active == "planning":
                     except Exception as _e:
                         st.error(f"Erreur génération PDF : {_e}")
                         import traceback; st.code(traceback.format_exc())
-
-# ═══════════════════════════════════════════════════════════════════════════════
+                        # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
 elif active == "historique":
@@ -4646,14 +4059,13 @@ elif active == "historique":
         c4.metric("🚨 Actions",   actions)
         st.divider()
 
-        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste, hist_tab_plan = st.tabs([
+        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
             "📍 Stats par point",
             "🦠 Stats par germe",
             "👤 Répartition par préleveur",
             "📋 Liste des entrées",
-            "🗺️ Plan URC",
         ])
-        
+
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
@@ -5144,310 +4556,6 @@ elif active == "historique":
                     unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
-        # ONGLET 5 : PLAN URC — carte récapitulative + filtres + sous-menus
-        # ══════════════════════════════════════════════════════════════════════
-        with hist_tab_plan:
-            import json as _json_plan
- 
-            st.markdown(
-                "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
-                "🗺️ Carte récapitulative de tous les points de prélèvement</div>",
-                unsafe_allow_html=True)
- 
-            # ── Upload plan ──────────────────────────────────────────────────
-            plan_up_hist = st.file_uploader(
-                "Plan URC (PDF / JPG) — remplace le plan existant si uploadé",
-                type=["pdf", "jpg", "jpeg"],
-                key="hist_plan_upload"
-            )
-            if plan_up_hist:
-                import base64 as _b64h
-                raw_h = plan_up_hist.read()
-                b64_h = _b64h.b64encode(raw_h).decode()
-                st.session_state.map_image = f"data:{plan_up_hist.type};base64,{b64_h}"
- 
-            # ── Filtres ───────────────────────────────────────────────────────
-            st.markdown(
-                "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
-                "padding:12px 16px;margin:8px 0 4px 0'>"
-                "<div style='font-size:.78rem;font-weight:700;color:#0369a1;margin-bottom:8px'>"
-                "🔍 Filtres applicables sur la carte et les tableaux</div>",
-                unsafe_allow_html=True)
- 
-            hf1, hf2, hf3 = st.columns(3)
-            with hf1:
-                all_germs_plan = sorted(set(
-                    r.get("germ_match", "") for r in surv_f
-                    if r.get("germ_match") not in ("", "Négatif", None, "—")
-                ))
-                filtre_germ_plan = st.multiselect(
-                    "🦠 Germe", all_germs_plan, key="hist_plan_filtre_germ")
-            with hf2:
-                ufc_min_plan = st.number_input("UFC min", min_value=0, value=0,
-                                               step=1, key="hist_plan_ufc_min")
-                ufc_max_plan = st.number_input("UFC max", min_value=0, value=9999,
-                                               step=1, key="hist_plan_ufc_max")
-            with hf3:
-                all_classes_plan = sorted(set(
-                    r.get("room_class", "") for r in surv_f if r.get("room_class")
-                ))
-                filtre_classe_plan = st.multiselect(
-                    "🏷️ Classe GMP", all_classes_plan, key="hist_plan_filtre_classe")
-            st.markdown("</div>", unsafe_allow_html=True)
- 
-            # ── Application filtres ───────────────────────────────────────────
-            surv_plan = list(surv_f)
-            if filtre_germ_plan:
-                surv_plan = [r for r in surv_plan if r.get("germ_match") in filtre_germ_plan]
-            if ufc_min_plan > 0:
-                surv_plan = [r for r in surv_plan if int(r.get("ufc", 0) or 0) >= ufc_min_plan]
-            if ufc_max_plan < 9999:
-                surv_plan = [r for r in surv_plan if int(r.get("ufc", 0) or 0) <= ufc_max_plan]
-            if filtre_classe_plan:
-                surv_plan = [r for r in surv_plan if r.get("room_class", "") in filtre_classe_plan]
- 
-            # ── Points carte avec positions (depuis map_points) ───────────────
-            map_pts_raw = st.session_state.get("map_points", [])
- 
-            # Données surveillance pour la carte (pire statut par point)
-            surv_by_pt = {}
-            for r in surv_plan:
-                lbl = r.get("prelevement", "")
-                if not lbl:
-                    continue
-                rank = {"action": 3, "alert": 2, "ok": 1}
-                if lbl not in surv_by_pt or rank.get(r.get("status","ok"),0) > rank.get(surv_by_pt[lbl].get("status","ok"),0):
-                    surv_by_pt[lbl] = r
- 
-            surv_json_plan = _json_plan.dumps([
-                {
-                    "label":     r.get("prelevement", ""),
-                    "germ":      r.get("germ_match", ""),
-                    "ufc":       r.get("ufc", 0),
-                    "ufc_total": r.get("ufc_total", r.get("ufc", 0)),
-                    "date":      r.get("date", ""),
-                    "status":    r.get("status", "ok"),
-                    "room_class":r.get("room_class", ""),
-                    "score":     r.get("total_score", 0),
-                }
-                for r in surv_by_pt.values()
-            ], ensure_ascii=False)
-            pts_pos_json = _json_plan.dumps(map_pts_raw, ensure_ascii=False)
- 
-            if not st.session_state.get("map_image"):
-                st.markdown("""
-                <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;
-                            padding:48px 32px;text-align:center;color:#64748b;margin-top:8px">
-                  <div style="font-size:3rem;margin-bottom:8px">🗺️</div>
-                  <div style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:4px">Aucun plan chargé</div>
-                  <div style="font-size:.82rem">
-                    Uploadez un plan ci-dessus <strong>ou</strong>
-                    placez des points via <strong>Surveillance → Nouveau prélèvement</strong>
-                  </div>
-                </div>""", unsafe_allow_html=True)
-            else:
-                # ── Carte principale ──────────────────────────────────────────
-                plan_hist_html = f"""<!DOCTYPE html>
-        <html><head><meta charset="utf-8"><style>
-        *{{box-sizing:border-box;margin:0;padding:0}}
-        body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
-            display:flex;flex-direction:column;overflow:hidden}}
-        .tb{{padding:8px 14px;background:#fff;border-bottom:2px solid #e2e8f0;
-            display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0}}
-        .leg{{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:.62rem;color:#64748b}}
-        .ld{{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:3px}}
-        .mw{{flex:1;overflow:auto;background:#1e293b;display:flex;align-items:flex-start;justify-content:center}}
-        .mi{{position:relative;display:inline-block;margin:10px;
-            box-shadow:0 6px 28px rgba(0,0,0,.5);border-radius:4px}}
-        #pi{{display:block;max-width:100%;border-radius:4px;user-select:none}}
-        .pt{{position:absolute;width:30px;height:30px;border-radius:50%;
-            border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);
-            display:flex;align-items:center;justify-content:center;
-            font-size:10px;font-weight:800;color:#fff;
-            box-shadow:0 2px 12px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
-        .pt:hover{{transform:translate(-50%,-50%) scale(1.5)}}
-        .pt.ok{{background:#22c55e}}.pt.alert{{background:#f59e0b}}
-        .pt.action{{background:#ef4444}}.pt.none{{background:#475569}}
-        .tip{{position:fixed;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;
-            padding:10px 14px;font-size:.72rem;pointer-events:none;z-index:9999;
-            display:none;min-width:240px;box-shadow:0 4px 20px rgba(0,0,0,.15);line-height:1.7}}
-        .tip.v{{display:block}}
-        .tip-ttl{{font-weight:800;font-size:.82rem;color:#1e293b;margin-bottom:5px;
-                border-bottom:1px solid #f1f5f9;padding-bottom:4px}}
-        .tip-r{{color:#475569}}.tip-r b{{color:#1e293b}}
-        .ctr{{font-size:.72rem;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;
-            border-radius:6px;padding:4px 10px;font-weight:600}}
-        </style></head><body>
-        <div class="tb">
-        <span style="font-size:.78rem;font-weight:700;color:#1e40af">🗺️ Plan URC — Tous les points</span>
-        <span class="ctr" id="ctr">0 point(s)</span>
-        <div class="leg">
-            <span><span class="ld" style="background:#475569"></span>Sans résultat</span>
-            <span><span class="ld" style="background:#22c55e"></span>Conforme</span>
-            <span><span class="ld" style="background:#f59e0b"></span>Alerte</span>
-            <span><span class="ld" style="background:#ef4444"></span>Action</span>
-        </div>
-        </div>
-        <div class="mw"><div class="mi" id="mi">
-        <img id="pi" src="{st.session_state.map_image}" draggable="false">
-        </div></div>
-        <div id="tip" class="tip"></div>
-        <script>
-        const pts={pts_pos_json};
-        const surv={surv_json_plan};
-        function gS(lbl){{return surv.find(s=>s.label===lbl);}}
-        function render(){{
-        document.querySelectorAll('.pt').forEach(p=>p.remove());
-        const mi=document.getElementById('mi');
-        pts.forEach((pt,i)=>{{
-            const s=gS(pt.label);
-            const st_=s?s.status:'none';
-            const d=document.createElement('div');
-            d.className='pt '+st_;
-            d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
-            d.textContent=i+1; d.title=pt.label;
-            d.addEventListener('mouseenter',e=>showT(e,pt,s));
-            d.addEventListener('mouseleave',hideT);
-            mi.appendChild(d);
-        }});
-        document.getElementById('ctr').textContent=pts.length+' point(s)';
-        }}
-        function showT(e,pt,s){{
-        const t=document.getElementById('tip');
-        const cls=pt.room_class||'';
-        const stTxt=s?(s.status==='ok'?'✅ Conforme':s.status==='alert'?'⚠️ Alerte':'🚨 Action'):null;
-        const ufcTot=s&&s.ufc_total&&s.ufc_total!==s.ufc?' (total : <b>'+s.ufc_total+'</b>)':'';
-        t.innerHTML='<div class="tip-ttl">📍 '+pt.label
-            +(cls?'&nbsp;<span style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 5px;font-size:.6rem">Cl.'+cls+'</span>':'')
-            +'</div>'
-            +(s
-            ?'<div class="tip-r">🦠 <b>'+s.germ+'</b></div>'
-            +'<div class="tip-r">🔢 UFC : <b>'+s.ufc+'</b>'+ufcTot+'</div>'
-            +'<div class="tip-r">📅 <b>'+s.date+'</b></div>'
-            +'<div class="tip-r">📊 Score : <b>'+(s.score||'—')+'</b></div>'
-            +'<div class="tip-r" style="margin-top:4px">Statut : <b>'+stTxt+'</b></div>'
-            :'<div class="tip-r" style="color:#94a3b8;font-style:italic">Pas de résultat sur la période filtrée</div>');
-        t.style.left=(e.clientX+16)+'px'; t.style.top=(e.clientY-12)+'px';
-        t.classList.add('v');
-        }}
-        function hideT(){{document.getElementById('tip').classList.remove('v');}}
-        document.addEventListener('mousemove',e=>{{
-        const t=document.getElementById('tip');
-        if(t.classList.contains('v')){{t.style.left=(e.clientX+16)+'px';t.style.top=(e.clientY-12)+'px';}}
-        }});
-        const img=document.getElementById('pi');
-        if(img.complete&&img.naturalWidth>0)render();
-        else img.addEventListener('load',render);
-        </script></body></html>"""
-                st.components.v1.html(plan_hist_html, height=580, scrolling=False)
-
-                st.divider()
- 
-                # ── Sous-menus par classe GMP ─────────────────────────────────
-                classes_present = sorted(set(
-                    p.get("room_class", "") for p in map_pts_raw if p.get("room_class")
-                ))
- 
-                if classes_present:
-                    st.markdown(
-                        "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
-                        "📊 Détail par classe GMP</div>",
-                        unsafe_allow_html=True)
-                    class_colors = {"A":"#ef4444","B":"#f59e0b","C":"#22c55e","D":"#3b82f6"}
- 
-                    class_tabs_plan = st.tabs([f"Classe {c}" for c in classes_present])
-                    for ci, cl in enumerate(classes_present):
-                        with class_tabs_plan[ci]:
-                            cl_col  = class_colors.get(cl, "#6366f1")
-                            cl_pts  = [p for p in map_pts_raw if p.get("room_class") == cl]
-                            cl_surv = [r for r in surv_plan if r.get("room_class") == cl]
- 
-                            cl_neg     = sum(1 for r in cl_surv if int(r.get("ufc",0) or 0) == 0)
-                            cl_pos     = sum(1 for r in cl_surv if int(r.get("ufc",0) or 0) > 0)
-                            cl_alerts  = sum(1 for r in cl_surv if r.get("status") == "alert")
-                            cl_actions = sum(1 for r in cl_surv if r.get("status") == "action")
- 
-                            cmc1, cmc2, cmc3, cmc4, cmc5 = st.columns(5)
-                            cmc1.metric("Points sur carte",  len(cl_pts))
-                            cmc2.metric("Résultats période", len(cl_surv))
-                            cmc3.metric("✅ Négatifs",        cl_neg)
-                            cmc4.metric("⚠️ Alertes",        cl_alerts)
-                            cmc5.metric("🚨 Actions",        cl_actions)
- 
-                            if not cl_pts:
-                                st.info(f"Aucun point de classe {cl} placé sur la carte.")
-                            else:
-                                st.markdown(
-                                    f"<div style='display:grid;"
-                                    f"grid-template-columns:2fr 0.7fr 1.1fr 1.8fr 1.3fr 1.1fr;"
-                                    f"gap:4px;background:{cl_col};border-radius:10px 10px 0 0;padding:9px 12px'>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Classe</div>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Position</div>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff'>Dernier germe (filtré)</div>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>UFC · UFC total</div>"
-                                    f"<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Statut</div>"
-                                    f"</div>",
-                                    unsafe_allow_html=True)
- 
-                                for pi, clpt in enumerate(cl_pts):
-                                    clpt_surv = [r for r in cl_surv if r.get("prelevement") == clpt.get("label")]
-                                    last_r = clpt_surv[-1] if clpt_surv else None
-                                    germ_str = (last_r.get("germ_match") or "—") if last_r else "—"
-                                    ufc_val  = int(last_r.get("ufc", 0) or 0) if last_r else 0
-                                    ufc_tot  = int(last_r.get("ufc_total", ufc_val) or ufc_val) if last_r else 0
-                                    ufc_str  = f"{ufc_val}" if ufc_val == ufc_tot or ufc_tot == 0 else f"{ufc_val} · {ufc_tot}"
-                                    st_r     = (last_r.get("status", "none") or "none") if last_r else "none"
-                                    sc = {"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}.get(st_r,"#94a3b8")
-                                    st_lbl = {"action":"🚨 Action","alert":"⚠️ Alerte","ok":"✅ OK","none":"—"}.get(st_r,"—")
-                                    row_bg = "#f8fafc" if pi % 2 == 0 else "#ffffff"
- 
-                                    st.markdown(
-                                        f"<div style='display:grid;"
-                                        f"grid-template-columns:2fr 0.7fr 1.1fr 1.8fr 1.3fr 1.1fr;"
-                                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
-                                        f"padding:8px 12px;align-items:center'>"
-                                        f"<div style='font-size:.85rem;font-weight:700;color:#0f172a'>"
-                                        f"📍 {clpt.get('label','')}</div>"
-                                        f"<div style='text-align:center'>"
-                                        f"<span style='background:{cl_col}22;color:{cl_col};"
-                                        f"border:1px solid {cl_col}55;border-radius:4px;padding:1px 7px;"
-                                        f"font-size:.72rem;font-weight:800'>{cl}</span></div>"
-                                        f"<div style='font-size:.68rem;color:#64748b;text-align:center'>"
-                                        f"{clpt.get('x',0):.1f}% / {clpt.get('y',0):.1f}%</div>"
-                                        f"<div style='font-size:.78rem;font-weight:600;color:#1e293b'>"
-                                        f"🦠 {germ_str[:24]}</div>"
-                                        f"<div style='font-size:.82rem;font-weight:700;color:#1e40af;text-align:center'>"
-                                        f"{'—' if not last_r else ufc_str}</div>"
-                                        f"<div style='text-align:center'>"
-                                        f"<span style='background:{sc}22;color:{sc};"
-                                        f"border:1px solid {sc}55;border-radius:6px;padding:2px 8px;"
-                                        f"font-size:.72rem;font-weight:700'>{st_lbl}</span></div>"
-                                        f"</div>",
-                                        unsafe_allow_html=True)
- 
-                                st.markdown(
-                                    f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
-                                    f"padding:7px 12px'><div style='font-size:.72rem;color:#94a3b8'>"
-                                    f"{len(cl_pts)} point(s) · {len(cl_surv)} résultat(s) sur la période</div></div>",
-                                    unsafe_allow_html=True)
- 
-                else:
-                    st.info(
-                        "Aucun point avec classe GMP détecté. "
-                        "Assignez une classe aux points via **Paramètres → Points de prélèvement**, "
-                        "puis placez-les depuis **Surveillance → Nouveau prélèvement**.")
- 
-            if not map_pts_raw:
-                st.markdown(
-                    "<div style='background:#fef9c3;border:1px solid #fde047;border-radius:10px;"
-                    "padding:12px 16px;margin-top:8px;font-size:.78rem;color:#854d0e'>"
-                    "💡 <b>Aucun point localisé sur la carte.</b> "
-                    "Pour commencer, allez dans <b>Surveillance → Nouveau prélèvement</b>, "
-                    "uploadez le plan URC et cliquez pour placer le point de chaque prélèvement.</div>",
-                    unsafe_allow_html=True)
-
-        # ══════════════════════════════════════════════════════════════════════
         # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_prev:
@@ -5625,8 +4733,7 @@ elif active == "historique":
                                 st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
-
-# ═══════════════════════════════════════════════════════════════════════════════
+        # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PARAMÈTRES — COMPLET
 # Suppression des onglets "Seuils par germe" et "Seuils par classe"
 # Criticité du lieu (1–3) dans les Points de prélèvement
@@ -5646,13 +4753,12 @@ elif active == "parametres":
 
     # ── Constantes Points ──────────────────────────────────────────────────────
     LOC_CRIT_OPTS = [
-        "1 — Limité",
-        "2 — Modéré",
-        "3 — Important",
-        "4 — Maximal",
+        "1 — Zone non critique (locaux techniques, couloirs...)",
+        "2 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)",
+        "3 — Zone critique (ZAC, salles blanches, isolateurs...)",
     ]
-    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0bb3f5", "3": "#efab44", "4": "#dc2626"}
-    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Modéré", "3": "Important", "4": "Maximal"}
+    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}
+    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5664,6 +4770,7 @@ elif active == "parametres":
             "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
             "Flore fécale": "🦠 Flore fécale",
             "Oropharynx / Gouttelettes": "😷 Oropharynx",
+            "Peau / Muqueuses": "🖐️ Peau / Muqueuses",
             "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
             "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
         }
@@ -5869,7 +4976,14 @@ elif active == "parametres":
     # POINTS DE PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_points:
-        
+        st.markdown("""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+        ℹ️ Le <strong>niveau de criticité du lieu</strong> (1–3) est automatiquement repris
+        lors de l'identification microbiologique.<br>
+        Score total = criticité lieu × score germe · ⚠️ Alerte : 16–24 · 🚨 Action : &gt; 24
+        </div>""", unsafe_allow_html=True)
+
         if not st.session_state.points:
             st.info("Aucun point défini.")
         else:
@@ -6001,7 +5115,39 @@ elif active == "parametres":
                 unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 1
                 new_fu   = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
 
-            
+            # Aperçu grille seuils
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+            padding:10px 14px;margin-top:6px">
+              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
+              font-weight:700;margin-bottom:8px">
+                Grille d'alerte — criticité lieu {new_lc} (score = lieu × germe)
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #86efac">
+                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
+                  <div style="font-size:.78rem;color:#166534;font-weight:800;margin-top:2px">Score &lt; 16</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe ≤ {int(15/new_lc)}</div>
+                </div>
+                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fcd34d">
+                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
+                  <div style="font-size:.78rem;color:#92400e;font-weight:800;margin-top:2px">Score 16–24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe {round(16/new_lc,1)}–{round(24/new_lc,1)}</div>
+                </div>
+                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fca5a5">
+                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
+                  <div style="font-size:.78rem;color:#dc2626;font-weight:800;margin-top:2px">Score &gt; 24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe &gt; {round(24/new_lc,1)}</div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
             eb1, eb2 = st.columns(2)
             with eb1:
                 if st.button("✅ Enregistrer", key="pt_save_edit"):
@@ -6060,6 +5206,32 @@ elif active == "parametres":
             with np6:
                 np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
 
+            # Aperçu grille
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+            padding:10px 14px;margin-top:4px;margin-bottom:10px">
+              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
+              font-weight:700;margin-bottom:8px">
+                Aperçu grille (criticité lieu {np_lc} × score germe)
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #86efac">
+                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
+                  <div style="font-size:.72rem;color:#166534;font-weight:800">Score &lt; 16</div>
+                </div>
+                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #fcd34d">
+                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
+                  <div style="font-size:.72rem;color:#92400e;font-weight:800">Score 16–24</div>
+                </div>
+                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #fca5a5">
+                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
+                  <div style="font-size:.72rem;color:#dc2626;font-weight:800">Score &gt; 24</div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
 
             if st.button("➕ Ajouter", key="np_add"):
                 if not np_label.strip():
