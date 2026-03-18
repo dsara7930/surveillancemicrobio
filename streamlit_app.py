@@ -3677,224 +3677,7 @@ if active == "planning":
     # ═════════════════════════════════════════════════════════════════════════
     # ONGLET : EXPORT EXCEL
     # ═════════════════════════════════════════════════════════════════════════
-    with plan_tab_export:
-        st.markdown("#### 📥 Exporter le planning en Excel")
-
-        if not _openpyxl_ok:
-            st.error(
-                "❌ **openpyxl** n'est pas installé.\n\n"
-                "Ajoutez `openpyxl` dans votre fichier **requirements.txt** "
-                "puis redémarrez l'application.")
-            st.stop()
-
-        exp_scope = st.selectbox(
-            "Période",
-            ["Mois en cours", "4 semaines à venir", "Tout le planning"],
-            key="exp_scope")
-        exp_oper_filter = st.selectbox(
-            "Filtrer par opérateur",
-            ["Tous"] + [o['nom'] for o in st.session_state.operators],
-            key="exp_oper")
-        only_working = st.checkbox(
-            "Inclure uniquement les jours ouvrés", value=True)
-
-        if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
-            import io as _io
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-            from openpyxl.utils import get_column_letter
-
-            wb = openpyxl.Workbook()
-            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
-            C_PURPLE_L = "F5F3FF"; C_YELLOW_L = "FFFBEB"; C_TEAL_L = "EFF6FF"
-            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"
-            C_PURPLE   = "7C3AED"; C_YELLOW = "D97706"
-            C_TEAL     = "0369A1"; C_GREEN  = "16A34A"
-
-            thin   = Side(style="thin", color="E2E8F0")
-            border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-            def fill(h):
-                return PatternFill("solid", fgColor=h)
-
-            def font(size=10, bold=False, color=C_TEXT):
-                return Font(name="Arial", size=size, bold=bold, color=color)
-
-            def al_c():
-                return Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-            def al_l():
-                return Alignment(horizontal="left", vertical="center", wrap_text=True)
-
-            exp_today = _today_dt
-            if exp_scope == "Mois en cours":
-                import calendar as cal_module
-                first = exp_today.replace(day=1)
-                last  = exp_today.replace(
-                    day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
-                exp_dates = [
-                    first + timedelta(days=i)
-                    for i in range((last - first).days + 1)
-                ]
-            elif exp_scope == "4 semaines à venir":
-                ws_e = exp_today - timedelta(days=exp_today.weekday())
-                exp_dates = [ws_e + timedelta(days=i) for i in range(28)]
-            else:
-                all_d = []
-                for p in st.session_state.prelevements:
-                    try:
-                        all_d.append(datetime.fromisoformat(p["date"]).date())
-                    except Exception:
-                        pass
-                for s in st.session_state.schedules:
-                    try:
-                        all_d.append(datetime.fromisoformat(s["due_date"]).date())
-                    except Exception:
-                        pass
-                exp_dates = (
-                    [min(all_d) + timedelta(days=i)
-                     for i in range((max(all_d) - min(all_d)).days + 1)]
-                    if all_d
-                    else [exp_today + timedelta(days=i) for i in range(7)])
-
-            if only_working:
-                exp_dates = [d for d in exp_dates if is_working_day(d)]
-
-            ws1 = wb.active
-            ws1.title = "Planning"
-            ws1.sheet_view.showGridLines = False
-
-            ws1.merge_cells("A1:I1")
-            ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
-            ws1["A1"].font      = Font(name="Arial", size=14, bold=True, color=C_WHITE)
-            ws1["A1"].fill      = fill(C_BLUE)
-            ws1["A1"].alignment = al_c()
-            ws1.row_dimensions[1].height = 30
-
-            ws1.merge_cells("A2:I2")
-            ws1["A2"] = (
-                f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement"
-                if only_working
-                else f"Généré le {exp_today.strftime('%d/%m/%Y')}")
-            ws1["A2"].font      = Font(name="Arial", size=9, color="475569")
-            ws1["A2"].fill      = fill(C_BLUE_L)
-            ws1["A2"].alignment = al_c()
-            ws1.row_dimensions[2].height = 18
-
-            headers    = ["Date", "Jour", "Férié", "Type",
-                          "Point de prélèvement", "Classe", "Gélose",
-                          "Opérateur", "Statut"]
-            col_widths = [14, 12, 10, 22, 32, 10, 28, 25, 14]
-            for ci, (h, w) in enumerate(zip(headers, col_widths), start=1):
-                c = ws1.cell(row=4, column=ci, value=h)
-                c.font      = Font(name="Arial", size=10, bold=True, color=C_WHITE)
-                c.fill      = fill(C_BLUE2)
-                c.alignment = al_c()
-                c.border    = border
-                ws1.column_dimensions[get_column_letter(ci)].width = w
-            ws1.row_dimensions[4].height = 22
-            ws1.freeze_panes = "A5"
-
-            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi",
-                        "Vendredi", "Samedi", "Dimanche"]
-            row = 5
-            for d in exp_dates:
-                holidays_d  = get_holidays_cached(d.year)
-                is_h        = d in holidays_d
-                day_prelevs = [
-                    p for p in st.session_state.prelevements
-                    if p.get('date')
-                    and datetime.fromisoformat(p['date']).date() == d
-                    and not p.get('archived', False)
-                    and (exp_oper_filter == "Tous"
-                         or p.get('operateur', '').startswith(exp_oper_filter))
-                ]
-                day_j2 = [
-                    s for s in st.session_state.schedules
-                    if s['when'] == 'J2'
-                    and datetime.fromisoformat(s['due_date']).date() == d
-                ]
-                day_j7 = [
-                    s for s in st.session_state.schedules
-                    if s['when'] == 'J7'
-                    and datetime.fromisoformat(s['due_date']).date() == d
-                ]
-                if not day_prelevs and not day_j2 and not day_j7:
-                    continue
-
-                for p in day_prelevs:
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Prélèvement J0", p['label'],
-                          p.get('room_class', '—'), p.get('gelose', '—'),
-                          p.get('operateur', '—'), "🧪 À réaliser"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill = fill(C_PURPLE_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_PURPLE)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
-
-                for sch in day_j2:
-                    samp    = next(
-                        (p for p in st.session_state.prelevements
-                         if p['id'] == sch['sample_id']), None)
-                    is_done = sch['status'] == 'done'
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Lecture J2", sch['label'],
-                          samp.get('room_class', '—') if samp else '—',
-                          samp.get('gelose', '—')     if samp else '—',
-                          samp.get('operateur', '—')  if samp else '—',
-                          "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill = fill(C_YELLOW_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_YELLOW)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
-                        color=C_GREEN if is_done else C_YELLOW)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
-
-                for sch in day_j7:
-                    samp    = next(
-                        (p for p in st.session_state.prelevements
-                         if p['id'] == sch['sample_id']), None)
-                    is_done = sch['status'] == 'done'
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Lecture J7", sch['label'],
-                          samp.get('room_class', '—') if samp else '—',
-                          samp.get('gelose', '—')     if samp else '—',
-                          samp.get('operateur', '—')  if samp else '—',
-                          "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
-                        c.fill = fill(C_TEAL_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_TEAL)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
-                        color=C_GREEN if is_done else C_TEAL)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
-
-            buf = _io.BytesIO()
-            wb.save(buf)
-            buf.seek(0)
-            fname = f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
-            st.download_button(
-                "⬇️ Télécharger le planning Excel",
-                data=buf.getvalue(), file_name=fname,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True)
-            st.success(f"✅ Fichier **{fname}** généré avec succès.")
-# ── Panel détail du jour sélectionné + génération étiquettes ────────
+    # ── Panel détail du jour sélectionné + génération étiquettes ────────
         _sel = st.session_state.get("pm_selected_day")
         if _sel:
             taches_sel = monthly_plan.get(_sel, [])
@@ -4197,6 +3980,226 @@ if active == "planning":
                             st.code(traceback.format_exc())
             else:
                 st.info("Aucun prélèvement planifié ce jour.")
+                
+    with plan_tab_export:
+        st.markdown("#### 📥 Exporter le planning en Excel")
+
+        if not _openpyxl_ok:
+            st.error(
+                "❌ **openpyxl** n'est pas installé.\n\n"
+                "Ajoutez `openpyxl` dans votre fichier **requirements.txt** "
+                "puis redémarrez l'application.")
+            st.stop()
+
+        exp_scope = st.selectbox(
+            "Période",
+            ["Mois en cours", "4 semaines à venir", "Tout le planning"],
+            key="exp_scope")
+        exp_oper_filter = st.selectbox(
+            "Filtrer par opérateur",
+            ["Tous"] + [o['nom'] for o in st.session_state.operators],
+            key="exp_oper")
+        only_working = st.checkbox(
+            "Inclure uniquement les jours ouvrés", value=True)
+
+        if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
+            import io as _io
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter
+
+            wb = openpyxl.Workbook()
+            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
+            C_PURPLE_L = "F5F3FF"; C_YELLOW_L = "FFFBEB"; C_TEAL_L = "EFF6FF"
+            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"
+            C_PURPLE   = "7C3AED"; C_YELLOW = "D97706"
+            C_TEAL     = "0369A1"; C_GREEN  = "16A34A"
+
+            thin   = Side(style="thin", color="E2E8F0")
+            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+            def fill(h):
+                return PatternFill("solid", fgColor=h)
+
+            def font(size=10, bold=False, color=C_TEXT):
+                return Font(name="Arial", size=size, bold=bold, color=color)
+
+            def al_c():
+                return Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+            def al_l():
+                return Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+            exp_today = _today_dt
+            if exp_scope == "Mois en cours":
+                import calendar as cal_module
+                first = exp_today.replace(day=1)
+                last  = exp_today.replace(
+                    day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
+                exp_dates = [
+                    first + timedelta(days=i)
+                    for i in range((last - first).days + 1)
+                ]
+            elif exp_scope == "4 semaines à venir":
+                ws_e = exp_today - timedelta(days=exp_today.weekday())
+                exp_dates = [ws_e + timedelta(days=i) for i in range(28)]
+            else:
+                all_d = []
+                for p in st.session_state.prelevements:
+                    try:
+                        all_d.append(datetime.fromisoformat(p["date"]).date())
+                    except Exception:
+                        pass
+                for s in st.session_state.schedules:
+                    try:
+                        all_d.append(datetime.fromisoformat(s["due_date"]).date())
+                    except Exception:
+                        pass
+                exp_dates = (
+                    [min(all_d) + timedelta(days=i)
+                     for i in range((max(all_d) - min(all_d)).days + 1)]
+                    if all_d
+                    else [exp_today + timedelta(days=i) for i in range(7)])
+
+            if only_working:
+                exp_dates = [d for d in exp_dates if is_working_day(d)]
+
+            ws1 = wb.active
+            ws1.title = "Planning"
+            ws1.sheet_view.showGridLines = False
+
+            ws1.merge_cells("A1:I1")
+            ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
+            ws1["A1"].font      = Font(name="Arial", size=14, bold=True, color=C_WHITE)
+            ws1["A1"].fill      = fill(C_BLUE)
+            ws1["A1"].alignment = al_c()
+            ws1.row_dimensions[1].height = 30
+
+            ws1.merge_cells("A2:I2")
+            ws1["A2"] = (
+                f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement"
+                if only_working
+                else f"Généré le {exp_today.strftime('%d/%m/%Y')}")
+            ws1["A2"].font      = Font(name="Arial", size=9, color="475569")
+            ws1["A2"].fill      = fill(C_BLUE_L)
+            ws1["A2"].alignment = al_c()
+            ws1.row_dimensions[2].height = 18
+
+            headers    = ["Date", "Jour", "Férié", "Type",
+                          "Point de prélèvement", "Classe", "Gélose",
+                          "Opérateur", "Statut"]
+            col_widths = [14, 12, 10, 22, 32, 10, 28, 25, 14]
+            for ci, (h, w) in enumerate(zip(headers, col_widths), start=1):
+                c = ws1.cell(row=4, column=ci, value=h)
+                c.font      = Font(name="Arial", size=10, bold=True, color=C_WHITE)
+                c.fill      = fill(C_BLUE2)
+                c.alignment = al_c()
+                c.border    = border
+                ws1.column_dimensions[get_column_letter(ci)].width = w
+            ws1.row_dimensions[4].height = 22
+            ws1.freeze_panes = "A5"
+
+            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi",
+                        "Vendredi", "Samedi", "Dimanche"]
+            row = 5
+            for d in exp_dates:
+                holidays_d  = get_holidays_cached(d.year)
+                is_h        = d in holidays_d
+                day_prelevs = [
+                    p for p in st.session_state.prelevements
+                    if p.get('date')
+                    and datetime.fromisoformat(p['date']).date() == d
+                    and not p.get('archived', False)
+                    and (exp_oper_filter == "Tous"
+                         or p.get('operateur', '').startswith(exp_oper_filter))
+                ]
+                day_j2 = [
+                    s for s in st.session_state.schedules
+                    if s['when'] == 'J2'
+                    and datetime.fromisoformat(s['due_date']).date() == d
+                ]
+                day_j7 = [
+                    s for s in st.session_state.schedules
+                    if s['when'] == 'J7'
+                    and datetime.fromisoformat(s['due_date']).date() == d
+                ]
+                if not day_prelevs and not day_j2 and not day_j7:
+                    continue
+
+                for p in day_prelevs:
+                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
+                          "Oui" if is_h else "",
+                          "Prélèvement J0", p['label'],
+                          p.get('room_class', '—'), p.get('gelose', '—'),
+                          p.get('operateur', '—'), "🧪 À réaliser"]
+                    for ci, val in enumerate(rd, 1):
+                        c = ws1.cell(row=row, column=ci, value=val)
+                        c.fill = fill(C_PURPLE_L); c.alignment = al_l()
+                        c.border = border; c.font = font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_PURPLE)
+                    ws1.row_dimensions[row].height = 18
+                    row += 1
+
+                for sch in day_j2:
+                    samp    = next(
+                        (p for p in st.session_state.prelevements
+                         if p['id'] == sch['sample_id']), None)
+                    is_done = sch['status'] == 'done'
+                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
+                          "Oui" if is_h else "",
+                          "Lecture J2", sch['label'],
+                          samp.get('room_class', '—') if samp else '—',
+                          samp.get('gelose', '—')     if samp else '—',
+                          samp.get('operateur', '—')  if samp else '—',
+                          "✅ Faite" if is_done else "⏳ À faire"]
+                    for ci, val in enumerate(rd, 1):
+                        c = ws1.cell(row=row, column=ci, value=val)
+                        c.fill = fill(C_YELLOW_L); c.alignment = al_l()
+                        c.border = border; c.font = font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_YELLOW)
+                    ws1.cell(row=row, column=9).font = Font(
+                        name="Arial", size=10, bold=True,
+                        color=C_GREEN if is_done else C_YELLOW)
+                    ws1.row_dimensions[row].height = 18
+                    row += 1
+
+                for sch in day_j7:
+                    samp    = next(
+                        (p for p in st.session_state.prelevements
+                         if p['id'] == sch['sample_id']), None)
+                    is_done = sch['status'] == 'done'
+                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
+                          "Oui" if is_h else "",
+                          "Lecture J7", sch['label'],
+                          samp.get('room_class', '—') if samp else '—',
+                          samp.get('gelose', '—')     if samp else '—',
+                          samp.get('operateur', '—')  if samp else '—',
+                          "✅ Faite" if is_done else "⏳ À faire"]
+                    for ci, val in enumerate(rd, 1):
+                        c = ws1.cell(row=row, column=ci, value=val)
+                        c.fill = fill(C_TEAL_L); c.alignment = al_l()
+                        c.border = border; c.font = font()
+                    ws1.cell(row=row, column=4).font = Font(
+                        name="Arial", size=10, bold=True, color=C_TEAL)
+                    ws1.cell(row=row, column=9).font = Font(
+                        name="Arial", size=10, bold=True,
+                        color=C_GREEN if is_done else C_TEAL)
+                    ws1.row_dimensions[row].height = 18
+                    row += 1
+
+            buf = _io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            fname = f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
+            st.download_button(
+                "⬇️ Télécharger le planning Excel",
+                data=buf.getvalue(), file_name=fname,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True)
+            st.success(f"✅ Fichier **{fname}** généré avec succès.")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -5008,7 +5011,6 @@ elif active == "parametres":
             "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
             "Flore fécale": "🦠 Flore fécale",
             "Oropharynx / Gouttelettes": "😷 Oropharynx",
-            "Peau / Muqueuses": "🖐️ Peau / Muqueuses",
             "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
             "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
         }
