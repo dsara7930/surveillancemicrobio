@@ -3674,10 +3674,7 @@ if active == "planning":
                 "<div style='height:170px'></div>",
                 unsafe_allow_html=True)
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET : EXPORT EXCEL
-    # ═════════════════════════════════════════════════════════════════════════
-    # ── Panel détail du jour sélectionné + génération étiquettes ────────
+# ── Panel détail du jour sélectionné + génération étiquettes ────────
         _sel = st.session_state.get("pm_selected_day")
         if _sel:
             taches_sel = monthly_plan.get(_sel, [])
@@ -3767,32 +3764,31 @@ if active == "planning":
                     "🏷️ Générer les étiquettes pour ce jour</span></div>",
                     unsafe_allow_html=True)
 
-                # Boutons sélectionner tout / aucun
-                _sel_key_all = f"etiq_sel_all_{_sel.isoformat()}"
                 col_sa, col_sn, _ = st.columns([1, 1, 4])
                 with col_sa:
-                    if st.button("☑️ Tout sélectionner", key=f"etiq_all_{_sel.isoformat()}",
+                    if st.button("☑️ Tout sélectionner",
+                                 key=f"etiq_all_{_sel.isoformat()}",
                                  use_container_width=True):
                         for _t in taches_sel:
                             st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
                         st.rerun()
                 with col_sn:
-                    if st.button("⬜ Tout désélectionner", key=f"etiq_none_{_sel.isoformat()}",
+                    if st.button("⬜ Tout désélectionner",
+                                 key=f"etiq_none_{_sel.isoformat()}",
                                  use_container_width=True):
                         for _t in taches_sel:
                             st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
                         st.rerun()
 
-                # Grille de cases à cocher
                 _chk_cols = st.columns(3)
                 _selected_tasks = []
                 for _ti, _t in enumerate(taches_sel):
                     _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
                     if _chk_key not in st.session_state:
-                        st.session_state[_chk_key] = True  # coché par défaut
-                    _rc  = rcp_fix.get(str(_t["risk"]), "#94a3b8")
-                    _ic  = "💨" if _t["type"] == "Air" else "🧴"
-                    _dn  = any(p.get("label") == _t["label"] for p in j0r_sel)
+                        st.session_state[_chk_key] = True
+                    _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
+                    _ic = "💨" if _t["type"] == "Air" else "🧴"
+                    _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
                     with _chk_cols[_ti % 3]:
                         st.markdown(
                             f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
@@ -3803,10 +3799,8 @@ if active == "planning":
                             f"<span style='font-size:.6rem;color:#64748b'>"
                             f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
                             unsafe_allow_html=True)
-                        checked = st.checkbox(
-                            "Inclure", value=st.session_state[_chk_key],
-                            key=_chk_key, label_visibility="collapsed")
-                        if checked:
+                        if st.checkbox("Inclure", value=st.session_state[_chk_key],
+                                       key=_chk_key, label_visibility="collapsed"):
                             _selected_tasks.append(_t)
 
                 _n_sel_etiq = len(_selected_tasks)
@@ -3817,7 +3811,8 @@ if active == "planning":
 
                 if _n_sel_etiq > 0:
                     if st.button(
-                        f"📄 Générer {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
+                        f"📄 Générer {_n_sel_etiq} "
+                        f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
                         use_container_width=True,
                         key=f"etiq_gen_{_sel.isoformat()}",
                         type="primary"
@@ -3855,25 +3850,25 @@ if active == "planning":
                             s_titre   = ParagraphStyle("etiq_titre2", fontName="Helvetica-Bold",
                                                        fontSize=7.5, leading=9, spaceAfter=2,
                                                        textColor=rlc.HexColor("#0f172a"))
-                            s_lbl     = ParagraphStyle("etiq_lbl2",   fontName="Helvetica",
+                            s_lbl     = ParagraphStyle("etiq_lbl2", fontName="Helvetica",
                                                        fontSize=5.5, leading=7,
                                                        textColor=rlc.HexColor("#64748b"))
-                            s_date    = ParagraphStyle("etiq_date2",  fontName="Helvetica-Bold",
+                            s_date    = ParagraphStyle("etiq_date2", fontName="Helvetica-Bold",
                                                        fontSize=9, leading=10,
                                                        textColor=rlc.HexColor("#1e40af"))
-                            s_logo    = ParagraphStyle("etiq_logo2",  fontName="Helvetica",
+                            s_logo    = ParagraphStyle("etiq_logo2", fontName="Helvetica",
                                                        fontSize=5, leading=6,
                                                        textColor=rlc.HexColor("#94a3b8"),
                                                        alignment=TA_RIGHT)
-                            s_classea = ParagraphStyle("etiq_ca2",    fontName="Helvetica-Bold",
+                            s_classea = ParagraphStyle("etiq_ca2", fontName="Helvetica-Bold",
                                                        fontSize=6, leading=7,
                                                        textColor=rlc.HexColor("#854d0e"),
                                                        backColor=rlc.HexColor("#fef9c3"),
                                                        spaceAfter=2)
-                            s_val     = ParagraphStyle("etiq_val2",   fontName="Helvetica-Bold",
+                            s_val     = ParagraphStyle("etiq_val2", fontName="Helvetica-Bold",
                                                        fontSize=7.5, leading=9,
                                                        textColor=rlc.HexColor("#0f172a"))
-                            s_phdr    = ParagraphStyle("page_hdr2",   fontName="Helvetica-Bold",
+                            s_phdr    = ParagraphStyle("page_hdr2", fontName="Helvetica-Bold",
                                                        fontSize=8,
                                                        textColor=rlc.HexColor("#1e40af"),
                                                        spaceAfter=5)
@@ -3884,8 +3879,6 @@ if active == "planning":
                                 lv      = task.get("label", "—")
                                 dv      = date_obj.strftime("%d/%m/%Y")
                                 W_INNER = W_ETQ - 0.55 * rl_cm
-
-                                # Chercher les infos complémentaires dans les points
                                 _pt_data = next(
                                     (p for p in st.session_state.points
                                      if p.get("label") == lv), None)
@@ -3894,7 +3887,6 @@ if active == "planning":
                                     iso = _pt_data.get("num_isolateur", "—") or "—"
                                     pst = _pt_data.get("poste", "—") or "—"
                                     classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
-
                                 inner = Table([
                                     [Paragraph(lv, s_titre)],
                                     [HRFlowable(width=W_INNER, thickness=0.6,
@@ -3949,13 +3941,11 @@ if active == "planning":
                                 ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
                                 ("VALIGN",        (0,0),(-1,-1), "TOP"),
                             ]))
-
                             doc_etiq.build([
                                 Paragraph(
                                     f"Étiquettes — {_day_lbl} — "
                                     f"{_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} — "
-                                    f"45×32 mm · 4 col.",
-                                    s_phdr),
+                                    f"45×32 mm · 4 col.", s_phdr),
                                 main_tbl_etiq,
                             ])
                             buf_etiq.seek(0)
@@ -3971,16 +3961,22 @@ if active == "planning":
                                 f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
                                 f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
                         except ImportError:
-                            st.error(
-                                "❌ **ReportLab** non installé.\n\n"
-                                "Ajoutez `reportlab` dans **requirements.txt**.")
+                            st.error("❌ **ReportLab** non installé.\n\n"
+                                     "Ajoutez `reportlab` dans **requirements.txt**.")
                         except Exception as _e:
                             st.error(f"Erreur génération PDF : {_e}")
                             import traceback
                             st.code(traceback.format_exc())
             else:
                 st.info("Aucun prélèvement planifié ce jour.")
-                
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FIN du with plan_tab_charge — le bloc ci-dessous est au même niveau que lui
+# ─────────────────────────────────────────────────────────────────────────────
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ONGLET : EXPORT EXCEL
+    # ═════════════════════════════════════════════════════════════════════════
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
 
@@ -4198,7 +4194,6 @@ if active == "planning":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.success(f"✅ Fichier **{fname}** généré avec succès.")
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 : HISTORIQUE
