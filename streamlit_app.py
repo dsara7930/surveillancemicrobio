@@ -3219,7 +3219,7 @@ if active == "planning":
         actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
         
 
-    st.markdown(
+        st.markdown(
             f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
             padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
             justify-content:space-between;flex-wrap:wrap;gap:10px">
