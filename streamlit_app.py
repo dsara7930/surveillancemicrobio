@@ -1198,12 +1198,13 @@ with st.sidebar:
     }
     </style>
     """, unsafe_allow_html=True)
+
     col1, col2 = st.columns([1, 2])
     with col1:
         st.components.v1.html("""
         <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="78" height="78"
             style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
-        """, height=82, scrolling=False)
+        """, height=100, scrolling=False)
     with col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
