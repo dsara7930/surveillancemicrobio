@@ -1042,7 +1042,6 @@ if st.query_params.get("open_faq") == "1":
     st.query_params.clear()
     st.session_state["_faq_panel_open"] = True
     st.rerun()
-
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -1162,7 +1161,6 @@ if st.session_state.get("_faq_panel_open"):
         key=lambda x: x.get("order", 999),
     )
 
-    # Header
     h1, h2, h3 = st.columns([6, 1, 1])
     with h1:
         st.markdown(
@@ -1185,7 +1183,6 @@ if st.session_state.get("_faq_panel_open"):
             st.session_state["_faq_panel_open"] = False
             st.rerun()
 
-    # Recherche + filtre
     sc1, sc2 = st.columns([3, 1])
     with sc1:
         faq_query = st.text_input(
@@ -1198,9 +1195,7 @@ if st.session_state.get("_faq_panel_open"):
             "cat", all_cats_panel,
             label_visibility="collapsed", key="faq_panel_cat")
 
-    st.markdown(
-        "<hr style='margin:8px 0 14px;border-color:#e2e8f0'>",
-        unsafe_allow_html=True)
+    st.markdown("<hr style='margin:8px 0 14px;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
     q_panel = faq_query.strip().lower()
 
