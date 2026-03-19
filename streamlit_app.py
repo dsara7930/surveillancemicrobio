@@ -1190,16 +1190,25 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.components.v1.html("""
-        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="78" height="78"
+    st.markdown("""
+    <style>
+    div[data-testid="stButton"]:has(button#mush_faq_btn) button,
+    button[kind="secondary"] {
+        font-style: italic;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.columns([1, 2])
+with col1:
+    st.components.v1.html("""
+        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="100" height="100"
             style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
         """, height=82, scrolling=False)
-    with col2:
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
-            show_faq_dialog()
+with col2:
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
