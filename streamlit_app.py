@@ -8,9 +8,9 @@ import calendar as cal_module
 from datetime import datetime, timedelta, date as date_type
 import difflib
 
-# ── Gestion accès protégé ──────────────────────────────────────────────
+# ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
-    st.session_state["access_mode"] = None  # None = pas encore choisi
+    st.session_state["access_mode"] = None
 
 MOT_DE_PASSE_ADMIN = "pharmaCHBA"
 
@@ -145,13 +145,65 @@ hr{border-color:#e2e8f0!important}
 [data-testid="stSelectbox"] div,[data-testid="stSelectbox"] span{font-size:1rem!important}
 [data-testid="stRadio"] label,[data-testid="stRadio"] span{font-size:1rem!important}
 [data-testid="stDateInput"] input{font-size:1rem!important}
+
+/* ── Champignon dansant ─────────────────────────────────────────────────── */
+@keyframes mush-bounce {
+    0%,100%{ transform:translateY(0) rotate(0deg) scale(1); }
+    25%     { transform:translateY(-7px) rotate(-6deg) scale(1.05); }
+    50%     { transform:translateY(-10px) rotate(0deg) scale(1.08); }
+    75%     { transform:translateY(-7px) rotate(6deg) scale(1.05); }
+}
+@keyframes mush-glow {
+    0%,100%{ box-shadow:0 0 0 0 rgba(124,58,237,0); }
+    50%    { box-shadow:0 0 22px 6px rgba(124,58,237,.45); }
+}
+@keyframes mush-dance {
+    0%  { transform:rotate(-14deg) scale(1); }
+    20% { transform:rotate(14deg) scale(1.12); }
+    40% { transform:rotate(-9deg) scale(1); }
+    60% { transform:rotate(9deg) scale(1.08); }
+    80% { transform:rotate(-4deg) scale(1); }
+    100%{ transform:rotate(0deg) scale(1); }
+}
+/* Cible le bouton champignon via son data-key */
+[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-testid="baseButton-secondary"][key="mush_faq_btn"]) button,
+[data-testid="stSidebar"] div[data-testid="stButton"] button[aria-label="🍄"] {
+    background: linear-gradient(135deg,#7c3aed,#a855f7) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 54px !important;
+    height: 54px !important;
+    min-height: 54px !important;
+    font-size: 1.7rem !important;
+    padding: 0 !important;
+    animation: mush-bounce 1.8s ease-in-out infinite,
+               mush-glow 2.6s ease-in-out infinite !important;
+    transition: transform .15s ease, filter .2s !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[aria-label="🍄"]) button:hover {
+    animation: mush-dance .55s ease-in-out forwards !important;
+    filter: brightness(1.18) !important;
+}
 </style>""", unsafe_allow_html=True)
 
+# ── CONSTANTES ─────────────────────────────────────────────────────────────────
 RISK_COLORS = {1:"#22c55e",2:"#84cc16",3:"#f59e0b",4:"#f97316",5:"#ef4444"}
 RISK_LABELS = {1:"Limité",2:"Modéré",3:"Important",4:"Majeur",5:"Critique"}
-CSV_FILE = "surveillance_data.csv"
-GERMS_FILE = "germs_data.json"
-THRESHOLDS_FILE = "thresholds_config.json"
+CSV_FILE          = "surveillance_data.csv"
+GERMS_FILE        = "germs_data.json"
+THRESHOLDS_FILE   = "thresholds_config.json"
+MEASURES_FILE     = "measures_config.json"
+POINTS_FILE       = "points.json"
+PRELEVEMENTS_FILE = "prelevements.json"
+SCHEDULES_FILE    = "schedules.json"
+PENDING_FILE      = "pending_identifications.json"
+ARCHIVED_FILE     = "archived_samples.json"
+OPERATORS_FILE    = "operators.json"
+PLANS_FILE        = "plans_data.json"
 
 DEFAULT_THRESHOLDS = {
     5: {"alert": 1,  "action": 1},
@@ -189,14 +241,131 @@ ALL_ORIGINS = [
     "Peau / Muqueuse","Sol / Carton / Surface sèche",
 ]
 
-MEASURES_FILE = "measures_config.json"
-POINTS_FILE = "points.json"
-PRELEVEMENTS_FILE = "prelevements.json"
-SCHEDULES_FILE = "schedules.json"
-PENDING_FILE = "pending_identifications.json"
-ARCHIVED_FILE = "archived_samples.json"
-OPERATORS_FILE = "operators.json"
-PLANS_FILE = "plans_data.json"
+# ── DONNÉES FAQ ────────────────────────────────────────────────────────────────
+FAQ_CATEGORIES = [
+    "Général", "Score & Seuils", "Prélèvements",
+    "Paramètres", "Données", "Mesures correctives",
+]
+
+DEFAULT_FAQ = [
+    {
+        "id": "faq_001", "category": "Général", "order": 0,
+        "question": "À quoi sert cette application ?",
+        "answer": (
+            "Cette application permet de **suivre la surveillance microbiologique** "
+            "de votre environnement pharmaceutique. Elle gère les prélèvements d'air "
+            "et de surface, l'identification des germes, le calcul automatique des scores "
+            "de criticité et le déclenchement des alertes et actions correctives."
+        ),
+    },
+    {
+        "id": "faq_002", "category": "Score & Seuils", "order": 1,
+        "question": "Comment est calculé le score de criticité ?",
+        "answer": (
+            "Le score total est calculé selon la formule :\n\n"
+            "**Score = Criticité lieu (1–3) × Pathogénicité (1–3) × Résistance (1–3) × Dissémination (1–3)**\n\n"
+            "- Score **< seuil alerte** → ✅ Conforme\n"
+            "- Score entre les deux seuils → ⚠️ Alerte\n"
+            "- Score **> seuil action** → 🚨 Action immédiate\n\n"
+            "Les seuils sont configurables dans **Paramètres → Seuils d'alerte**."
+        ),
+    },
+    {
+        "id": "faq_003", "category": "Score & Seuils", "order": 2,
+        "question": "Que signifie la criticité du lieu (1–3) ?",
+        "answer": (
+            "La criticité du lieu qualifie l'importance environnementale du point de prélèvement :\n\n"
+            "- **Niveau 1** 🟢 — Zone non critique (couloirs, locaux techniques…)\n"
+            "- **Niveau 2** 🟡 — Zone semi-critique (préparations non stériles, zones annexes ZAC…)\n"
+            "- **Niveau 3** 🔴 — Zone critique (ZAC, salles blanches, isolateurs…)\n\n"
+            "Ce niveau est défini dans **Paramètres → Points de prélèvement** et est "
+            "automatiquement repris lors de l'identification microbiologique."
+        ),
+    },
+    {
+        "id": "faq_004", "category": "Prélèvements", "order": 3,
+        "question": "Comment ajouter un nouveau prélèvement ?",
+        "answer": (
+            "Rendez-vous dans **Surveillance → Nouveau prélèvement**, puis :\n\n"
+            "1. Sélectionnez le point de prélèvement dans le menu déroulant\n"
+            "2. Choisissez l'opérateur et la date\n"
+            "3. Sélectionnez éventuellement un plan de localisation\n"
+            "4. Validez le formulaire\n\n"
+            "Le prélèvement apparaîtra dans la liste en attente d'identification microbiologique."
+        ),
+    },
+    {
+        "id": "faq_005", "category": "Prélèvements", "order": 4,
+        "question": "Qu'est-ce qu'une identification microbiologique ?",
+        "answer": (
+            "Après la lecture des géloses, vous saisissez les germes identifiés pour chaque prélèvement. "
+            "L'application calcule alors automatiquement le **score de criticité** pour chaque germe "
+            "trouvé et déclenche les alertes ou actions appropriées.\n\n"
+            "Accès : **Surveillance → Identifier** sur un prélèvement en attente."
+        ),
+    },
+    {
+        "id": "faq_006", "category": "Paramètres", "order": 5,
+        "question": "Comment configurer les points de prélèvement ?",
+        "answer": (
+            "Dans **Paramètres → Points de prélèvement** :\n\n"
+            "- Cliquez sur **➕ Ajouter** pour créer un nouveau point\n"
+            "- Renseignez le nom, le type (Air / Surface), la classe ISO/GMP, "
+            "la criticité du lieu, la gélose utilisée et la fréquence de prélèvement\n"
+            "- Modifiez (✏️) ou supprimez (🗑️) les points existants\n\n"
+            "Les points sont synchronisés automatiquement avec Supabase si configuré."
+        ),
+    },
+    {
+        "id": "faq_007", "category": "Paramètres", "order": 6,
+        "question": "Comment ajouter un plan de localisation ?",
+        "answer": (
+            "Dans **Paramètres → Plans** :\n\n"
+            "1. Cliquez sur **➕ Ajouter un plan**\n"
+            "2. Donnez un nom au plan\n"
+            "3. Importez une image (PNG, JPG) ou un PDF (la première page sera utilisée)\n"
+            "4. Validez\n\n"
+            "Le plan sera disponible lors de la création d'un prélèvement pour "
+            "visualiser et positionner le point sur la carte."
+        ),
+    },
+    {
+        "id": "faq_008", "category": "Données", "order": 7,
+        "question": "Comment sauvegarder et restaurer mes données ?",
+        "answer": (
+            "Dans **Paramètres → Sauvegarde** :\n\n"
+            "- **⬇️ Exporter** : télécharge un fichier JSON contenant toutes vos données "
+            "(germes, prélèvements, points, opérateurs, historique…)\n"
+            "- **⬆️ Restaurer** : importez un fichier de sauvegarde pour remplacer "
+            "toutes les données actuelles\n\n"
+            "⚠️ La restauration est irréversible — effectuez toujours une exportation avant."
+        ),
+    },
+    {
+        "id": "faq_009", "category": "Données", "order": 8,
+        "question": "Pourquoi configurer Supabase ?",
+        "answer": (
+            "Sans Supabase, les données sont **perdues à chaque redémarrage** de l'application "
+            "(mise à jour du code, timeout Streamlit Cloud…).\n\n"
+            "Supabase est une base de données cloud **gratuite** qui garantit la persistance. "
+            "Configuration dans **Paramètres → Base de données** — il suffit de coller "
+            "votre `SUPABASE_URL` et `SUPABASE_KEY` dans les secrets Streamlit."
+        ),
+    },
+    {
+        "id": "faq_010", "category": "Mesures correctives", "order": 9,
+        "question": "Comment fonctionnent les mesures correctives ?",
+        "answer": (
+            "Les mesures correctives sont des actions prédéfinies suggérées automatiquement "
+            "lors d'une alerte ou d'une action microbiologique.\n\n"
+            "Chaque mesure est associée à :\n"
+            "- Une **origine** (Air, Surface, Flore fécale…)\n"
+            "- Un **niveau de criticité** (1 à 5)\n"
+            "- Un **type** (⚠️ Alerte ou 🚨 Action)\n\n"
+            "Gérez-les dans **Paramètres → Mesures correctives**."
+        ),
+    },
+]
 
 DEFAULT_ORIGIN_MEASURES = [
     {"id":"m001","text":"Documenter l'événement dans le registre qualité","scope":"all","risk":"all","type":"alert"},
@@ -316,12 +485,11 @@ def _supa_upsert(key, value_json):
         return False
     try:
         supa.table('app_state').upsert(
-            {'key': key, 'value': value_json},
-            on_conflict='key'
+            {'key': key, 'value': value_json}, on_conflict='key'
         ).execute()
         return True
     except Exception as e:
-        print(f"[SUPA ERROR] key={key} : {e}")  # visible dans les logs Streamlit Cloud
+        print(f"[SUPA ERROR] key={key} : {e}")
         return False
 
 def _supa_get(key):
@@ -338,13 +506,8 @@ def _supa_get(key):
     return None
 
 def save_germs(germs):
-    # On sauvegarde aussi les noms connus pour différencier
-    # "supprimé intentionnellement" vs "nouveau dans le code"
     known_default_names = sorted(DEFAULT_GERM_NAMES)
-    payload = {
-        "germs": germs,
-        "known_defaults": known_default_names
-    }
+    payload = {"germs": germs, "known_defaults": known_default_names}
     js = json.dumps(payload, ensure_ascii=False)
     _supa_upsert('germs', js)
     try:
@@ -353,24 +516,20 @@ def save_germs(germs):
     except Exception:
         pass
 
-
 def load_germs():
     defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
     saved_germs = []
-    known_defaults = set()  # noms connus lors de la dernière sauvegarde
+    known_defaults = set()
 
     raw_json = _supa_get('germs')
     if raw_json:
         try:
             raw = json.loads(raw_json)
-            # Nouveau format : dict avec "germs" et "known_defaults"
             if isinstance(raw, dict):
-                saved_germs = raw.get("germs", [])
+                saved_germs  = raw.get("germs", [])
                 known_defaults = set(raw.get("known_defaults", []))
-            # Ancien format : liste simple (rétrocompatibilité)
             elif isinstance(raw, list):
                 saved_germs = raw
-                known_defaults = set()  # inconnu → comportement sécurisé
         except Exception:
             saved_germs = []
 
@@ -379,14 +538,13 @@ def load_germs():
             with open(GERMS_FILE) as f:
                 raw = json.load(f)
             if isinstance(raw, dict):
-                saved_germs = raw.get("germs", [])
+                saved_germs    = raw.get("germs", [])
                 known_defaults = set(raw.get("known_defaults", []))
             elif isinstance(raw, list):
                 saved_germs = raw
         except Exception:
             saved_germs = []
 
-    # Rien en base → on retourne les défauts tels quels
     if not saved_germs:
         return [dict(d) for d in DEFAULT_GERMS], len(DEFAULT_GERMS)
 
@@ -397,15 +555,11 @@ def load_germs():
     for dflt in DEFAULT_GERMS:
         name = dflt["name"]
         if name in saved_by_name:
-            # Germe existant : on garde la version sauvegardée
             merged.append(dict(saved_by_name[name]))
         elif name not in known_defaults:
-            # Genuinement nouveau dans le code (absent de l'ancienne base)
             merged.append(dict(dflt))
             new_defaults_added += 1
-        # else : était connu mais absent de saved → intentionnellement supprimé, on skip
 
-    # Germes personnalisés (hors DEFAULT_GERMS)
     for g in saved_germs:
         name = g.get("name", "")
         if name and name not in defaults_by_name:
@@ -475,7 +629,6 @@ def load_origin_measures():
                 return raw["measures"]
         except Exception:
             pass
-    # Aucune donnée sauvegardée → on charge les défauts une seule fois
     return [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
 
 def save_origin_measures(measures, supa=True):
@@ -483,10 +636,8 @@ def save_origin_measures(measures, supa=True):
         try:
             result = _supa_upsert('measures', json.dumps(measures, ensure_ascii=False))
             if not result:
-                import streamlit as st
                 st.warning("⚠️ Supabase non connecté — sauvegarde locale uniquement.")
         except Exception as e:
-            import streamlit as st
             st.error(f"❌ Erreur Supabase : {e}")
     if os.path.exists(THRESHOLDS_FILE):
         try:
@@ -531,40 +682,55 @@ def _save_json_key(key, data, local_file):
     except Exception:
         pass
 
-def load_points(): return _load_json_key('points', POINTS_FILE)
+def load_points():  return _load_json_key('points', POINTS_FILE)
 def save_points(d, supa=True):
     _save_json_key('points', d, POINTS_FILE)
     if supa: _supa_upsert('points', json.dumps(d, ensure_ascii=False))
 
-def load_prelevements(): return _load_json_key('prelevements', PRELEVEMENTS_FILE)
+def load_prelevements():  return _load_json_key('prelevements', PRELEVEMENTS_FILE)
 def save_prelevements(d, supa=True):
     _save_json_key('prelevements', d, PRELEVEMENTS_FILE)
     if supa: _supa_upsert('prelevements', json.dumps(d, ensure_ascii=False))
 
-def load_schedules(): return _load_json_key('schedules', SCHEDULES_FILE)
+def load_schedules():  return _load_json_key('schedules', SCHEDULES_FILE)
 def save_schedules(d, supa=True):
     _save_json_key('schedules', d, SCHEDULES_FILE)
     if supa: _supa_upsert('schedules', json.dumps(d, ensure_ascii=False))
 
-def load_pending_identifications(): return _load_json_key('pending_identifications', PENDING_FILE)
+def load_pending_identifications():  return _load_json_key('pending_identifications', PENDING_FILE)
 def save_pending_identifications(d, supa=True):
     _save_json_key('pending_identifications', d, PENDING_FILE)
     if supa: _supa_upsert('pending_identifications', json.dumps(d, ensure_ascii=False))
 
-def load_archived_samples(): return _load_json_key('archived_samples', ARCHIVED_FILE)
+def load_archived_samples():  return _load_json_key('archived_samples', ARCHIVED_FILE)
 def save_archived_samples(d, supa=True):
     _save_json_key('archived_samples', d, ARCHIVED_FILE)
     if supa: _supa_upsert('archived_samples', json.dumps(d, ensure_ascii=False))
 
-def load_operators(): return _load_json_key('operators', OPERATORS_FILE)
+def load_operators():  return _load_json_key('operators', OPERATORS_FILE)
 def save_operators(d, supa=True):
     _save_json_key('operators', d, OPERATORS_FILE)
     if supa: _supa_upsert('operators', json.dumps(d, ensure_ascii=False))
 
-def load_plans(): return _load_json_key('plans', PLANS_FILE)
+def load_plans():  return _load_json_key('plans', PLANS_FILE)
 def save_plans(d, supa=True):
     _save_json_key('plans', d, PLANS_FILE)
     if supa: _supa_upsert('plans', json.dumps(d, ensure_ascii=False))
+
+def load_faq():
+    raw_json = _supa_get('faq')
+    if raw_json:
+        try:
+            raw = json.loads(raw_json)
+            if isinstance(raw, list) and raw:
+                return raw
+        except Exception:
+            pass
+    return [dict(f) for f in DEFAULT_FAQ]
+
+def save_faq(faq_items, supa=True):
+    if supa:
+        _supa_upsert('faq', json.dumps(faq_items, ensure_ascii=False))
 
 def load_surveillance():
     raw_json = _supa_get('surveillance')
@@ -588,7 +754,6 @@ def load_surveillance():
 def save_surveillance(records):
     js = json.dumps(records, ensure_ascii=False)
     _supa_upsert('surveillance', js)
-    # Supprimer le CSV si liste vide, sinon écrire
     try:
         if not records:
             if os.path.exists(CSV_FILE):
@@ -609,19 +774,19 @@ def export_all_data():
             "exported_at": datetime.now().isoformat(),
             "app": "MicroSurveillance URC"
         },
-        "germs":                    st.session_state.germs,
-        "thresholds":               {str(k): v for k, v in st.session_state.thresholds.items()},
-        "measures":                 {str(k): v for k, v in st.session_state.measures.items()},
-        "origin_measures":          st.session_state.origin_measures,
-        "points":                   st.session_state.points,
-        "operators":                st.session_state.operators,
-        "plans":                    st.session_state.plans,
-        "prelevements":             st.session_state.prelevements,
-        "schedules":                st.session_state.schedules,
-        "pending_identifications":  st.session_state.pending_identifications,
-        "archived_samples":         st.session_state.archived_samples,
-        "surveillance":             st.session_state.surveillance,
-        "planning_overrides": st.session_state.get("planning_overrides", {}),
+        "germs":                   st.session_state.germs,
+        "thresholds":              {str(k): v for k, v in st.session_state.thresholds.items()},
+        "measures":                {str(k): v for k, v in st.session_state.measures.items()},
+        "origin_measures":         st.session_state.origin_measures,
+        "points":                  st.session_state.points,
+        "operators":               st.session_state.operators,
+        "plans":                   st.session_state.plans,
+        "prelevements":            st.session_state.prelevements,
+        "schedules":               st.session_state.schedules,
+        "pending_identifications": st.session_state.pending_identifications,
+        "archived_samples":        st.session_state.archived_samples,
+        "surveillance":            st.session_state.surveillance,
+        "planning_overrides":      st.session_state.get("planning_overrides", {}),
     }
 
 def import_all_data(data: dict):
@@ -669,34 +834,38 @@ def import_all_data(data: dict):
         return False, f"Erreur lors de la restauration : {e}"
 
 def find_germ_match(query, germs):
-    query_low = query.lower().strip()
+    query_low  = query.lower().strip()
     query_genus = query_low.split()[0] if query_low else ""
     best_score = 0
     best_match = None
     for g in germs:
         name_low = g["name"].lower()
-        genus = name_low.split()[0]
+        genus    = name_low.split()[0]
         if query_genus and query_genus == genus:
             score = 0.9
         else:
-            score = difflib.SequenceMatcher(None, query_low, name_low).ratio()
+            score       = difflib.SequenceMatcher(None, query_low, name_low).ratio()
             genus_score = difflib.SequenceMatcher(None, query_genus, genus).ratio()
-            score = max(score, genus_score * 0.85)
+            score       = max(score, genus_score * 0.85)
         if score > best_score:
             best_score = score
             best_match = g
     return best_match, best_score
 
-# ── Helpers scoring — niveau global ───────────────────────────────────
+# ── Helpers scoring ────────────────────────────────────────────────────────────
 def _get_location_criticality(sample):
     if "location_criticality" in sample:
-        try: return int(sample["location_criticality"])
-        except: pass
+        try:
+            return int(sample["location_criticality"])
+        except Exception:
+            pass
     pt = next((p for p in st.session_state.points
                if p.get("label") == sample.get("label")), None)
     if pt and "location_criticality" in pt:
-        try: return int(pt["location_criticality"])
-        except: pass
+        try:
+            return int(pt["location_criticality"])
+        except Exception:
+            pass
     rc = str(sample.get("room_class", "")).strip().upper()
     return {"A": 3, "B": 2, "C": 2, "D": 1}.get(rc, 1)
 
@@ -718,16 +887,10 @@ def _loc_crit_label(n):
 
 # ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
 def check_access_protege(onglet_nom: str) -> bool:
-    """
-    Affiche un écran de connexion pour les onglets protégés.
-    Retourne True si l'utilisateur est en mode admin (modifications autorisées).
-    Retourne False si lecture seule (le contenu de l'onglet est bloqué via st.stop()).
-    """
     key_mode = f"access_mode_{onglet_nom}"
     key_pwd  = f"pwd_input_{onglet_nom}"
     key_err  = f"pwd_error_{onglet_nom}"
 
-    # ── Déjà authentifié en admin ──────────────────────────────────────────
     if st.session_state.get(key_mode) == "admin":
         col_info, col_lock = st.columns([5, 1])
         with col_info:
@@ -738,7 +901,6 @@ def check_access_protege(onglet_nom: str) -> bool:
                 st.rerun()
         return True
 
-    # ── Déjà en lecture seule ──────────────────────────────────────────────
     if st.session_state.get(key_mode) == "lecture":
         col_info, col_conn = st.columns([5, 1])
         with col_info:
@@ -749,7 +911,6 @@ def check_access_protege(onglet_nom: str) -> bool:
                 st.rerun()
         return False
 
-    # ── Pas encore choisi → afficher le formulaire ─────────────────────────
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
     st.markdown(
         "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;"
@@ -760,20 +921,18 @@ def check_access_protege(onglet_nom: str) -> bool:
         "<div style='text-align:center;font-size:.85rem;color:#64748b;margin:8px 0 20px'>"
         "Cet onglet est restreint. Connectez-vous pour modifier,<br>ou continuez en lecture seule.</div>"
         "</div>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**🔑 Accès administrateur**")
         pwd = st.text_input(
-            "Mot de passe",
-            type="password",
-            key=key_pwd,
-            placeholder="Entrez le mot de passe",
-            label_visibility="collapsed"
+            "Mot de passe", type="password", key=key_pwd,
+            placeholder="Entrez le mot de passe", label_visibility="collapsed"
         )
-        if st.button("✅ Connexion", key=f"btn_admin_{onglet_nom}", use_container_width=True, type="primary"):
+        if st.button("✅ Connexion", key=f"btn_admin_{onglet_nom}",
+                     use_container_width=True, type="primary"):
             if pwd == MOT_DE_PASSE_ADMIN:
                 st.session_state[key_mode] = "admin"
                 st.session_state[key_err]  = False
@@ -789,22 +948,21 @@ def check_access_protege(onglet_nom: str) -> bool:
         st.markdown(
             "<div style='font-size:.82rem;color:#64748b;margin-bottom:10px'>"
             "Consultez le contenu sans pouvoir effectuer de modifications.</div>",
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-        if st.button("👁️ Continuer en lecture", key=f"btn_lecture_{onglet_nom}", use_container_width=True):
+        if st.button("👁️ Continuer en lecture", key=f"btn_lecture_{onglet_nom}",
+                     use_container_width=True):
             st.session_state[key_mode] = "lecture"
             st.rerun()
 
-    st.stop()  # bloque le rendu du reste de l'onglet tant qu'aucun choix n'est fait
+    st.stop()
     return False
-
 
 # ── SESSION STATE ──────────────────────────────────────────────────────────────
 if "germs" not in st.session_state:
     _germs, _new = load_germs()
     st.session_state.germs = _germs
     st.session_state.germs_synced_count = _new
-    # Sauvegarde SEULEMENT si de nouveaux germes par défaut ont été ajoutés
     if _new > 0:
         save_germs(st.session_state.germs)
 if "thresholds" not in st.session_state:
@@ -841,6 +999,8 @@ if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
 if "plans" not in st.session_state:
     st.session_state.plans = load_plans()
+if "faq_items" not in st.session_state:
+    st.session_state.faq_items = load_faq()
 if "_seuil_alerte" not in st.session_state:
     _raw_seuils = _supa_get('seuils')
     if _raw_seuils:
@@ -866,10 +1026,107 @@ if "planning_overrides" not in st.session_state:
     raw = _supa_get('planning_overrides')
     st.session_state["planning_overrides"] = json.loads(raw) if raw else {}
 
+# ── DIALOG FAQ ─────────────────────────────────────────────────────────────────
+@st.dialog("🍄 FAQ — Centre d'aide", width="large")
+def show_faq_dialog():
+    faq_items = sorted(
+        st.session_state.get("faq_items", DEFAULT_FAQ),
+        key=lambda x: x.get("order", 999),
+    )
+
+    col_s, col_n = st.columns([5, 1])
+    with col_s:
+        query_raw = st.text_input(
+            "search", placeholder="🔍  Rechercher une question ou un mot-clé…",
+            label_visibility="collapsed", key="faq_dlg_search",
+        )
+    with col_n:
+        st.markdown(
+            f"<div style='padding-top:9px;font-size:.72rem;color:#64748b;text-align:right'>"
+            f"{len(faq_items)} Q&R</div>",
+            unsafe_allow_html=True,
+        )
+
+    all_cats = ["Toutes les catégories"] + sorted(
+        set(f.get("category", "Général") for f in faq_items)
+    )
+    sel_cat = st.selectbox(
+        "cat", all_cats, label_visibility="collapsed", key="faq_dlg_cat"
+    )
+
+    st.markdown("<hr style='margin:8px 0 14px;border-color:#e2e8f0'>", unsafe_allow_html=True)
+
+    q = query_raw.strip().lower()
+
+    def _matches(item):
+        if sel_cat != "Toutes les catégories" and item.get("category") != sel_cat:
+            return False
+        if q:
+            return (q in item["question"].lower()
+                    or q in item["answer"].lower()
+                    or q in item.get("category", "").lower())
+        return True
+
+    filtered = [f for f in faq_items if _matches(f)]
+
+    if not filtered:
+        st.markdown(
+            f"<div style='text-align:center;padding:32px 0;color:#94a3b8'>"
+            f"<div style='font-size:2rem;margin-bottom:8px'>🔍</div>"
+            f"<div style='font-size:.85rem'>Aucun résultat pour "
+            f"<strong>« {query_raw} »</strong></div>"
+            f"<div style='font-size:.74rem;margin-top:4px'>Essayez un autre mot-clé</div></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        from collections import defaultdict
+        import re as _re
+        grouped = defaultdict(list)
+        for item in filtered:
+            grouped[item.get("category", "Général")].append(item)
+
+        CAT_COLORS = {
+            "Général":            "#2563eb",
+            "Score & Seuils":     "#7c3aed",
+            "Prélèvements":       "#0891b2",
+            "Paramètres":         "#059669",
+            "Données":            "#d97706",
+            "Mesures correctives":"#dc2626",
+        }
+        for cat in sorted(grouped.keys()):
+            c = CAT_COLORS.get(cat, "#475569")
+            st.markdown(
+                f"<div style='display:inline-block;background:{c}12;color:{c};"
+                f"border:1px solid {c}44;border-radius:20px;padding:2px 12px;"
+                f"font-size:.65rem;font-weight:700;text-transform:uppercase;"
+                f"letter-spacing:.06em;margin:10px 0 6px'>📂 {cat}</div>",
+                unsafe_allow_html=True,
+            )
+            for item in grouped[cat]:
+                q_display = item["question"]
+                if q:
+                    q_display = _re.sub(
+                        f"({_re.escape(query_raw)})",
+                        r"<mark style='background:#fef08a;border-radius:3px;padding:0 2px'>\1</mark>",
+                        q_display, flags=_re.IGNORECASE,
+                    )
+                with st.expander(item["question"]):
+                    st.markdown(item["answer"])
+
+    st.markdown(
+        "<div style='margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;"
+        "font-size:.68rem;color:#94a3b8;text-align:center'>"
+        "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
+        unsafe_allow_html=True,
+    )
 
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<p style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;margin-bottom:12px;font-weight:700">NAVIGATION</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;'
+        'color:#94a3b8;margin-bottom:12px;font-weight:700">NAVIGATION</p>',
+        unsafe_allow_html=True,
+    )
     tabs_cfg = [
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
@@ -878,18 +1135,32 @@ with st.sidebar:
         ("parametres",   "⚙️", "Paramètres & Seuils"),
     ]
     for key, icon, label in tabs_cfg:
-        t = "primary" if st.session_state.active_tab == key else "secondary"
         if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
             st.session_state.active_tab = key
             st.rerun()
+
     st.divider()
-    supa_ok = get_supabase_client() is not None
+
+    supa_ok   = get_supabase_client() is not None
     supa_icon = "🟢" if supa_ok else "🔴"
-    supa_txt = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
-    st.markdown(f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>', unsafe_allow_html=True)
-    st.markdown('<p style="font-size:.75rem;color:#94a3b8;text-align:center">MicroSurveillance URC v5.0</p>', unsafe_allow_html=True)
+    supa_txt  = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
+    st.markdown(
+        f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p style="font-size:.75rem;color:#94a3b8;text-align:center">'
+        'MicroSurveillance URC v5.0</p>',
+        unsafe_allow_html=True,
+    )
+
     st.divider()
-    st.markdown('<p style="font-size:.7rem;color:#f59e0b;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:.08em">💾 Sauvegarde données</p>', unsafe_allow_html=True)
+
+    st.markdown(
+        '<p style="font-size:.7rem;color:#f59e0b;font-weight:700;text-align:center;'
+        'text-transform:uppercase;letter-spacing:.08em">💾 Sauvegarde données</p>',
+        unsafe_allow_html=True,
+    )
     _backup_data = json.dumps(export_all_data(), ensure_ascii=False, indent=2)
     _backup_name = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
     st.download_button(
@@ -899,108 +1170,271 @@ with st.sidebar:
         mime="application/json",
         use_container_width=True,
         key="sidebar_export",
-        help="Téléchargez ce fichier avant toute modification du code pour ne jamais perdre vos données"
+        help="Téléchargez ce fichier avant toute modification du code.",
     )
     if not supa_ok:
-        st.markdown('<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">⚠️ Sans Supabase, exportez régulièrement vos données !</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p style="font-size:.6rem;color:#f59e0b;text-align:center;margin-top:4px">'
+            '⚠️ Sans Supabase, exportez régulièrement vos données !</p>',
+            unsafe_allow_html=True,
+        )
 
-# ── 🍄 Champignon dansant ─────────────────────────────────────────────
-    st.components.v1.html("""
-    <div style="text-align:center;margin-top:14px;padding-bottom:4px">
-      <iframe
-        src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-        width="100" height="100"
-        style="border:none;border-radius:12px;pointer-events:none"
-        frameBorder="0"
-        allowFullScreen>
-      </iframe>
-      <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
-                  font-family:'Segoe UI',sans-serif">
-        Bonne surveillance :) 🍄
-      </div>
-    </div>
-    """, height=140, scrolling=False)
+    # ── 🍄 Champignon dansant ─────────────────────────────────────────────
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:center;margin-bottom:4px;"
+        "font-size:.62rem;color:#94a3b8;text-transform:uppercase;"
+        "letter-spacing:.08em;font-weight:700'>❓ Aide & FAQ</div>",
+        unsafe_allow_html=True,
+    )
+    _c1, _c2, _c3 = st.columns([1, 1, 1])
+    with _c2:
+        if st.button(
+            "🍄", key="mush_faq_btn",
+            help="Ouvrir le centre d'aide — FAQ",
+            use_container_width=True,
+        ):
+            show_faq_dialog()
+    st.markdown(
+        "<div style='text-align:center;font-size:.6rem;color:#a78bfa;"
+        "margin-top:2px;font-style:italic'>Bonne surveillance :)</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-active = st.session_state.active_tab
-today = datetime.today().date()
+# ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
+def render_faq_tab(can_edit: bool):
+    faq_items = st.session_state.get("faq_items", [])
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# POPUP MODALE — lectures en attente (remplace le st.warning basique)
-# ═══════════════════════════════════════════════════════════════════════════════
-due_global = [s for s in st.session_state.schedules if s["status"] == "pending" and datetime.fromisoformat(s["due_date"]).date() <= today]
+    st.markdown("### ❓ Gestion de la FAQ")
+    st.markdown("""
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+    padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+    ℹ️ Les questions et réponses définies ici apparaissent dans la fenêtre
+    d'aide accessible via le <strong>🍄 champignon</strong> en bas de la sidebar.
+    Le formatage <strong>Markdown</strong> est supporté dans les réponses.
+    </div>""", unsafe_allow_html=True)
 
-if due_global and not st.session_state.due_alert_shown:
-    _nb = len(due_global)
-    _items_html = ""
-    for _s in due_global[:6]:
-        _d = datetime.fromisoformat(_s["due_date"]).date()
-        _late = _d < today
-        _bc = "#ef4444" if _late else "#f59e0b"
-        _ic = "🚨" if _late else "⏳"
-        _diff_txt = f"{(today - _d).days}j de retard" if _late else "aujourd'hui"
-        _items_html += f"""<div style='background:#fff;border-left:3px solid {_bc};border-radius:0 6px 6px 0;
-            padding:7px 12px;margin-bottom:5px;font-size:.8rem;color:#0f172a;
-            display:flex;align-items:center;justify-content:space-between'>
-            <span>{_ic} <strong>{_s['label']}</strong></span>
-            <span style='background:{_bc}22;color:{_bc};border-radius:4px;padding:2px 8px;
-                font-size:.68rem;font-weight:700'>{_s['when']} — {_diff_txt}</span>
-        </div>"""
-    if _nb > 6:
-        _items_html += f"<div style='font-size:.7rem;color:#94a3b8;font-style:italic;padding:4px 10px'>+ {_nb - 6} autre(s)…</div>"
+    # Métriques
+    cats_count = {}
+    for f in faq_items:
+        c = f.get("category", "Général")
+        cats_count[c] = cats_count.get(c, 0) + 1
+    stat_cols = st.columns(min(len(cats_count) + 1, 5))
+    with stat_cols[0]:
+        st.metric("Total Q&R", len(faq_items))
+    for i, (cat, cnt) in enumerate(list(cats_count.items())[:4], 1):
+        with stat_cols[i]:
+            st.metric(cat[:14], cnt)
 
-    _popup = f"""
-    <div id="dueModal" style="position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:99999;
-        display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease">
-      <div style="background:#fff;border-radius:16px;width:min(480px,92vw);
-          box-shadow:0 24px 60px rgba(0,0,0,.35);overflow:hidden;animation:slideUp .25s ease">
-        <div style="background:linear-gradient(135deg,#dc2626,#ef4444);padding:20px 24px;
-            display:flex;align-items:center;justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:14px">
-            <span style="font-size:2rem">🔔</span>
-            <div>
-              <div style="color:#fff;font-weight:800;font-size:1.1rem">
-                {_nb} lecture{'s' if _nb > 1 else ''} à faire aujourd'hui
-              </div>
-              <div style="color:#fecaca;font-size:.75rem;margin-top:3px">
-                Allez dans Identification &amp; Surveillance pour les traiter
-              </div>
-            </div>
-          </div>
-          <button onclick="document.getElementById('dueModal').style.display='none'"
-            style="background:rgba(255,255,255,.2);border:none;border-radius:50%;width:32px;height:32px;
-            cursor:pointer;font-size:1.1rem;color:#fff;line-height:32px;text-align:center">✕</button>
-        </div>
-        <div style="background:#fef2f2;padding:20px;text-align:center;border-bottom:1px solid #fee2e2">
-          <div style="font-size:3.5rem;font-weight:900;color:#dc2626;line-height:1">{_nb}</div>
-          <div style="font-size:.8rem;color:#991b1b;font-weight:700;text-transform:uppercase;
-              letter-spacing:.08em;margin-top:4px">
-            lecture{'s' if _nb > 1 else ''} en attente
-          </div>
-        </div>
-        <div style="padding:14px 16px;max-height:200px;overflow-y:auto;background:#f8fafc">
-          {_items_html}
-        </div>
-        <div style="padding:14px 16px;background:#fff;border-top:1px solid #f1f5f9">
-          <button onclick="document.getElementById('dueModal').style.display='none'"
-            style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;
-            padding:12px;font-size:.95rem;font-weight:700;cursor:pointer">
-            Compris — Je vais les traiter 👍
-          </button>
-        </div>
-      </div>
-    </div>
-    <style>
-      @keyframes fadeIn{{from{{opacity:0}}to{{opacity:1}}}}
-      @keyframes slideUp{{from{{transform:translateY(24px);opacity:0}}to{{transform:translateY(0);opacity:1}}}}
-    </style>
-    """
-    st.components.v1.html(_popup, height=0, scrolling=False)
-    st.session_state.due_alert_shown = True
+    st.divider()
+
+    edit_idx = st.session_state.get("_faq_edit_idx")
+
+    if can_edit and st.session_state.get("_faq_show_form", False):
+        is_edit  = edit_idx is not None
+        existing = faq_items[edit_idx] if is_edit else {}
+        form_bg  = "#eff6ff" if is_edit else "#f0fdf4"
+        form_bdr = "#93c5fd" if is_edit else "#86efac"
+        form_ttl = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
+
+        st.markdown(
+            f"<div style='background:{form_bg};border:1.5px solid {form_bdr};"
+            f"border-radius:12px;padding:18px;margin-bottom:16px'>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"#### {form_ttl}")
+
+        fc1, fc2 = st.columns([3, 1])
+        with fc1:
+            faq_q = st.text_input(
+                "Question *", value=existing.get("question", ""),
+                placeholder="Ex: Comment ajouter un point de prélèvement ?",
+                key="faq_form_q",
+            )
+        with fc2:
+            cur_cat = existing.get("category", "Général")
+            faq_c = st.selectbox(
+                "Catégorie", FAQ_CATEGORIES,
+                index=FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0,
+                key="faq_form_c",
+            )
+
+        faq_a = st.text_area(
+            "Réponse * (Markdown supporté)", value=existing.get("answer", ""),
+            height=160,
+            placeholder="Décrivez la réponse. **Gras**, *italique*, listes…",
+            key="faq_form_a",
+        )
+        if faq_a.strip():
+            with st.expander("👁️ Aperçu du rendu", expanded=False):
+                st.markdown(faq_a)
+
+        fb1, fb2 = st.columns(2)
+        with fb1:
+            if st.button(
+                "✔️ Mettre à jour" if is_edit else "✅ Ajouter",
+                use_container_width=True, type="primary", key="faq_form_submit",
+            ):
+                if not faq_q.strip():
+                    st.error("La question est obligatoire.")
+                elif not faq_a.strip():
+                    st.error("La réponse est obligatoire.")
+                else:
+                    if is_edit:
+                        faq_items[edit_idx].update(
+                            question=faq_q.strip(), answer=faq_a.strip(), category=faq_c
+                        )
+                    else:
+                        faq_items.append({
+                            "id":       f"faq_{int(datetime.now().timestamp())}",
+                            "category": faq_c,
+                            "question": faq_q.strip(),
+                            "answer":   faq_a.strip(),
+                            "order":    len(faq_items),
+                        })
+                    save_faq(faq_items, supa=True)
+                    st.session_state["faq_items"]      = faq_items
+                    st.session_state["_faq_show_form"] = False
+                    st.session_state["_faq_edit_idx"]  = None
+                    st.success("✅ FAQ mise à jour !")
+                    st.rerun()
+        with fb2:
+            if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
+                st.session_state["_faq_show_form"] = False
+                st.session_state["_faq_edit_idx"]  = None
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    elif can_edit and not st.session_state.get("_faq_show_form", False):
+        if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
+            st.session_state["_faq_show_form"] = True
+            st.session_state["_faq_edit_idx"]  = None
+            st.rerun()
+
+    if not faq_items:
+        st.markdown(
+            "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+            "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
+            "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
+            "<div style='font-weight:700;color:#475569'>Aucune question définie</div>"
+            "<div style='font-size:.8rem;color:#94a3b8;margin-top:4px'>"
+            "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        all_cats_f = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
+        sel_f = st.selectbox(
+            "Filtrer", all_cats_f, key="faq_tab_cat", label_visibility="collapsed"
+        )
+
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
+            "padding:10px 14px;margin-top:8px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Actions</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        CAT_COL = {
+            "Général":            "#2563eb",
+            "Score & Seuils":     "#7c3aed",
+            "Prélèvements":       "#0891b2",
+            "Paramètres":         "#059669",
+            "Données":            "#d97706",
+            "Mesures correctives":"#dc2626",
+        }
+
+        displayed = [
+            (i, f) for i, f in enumerate(faq_items)
+            if sel_f == "Toutes" or f.get("category") == sel_f
+        ]
+
+        for dp, (ri, item) in enumerate(displayed):
+            cc     = CAT_COL.get(item.get("category", "Général"), "#475569")
+            row_bg = "#f8fafc" if dp % 2 == 0 else "#ffffff"
+            is_last = dp == len(displayed) - 1
+            r_bdr   = "border-radius:0 0 10px 10px" if is_last else ""
+
+            rc1, rc2 = st.columns([7, 1])
+            with rc1:
+                st.markdown(
+                    f"<div style='display:grid;grid-template-columns:2.2fr 1fr;"
+                    f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-top:none;padding:10px 14px;align-items:center;{r_bdr}'>"
+                    f"<div style='font-size:.83rem;font-weight:600;color:#0f172a'>"
+                    f"{item['question']}</div>"
+                    f"<div style='text-align:center'>"
+                    f"<span style='background:{cc}14;color:{cc};border:1px solid {cc}44;"
+                    f"border-radius:12px;padding:2px 10px;font-size:.65rem;font-weight:700'>"
+                    f"{item.get('category','Général')}</span></div></div>",
+                    unsafe_allow_html=True,
+                )
+            with rc2:
+                a1, a2, a3, a4 = st.columns(4)
+                with a1:
+                    if can_edit and ri > 0:
+                        if st.button("↑", key=f"faq_up_{ri}", help="Monter"):
+                            faq_items[ri], faq_items[ri - 1] = faq_items[ri - 1], faq_items[ri]
+                            for k, f in enumerate(faq_items): f["order"] = k
+                            save_faq(faq_items, supa=True)
+                            st.session_state["faq_items"] = faq_items
+                            st.rerun()
+                with a2:
+                    if can_edit and ri < len(faq_items) - 1:
+                        if st.button("↓", key=f"faq_dn_{ri}", help="Descendre"):
+                            faq_items[ri], faq_items[ri + 1] = faq_items[ri + 1], faq_items[ri]
+                            for k, f in enumerate(faq_items): f["order"] = k
+                            save_faq(faq_items, supa=True)
+                            st.session_state["faq_items"] = faq_items
+                            st.rerun()
+                with a3:
+                    if can_edit:
+                        if st.button("✏️", key=f"faq_ed_{ri}"):
+                            st.session_state["_faq_edit_idx"]  = ri
+                            st.session_state["_faq_show_form"] = True
+                            st.rerun()
+                with a4:
+                    if can_edit:
+                        if st.button("🗑️", key=f"faq_dl_{ri}"):
+                            faq_items.pop(ri)
+                            for k, f in enumerate(faq_items): f["order"] = k
+                            save_faq(faq_items, supa=True)
+                            st.session_state["faq_items"] = faq_items
+                            st.rerun()
+
+        st.markdown(
+            f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+            f"padding:8px 14px'><div style='font-size:.75rem;color:#94a3b8'>"
+            f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
+    if can_edit:
+        st.markdown("#### ↩️ Réinitialiser la FAQ")
+        st.caption("Recharge les 10 questions prédéfinies et efface vos personnalisations.")
+        if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
+            st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
+            save_faq(st.session_state["faq_items"], supa=True)
+            st.success("✅ FAQ réinitialisée.")
+            st.rerun()
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
-st.markdown('<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>', unsafe_allow_html=True)
-st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
+active = st.session_state.active_tab
+today  = datetime.today().date()
 
+st.markdown(
+    '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
+    'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
+    unsafe_allow_html=True,
+)
+st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
@@ -5430,7 +5864,7 @@ elif active == "parametres":
     (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
      subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
         "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans", 
-        "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
+        "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
     ])
 
     # ── Constantes Points ──────────────────────────────────────────────────────
@@ -6609,3 +7043,265 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         st.session_state.origin_measures         = load_origin_measures()
                         st.success("✅ Données rechargées depuis Supabase !")
                         st.rerun()
+                        def render_faq_tab(can_edit: bool):
+    """
+    Contenu complet de l'onglet FAQ dans la section Paramètres.
+    Usage : render_faq_tab(can_edit)  dans  with subtab_faq:
+    """
+    faq_items = st.session_state.get("faq_items", [])
+ 
+    st.markdown("### ❓ Gestion de la FAQ")
+    st.markdown("""
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+    padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+    ℹ️ Les questions et réponses définies ici apparaissent dans la fenêtre d'aide
+    accessibles via le <strong>🍄 champignon</strong>. Elles supportent le <strong>Markdown</strong>
+    pour le formatage (gras, listes, titres…).
+    </div>""", unsafe_allow_html=True)
+ 
+    # ── Stats rapides ──────────────────────────────────────────────────────
+    cats_count = {}
+    for f in faq_items:
+        c = f.get("category", "Général")
+        cats_count[c] = cats_count.get(c, 0) + 1
+ 
+    cols_stat = st.columns(len(cats_count) + 1 if cats_count else 2)
+    with cols_stat[0]:
+        st.metric("Total Q&R", len(faq_items))
+    for i, (cat, cnt) in enumerate(cats_count.items(), 1):
+        if i < len(cols_stat):
+            with cols_stat[i]:
+                st.metric(cat, cnt)
+ 
+    st.divider()
+ 
+    # ── Formulaire ajout / édition ─────────────────────────────────────────
+    edit_idx = st.session_state.get("_faq_edit_idx")
+ 
+    if can_edit and st.session_state.get("_faq_show_form", False):
+        is_edit = edit_idx is not None
+        form_title = f"✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
+        existing = faq_items[edit_idx] if is_edit else {}
+        form_bg = "#eff6ff" if is_edit else "#f0fdf4"
+        form_border = "#93c5fd" if is_edit else "#86efac"
+ 
+        st.markdown(
+            f"<div style='background:{form_bg};border:1.5px solid {form_border};"
+            f"border-radius:12px;padding:18px;margin-bottom:16px'>",
+            unsafe_allow_html=True
+        )
+        st.markdown(f"#### {form_title}")
+ 
+        fc1, fc2 = st.columns([3, 1])
+        with fc1:
+            faq_question = st.text_input(
+                "Question *",
+                value=existing.get("question", ""),
+                placeholder="Ex: Comment ajouter un point de prélèvement ?",
+                key="faq_form_question"
+            )
+        with fc2:
+            cur_cat = existing.get("category", "Général")
+            cat_idx = FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0
+            faq_category = st.selectbox(
+                "Catégorie",
+                FAQ_CATEGORIES,
+                index=cat_idx,
+                key="faq_form_category"
+            )
+ 
+        faq_answer = st.text_area(
+            "Réponse * (Markdown supporté)",
+            value=existing.get("answer", ""),
+            height=150,
+            placeholder="Décrivez la réponse. Vous pouvez utiliser **gras**, *italique*, listes…",
+            key="faq_form_answer"
+        )
+ 
+        # Aperçu
+        if faq_answer.strip():
+            with st.expander("👁️ Aperçu du rendu Markdown", expanded=False):
+                st.markdown(faq_answer)
+ 
+        fb1, fb2 = st.columns(2)
+        with fb1:
+            btn_label = "✔️ Mettre à jour" if is_edit else "✅ Ajouter"
+            if st.button(btn_label, use_container_width=True, type="primary", key="faq_form_submit"):
+                if not faq_question.strip():
+                    st.error("La question est obligatoire.")
+                elif not faq_answer.strip():
+                    st.error("La réponse est obligatoire.")
+                else:
+                    if is_edit:
+                        faq_items[edit_idx]["question"] = faq_question.strip()
+                        faq_items[edit_idx]["answer"]   = faq_answer.strip()
+                        faq_items[edit_idx]["category"] = faq_category
+                    else:
+                        new_faq_item = {
+                            "id":       f"faq_{int(datetime.now().timestamp())}",
+                            "category": faq_category,
+                            "question": faq_question.strip(),
+                            "answer":   faq_answer.strip(),
+                            "order":    len(faq_items),
+                        }
+                        faq_items.append(new_faq_item)
+ 
+                    save_faq(faq_items, supa=True)
+                    st.session_state["faq_items"]       = faq_items
+                    st.session_state["_faq_show_form"]  = False
+                    st.session_state["_faq_edit_idx"]   = None
+                    st.success("✅ FAQ mise à jour !")
+                    st.rerun()
+        with fb2:
+            if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
+                st.session_state["_faq_show_form"] = False
+                st.session_state["_faq_edit_idx"]  = None
+                st.rerun()
+ 
+        st.markdown("</div>", unsafe_allow_html=True)
+ 
+    elif can_edit and not st.session_state.get("_faq_show_form", False):
+        if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
+            st.session_state["_faq_show_form"] = True
+            st.session_state["_faq_edit_idx"]  = None
+            st.rerun()
+ 
+    # ── Filtre catégorie ────────────────────────────────────────────────────
+    if faq_items:
+        all_cats_tab = ["Toutes"] + sorted(set(f.get("category","Général") for f in faq_items))
+        faq_filter_cat = st.selectbox(
+            "Filtrer par catégorie",
+            all_cats_tab,
+            key="faq_tab_cat_filter",
+            label_visibility="collapsed"
+        )
+ 
+        # ── Liste des Q&R ───────────────────────────────────────────────────
+        # En-tête tableau
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:2fr 1fr 0.4fr 0.4fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
+            "padding:10px 14px;margin-top:8px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
+            "<div></div><div></div></div>",
+            unsafe_allow_html=True
+        )
+ 
+        displayed = [
+            (i, f) for i, f in enumerate(faq_items)
+            if faq_filter_cat == "Toutes" or f.get("category") == faq_filter_cat
+        ]
+ 
+        if not displayed:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
+                "border-radius:0 0 10px 10px;padding:20px;text-align:center;"
+                "color:#94a3b8;font-size:.82rem'>Aucune question dans cette catégorie</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            for display_pos, (real_idx, item) in enumerate(displayed):
+                cat_col = {
+                    "Général":            "#2563eb",
+                    "Score & Seuils":     "#7c3aed",
+                    "Prélèvements":       "#0891b2",
+                    "Paramètres":         "#059669",
+                    "Données":            "#d97706",
+                    "Mesures correctives":"#dc2626",
+                }.get(item.get("category","Général"), "#475569")
+ 
+                row_bg = "#f8fafc" if display_pos % 2 == 0 else "#ffffff"
+                border_r = "none" if display_pos < len(displayed)-1 else ""
+ 
+                rc1, rc2 = st.columns([6, 1])
+                with rc1:
+                    st.markdown(
+                        f"<div style='display:grid;grid-template-columns:2fr 1fr;"
+                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
+                        f"border-top:none;padding:10px 14px;align-items:center'>"
+                        f"<div style='font-size:.82rem;font-weight:600;color:#0f172a'>"
+                        f"{item['question']}</div>"
+                        f"<div style='text-align:center'>"
+                        f"<span style='background:{cat_col}18;color:{cat_col};"
+                        f"border:1px solid {cat_col}44;border-radius:12px;"
+                        f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
+                        f"{item.get('category','Général')}</span></div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                with rc2:
+                    act1, act2, act3, act4 = st.columns(4)
+                    # Monter
+                    with act1:
+                        if can_edit and real_idx > 0:
+                            if st.button("↑", key=f"faq_up_{real_idx}",
+                                         help="Monter"):
+                                faq_items[real_idx], faq_items[real_idx-1] = \
+                                    faq_items[real_idx-1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+                    # Descendre
+                    with act2:
+                        if can_edit and real_idx < len(faq_items)-1:
+                            if st.button("↓", key=f"faq_dn_{real_idx}",
+                                         help="Descendre"):
+                                faq_items[real_idx], faq_items[real_idx+1] = \
+                                    faq_items[real_idx+1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+                    # Éditer
+                    with act3:
+                        if can_edit:
+                            if st.button("✏️", key=f"faq_edit_{real_idx}"):
+                                st.session_state["_faq_edit_idx"]  = real_idx
+                                st.session_state["_faq_show_form"] = True
+                                st.rerun()
+                    # Supprimer
+                    with act4:
+                        if can_edit:
+                            if st.button("🗑️", key=f"faq_del_{real_idx}"):
+                                faq_items.pop(real_idx)
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+ 
+            st.markdown(
+                f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                f"padding:8px 14px'>"
+                f"<div style='font-size:.75rem;color:#94a3b8'>"
+                f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
+                f"</div></div>",
+                unsafe_allow_html=True
+            )
+ 
+    else:
+        st.markdown(
+            "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+            "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
+            "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
+            "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucune question définie</div>"
+            "<div style='font-size:.8rem;color:#94a3b8'>"
+            "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
+            unsafe_allow_html=True
+        )
+ 
+    st.divider()
+ 
+    # ── Réinitialiser FAQ par défaut ────────────────────────────────────────
+    if can_edit:
+        st.markdown("#### ↩️ Réinitialiser la FAQ")
+        st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
+        if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
+            st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
+            save_faq(st.session_state["faq_items"], supa=True)
+            st.success("✅ FAQ réinitialisée avec les questions par défaut.")
+            st.rerun()
