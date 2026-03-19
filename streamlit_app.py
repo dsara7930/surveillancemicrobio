@@ -1201,45 +1201,27 @@ with st.sidebar:
         <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
         <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
       </div>
-      <!-- Bulle visuelle -->
-      <div style="position:relative;background:#fff;border:2.5px solid #1e293b;border-radius:18px;padding:9px 13px;box-shadow:3px 3px 0 #1e293b;max-width:130px;user-select:none;">
+      <div id="b" onclick="go()" style="position:relative;background:#fff;border:2.5px solid #1e293b;border-radius:18px;padding:9px 13px;box-shadow:3px 3px 0 #1e293b;cursor:pointer;max-width:130px;transition:transform .12s,box-shadow .12s,border-color .12s;user-select:none;">
         <div style="position:absolute;left:-13px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:13px solid #1e293b"></div>
         <div style="position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-right:10px solid #fff"></div>
-        <div style="font-size:.70rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">Si tu as besoin<br>d'aide, je suis là !<br><span style="font-size:.60rem;color:#64748b">❓ FAQ</span></div>
+        <div style="font-size:.70rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">Si tu as besoin<br>d'aide, je suis là !</div>
+        <div style="text-align:center;font-size:.60rem;color:#64748b;margin-top:3px">❓ FAQ</div>
       </div>
     </div>
+    <script>
+    function go(){
+      var b=document.getElementById('b');
+      b.style.transform='scale(0.95)';b.style.boxShadow='1px 1px 0 #1e293b';
+      setTimeout(function(){b.style.transform='scale(1)';b.style.boxShadow='3px 3px 0 #1e293b';},120);
+      var u=new URL(window.parent.location.href);
+      u.searchParams.set('open_faq','1');
+      window.parent.location.href=u.toString();
+    }
+    var b=document.getElementById('b');
+    b.addEventListener('mouseover',function(){this.style.transform='scale(1.04)';this.style.boxShadow='4px 4px 0 #2563eb';this.style.borderColor='#2563eb';});
+    b.addEventListener('mouseout',function(){this.style.transform='scale(1)';this.style.boxShadow='3px 3px 0 #1e293b';this.style.borderColor='#1e293b';});
+    </script>
     """, height=110, scrolling=False)
-
-    st.markdown("""
-    <style>
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) {
-        position: relative;
-        margin-top: -60px;
-        margin-left: 55%;
-        width: 42% !important;
-        z-index: 999;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        width: 100% !important;
-        height: 60px !important;
-        cursor: pointer !important;
-        color: transparent !important;
-        font-size: 0 !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover,
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:focus {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    if st.button("faq", key="mush_faq_btn"):
-        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
