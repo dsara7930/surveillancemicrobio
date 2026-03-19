@@ -1222,7 +1222,7 @@ with st.sidebar:
     b.addEventListener('mouseout',function(){this.style.transform='scale(1)';this.style.boxShadow='3px 3px 0 #1e293b';this.style.borderColor='#1e293b';});
     </script>
     """, height=110, scrolling=False)
-st.markdown("""
+    st.markdown("""
     <style>
     /* Cache complètement le bouton Streamlit */
     div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) {
