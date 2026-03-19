@@ -1712,7 +1712,7 @@ if active == "surveillance":
                     if sel_plan and sel_plan.get("image_b64"):
                         lc_plan, rc_plan = st.columns([1, 2])
                         
-                    with lc_plan:
+                        with lc_plan:
                             _cur_pt = st.session_state.get("_new_prelev_plan_point")
                             if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
                                 _cur_pt = None
@@ -1730,11 +1730,29 @@ if active == "surveillance":
                             else:
                                 st.info("Aucun point placé.")
 
+                            if sel_plan and sel_plan.get("image_b64"):
+                        lc_plan, rc_plan = st.columns([1, 2])
+                        with lc_plan:
+                            _cur_pt = st.session_state.get("_new_prelev_plan_point")
+                            if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
+                                _cur_pt = None
+                                st.session_state["_new_prelev_plan_point"] = None
+                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
+                            if _cur_pt:
+                                _px = float(_cur_pt.get("x", 0))
+                                _py = float(_cur_pt.get("y", 0))
+                                st.markdown(
+                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;"
+                                    f"color:#166534;margin-top:4px'>"
+                                    f"📌 Point placé : <b>{_px:.1f}% / {_py:.1f}%</b></div>",
+                                    unsafe_allow_html=True)
+                            else:
+                                st.info("Aucun point placé.")
                             # Champ caché — mis à jour par le JS de la carte
                             coords_raw = st.text_input(
                                 "coords", value="", key="np_coords_hidden",
                                 label_visibility="collapsed")
-
                             if coords_raw and "," in coords_raw:
                                 try:
                                     _cx, _cy = coords_raw.split(",")
@@ -1749,11 +1767,9 @@ if active == "surveillance":
                                     st.rerun()
                                 except Exception:
                                     pass
-
                             if st.button("🗑️ Effacer le point", key="clear_np_pt", use_container_width=True):
                                 st.session_state["_new_prelev_plan_point"] = None
                                 st.rerun()
-
                         with rc_plan:
                             _np_img     = sel_plan["image_b64"]
                             _np_label   = selected_point.get("label","Point")
@@ -1789,9 +1805,7 @@ body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;display:
 <script>
 let add=false,pt={_np_pt_json};
 const lbl="{_np_label}",rc="{_np_rc}",lc={_np_lc};
-
 function sendToStreamlit(x,y){{
-  // Trouve le text_input caché et met à jour sa valeur
   const inputs=window.parent.document.querySelectorAll('input[type="text"]');
   for(const inp of inputs){{
     if(inp.value===''||inp.value.includes(',')){{
@@ -1802,7 +1816,6 @@ function sendToStreamlit(x,y){{
     }}
   }}
 }}
-
 function upd(){{
   document.getElementById('st').textContent=pt
     ?'✅ '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'% — placé !'
@@ -1845,7 +1858,6 @@ upd();
 </script></body></html>"""
                             st.components.v1.html(_np_html, height=280, scrolling=False)
                             st.caption("💡 Cliquez '📍 Cliquer pour placer' puis cliquez sur la carte — le point se sauvegarde automatiquement.")
-                            
                     elif sel_plan and not sel_plan.get("image_b64"):
                         st.markdown(
                             "<div style='background:#fffbeb;border:1px solid #fde047;"
