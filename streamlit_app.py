@@ -1863,9 +1863,9 @@ if active == "surveillance":
                         "Sélectionnez un plan pour afficher la carte</div>",
                         unsafe_allow_html=True)
 
-            with btn_col:
-                st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-                if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
+                         key="save_prelev", type="primary"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                     sample = {
                         "id":                   pid,
