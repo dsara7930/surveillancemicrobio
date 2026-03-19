@@ -1237,13 +1237,6 @@ with st.sidebar:
         </div>
       </div>
 
-      <!-- Petites bulles de liaison -->
-      <div style="display:flex;align-items:center;gap:3px;padding:0 4px;margin-bottom:-18px">
-        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
-        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
-        <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
-      </div>
-
       <!-- Champignon -->
       <div style="flex-shrink:0">
         <iframe
