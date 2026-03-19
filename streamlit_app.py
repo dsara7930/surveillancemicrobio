@@ -2046,7 +2046,7 @@ upd();
     # ══════════════════════════════════════════════════════════════════════════
     # HELPERS PARTAGÉS
     # ══════════════════════════════════════════════════════════════════════════
-    def _render_lecture_card(s):
+    def _render_lecture_card(s, tab_prefix=""):
         sched_date  = datetime.fromisoformat(s["due_date"]).date()
         is_late     = sched_date <= today
         border_col  = "#ef4444" if is_late else "#3b82f6"
@@ -2114,11 +2114,11 @@ upd();
             </div>""", unsafe_allow_html=True)
             bc1, bc2 = st.columns([3, 1])
             with bc1:
-                if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"proc_{s['id']}", use_container_width=True):
+                if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
                     st.session_state.current_process = s['id']
                     st.rerun()
             with bc2:
-                if st.button("🗑️ Supprimer", key=f"del_sch_{s['id']}", use_container_width=True):
+                if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}", use_container_width=True):
                     sid = s.get('sample_id')
                     st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
                     st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
@@ -2281,7 +2281,7 @@ upd();
                     f'📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>',
                     unsafe_allow_html=True)
             for s in overdue_j2 + upcoming_j2:
-                _render_lecture_card(s)
+                _render_lecture_card(s, "j2_")
 
         if st.session_state.current_process:
             proc_check = next((x for x in st.session_state.schedules
@@ -2325,7 +2325,7 @@ upd();
                     f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
                     unsafe_allow_html=True)
             for s in overdue_j7 + upcoming_j7:
-                _render_lecture_card(s)
+                _render_lecture_card(s, "j7_")
 
         if st.session_state.current_process:
             proc_check = next((x for x in st.session_state.schedules
