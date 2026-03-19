@@ -707,8 +707,10 @@ def _get_germ_score(germ):
     return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
 
 def _evaluate_score(total):
-    if total > 36:  return "action", "🚨 ACTION",  "#ef4444"
-    if total >= 24: return "alert",  "⚠️ ALERTE",  "#f59e0b"
+    _sa = st.session_state.get("_seuil_alerte", 24)
+    _sc = st.session_state.get("_seuil_action", 36)
+    if total > _sc:  return "action", "🚨 ACTION",  "#ef4444"
+    if total >= _sa: return "alert",  "⚠️ ALERTE",  "#f59e0b"
     return "ok", "✅ Conforme", "#22c55e"
 
 def _loc_crit_label(n):
@@ -839,6 +841,19 @@ if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
 if "plans" not in st.session_state:
     st.session_state.plans = load_plans()
+if "_seuil_alerte" not in st.session_state:
+    _raw_seuils = _supa_get('seuils')
+    if _raw_seuils:
+        try:
+            _s = json.loads(_raw_seuils)
+            st.session_state["_seuil_alerte"] = int(_s.get("alerte", 24))
+            st.session_state["_seuil_action"] = int(_s.get("action", 36))
+        except Exception:
+            st.session_state["_seuil_alerte"] = 24
+            st.session_state["_seuil_action"] = 36
+    else:
+        st.session_state["_seuil_alerte"] = 24
+        st.session_state["_seuil_action"] = 36
 if "due_alert_shown" not in st.session_state:
     st.session_state.due_alert_shown = False
 if "current_process" not in st.session_state:
@@ -5873,7 +5888,7 @@ elif active == "parametres":
     (subtab_mesures, subtab_points, subtab_plans,
      subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
         "📋 Mesures correctives", "📍 Points de prélèvement",
-        "🗺️ Plans", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
+        "🗺️ Plans", "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
     ])
 
     # ── Constantes Points ──────────────────────────────────────────────────────
@@ -6536,7 +6551,250 @@ elif active == "parametres":
                     save_plans(st.session_state.plans)
                     st.success(f"✅ Plan **{np_plan_name}** ajouté avec succès !")
                     st.rerun()
+# ══════════════════════════════════════════════════════════════════════════
+    # SEUILS D'ALERTE ET D'ACTION
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_seuils:
+        st.markdown("### ⚖️ Seuils d'alerte et d'action")
 
+        # ── Explication du calcul ─────────────────────────────────────────────
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+        border-radius:14px;padding:20px 24px;margin-bottom:20px">
+          <div style="font-size:1rem;font-weight:800;color:#1e40af;margin-bottom:14px">
+            🧮 Comment est calculé le score de criticité ?
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">🧬</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Pathogénicité</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Non pathogène<br>
+                <b>2</b> — Pathogène opportuniste<br>
+                <b>3</b> — Pathogène MR / primaire
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">🧴</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Résistance désinfectants</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Sensible<br>
+                <b>2</b> — Résistant Surfa'Safe<br>
+                <b>3</b> — Résistant Surfa'Safe + APA
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">💨</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Dissémination</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Environnemental<br>
+                <b>2</b> — Manuporté<br>
+                <b>3</b> — Aéroporté
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#1e293b;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px">
+            <div style="font-size:.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
+              Formule du score total
+            </div>
+            <div style="font-size:1rem;color:#e2e8f0;font-weight:700">
+              Score total = <span style="color:#60a5fa">Criticité lieu (1–3)</span>
+              × <span style="color:#34d399">Pathogénicité (1–3)</span>
+              × <span style="color:#fbbf24">Résistance (1–3)</span>
+              × <span style="color:#f87171">Dissémination (1–3)</span>
+            </div>
+            <div style="font-size:.72rem;color:#64748b;margin-top:8px">
+              Score minimum : 1×1×1×1 = <b style="color:#94a3b8">1</b>
+              &nbsp;·&nbsp;
+              Score maximum : 3×3×3×3 = <b style="color:#f87171">81</b>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">✅</div>
+              <div style="font-weight:800;color:#166534;font-size:.85rem;margin-top:4px">CONFORME</div>
+              <div style="font-size:.78rem;color:#166534;margin-top:4px">Score &lt; seuil alerte</div>
+            </div>
+            <div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">⚠️</div>
+              <div style="font-weight:800;color:#92400e;font-size:.85rem;margin-top:4px">ALERTE</div>
+              <div style="font-size:.78rem;color:#92400e;margin-top:4px">Seuil alerte ≤ Score ≤ seuil action</div>
+            </div>
+            <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">🚨</div>
+              <div style="font-weight:800;color:#991b1b;font-size:.85rem;margin-top:4px">ACTION</div>
+              <div style="font-size:.78rem;color:#991b1b;margin-top:4px">Score &gt; seuil action</div>
+            </div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── Seuils actuels ────────────────────────────────────────────────────
+        _seuil_alerte  = st.session_state.get("_seuil_alerte", 24)
+        _seuil_action  = st.session_state.get("_seuil_action", 36)
+
+        st.markdown("#### ⚙️ Modifier les seuils")
+
+        if not can_edit:
+            st.info("👁️ Mode lecture seule — connectez-vous pour modifier les seuils.")
+
+        sc1, sc2, sc3 = st.columns([2, 2, 3])
+        with sc1:
+            new_seuil_alerte = st.number_input(
+                "⚠️ Seuil ALERTE",
+                min_value=1, max_value=80, value=int(_seuil_alerte), step=1,
+                disabled=not can_edit,
+                help="En dessous : conforme. À partir de ce score : alerte.",
+                key="input_seuil_alerte")
+        with sc2:
+            new_seuil_action = st.number_input(
+                "🚨 Seuil ACTION",
+                min_value=1, max_value=81, value=int(_seuil_action), step=1,
+                disabled=not can_edit,
+                help="Au-dessus de ce score : action immédiate requise.",
+                key="input_seuil_action")
+        with sc3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if can_edit:
+                if st.button("💾 Sauvegarder les seuils", use_container_width=True,
+                             key="save_seuils", type="primary"):
+                    if new_seuil_alerte >= new_seuil_action:
+                        st.error("❌ Le seuil d'alerte doit être strictement inférieur au seuil d'action.")
+                    else:
+                        st.session_state["_seuil_alerte"] = new_seuil_alerte
+                        st.session_state["_seuil_action"] = new_seuil_action
+                        _supa_upsert('seuils', json.dumps({
+                            "alerte": new_seuil_alerte,
+                            "action": new_seuil_action
+                        }, ensure_ascii=False))
+                        st.success(
+                            f"✅ Seuils sauvegardés — Alerte : {new_seuil_alerte} · Action : {new_seuil_action}")
+                        st.rerun()
+
+        # Validation visuelle
+        if new_seuil_alerte >= new_seuil_action:
+            st.error("❌ Le seuil d'alerte doit être strictement inférieur au seuil d'action.")
+        else:
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
+            padding:14px 18px;margin-top:8px">
+              <div style="font-size:.78rem;font-weight:700;color:#475569;margin-bottom:10px">
+                Aperçu de la grille avec ces seuils
+              </div>
+              <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0">
+                <div style="flex:1;background:#f0fdf4;padding:10px;text-align:center;border-right:1px solid #e2e8f0">
+                  <div style="font-size:.65rem;color:#166534;font-weight:700;text-transform:uppercase">✅ Conforme</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#166534;margin-top:2px">
+                    Score &lt; {new_seuil_alerte}
+                  </div>
+                </div>
+                <div style="flex:1;background:#fffbeb;padding:10px;text-align:center;border-right:1px solid #e2e8f0">
+                  <div style="font-size:.65rem;color:#92400e;font-weight:700;text-transform:uppercase">⚠️ Alerte</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#92400e;margin-top:2px">
+                    {new_seuil_alerte} – {new_seuil_action}
+                  </div>
+                </div>
+                <div style="flex:1;background:#fef2f2;padding:10px;text-align:center">
+                  <div style="font-size:.65rem;color:#991b1b;font-weight:700;text-transform:uppercase">🚨 Action</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#dc2626;margin-top:2px">
+                    Score &gt; {new_seuil_action}
+                  </div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Tableau des scores limites par criticité de lieu ──────────────────
+        st.markdown("#### 📊 Tableau de référence — scores limites par criticité de lieu")
+        st.caption(
+            "Montre à quel score germe (pathogénicité × résistance × dissémination) "
+            "les seuils sont déclenchés selon la criticité du lieu.")
+
+        _sa = new_seuil_alerte
+        _sc_val = new_seuil_action
+
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 2fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Criticité lieu</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Score lieu</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → ⚠️ Alerte</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → 🚨 Action</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Exemples de germes concernés</div>"
+            "</div>",
+            unsafe_allow_html=True)
+
+        lc_examples = {
+            1: "Couloirs, locaux techniques, zones administratives",
+            2: "Préparations non stériles, zones annexes ZAC, vestiaires",
+            3: "ZAC, salles blanches ISO A/B, isolateurs",
+        }
+        lc_labels = {1: "Non critique", 2: "Semi-critique", 3: "Critique"}
+        lc_colors = {1: "#22c55e", 2: "#f59e0b", 3: "#ef4444"}
+
+        for lci, (loc_crit_val, lc_lbl) in enumerate([
+            (1, "Nv.1 — Non critique"),
+            (2, "Nv.2 — Semi-critique"),
+            (3, "Nv.3 — Critique"),
+        ]):
+            # Score germe minimum pour déclencher alerte / action
+            germe_alerte = _sa / loc_crit_val
+            germe_action = _sc_val / loc_crit_val
+            lc_col = lc_colors[loc_crit_val]
+            row_bg = "#f8fafc" if lci % 2 == 0 else "#ffffff"
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 2fr;"
+                f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
+                "padding:10px 14px;align-items:center'>"
+                f"<div style='font-size:.85rem;font-weight:700'>"
+                f"<span style='color:{lc_col}'>●</span> {lc_lbl}</div>"
+                f"<div style='text-align:center'>"
+                f"<span style='background:{lc_col}22;color:{lc_col};"
+                f"border:1px solid {lc_col}55;border-radius:6px;"
+                f"padding:2px 10px;font-size:.82rem;font-weight:800'>× {loc_crit_val}</span></div>"
+                f"<div style='text-align:center;font-size:.82rem;font-weight:700;color:#92400e'>"
+                f"Score germe ≥ {germe_alerte:.1f}</div>"
+                f"<div style='text-align:center;font-size:.82rem;font-weight:700;color:#dc2626'>"
+                f"Score germe &gt; {germe_action:.1f}</div>"
+                f"<div style='font-size:.7rem;color:#64748b;font-style:italic'>"
+                f"{lc_examples[loc_crit_val]}</div>"
+                "</div>",
+                unsafe_allow_html=True)
+
+        st.markdown(
+            "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+            f"<div style='font-size:.75rem;color:#94a3b8'>"
+            f"Score germe = Pathogénicité × Résistance × Dissémination (min 1 · max 27) "
+            f"· Seuil alerte actuel : <b style='color:#fbbf24'>{_sa}</b> "
+            f"· Seuil action actuel : <b style='color:#f87171'>{_sc_val}</b>"
+            f"</div></div>",
+            unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Réinitialiser aux valeurs par défaut ──────────────────────────────
+        st.markdown("#### ↩️ Réinitialiser aux valeurs par défaut")
+        st.markdown(
+            "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"
+            "padding:10px 14px;font-size:.78rem;color:#475569;margin-bottom:8px'>"
+            "Les valeurs par défaut sont <b>Alerte : 24</b> et <b>Action : 36</b>.<br>"
+            "Ces seuils correspondent à :<br>"
+            "• Alerte dès qu'un germe de score 8 est trouvé en zone critique (3×8=24)<br>"
+            "• Action dès qu'un germe de score 12 est trouvé en zone critique (3×12=36)"
+            "</div>",
+            unsafe_allow_html=True)
+        if can_edit:
+            if st.button("↩️ Remettre Alerte=24 / Action=36", key="reset_seuils"):
+                st.session_state["_seuil_alerte"] = 24
+                st.session_state["_seuil_action"] = 36
+                _supa_upsert('seuils', json.dumps({"alerte": 24, "action": 36}, ensure_ascii=False))
+                st.success("✅ Seuils réinitialisés — Alerte : 24 · Action : 36")
+                st.rerun()
+
+    
     # ══════════════════════════════════════════════════════════════════════════
     # OPÉRATEURS
     # ══════════════════════════════════════════════════════════════════════════
