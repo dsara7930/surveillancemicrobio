@@ -1202,7 +1202,7 @@ with st.sidebar:
 col1, col2 = st.columns([1, 2])
 with col1:
     st.components.v1.html("""
-        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="100" height="100"
+        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="75" height="75"
             style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
         """, height=82, scrolling=False)
 with col2:
