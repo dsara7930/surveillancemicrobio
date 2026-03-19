@@ -1193,16 +1193,9 @@ with st.sidebar:
     col1, col2 = st.columns([1, 2])
     with col1:
         st.components.v1.html("""
-        <div style="display:flex;align-items:center;height:78px;">
-          <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="62" height="62"
+        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="78" height="78"
             style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
-          <div style="display:flex;flex-direction:row;align-items:center;gap:4px;margin-left:6px">
-            <div style="width:8px;height:8px;background:#334155;border-radius:50%"></div>
-            <div style="width:6px;height:6px;background:#334155;border-radius:50%"></div>
-            <div style="width:4px;height:4px;background:#334155;border-radius:50%"></div>
-          </div>
-        </div>
-        """, height=78, scrolling=False)
+        """, height=82, scrolling=False)
     with col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
