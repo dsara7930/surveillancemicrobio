@@ -5542,6 +5542,12 @@ else img.addEventListener('load',render);
                             "border-radius:3px;padding:0 4px;font-size:.55rem'>?</span>")
                         row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
 
+                        _ls  = s['last_status']
+                        _lsc = STATUS_COL.get(_ls, '#94a3b8')
+                        _lsi = STATUS_IC.get(_ls, '⬜')
+                        _lsl = STATUS_LBL.get(_ls, '—')
+                        _ld  = s['last_date'][:10] if s['last_date'] else '—'
+
                         st.markdown(
                             "<div style='display:grid;"
                             "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
@@ -5565,10 +5571,8 @@ else img.addEventListener('load',render);
                             f"<div style='font-size:.72rem;color:#475569;font-style:italic'>"
                             f"{germes_str}</div>"
                             f"<div style='font-size:.72rem;font-weight:600;color:#475569;text-align:center'>"
-                            f"{s['last_date'][:10] if s['last_date'] else '—'}<br>"
-                            f"<span style='color:{STATUS_COL.get(s[\"last_status\"],\"#94a3b8\")};"
-                            f"font-size:.62rem'>{STATUS_IC.get(s['last_status'],'⬜')} "
-                            f"{STATUS_LBL.get(s['last_status'],'—')}</span></div>"
+                            f"{_ld}<br>"
+                            f"<span style='color:{_lsc};font-size:.62rem'>{_lsi} {_lsl}</span></div>"
                             "</div>",
                             unsafe_allow_html=True)
 
