@@ -1180,36 +1180,49 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── 🍄 Champignon dansant — cliquable pour ouvrir la FAQ ─────────────
-    # CSS : rend le bouton Streamlit transparent et le superpose sur l'iframe
+    # ── 🍄 Champignon dansant + bouton invisible centré dessus ────────────
     st.markdown("""
     <style>
-    /* Bouton FAQ invisible superposé sur le champignon */
+    /* Conteneur relatif pour le positionnement absolu du bouton */
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) {
-        margin-top: -148px !important;
-        height: 130px !important;
         position: relative !important;
-        z-index: 999 !important;
+        /* remonte le bouton pour le superposer sur l'iframe juste au-dessus */
+        margin-top: -114px !important;
+        /* centre horizontalement */
+        display: flex !important;
+        justify-content: center !important;
+        height: 0px !important;
     }
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button {
+        /* taille exacte du gif champignon */
+        width: 100px !important;
+        height: 100px !important;
+        min-height: unset !important;
+        padding: 0 !important;
+        /* totalement invisible */
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        width: 100% !important;
-        height: 130px !important;
-        cursor: pointer !important;
         color: transparent !important;
         font-size: 0 !important;
-        padding: 0 !important;
+        border-radius: 50% !important;
+        cursor: pointer !important;
+        position: relative !important;
+        z-index: 1000 !important;
     }
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:hover {
-        background: rgba(124,58,237,.08) !important;
-        border-radius: 12px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:focus {
+        outline: none !important;
+        box-shadow: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # L'iframe Giphy (champignon dansant)
+    # Iframe champignon dansant
     st.components.v1.html("""
     <div style="text-align:center;margin-top:14px;padding-bottom:4px">
       <iframe
@@ -1221,14 +1234,14 @@ with st.sidebar:
       </iframe>
       <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
                   font-family:'Segoe UI',sans-serif">
-        Cliquez pour l'aide 🍄
+        Bonne surveillance :) 🍄
       </div>
     </div>
-    """, height=148, scrolling=False)
+    """, height=130, scrolling=False)
 
-    # Bouton invisible superposé sur le champignon
-    if st.button(" ", key="mush_faq_btn", use_container_width=True,
-                 help="❓ Ouvrir le centre d'aide — FAQ"):
+    # Bouton invisible 100x100px centré pile sur le champignon
+    if st.button(" ", key="mush_faq_btn", use_container_width=False,
+                 help="❓ Aide & FAQ"):
         show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
