@@ -1042,6 +1042,7 @@ if st.query_params.get("open_faq") == "1":
     st.query_params.clear()
     st.session_state["_faq_panel_open"] = True
     st.rerun()
+
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -1135,15 +1136,13 @@ div[onclick] {
   overflow:visible;
 }
 div[onclick]:hover {
-  animation:none;
-  transform:scale(1.2);
-  transition:transform .15s;
-  filter:brightness(1.15);
+  animation:none; transform:scale(1.2);
+  transition:transform .15s; filter:brightness(1.15);
 }
 </style>
 """, height=160, scrolling=False)
 
-# ── HEADER ─────────────────────────────────────────────────────────────────────
+# ── HEADER (une seule fois) ────────────────────────────────────────────────────
 active = st.session_state.active_tab
 today  = datetime.today().date()
 
@@ -1154,69 +1153,52 @@ st.markdown(
 )
 st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
-# ── PANEL FAQ PLEINE PAGE ──────────────────────────────────────────────────────
-if st.session_state.get("_faq_panel_open"):
+# ── DIALOG FAQ ─────────────────────────────────────────────────────────────────
+@st.dialog("🍄 Centre d'aide — FAQ", width="large")
+def _show_faq_popup():
     faq_items = sorted(
         st.session_state.get("faq_items", DEFAULT_FAQ),
         key=lambda x: x.get("order", 999),
     )
 
-    h1, h2, h3 = st.columns([6, 1, 1])
-    with h1:
-        st.markdown(
-            "<div style='background:linear-gradient(135deg,#7c3aed,#a855f7);"
-            "border-radius:14px;padding:16px 22px;margin-bottom:12px'>"
-            "<div style='color:#fff;font-size:1.2rem;font-weight:900'>"
-            "🍄 Centre d'aide — FAQ</div>"
-            f"<div style='color:#e9d5ff;font-size:.78rem;margin-top:3px'>"
-            f"{len(faq_items)} questions & réponses disponibles</div>"
-            "</div>",
-            unsafe_allow_html=True)
-    with h2:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        if st.button("⛶ Réduire", key="faq_minimize", use_container_width=True):
-            st.session_state["_faq_panel_open"] = False
-            st.rerun()
-    with h3:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        if st.button("✕ Fermer", key="faq_close", use_container_width=True):
-            st.session_state["_faq_panel_open"] = False
-            st.rerun()
-
     sc1, sc2 = st.columns([3, 1])
     with sc1:
         faq_query = st.text_input(
             "search", placeholder="🔍 Rechercher une question ou un mot-clé…",
-            label_visibility="collapsed", key="faq_panel_search")
+            label_visibility="collapsed", key="faq_popup_search")
     with sc2:
-        all_cats_panel = ["Toutes les catégories"] + sorted(
+        all_cats_p = ["Toutes les catégories"] + sorted(
             set(f.get("category", "Général") for f in faq_items))
-        sel_cat_panel = st.selectbox(
-            "cat", all_cats_panel,
-            label_visibility="collapsed", key="faq_panel_cat")
+        sel_cat_p = st.selectbox(
+            "cat", all_cats_p,
+            label_visibility="collapsed", key="faq_popup_cat")
 
-    st.markdown("<hr style='margin:8px 0 14px;border-color:#e2e8f0'>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='font-size:.72rem;color:#64748b;text-align:right;"
+        f"margin-bottom:8px'>{len(faq_items)} Q&R disponibles</div>",
+        unsafe_allow_html=True)
 
-    q_panel = faq_query.strip().lower()
+    st.markdown("<hr style='margin:4px 0 12px;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
-    def _faq_matches(item):
-        if sel_cat_panel != "Toutes les catégories" and item.get("category") != sel_cat_panel:
+    q_p = faq_query.strip().lower()
+
+    def _matches_p(item):
+        if sel_cat_p != "Toutes les catégories" and item.get("category") != sel_cat_p:
             return False
-        if q_panel:
-            return (q_panel in item["question"].lower()
-                    or q_panel in item["answer"].lower()
-                    or q_panel in item.get("category", "").lower())
+        if q_p:
+            return (q_p in item["question"].lower()
+                    or q_p in item["answer"].lower()
+                    or q_p in item.get("category", "").lower())
         return True
 
-    filtered_panel = [f for f in faq_items if _faq_matches(f)]
+    filtered_p = [f for f in faq_items if _matches_p(f)]
 
-    if not filtered_panel:
+    if not filtered_p:
         st.markdown(
-            "<div style='text-align:center;padding:48px 0;color:#94a3b8'>"
-            "<div style='font-size:2.5rem;margin-bottom:10px'>🔍</div>"
-            f"<div style='font-size:.9rem'>Aucun résultat pour "
-            f"<strong>« {faq_query} »</strong></div>"
-            "<div style='font-size:.75rem;margin-top:4px'>Essayez un autre mot-clé</div></div>",
+            "<div style='text-align:center;padding:32px 0;color:#94a3b8'>"
+            "<div style='font-size:2rem;margin-bottom:8px'>🔍</div>"
+            f"<div style='font-size:.85rem'>Aucun résultat pour "
+            f"<strong>« {faq_query} »</strong></div></div>",
             unsafe_allow_html=True)
     else:
         from collections import defaultdict
@@ -1231,27 +1213,27 @@ if st.session_state.get("_faq_panel_open"):
             "Mesures correctives":"#dc2626",
         }
 
-        grouped_panel = defaultdict(list)
-        for item in filtered_panel:
-            grouped_panel[item.get("category", "Général")].append(item)
+        grouped_p = defaultdict(list)
+        for item in filtered_p:
+            grouped_p[item.get("category", "Général")].append(item)
 
-        cats_sorted = sorted(grouped_panel.keys())
-        mid = (len(cats_sorted) + 1) // 2
-        col_left, col_right = st.columns(2)
+        cats_sorted_p = sorted(grouped_p.keys())
+        mid_p = (len(cats_sorted_p) + 1) // 2
+        col_l, col_r = st.columns(2)
 
-        for ci, cat in enumerate(cats_sorted):
-            col = col_left if ci < mid else col_right
+        for ci, cat in enumerate(cats_sorted_p):
+            col = col_l if ci < mid_p else col_r
             c   = CAT_COLORS.get(cat, "#475569")
             with col:
                 st.markdown(
                     f"<div style='display:inline-block;background:{c}12;color:{c};"
                     f"border:1px solid {c}44;border-radius:20px;padding:3px 14px;"
                     f"font-size:.68rem;font-weight:700;text-transform:uppercase;"
-                    f"letter-spacing:.06em;margin:12px 0 6px'>📂 {cat}</div>",
+                    f"letter-spacing:.06em;margin:10px 0 6px'>📂 {cat}</div>",
                     unsafe_allow_html=True)
-                for item in grouped_panel[cat]:
+                for item in grouped_p[cat]:
                     q_display = item["question"]
-                    if q_panel:
+                    if q_p:
                         q_display = _re.sub(
                             f"({_re.escape(faq_query)})",
                             r"<mark style='background:#fef08a;border-radius:3px;"
@@ -1261,13 +1243,16 @@ if st.session_state.get("_faq_panel_open"):
                         st.markdown(item["answer"])
 
     st.markdown(
-        "<div style='margin-top:24px;padding:12px 16px;background:#f8fafc;"
+        "<div style='margin-top:20px;padding:10px 14px;background:#f8fafc;"
         "border:1px solid #e2e8f0;border-radius:10px;"
-        "font-size:.72rem;color:#94a3b8;text-align:center'>"
+        "font-size:.7rem;color:#94a3b8;text-align:center'>"
         "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
         unsafe_allow_html=True)
 
-    st.divider()
+# Ouvrir le dialog si demandé
+if st.session_state.get("_faq_panel_open"):
+    st.session_state["_faq_panel_open"] = False
+    _show_faq_popup()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
