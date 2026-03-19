@@ -1028,6 +1028,15 @@ if "cal_month" not in st.session_state:
 if "planning_overrides" not in st.session_state:
     raw = _supa_get('planning_overrides')
     st.session_state["planning_overrides"] = json.loads(raw) if raw else {}
+if "class_constraints_loaded" not in st.session_state:
+    raw_cc = _supa_get('class_constraints')
+    if raw_cc:
+        try:
+            for cls, val in json.loads(raw_cc).items():
+                st.session_state[f"class_max_{cls}"] = int(val)
+        except Exception:
+            pass
+    st.session_state["class_constraints_loaded"] = True
 
 # ── DIALOG FAQ ─────────────────────────────────────────────────────────────────
 # La fonction est définie ICI, avant tout appel — c'est la règle absolue avec @st.dialog.
@@ -1189,7 +1198,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-# ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
+# ── 🍄 Champignon dansant + bulle cliquable ───────────────────
     st.markdown("""
     <style>
     div[data-testid="stButton"]:has(button#mush_faq_btn) button,
@@ -3637,6 +3646,22 @@ if active == "planning":
             st.info("Aucune classe de salle définie sur les points de prélèvement.")
             class_max_dict = {}
 
+        if all_classes:
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            sv_col, _ = st.columns([1, 3])
+            with sv_col:
+                if st.button("💾 Sauvegarder les contraintes", 
+                             key="save_class_constraints",
+                             use_container_width=True, type="primary"):
+                    payload = {
+                        cls: int(st.session_state.get(f"class_max_{cls}", 0))
+                        for cls in all_classes
+                    }
+                    if _supa_upsert('class_constraints', 
+                                    json.dumps(payload, ensure_ascii=False)):
+                        st.success("✅ Contraintes sauvegardées dans Supabase !")
+                    else:
+                        st.warning("⚠️ Supabase non connecté — contraintes non sauvegardées.")
         st.divider()
 
         # ── Sélecteur semaine ─────────────────────────────────────────────────
