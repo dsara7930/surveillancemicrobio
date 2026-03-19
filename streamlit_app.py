@@ -1190,90 +1190,97 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
-    st.components.v1.html("""
+    st.markdown("""
+    <style>
+    /* ── Conteneur flex champignon + bulles + bouton ── */
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        margin-top: 8px !important;
+    }
+    /* ── Le bouton = la bulle BD ── */
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button {
+        position: relative !important;
+        background: #ffffff !important;
+        border: 2.5px solid #1e293b !important;
+        border-radius: 18px !important;
+        padding: 9px 13px !important;
+        box-shadow: 3px 3px 0px #1e293b !important;
+        cursor: pointer !important;
+        font-size: .70rem !important;
+        font-weight: 800 !important;
+        color: #1e293b !important;
+        line-height: 1.4 !important;
+        text-align: center !important;
+        width: auto !important;
+        min-width: 0 !important;
+        transition: transform .12s ease, box-shadow .12s ease, border-color .12s !important;
+    }
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
+        transform: scale(1.04) !important;
+        box-shadow: 4px 4px 0px #2563eb !important;
+        border-color: #2563eb !important;
+        color: #2563eb !important;
+        background: #ffffff !important;
+    }
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:active {
+        transform: scale(0.96) !important;
+        box-shadow: 1px 1px 0px #1e293b !important;
+    }
+    /* ── Queue droite de la bulle (pseudo-éléments impossibles sur button, on la fait via le wrapper) ── */
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::after {
+        content: '' !important;
+        position: absolute !important;
+        right: -11px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 0 !important;
+        height: 0 !important;
+        border-top: 7px solid transparent !important;
+        border-bottom: 7px solid transparent !important;
+        border-left: 11px solid #1e293b !important;
+    }
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::before {
+        content: '' !important;
+        position: absolute !important;
+        right: -7px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 0 !important;
+        height: 0 !important;
+        border-top: 5px solid transparent !important;
+        border-bottom: 5px solid transparent !important;
+        border-left: 8px solid #ffffff !important;
+        z-index: 1 !important;
+    }
+    </style>
+
+    <!-- Petites bulles + champignon à droite du bouton -->
     <div style="
         display:flex;align-items:center;justify-content:center;
-        gap:0;margin-top:8px;padding:0 6px;
+        gap:3px;margin-top:8px;padding:0 6px;
         font-family:'Segoe UI',sans-serif;
+        pointer-events:none;
     ">
-      <!-- Bulle principale cliquable -->
-      <div id="faq-bubble" onclick="triggerFaq()" style="
-          position:relative;
-          background:#ffffff;
-          border:2.5px solid #1e293b;
-          border-radius:18px;
-          padding:9px 13px;
-          box-shadow:3px 3px 0px #1e293b;
-          cursor:pointer;
-          max-width:130px;
-          transition:transform .12s ease, box-shadow .12s ease, border-color .12s;
-          user-select:none;
-      ">
-        <!-- Queue droite (bordure) -->
-        <div style="
-            position:absolute;
-            right:-13px;top:50%;
-            transform:translateY(-50%);
-            width:0;height:0;
-            border-top:8px solid transparent;
-            border-bottom:8px solid transparent;
-            border-left:13px solid #1e293b;
-        "></div>
-        <!-- Queue droite (fond blanc) -->
-        <div style="
-            position:absolute;
-            right:-9px;top:50%;
-            transform:translateY(-50%);
-            width:0;height:0;
-            border-top:6px solid transparent;
-            border-bottom:6px solid transparent;
-            border-left:10px solid #ffffff;
-        "></div>
-        <div style="font-size:.70rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
-          Si tu as besoin<br>d'aide, je suis là !
-        </div>
-        <div style="text-align:center;font-size:.60rem;color:#64748b;margin-top:3px">
-          ❓ FAQ
-        </div>
+      <div style="width:0;height:0"></div><!-- placeholder alignement bouton -->
+      <div style="display:flex;align-items:center;gap:3px;margin-left:4px">
+        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
+        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+        <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
       </div>
-
-      <!-- Champignon -->
-      <div style="flex-shrink:0">
-        <iframe
-          src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-          width="80" height="80"
-          style="border:none;border-radius:10px;pointer-events:none;display:block"
-          frameBorder="0">
-        </iframe>
-      </div>
+      <iframe
+        src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+        width="78" height="78"
+        style="border:none;border-radius:10px;pointer-events:none;display:block"
+        frameBorder="0">
+      </iframe>
     </div>
+    """, unsafe_allow_html=True)
 
-    <script>
-    function triggerFaq() {
-        var b = document.getElementById('faq-bubble');
-        b.style.transform = 'scale(0.95)';
-        b.style.boxShadow = '1px 1px 0px #1e293b';
-        setTimeout(function(){
-            b.style.transform = 'scale(1)';
-            b.style.boxShadow = '3px 3px 0px #1e293b';
-        }, 120);
-        var url = new URL(window.parent.location.href);
-        url.searchParams.set('open_faq','1');
-        window.parent.location.href = url.toString();
-    }
-    var b = document.getElementById('faq-bubble');
-    b.addEventListener('mouseover', function(){
-        this.style.transform = 'scale(1.04)';
-        this.style.boxShadow = '4px 4px 0px #2563eb';
-        this.style.borderColor = '#2563eb';
-    });
-    b.addEventListener('mouseout', function(){
-        this.style.transform = 'scale(1)';
-        this.style.boxShadow = '3px 3px 0px #1e293b';
-        this.style.borderColor = '#1e293b';
-    });
-    </script>
-    """, height=110, scrolling=False)
+    if st.button("Si tu as besoin\nd'aide, je suis là !\n❓ FAQ", key="mush_faq_btn"):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
