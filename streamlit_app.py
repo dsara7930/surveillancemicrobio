@@ -1189,63 +1189,80 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-# ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
-    st.markdown("""
-    <style>
-    /* Cache le bouton standard et le remplace visuellement par la bulle */
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button {
-        all: unset !important;
-        position: relative !important;
-        display: block !important;
-        background: #ffffff !important;
-        border: 2.5px solid #1e293b !important;
-        border-radius: 18px !important;
-        padding: 9px 13px !important;
-        box-shadow: 3px 3px 0px #1e293b !important;
-        cursor: pointer !important;
-        width: 100% !important;
-        transition: transform .12s ease, box-shadow .12s ease !important;
-        font-size: .72rem !important;
-        font-weight: 800 !important;
-        color: #1e293b !important;
-        line-height: 1.4 !important;
-        text-align: center !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
-        transform: scale(1.04) !important;
-        box-shadow: 4px 4px 0px #2563eb !important;
-        border-color: #2563eb !important;
-        color: #2563eb !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:active {
-        transform: scale(0.96) !important;
-        box-shadow: 1px 1px 0px #1e293b !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
+    _faq_clicked = st.components.v1.html("""
+    <div style="
+        display:flex;align-items:center;justify-content:center;
+        gap:0;margin-top:8px;padding:0 6px;
+        font-family:'Segoe UI',sans-serif;
+    ">
+      <!-- Champignon -->
+      <div style="flex-shrink:0;position:relative">
+        <iframe
+          src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+          width="80" height="80"
+          style="border:none;border-radius:10px;pointer-events:none;display:block"
+          frameBorder="0">
+        </iframe>
+      </div>
 
-    _col_mush, _col_bubble = st.columns([1, 2], gap="small")
+      <!-- Petites bulles de liaison -->
+      <div style="display:flex;align-items:center;gap:3px;padding:0 2px;margin-bottom:-18px">
+        <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
+        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
+      </div>
 
-    with _col_mush:
-        st.components.v1.html(
-            """<iframe
-                src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-                width="72" height="72"
-                style="border:none;border-radius:10px;pointer-events:none;display:block"
-                frameBorder="0">
-            </iframe>""",
-            height=76, scrolling=False,
-        )
+      <!-- Bulle principale cliquable -->
+      <div id="faq-bubble" onclick="triggerFaq()" style="
+          position:relative;
+          background:#ffffff;
+          border:2.5px solid #1e293b;
+          border-radius:18px;
+          padding:9px 13px;
+          box-shadow:3px 3px 0px #1e293b;
+          cursor:pointer;
+          max-width:130px;
+          transition:transform .12s ease, box-shadow .12s ease, border-color .12s;
+          user-select:none;
+      ">
+        <div style="font-size:.70rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
+          Si tu as besoin<br>d'aide, je suis là !
+        </div>
+        <div style="text-align:center;font-size:.60rem;color:#64748b;margin-top:3px">
+          ❓ FAQ
+        </div>
+      </div>
+    </div>
 
-    with _col_bubble:
-        # Le st.button EST la bulle — le CSS ci-dessus le déguise complètement
-        if st.button(
-            "Si tu as besoin\nd'aide, je suis là !\n\n❓ Clique ici pour la FAQ",
-            key="mush_faq_btn",
-            use_container_width=True,
-        ):
-            show_faq_dialog()
-            
+    <script>
+    function triggerFaq() {
+        var b = document.getElementById('faq-bubble');
+        b.style.transform = 'scale(0.95)';
+        b.style.boxShadow = '1px 1px 0px #1e293b';
+        setTimeout(function(){ 
+            b.style.transform='scale(1)'; 
+            b.style.boxShadow='3px 3px 0px #1e293b'; 
+        }, 120);
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('open_faq','1');
+        window.parent.location.href = url.toString();
+    }
+    var b = document.getElementById('faq-bubble');
+    b.addEventListener('mouseover',function(){
+        this.style.transform='scale(1.04)';
+        this.style.boxShadow='4px 4px 0px #2563eb';
+        this.style.borderColor='#2563eb';
+    });
+    b.addEventListener('mouseout',function(){
+        this.style.transform='scale(1)';
+        this.style.boxShadow='3px 3px 0px #1e293b';
+        this.style.borderColor='#1e293b';
+    });
+    </script>
+    """, height=110, scrolling=False)
+
+
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
