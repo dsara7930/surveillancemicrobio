@@ -1185,20 +1185,42 @@ with st.sidebar:
 # ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
     st.markdown("""
     <style>
-    /* Cache le bouton OPEN_FAQ avec clip-path — fonctionne là où display:none échoue */
+    /* Conteneur relatif pour positionner le bouton derrière la bulle */
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
         position: absolute !important;
-        clip-path: inset(50%) !important;
-        width: 1px !important;
-        height: 1px !important;
-        overflow: hidden !important;
-        white-space: nowrap !important;
-        margin: 0 !important;
+        right: 16px !important;
+        margin-top: -80px !important;
+        z-index: 0 !important;
+        width: 148px !important;
+        height: 72px !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button {
+        width: 148px !important;
+        height: 72px !important;
+        min-height: unset !important;
         padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        border-radius: 18px !important;
+        cursor: pointer !important;
+        opacity: 0 !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:hover,
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:focus,
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:active {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        opacity: 0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
+    # Champignon + bulle BD en HTML (non cliquable — le bouton Streamlit derrière gère le clic)
     st.components.v1.html("""
     <div style="
         display: flex;
@@ -1208,7 +1230,9 @@ with st.sidebar:
         margin-top: 10px;
         padding: 0 8px;
         font-family: 'Segoe UI', sans-serif;
+        pointer-events: none;
     ">
+      <!-- Champignon dansant -->
       <div style="flex-shrink:0">
         <iframe
           src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
@@ -1218,18 +1242,18 @@ with st.sidebar:
         </iframe>
       </div>
 
-      <div id="faq-bubble" onclick="triggerFaq()" style="
+      <!-- Bulle BD (visuelle uniquement, le bouton Streamlit derrière capte le clic) -->
+      <div style="
           position: relative;
           background: #ffffff;
           border: 2.5px solid #1e293b;
           border-radius: 18px;
           padding: 9px 13px;
           box-shadow: 3px 3px 0px #1e293b;
-          cursor: pointer;
-          max-width: 140px;
-          transition: transform .12s ease, box-shadow .12s ease;
+          max-width: 148px;
           user-select: none;
       ">
+        <!-- Queue gauche (bordure) -->
         <div style="
             position: absolute; left: -13px; top: 50%;
             transform: translateY(-50%);
@@ -1238,6 +1262,7 @@ with st.sidebar:
             border-bottom: 8px solid transparent;
             border-right: 13px solid #1e293b;
         "></div>
+        <!-- Queue gauche (fond blanc) -->
         <div style="
             position: absolute; left: -9px; top: 50%;
             transform: translateY(-50%);
@@ -1254,42 +1279,10 @@ with st.sidebar:
         </div>
       </div>
     </div>
-
-    <script>
-    function triggerFaq() {
-        var bubble = document.getElementById('faq-bubble');
-        bubble.style.transform = 'scale(0.95)';
-        bubble.style.boxShadow = '1px 1px 0px #1e293b';
-        setTimeout(function() {
-            bubble.style.transform = 'scale(1)';
-            bubble.style.boxShadow = '3px 3px 0px #1e293b';
-        }, 120);
-
-        // Cherche le bouton caché dans le document parent et le clique
-        var allBtns = window.parent.document.querySelectorAll('button');
-        for (var i = 0; i < allBtns.length; i++) {
-            if (allBtns[i].innerText.trim() === 'OPEN_FAQ') {
-                allBtns[i].click();
-                return;
-            }
-        }
-    }
-
-    var bubble = document.getElementById('faq-bubble');
-    bubble.addEventListener('mouseover', function() {
-        this.style.transform = 'scale(1.04)';
-        this.style.boxShadow = '4px 4px 0px #2563eb';
-        this.style.borderColor = '#2563eb';
-    });
-    bubble.addEventListener('mouseout', function() {
-        this.style.transform = 'scale(1)';
-        this.style.boxShadow = '3px 3px 0px #1e293b';
-        this.style.borderColor = '#1e293b';
-    });
-    </script>
     """, height=115, scrolling=False)
 
-    if st.button("OPEN_FAQ", key="mush_faq_hidden"):
+    # Bouton Streamlit transparent positionné DERRIÈRE la bulle via CSS absolu
+    if st.button(" ", key="mush_faq_hidden", use_container_width=False):
         show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
