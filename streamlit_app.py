@@ -1179,16 +1179,25 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
- # ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
-    # Bouton Streamlit caché — déclenché par le JS de la bulle
+# ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
     st.markdown("""
     <style>
-    div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
+    /* Cache TOUS les boutons dont le texte est OPEN_FAQ */
+    [data-testid="stSidebar"] [data-testid="stButton"]:has(button) button[kind="secondary"] {
+        display: block;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]),
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) *,
+    [data-testid="stSidebar"] button[data-key="mush_faq_hidden"] {
+        display: none !important;
         visibility: hidden !important;
-        height: 0px !important;
+        height: 0 !important;
+        width: 0 !important;
+        overflow: hidden !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        position: absolute !important;
+        pointer-events: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1227,52 +1236,37 @@ with st.sidebar:
           transition: transform .12s ease, box-shadow .12s ease;
           user-select: none;
       ">
-        <!-- Queue de bulle pointant vers la gauche -->
+        <!-- Queue gauche (bordure) -->
         <div style="
             position: absolute;
-            left: -13px;
-            top: 50%;
+            left: -13px; top: 50%;
             transform: translateY(-50%);
             width: 0; height: 0;
             border-top: 8px solid transparent;
             border-bottom: 8px solid transparent;
             border-right: 13px solid #1e293b;
         "></div>
+        <!-- Queue gauche (fond blanc) -->
         <div style="
             position: absolute;
-            left: -9px;
-            top: 50%;
+            left: -9px; top: 50%;
             transform: translateY(-50%);
             width: 0; height: 0;
             border-top: 6px solid transparent;
             border-bottom: 6px solid transparent;
             border-right: 10px solid #ffffff;
         "></div>
-
-        <div style="
-            font-size: .72rem;
-            font-weight: 800;
-            color: #1e293b;
-            line-height: 1.4;
-            text-align: center;
-        ">
+        <div style="font-size:.72rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
           Si tu as besoin<br>d'aide, je suis là !
         </div>
-        <div style="
-            text-align: center;
-            font-size: .62rem;
-            color: #64748b;
-            margin-top: 4px;
-        ">
+        <div style="text-align:center;font-size:.62rem;color:#64748b;margin-top:4px">
           ❓ Cliquer pour la FAQ
         </div>
       </div>
     </div>
 
     <script>
-    // Au clic sur la bulle, on clique sur le bouton Streamlit caché
     function triggerFaq() {
-        // Effet visuel sur la bulle
         var bubble = document.getElementById('faq-bubble');
         bubble.style.transform = 'scale(0.95)';
         bubble.style.boxShadow = '1px 1px 0px #1e293b';
@@ -1280,44 +1274,29 @@ with st.sidebar:
             bubble.style.transform = 'scale(1)';
             bubble.style.boxShadow = '3px 3px 0px #1e293b';
         }, 120);
-
-        // Cherche et clique le bouton Streamlit caché dans le parent
-        var btns = window.parent.document.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {
-            if (btns[i].getAttribute('data-key') === 'mush_faq_hidden' ||
-                btns[i].innerText.trim() === 'OPEN_FAQ') {
-                btns[i].click();
-                return;
-            }
-        }
-        // Fallback : cherche par contenu
         var allBtns = window.parent.document.querySelectorAll('[data-testid="stButton"] button');
-        for (var j = 0; j < allBtns.length; j++) {
-            if (allBtns[j].innerText.includes('OPEN_FAQ')) {
-                allBtns[j].click();
+        for (var i = 0; i < allBtns.length; i++) {
+            if (allBtns[i].innerText.trim() === 'OPEN_FAQ') {
+                allBtns[i].click();
                 return;
             }
         }
     }
-
-    // Hover effect
     var bubble = document.getElementById('faq-bubble');
     bubble.addEventListener('mouseover', function() {
         this.style.transform = 'scale(1.04)';
         this.style.boxShadow = '4px 4px 0px #2563eb';
         this.style.borderColor = '#2563eb';
-        this.querySelector('div:last-child').style.color = '#2563eb';
     });
     bubble.addEventListener('mouseout', function() {
         this.style.transform = 'scale(1)';
         this.style.boxShadow = '3px 3px 0px #1e293b';
         this.style.borderColor = '#1e293b';
-        this.querySelector('div:last-child').style.color = '#64748b';
     });
     </script>
     """, height=115, scrolling=False)
 
-    # Bouton Streamlit caché avec texte unique reconnaissable par le JS
+    # Bouton Streamlit caché — déclenché par le JS ci-dessus
     if st.button("OPEN_FAQ", key="mush_faq_hidden"):
         show_faq_dialog()
 
@@ -5981,7 +5960,7 @@ elif active == "parametres":
     st.markdown("### ⚙️ Paramètres")
 
     (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
-     subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
+     subtab_operateurs, subtab_backup, subtab_supabase, subtape_faq) = st.tabs([
         "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans", 
         "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
     ])
