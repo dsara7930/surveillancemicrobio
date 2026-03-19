@@ -1622,13 +1622,13 @@ if active == "surveillance":
                     format_func=lambda i: point_labels[i],
                     key="new_prelev_point")
                 selected_point = st.session_state.points[sel_idx]
-                pt_type      = selected_point.get('type', '—')
-                pt_loc_crit  = int(selected_point.get('location_criticality', 1))
-                pt_gelose    = selected_point.get('gelose', '—')
-                pt_room      = selected_point.get('room_class', '—')
-                type_icon    = "💨" if pt_type == "Air" else "🧴"
-                lc_col       = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#94a3b8")
-                lc_lbl       = _loc_crit_label(pt_loc_crit)
+                pt_type     = selected_point.get('type', '—')
+                pt_loc_crit = int(selected_point.get('location_criticality', 1))
+                pt_gelose   = selected_point.get('gelose', '—')
+                pt_room     = selected_point.get('room_class', '—')
+                type_icon   = "💨" if pt_type == "Air" else "🧴"
+                lc_col      = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#94a3b8")
+                lc_lbl      = _loc_crit_label(pt_loc_crit)
 
                 st.markdown(f"""
                 <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
@@ -1670,7 +1670,7 @@ if active == "surveillance":
                 else:
                     st.info("Aucun opérateur — ajoutez-en dans Paramètres")
                     p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
-                p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
+                p_date       = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
                 j2_date_calc = next_working_day_offset(p_date, 2)
                 j7_date_calc = next_working_day_offset(p_date, 5)
                 st.markdown(f"""
@@ -1681,7 +1681,7 @@ if active == "surveillance":
                 </div>""", unsafe_allow_html=True)
                 p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
-            # Classe A
+            # ── Classe A ──────────────────────────────────────────────────────
             p_isolateur = ""
             p_poste     = "Poste 1"
             if str(pt_room).strip().upper() == "A":
@@ -1704,247 +1704,250 @@ if active == "surveillance":
 
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-# ── Localisation sur plan ─────────────────────────────────────────
+            # ══════════════════════════════════════════════════════════════════
+            # LOCALISATION SUR PLAN — approche robuste sans communication JS
+            # ══════════════════════════════════════════════════════════════════
             plans_available = st.session_state.get("plans", [])
-            plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_available]
 
-            map_col, btn_col = st.columns([5, 1])
-            with map_col:
+            st.markdown(
+                "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
+                "🗺️ Localiser sur le plan URC "
+                "<span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                unsafe_allow_html=True)
+
+            if not plans_available:
                 st.markdown(
-                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
-                    "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>"
-                    "(optionnel)</span></div>",
+                    "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                    "border-radius:10px;padding:16px;text-align:center'>"
+                    "<div style='font-size:1.2rem;margin-bottom:4px'>🗺️</div>"
+                    "<div style='color:#64748b;font-size:.8rem;font-weight:600'>Aucun plan disponible</div>"
+                    "<div style='color:#94a3b8;font-size:.72rem;margin-top:4px'>"
+                    "Ajoutez des plans dans <strong>Paramètres → Plans</strong></div></div>",
                     unsafe_allow_html=True)
-                if plans_available:
-                    sel_plan_name = st.selectbox(
-                        "Choisir un plan de localisation",
-                        plan_names,
-                        key="new_prelev_plan_sel",
-                        help="Plans disponibles — gérez-les dans Paramètres → Plans")
-                    sel_plan = None
-                    if sel_plan_name != "— Aucun plan —":
-                        sel_plan = next((p for p in plans_available if p["name"] == sel_plan_name), None)
-                    if sel_plan and sel_plan.get("image_b64"):
-                        lc_plan, rc_plan = st.columns([1, 2])
-                        
-                        with lc_plan:
-                            _cur_pt = st.session_state.get("_new_prelev_plan_point")
-                            if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
-                                _cur_pt = None
-                                st.session_state["_new_prelev_plan_point"] = None
-                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
-                            if _cur_pt:
-                                _px = float(_cur_pt.get("x", 0))
-                                _py = float(_cur_pt.get("y", 0))
-                                st.markdown(
-                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;"
-                                    f"color:#166534;margin-top:4px'>"
-                                    f"📌 Point placé : <b>{_px:.1f}% / {_py:.1f}%</b></div>",
-                                    unsafe_allow_html=True)
-                            else:
-                                st.info("Aucun point placé.")
-                            # Champ caché — mis à jour par le JS de la carte
-                            coords_raw = st.text_input(
-                                "coords", key="np_coords_hidden",
-                                label_visibility="collapsed")
-                            if coords_raw and "," in coords_raw:
-                                try:
-                                    _cx, _cy = coords_raw.split(",")
-                                    _cx_f, _cy_f = float(_cx), float(_cy)
-                                    if _cx_f >= 0 and _cy_f >= 0:
-                                        _new_pt = {
-                                            "label":      selected_point.get("label",""),
-                                            "room_class": selected_point.get("room_class",""),
-                                            "loc_crit":   int(selected_point.get("location_criticality",1)),
-                                            "survLabel":  None,
-                                            "x":          _cx_f,
-                                            "y":          _cy_f,
-                                        }
-                                        if "map_points" not in st.session_state:
-                                            st.session_state.map_points = []
-                                        _existing_labels = [p.get("label") for p in st.session_state.map_points]
-                                        if _new_pt["label"] not in _existing_labels:
-                                            st.session_state.map_points.append(_new_pt)
-                                        else:
-                                            for _mp in st.session_state.map_points:
-                                                if _mp.get("label") == _new_pt["label"]:
-                                                    _mp.update(_new_pt)
-                                        # Persister immédiatement dans Supabase
-                                        _supa_upsert('map_points', json.dumps(
-                                            st.session_state.map_points, ensure_ascii=False))
-                                        st.session_state["_new_prelev_plan_point"] = _new_pt
-                                        # Vider le champ pour éviter re-lecture au prochain rerun
-                                        st.session_state["np_coords_hidden"] = ""
-                                        st.rerun()
-                                except Exception:
-                                    pass
-                            if st.button("🗑️ Effacer le point", key="clear_np_pt", use_container_width=True):
-                                st.session_state["_new_prelev_plan_point"] = None
-                                st.rerun()
-                        with rc_plan:
-                            _np_img     = sel_plan["image_b64"]
-                            _np_label   = selected_point.get("label","Point")
-                            _np_point   = st.session_state.get("_new_prelev_plan_point")
-                            if _np_point and not isinstance(_np_point.get("x"), (int, float)):
-                                _np_point = None
-                            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
-                            _np_lc      = int(selected_point.get("location_criticality",1))
-                            _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
-                            _np_rc      = selected_point.get("room_class","")
-                            _np_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+            else:
+                plan_names    = ["— Aucun plan —"] + [p["name"] for p in plans_available]
+                sel_plan_name = st.selectbox(
+                    "Choisir un plan de localisation", plan_names,
+                    key="new_prelev_plan_sel",
+                    help="Plans disponibles — gérez-les dans Paramètres → Plans")
+                sel_plan = None
+                if sel_plan_name != "— Aucun plan —":
+                    sel_plan = next((p for p in plans_available if p["name"] == sel_plan_name), None)
+
+                if sel_plan and sel_plan.get("image_b64"):
+                    # ── Point actuellement enregistré pour ce label ───────────
+                    _cur_label = selected_point.get("label","")
+                    _cur_pt    = next(
+                        (mp for mp in st.session_state.get("map_points",[])
+                         if mp.get("label") == _cur_label),
+                        None)
+                    if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
+                        _cur_pt = None
+
+                    # ── Affichage carte + saisie de coordonnées ───────────────
+                    map_left, map_right = st.columns([2, 3])
+
+                    with map_right:
+                        _np_img     = sel_plan["image_b64"]
+                        _np_lc      = pt_loc_crit
+                        _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
+                        _pt_json    = json.dumps(_cur_pt) if _cur_pt else "null"
+
+                        _map_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}}
-.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:6px;align-items:center;flex-shrink:0}}
-.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
-.btn.active{{background:#2563eb;border-color:#2563eb;color:#fff}}
-#st{{font-size:.62rem;color:#64748b;margin-left:auto;padding-right:4px}}
-.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;align-items:flex-start;justify-content:center}}
-.mi{{position:relative;display:inline-block;margin:8px;box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
-#img{{display:block;max-width:100%;border-radius:4px;user-select:none}}
-.pt{{position:absolute;width:28px;height:28px;border-radius:50%;background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
-.pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
-.mw.add{{cursor:crosshair}}
-.placed{{background:#22c55e!important;animation:pop .3s ease}}
-@keyframes pop{{0%{{transform:translate(-50%,-50%) scale(0)}}60%{{transform:translate(-50%,-50%) scale(1.3)}}100%{{transform:translate(-50%,-50%) scale(1)}}}}
+body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
+      display:flex;flex-direction:column;overflow:hidden}}
+.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;
+     display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}}
+.info{{font-size:.65rem;color:#475569;background:#f1f5f9;border-radius:6px;
+       padding:3px 8px;font-family:monospace;min-width:140px}}
+.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;
+     align-items:flex-start;justify-content:center;padding:8px}}
+.mi{{position:relative;display:inline-block;
+     box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
+#img{{display:block;max-width:100%;border-radius:4px;user-select:none;cursor:crosshair}}
+.pt{{position:absolute;width:28px;height:28px;border-radius:50%;
+     background:{_lc_col_map};border:2.5px solid #fff;
+     transform:translate(-50%,-50%);
+     display:flex;align-items:center;justify-content:center;
+     font-size:13px;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);
+     z-index:20;pointer-events:none}}
+.hint{{padding:5px 10px;background:#1e293b;border-top:1px solid #334155;
+       font-size:.6rem;color:#64748b;flex-shrink:0;text-align:center}}
 </style></head><body>
 <div class="tb">
-  <button class="btn" id="ab" onclick="tog()">📍 Cliquer pour placer</button>
-  <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
-  <span id="st">—</span>
+  <span style="font-size:.7rem;font-weight:700;color:#1e293b">
+    📍 Cliquez sur la carte pour obtenir les coordonnées
+  </span>
+  <span class="info" id="coords">X: — &nbsp; Y: —</span>
 </div>
-<div class="mw" id="mw"><div class="mi" id="mi"><img id="img" src="{_np_img}" draggable="false"></div></div>
+<div class="mw"><div class="mi" id="mi">
+  <img id="img" src="{_np_img}" draggable="false">
+</div></div>
+<div class="hint">Lisez X% et Y% affichés en haut, puis saisissez-les dans les champs ci-dessous</div>
 <script>
-let add=false,pt={_np_pt_json};
-const lbl="{_np_label}",rc="{_np_rc}",lc={_np_lc};
-function sendToStreamlit(x,y){{
-  const inputs=window.parent.document.querySelectorAll('input[type="text"]');
-  for(const inp of inputs){{
-    if(inp.value===''||inp.value.includes(',')){{
-      const nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-      nativeInputValueSetter.call(inp,x.toFixed(2)+','+y.toFixed(2));
-      inp.dispatchEvent(new Event('input',{{bubbles:true}}));
-      break;
-    }}
-  }}
-}}
-function upd(){{
-  document.getElementById('st').textContent=pt
-    ?'✅ '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'% — placé !'
-    :'Cliquez sur "📍 Cliquer pour placer" puis sur la carte';
-}}
+let pt={_pt_json};
 function render(){{
   document.querySelectorAll('.pt').forEach(p=>p.remove());
-  if(!pt)return;
-  const d=document.createElement('div');
-  d.className='pt placed';d.style.left=pt.x+'%';d.style.top=pt.y+'%';
-  d.textContent='📍';d.title=lbl;
-  document.getElementById('mi').appendChild(d);
-  upd();
+  if(!pt||typeof pt.x!=='number') return;
+  const el=document.createElement('div');
+  el.className='pt'; el.style.left=pt.x+'%'; el.style.top=pt.y+'%';
+  el.textContent='📍';
+  document.getElementById('mi').appendChild(el);
 }}
-function tog(){{
-  add=!add;
-  document.getElementById('ab').classList.toggle('active',add);
-  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Cliquer pour placer';
-  document.getElementById('mw').classList.toggle('add',add);
-  if(!add) upd();
-  else document.getElementById('st').textContent='Cliquez sur la carte pour placer le point';
-}}
-function clr(){{pt=null;render();upd();sendToStreamlit(-1,-1);}}
-document.getElementById('mi').addEventListener('click',function(e){{
-  if(!add)return;
-  if(e.target.classList.contains('pt'))return;
-  const img=document.getElementById('img');
-  const r=img.getBoundingClientRect();
-  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;
-  const x=((e.clientX-r.left)/r.width*100);
-  const y=((e.clientY-r.top)/r.height*100);
-  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
-  render();tog();
-  sendToStreamlit(x,y);
+document.getElementById('img').addEventListener('click',function(e){{
+  const r=this.getBoundingClientRect();
+  const x=((e.clientX-r.left)/r.width*100).toFixed(1);
+  const y=((e.clientY-r.top)/r.height*100).toFixed(1);
+  document.getElementById('coords').textContent='X: '+x+'% · Y: '+y+'%';
+  // Afficher pin temporaire
+  document.querySelectorAll('.pt').forEach(p=>p.remove());
+  const el=document.createElement('div');
+  el.className='pt';
+  el.style.left=x+'%'; el.style.top=y+'%';
+  el.textContent='📍';
+  document.getElementById('mi').appendChild(el);
 }});
 const img=document.getElementById('img');
-if(img.complete&&img.naturalWidth>0)render();
+if(img.complete&&img.naturalWidth>0) render();
 else img.addEventListener('load',render);
-upd();
 </script></body></html>"""
-                            st.components.v1.html(_np_html, height=280, scrolling=False)
-                            st.caption("💡 Cliquez '📍 Cliquer pour placer' puis cliquez sur la carte — le point se sauvegarde automatiquement.")
-                    elif sel_plan and not sel_plan.get("image_b64"):
+                        st.components.v1.html(_map_html, height=300, scrolling=False)
+
+                    with map_left:
                         st.markdown(
-                            "<div style='background:#fffbeb;border:1px solid #fde047;"
-                            "border-radius:8px;padding:16px;text-align:center;color:#92400e;font-size:.78rem'>"
-                            "⚠️ Ce plan n'a pas d'image. Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
+                            "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
+                            "border-radius:8px;padding:10px 12px;margin-bottom:8px;"
+                            "font-size:.75rem;color:#1e40af;line-height:1.7'>"
+                            "<b>Comment localiser :</b><br>"
+                            "1️⃣ Cliquez sur la carte →<br>"
+                            "2️⃣ Lisez <b>X%</b> et <b>Y%</b> affichés<br>"
+                            "3️⃣ Saisissez-les ci-dessous<br>"
+                            "4️⃣ Cliquez <b>📌 Valider</b>"
+                            "</div>",
                             unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;"
-                            "border-radius:8px;padding:20px;text-align:center;color:#94a3b8;font-size:.72rem'>"
-                            "Sélectionnez un plan ci-dessus pour afficher la carte</div>",
-                            unsafe_allow_html=True)
+
+                        # Pré-remplir avec les coords existantes si disponibles
+                        _default_x = float(_cur_pt["x"]) if _cur_pt else 50.0
+                        _default_y = float(_cur_pt["y"]) if _cur_pt else 50.0
+
+                        _px_input = st.number_input(
+                            "X (%)", min_value=0.0, max_value=100.0,
+                            value=_default_x, step=0.1, format="%.1f",
+                            key=f"np_coord_x_{_cur_label}",
+                            help="Coordonnée horizontale lue sur la carte")
+                        _py_input = st.number_input(
+                            "Y (%)", min_value=0.0, max_value=100.0,
+                            value=_default_y, step=0.1, format="%.1f",
+                            key=f"np_coord_y_{_cur_label}",
+                            help="Coordonnée verticale lue sur la carte")
+
+                        if _cur_pt:
+                            st.markdown(
+                                f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                                f"border-radius:6px;padding:6px 10px;font-size:.72rem;"
+                                f"color:#166534;margin-bottom:6px'>"
+                                f"📌 Enregistré : <b>{float(_cur_pt['x']):.1f}% / {float(_cur_pt['y']):.1f}%</b>"
+                                f"</div>",
+                                unsafe_allow_html=True)
+                        else:
+                            st.markdown(
+                                "<div style='background:#f8fafc;border:1px solid #e2e8f0;"
+                                "border-radius:6px;padding:6px 10px;font-size:.72rem;"
+                                "color:#94a3b8;margin-bottom:6px'>"
+                                "⬜ Aucune position enregistrée"
+                                "</div>",
+                                unsafe_allow_html=True)
+
+                        btn_v, btn_e = st.columns(2)
+                        with btn_v:
+                            if st.button("📌 Valider", key="validate_coords_btn",
+                                         use_container_width=True, type="primary"):
+                                _new_pt = {
+                                    "label":      _cur_label,
+                                    "room_class": selected_point.get("room_class",""),
+                                    "loc_crit":   pt_loc_crit,
+                                    "survLabel":  None,
+                                    "x":          float(_px_input),
+                                    "y":          float(_py_input),
+                                }
+                                if "map_points" not in st.session_state:
+                                    st.session_state.map_points = []
+                                _existing_labels = [p.get("label") for p in st.session_state.map_points]
+                                if _cur_label not in _existing_labels:
+                                    st.session_state.map_points.append(_new_pt)
+                                else:
+                                    for _mp in st.session_state.map_points:
+                                        if _mp.get("label") == _cur_label:
+                                            _mp.update(_new_pt)
+                                _supa_upsert('map_points', json.dumps(
+                                    st.session_state.map_points, ensure_ascii=False))
+                                st.success(f"📌 {_px_input:.1f}% / {_py_input:.1f}% enregistré !")
+                                st.rerun()
+                        with btn_e:
+                            if st.button("🗑️ Effacer", key="clear_np_pt",
+                                         use_container_width=True,
+                                         disabled=_cur_pt is None):
+                                st.session_state.map_points = [
+                                    p for p in st.session_state.get("map_points",[])
+                                    if p.get("label") != _cur_label
+                                ]
+                                _supa_upsert('map_points', json.dumps(
+                                    st.session_state.map_points, ensure_ascii=False))
+                                st.rerun()
+
+                elif sel_plan and not sel_plan.get("image_b64"):
+                    st.markdown(
+                        "<div style='background:#fffbeb;border:1px solid #fde047;"
+                        "border-radius:8px;padding:12px;text-align:center;color:#92400e;font-size:.78rem'>"
+                        "⚠️ Ce plan n'a pas d'image. "
+                        "Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
+                        unsafe_allow_html=True)
                 else:
                     st.markdown(
-                        "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-                        "border-radius:10px;padding:24px;text-align:center'>"
-                        "<div style='font-size:1.5rem;margin-bottom:6px'>🗺️</div>"
-                        "<div style='color:#64748b;font-size:.8rem;font-weight:600'>Aucun plan disponible</div>"
-                        "<div style='color:#94a3b8;font-size:.72rem;margin-top:4px'>"
-                        "Ajoutez des plans dans <strong>Paramètres → Plans</strong></div></div>",
+                        "<div style='background:#f8fafc;border:1px dashed #cbd5e1;"
+                        "border-radius:8px;padding:16px;text-align:center;color:#94a3b8;font-size:.72rem'>"
+                        "Sélectionnez un plan ci-dessus pour afficher la carte</div>",
                         unsafe_allow_html=True)
-                    
-            # Persiste point carte
-            _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
-            if _np_saved_pt:
-                if "map_points" not in st.session_state:
-                    st.session_state.map_points = []
-                _existing = [p.get("label") for p in st.session_state.map_points]
-                if _np_saved_pt["label"] not in _existing:
-                    st.session_state.map_points.append(_np_saved_pt)
-                else:
-                    for _mp in st.session_state.map_points:
-                        if _mp.get("label") == _np_saved_pt["label"]:
-                            _mp.update(_np_saved_pt)
-                st.session_state["_new_prelev_plan_point"] = None
-                st.rerun()
 
-            with btn_col:
-                st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-                if st.button("💾 Enregistrer\nprélèvement", use_container_width=True, key="save_prelev"):
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    sample = {
-                        "id":                   pid,
-                        "label":                selected_point['label'],
-                        "type":                 selected_point.get('type'),
-                        "gelose":               selected_point.get('gelose','—'),
-                        "room_class":           selected_point.get('room_class',''),
-                        "location_criticality": pt_loc_crit,
-                        "operateur":            p_oper if p_oper else "Non renseigné",
-                        "date":                 str(p_date) if p_date else str(today),
-                        "archived":             False,
-                        "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                        "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
-                        "commentaire":          p_commentaire if p_commentaire else ""
-                    }
-                    st.session_state.prelevements.append(sample)
-                    save_prelevements(st.session_state.prelevements)
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J2", "sample_id": pid,
-                        "label": sample['label'], "due_date": j2_date_calc.isoformat(),
-                        "when": "J2", "status": "pending"
-                    })
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J7", "sample_id": pid,
-                        "label": sample['label'], "due_date": j7_date_calc.isoformat(),
-                        "when": "J7", "status": "pending"
-                    })
-                    save_schedules(st.session_state.schedules)
-                    st.success(
-                        f"✅ **{sample['label']}** enregistré !\n"
-                        f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                        f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
+            # ── Bouton Enregistrer prélèvement ────────────────────────────────
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
+                         key="save_prelev", type="primary"):
+                pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                sample = {
+                    "id":                   pid,
+                    "label":                selected_point['label'],
+                    "type":                 selected_point.get('type'),
+                    "gelose":               selected_point.get('gelose','—'),
+                    "room_class":           selected_point.get('room_class',''),
+                    "location_criticality": pt_loc_crit,
+                    "operateur":            p_oper if p_oper else "Non renseigné",
+                    "date":                 str(p_date) if p_date else str(today),
+                    "archived":             False,
+                    "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                    "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
+                    "commentaire":          p_commentaire if p_commentaire else "",
+                }
+                st.session_state.prelevements.append(sample)
+                save_prelevements(st.session_state.prelevements)
+                st.session_state.schedules.append({
+                    "id": f"sch_{pid}_J2", "sample_id": pid,
+                    "label": sample['label'], "due_date": j2_date_calc.isoformat(),
+                    "when": "J2", "status": "pending"
+                })
+                st.session_state.schedules.append({
+                    "id": f"sch_{pid}_J7", "sample_id": pid,
+                    "label": sample['label'], "due_date": j7_date_calc.isoformat(),
+                    "when": "J7", "status": "pending"
+                })
+                save_schedules(st.session_state.schedules)
+                st.success(
+                    f"✅ **{sample['label']}** enregistré !\n"
+                    f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
+                    f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
-
-            # ── Prélèvements actifs ────────────────────────────────────────────
+            # ── Prélèvements actifs ───────────────────────────────────────────
             st.divider()
             st.markdown("#### 📋 Prélèvements en cours")
             for idx, samp in enumerate(st.session_state.prelevements):
@@ -1958,12 +1961,10 @@ upd();
                     room_badge = (
                         f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
                         f"border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;"
-                        f"margin-left:4px'>Cl.{room_cl}</span>"
-                        if room_cl else "")
+                        f"margin-left:4px'>Cl.{room_cl}</span>" if room_cl else "")
                     _comment_html = (
                         f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
-                        f"💬 {samp['commentaire']}</div>"
-                        if samp.get('commentaire') else "")
+                        f"💬 {samp['commentaire']}</div>" if samp.get('commentaire') else "")
                     st.markdown(
                         f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;"
                         f"padding:10px 16px;margin-bottom:6px'>"
@@ -2000,7 +2001,7 @@ upd();
                         st.markdown(f"**✏️ Modifier — {samp['label']}**")
                         e_col1, e_col2 = st.columns(2)
                         with e_col1:
-                            oper_list_e = [
+                            oper_list_e  = [
                                 o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
                                 for o in st.session_state.operators
                             ]
@@ -2085,8 +2086,7 @@ upd();
         room_cl_badge = (
             f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;"
             f"border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:800;"
-            f"margin-left:6px'>Cl.{pt_room_cl}</span>"
-            if pt_room_cl else "")
+            f"margin-left:6px'>Cl.{pt_room_cl}</span>" if pt_room_cl else "")
         extra_info = ""
         if smp and str(smp.get("room_class","")).strip().upper() == "A":
             iso = smp.get("num_isolateur","—") or "—"
@@ -2159,11 +2159,11 @@ upd();
         if not proc:
             return
         smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
-        pt_type   = smp.get('type','?')       if smp else '?'
-        pt_gelose = smp.get('gelose','?')     if smp else '?'
-        pt_oper   = smp.get('operateur','?')  if smp else '?'
-        pt_date   = smp.get('date','?')       if smp else '?'
-        pt_room_p = smp.get('room_class','')  if smp else ''
+        pt_type   = smp.get('type','?')      if smp else '?'
+        pt_gelose = smp.get('gelose','?')    if smp else '?'
+        pt_oper   = smp.get('operateur','?') if smp else '?'
+        pt_date   = smp.get('date','?')      if smp else '?'
+        pt_room_p = smp.get('room_class','') if smp else ''
         loc_crit  = _get_location_criticality(smp) if smp else 1
         lc_col_p  = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
 
@@ -2282,7 +2282,6 @@ upd();
             if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
                 st.session_state.current_process = None
                 st.rerun()
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
     # ══════════════════════════════════════════════════════════════════════════
