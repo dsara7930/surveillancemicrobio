@@ -1179,100 +1179,147 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
- # ── 🍄 Champignon dansant + bulle BD ─────────────────────────────────
+ # ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
+    # Bouton Streamlit caché — déclenché par le JS de la bulle
     st.markdown("""
     <style>
-    /* Bulle de BD — le bouton FAQ */
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) {
-        display: flex !important;
-        justify-content: flex-end !important;
-        margin-top: -110px !important;
-        margin-bottom: 0px !important;
-        padding-right: 8px !important;
-        position: relative !important;
-        z-index: 1000 !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button {
-        /* Style bulle BD */
-        width: auto !important;
-        min-width: unset !important;
-        min-height: unset !important;
-        height: auto !important;
-        padding: 7px 11px !important;
-        background: #ffffff !important;
-        border: 2.5px solid #1e293b !important;
-        border-radius: 16px !important;
-        box-shadow: 3px 3px 0px #1e293b !important;
-        color: #1e293b !important;
-        font-size: .72rem !important;
-        font-weight: 800 !important;
-        font-family: 'Syne', sans-serif !important;
-        line-height: 1.35 !important;
-        cursor: pointer !important;
-        text-align: center !important;
-        /* Petite queue de bulle pointant vers la gauche (vers le champignon) */
-        position: relative !important;
-        transition: transform .1s ease, box-shadow .1s ease !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button::before {
-        content: '' !important;
-        position: absolute !important;
-        left: -12px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        border-width: 7px 12px 7px 0 !important;
-        border-style: solid !important;
-        border-color: transparent #1e293b transparent transparent !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button::after {
-        content: '' !important;
-        position: absolute !important;
-        left: -8px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        border-width: 5px 9px 5px 0 !important;
-        border-style: solid !important;
-        border-color: transparent #ffffff transparent transparent !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:hover {
-        background: #eff6ff !important;
-        transform: scale(1.05) !important;
-        box-shadow: 4px 4px 0px #1e293b !important;
-        border-color: #2563eb !important;
-        color: #2563eb !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:active {
-        transform: scale(.97) translateY(2px) !important;
-        box-shadow: 1px 1px 0px #1e293b !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:focus {
-        outline: none !important;
-        box-shadow: 3px 3px 0px #1e293b !important;
+    div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
+        visibility: hidden !important;
+        height: 0px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Iframe champignon dansant
+    # Composant HTML : champignon à gauche + bulle BD à droite
     st.components.v1.html("""
-    <div style="text-align:left;margin-top:14px;padding-left:12px;padding-bottom:0px">
-      <iframe
-        src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-        width="90" height="90"
-        style="border:none;border-radius:12px;pointer-events:none;display:block"
-        frameBorder="0"
-        allowFullScreen>
-      </iframe>
+    <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 10px;
+        padding: 0 8px;
+        font-family: 'Segoe UI', sans-serif;
+    ">
+      <!-- Champignon dansant -->
+      <div style="flex-shrink:0">
+        <iframe
+          src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+          width="85" height="85"
+          style="border:none;border-radius:10px;pointer-events:none;display:block"
+          frameBorder="0">
+        </iframe>
+      </div>
+
+      <!-- Bulle de BD -->
+      <div id="faq-bubble" onclick="triggerFaq()" style="
+          position: relative;
+          background: #ffffff;
+          border: 2.5px solid #1e293b;
+          border-radius: 18px;
+          padding: 9px 13px;
+          box-shadow: 3px 3px 0px #1e293b;
+          cursor: pointer;
+          max-width: 140px;
+          transition: transform .12s ease, box-shadow .12s ease;
+          user-select: none;
+      ">
+        <!-- Queue de bulle pointant vers la gauche -->
+        <div style="
+            position: absolute;
+            left: -13px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0; height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-right: 13px solid #1e293b;
+        "></div>
+        <div style="
+            position: absolute;
+            left: -9px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0; height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-right: 10px solid #ffffff;
+        "></div>
+
+        <div style="
+            font-size: .72rem;
+            font-weight: 800;
+            color: #1e293b;
+            line-height: 1.4;
+            text-align: center;
+        ">
+          Si tu as besoin<br>d'aide, je suis là !
+        </div>
+        <div style="
+            text-align: center;
+            font-size: .62rem;
+            color: #64748b;
+            margin-top: 4px;
+        ">
+          ❓ Cliquer pour la FAQ
+        </div>
+      </div>
     </div>
-    """, height=100, scrolling=False)
 
-    # Bulle de BD cliquable
-    if st.button("Si tu as besoin\nd'aide, je suis là ! 💬",
-                 key="mush_faq_btn",
-                 use_container_width=False,
-                 help="Ouvrir la FAQ"):
+    <script>
+    // Au clic sur la bulle, on clique sur le bouton Streamlit caché
+    function triggerFaq() {
+        // Effet visuel sur la bulle
+        var bubble = document.getElementById('faq-bubble');
+        bubble.style.transform = 'scale(0.95)';
+        bubble.style.boxShadow = '1px 1px 0px #1e293b';
+        setTimeout(function() {
+            bubble.style.transform = 'scale(1)';
+            bubble.style.boxShadow = '3px 3px 0px #1e293b';
+        }, 120);
+
+        // Cherche et clique le bouton Streamlit caché dans le parent
+        var btns = window.parent.document.querySelectorAll('button');
+        for (var i = 0; i < btns.length; i++) {
+            if (btns[i].getAttribute('data-key') === 'mush_faq_hidden' ||
+                btns[i].innerText.trim() === 'OPEN_FAQ') {
+                btns[i].click();
+                return;
+            }
+        }
+        // Fallback : cherche par contenu
+        var allBtns = window.parent.document.querySelectorAll('[data-testid="stButton"] button');
+        for (var j = 0; j < allBtns.length; j++) {
+            if (allBtns[j].innerText.includes('OPEN_FAQ')) {
+                allBtns[j].click();
+                return;
+            }
+        }
+    }
+
+    // Hover effect
+    var bubble = document.getElementById('faq-bubble');
+    bubble.addEventListener('mouseover', function() {
+        this.style.transform = 'scale(1.04)';
+        this.style.boxShadow = '4px 4px 0px #2563eb';
+        this.style.borderColor = '#2563eb';
+        this.querySelector('div:last-child').style.color = '#2563eb';
+    });
+    bubble.addEventListener('mouseout', function() {
+        this.style.transform = 'scale(1)';
+        this.style.boxShadow = '3px 3px 0px #1e293b';
+        this.style.borderColor = '#1e293b';
+        this.querySelector('div:last-child').style.color = '#64748b';
+    });
+    </script>
+    """, height=115, scrolling=False)
+
+    # Bouton Streamlit caché avec texte unique reconnaissable par le JS
+    if st.button("OPEN_FAQ", key="mush_faq_hidden"):
         show_faq_dialog()
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
