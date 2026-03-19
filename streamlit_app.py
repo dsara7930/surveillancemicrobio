@@ -1190,14 +1190,12 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
-   # ── 🍄 Champignon + bulle BD cliquable ────────────────────────────────────
-    st.components.v1.html("""
+st.markdown("""
     <div style="
         display:flex;align-items:center;justify-content:center;
         gap:4px;margin-top:8px;padding:0 6px;
         font-family:'Segoe UI',sans-serif;
     ">
-      <!-- Champignon -->
       <div style="flex-shrink:0">
         <iframe
           src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
@@ -1206,80 +1204,16 @@ with st.sidebar:
           frameBorder="0">
         </iframe>
       </div>
-
-      <!-- Petites bulles croissantes -->
       <div style="display:flex;align-items:center;gap:3px">
         <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
         <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
         <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
       </div>
-
-      <!-- Bulle BD cliquable -->
-      <div id="faq-bubble" onclick="triggerFaq()" style="
-          position:relative;
-          background:#ffffff;
-          border:2.5px solid #1e293b;
-          border-radius:18px;
-          padding:9px 13px;
-          box-shadow:3px 3px 0px #1e293b;
-          cursor:pointer;
-          max-width:130px;
-          transition:transform .12s ease, box-shadow .12s ease, border-color .12s;
-          user-select:none;
-      ">
-        <!-- Queue gauche (bordure) -->
-        <div style="
-            position:absolute;left:-13px;top:50%;
-            transform:translateY(-50%);
-            width:0;height:0;
-            border-top:8px solid transparent;
-            border-bottom:8px solid transparent;
-            border-right:13px solid #1e293b;
-        "></div>
-        <!-- Queue gauche (fond blanc) -->
-        <div style="
-            position:absolute;left:-9px;top:50%;
-            transform:translateY(-50%);
-            width:0;height:0;
-            border-top:6px solid transparent;
-            border-bottom:6px solid transparent;
-            border-right:10px solid #ffffff;
-        "></div>
-        <div style="font-size:.70rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
-          Si tu as besoin<br>d'aide, je suis là !
-        </div>
-        <div style="text-align:center;font-size:.60rem;color:#64748b;margin-top:3px">
-          ❓ FAQ
-        </div>
-      </div>
     </div>
+    """, unsafe_allow_html=True)
 
-    <script>
-    function triggerFaq() {
-        var b = document.getElementById('faq-bubble');
-        b.style.transform = 'scale(0.95)';
-        b.style.boxShadow = '1px 1px 0px #1e293b';
-        setTimeout(function(){
-            b.style.transform = 'scale(1)';
-            b.style.boxShadow = '3px 3px 0px #1e293b';
-        }, 120);
-        var url = new URL(window.parent.location.href);
-        url.searchParams.set('open_faq', '1');
-        window.parent.location.href = url.toString();
-    }
-    var b = document.getElementById('faq-bubble');
-    b.addEventListener('mouseover', function(){
-        this.style.transform = 'scale(1.04)';
-        this.style.boxShadow = '4px 4px 0px #2563eb';
-        this.style.borderColor = '#2563eb';
-    });
-    b.addEventListener('mouseout', function(){
-        this.style.transform = 'scale(1)';
-        this.style.boxShadow = '3px 3px 0px #1e293b';
-        this.style.borderColor = '#1e293b';
-    });
-    </script>
-    """, height=110, scrolling=False)
+    if st.button("Si tu as besoin d'aide, je suis là ! ❓ FAQ", key="mush_faq_btn", use_container_width=False):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
