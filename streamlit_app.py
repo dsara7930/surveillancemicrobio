@@ -1190,7 +1190,7 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
-st.markdown("""
+   st.markdown("""
     <div style="
         display:flex;align-items:center;justify-content:center;
         gap:4px;margin-top:8px;padding:0 6px;
