@@ -1183,6 +1183,22 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 # ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
+    st.markdown("""
+    <style>
+    /* Cache le bouton OPEN_FAQ avec clip-path — fonctionne là où display:none échoue */
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
+        position: absolute !important;
+        clip-path: inset(50%) !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.components.v1.html("""
     <div style="
         display: flex;
@@ -1193,7 +1209,6 @@ with st.sidebar:
         padding: 0 8px;
         font-family: 'Segoe UI', sans-serif;
     ">
-      <!-- Champignon dansant -->
       <div style="flex-shrink:0">
         <iframe
           src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
@@ -1202,8 +1217,7 @@ with st.sidebar:
           frameBorder="0">
         </iframe>
       </div>
- 
-      <!-- Bulle de BD -->
+
       <div id="faq-bubble" onclick="triggerFaq()" style="
           position: relative;
           background: #ffffff;
@@ -1216,27 +1230,22 @@ with st.sidebar:
           transition: transform .12s ease, box-shadow .12s ease;
           user-select: none;
       ">
-        <!-- Queue gauche (bordure) -->
         <div style="
-            position: absolute;
-            left: -13px; top: 50%;
+            position: absolute; left: -13px; top: 50%;
             transform: translateY(-50%);
             width: 0; height: 0;
             border-top: 8px solid transparent;
             border-bottom: 8px solid transparent;
             border-right: 13px solid #1e293b;
         "></div>
-        <!-- Queue gauche (fond blanc) -->
         <div style="
-            position: absolute;
-            left: -9px; top: 50%;
+            position: absolute; left: -9px; top: 50%;
             transform: translateY(-50%);
             width: 0; height: 0;
             border-top: 6px solid transparent;
             border-bottom: 6px solid transparent;
             border-right: 10px solid #ffffff;
         "></div>
- 
         <div style="font-size:.72rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
           Si tu as besoin<br>d'aide, je suis là !
         </div>
@@ -1245,10 +1254,9 @@ with st.sidebar:
         </div>
       </div>
     </div>
- 
+
     <script>
     function triggerFaq() {
-        // Effet visuel
         var bubble = document.getElementById('faq-bubble');
         bubble.style.transform = 'scale(0.95)';
         bubble.style.boxShadow = '1px 1px 0px #1e293b';
@@ -1256,13 +1264,17 @@ with st.sidebar:
             bubble.style.transform = 'scale(1)';
             bubble.style.boxShadow = '3px 3px 0px #1e293b';
         }, 120);
- 
-        // Change le query param → déclenche un rerun Streamlit → ouvre le dialog
-        var url = new URL(window.parent.location.href);
-        url.searchParams.set('open_faq', '1');
-        window.parent.location.href = url.toString();
+
+        // Cherche le bouton caché dans le document parent et le clique
+        var allBtns = window.parent.document.querySelectorAll('button');
+        for (var i = 0; i < allBtns.length; i++) {
+            if (allBtns[i].innerText.trim() === 'OPEN_FAQ') {
+                allBtns[i].click();
+                return;
+            }
+        }
     }
- 
+
     var bubble = document.getElementById('faq-bubble');
     bubble.addEventListener('mouseover', function() {
         this.style.transform = 'scale(1.04)';
@@ -1276,6 +1288,9 @@ with st.sidebar:
     });
     </script>
     """, height=115, scrolling=False)
+
+    if st.button("OPEN_FAQ", key="mush_faq_hidden"):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
