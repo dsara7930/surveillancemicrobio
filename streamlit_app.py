@@ -1713,12 +1713,19 @@ if active == "surveillance":
                         lc_plan, rc_plan = st.columns([1, 2])
                         with lc_plan:
                             _cur_pt = st.session_state.get("_new_prelev_plan_point")
+                            # Vérification défensive : le point doit avoir x et y
+                            if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
+                                _cur_pt = None
+                                st.session_state["_new_prelev_plan_point"] = None
                             st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
                             if _cur_pt:
+                                _px = float(_cur_pt.get("x", 0))
+                                _py = float(_cur_pt.get("y", 0))
                                 st.markdown(
                                     f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
+                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;"
+                                    f"color:#166534;margin-top:4px'>"
+                                    f"📌 Point placé : <b>{_px:.1f}% / {_py:.1f}%</b></div>",
                                     unsafe_allow_html=True)
                             else:
                                 st.info("Aucun point placé.")
@@ -1730,6 +1737,8 @@ if active == "surveillance":
                                         "room_class": selected_point.get("room_class",""),
                                         "loc_crit":   int(selected_point.get("location_criticality",1)),
                                         "survLabel":  None,
+                                        "x":          0.0,
+                                        "y":          0.0,
                                     }
                                     st.rerun()
                             with col_clr:
@@ -1740,6 +1749,8 @@ if active == "surveillance":
                             _np_img     = sel_plan["image_b64"]
                             _np_label   = selected_point.get("label","Point")
                             _np_point   = st.session_state.get("_new_prelev_plan_point")
+                            if _np_point and not isinstance(_np_point.get("x"), (int, float)):
+                                _np_point = None
                             _np_pt_json = json.dumps(_np_point) if _np_point else "null"
                             _np_lc      = int(selected_point.get("location_criticality",1))
                             _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
@@ -1797,7 +1808,6 @@ const img=document.getElementById('img');if(img.complete&&img.naturalWidth>0)ren
                         "<div style='color:#94a3b8;font-size:.72rem;margin-top:4px'>"
                         "Ajoutez des plans dans <strong>Paramètres → Plans</strong></div></div>",
                         unsafe_allow_html=True)
-
             # Persiste point carte
             _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
             if _np_saved_pt:
