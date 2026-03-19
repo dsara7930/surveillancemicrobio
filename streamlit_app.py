@@ -1198,14 +1198,11 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-# ── 🍄 Champignon dansant + bulle cliquable ───────────────────
-    # ── 🍄 Champignon dansant cliquable ───────────────────────────
-st.components.v1.html("""
+    # ── 🍄 Champignon dansant cliquable ──────────────────────────
+    st.components.v1.html("""
 <div style="display:flex;justify-content:center;margin:8px 0">
   <a href="?open_faq=1" target="_self" style="display:block;cursor:pointer;
-     border-radius:50%;overflow:hidden;
-     animation:bounce 1.8s ease-in-out infinite,glow 2.6s ease-in-out infinite;
-     box-shadow:0 0 0 0 rgba(124,58,237,0)">
+     border-radius:50%;overflow:hidden">
     <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" 
             width="80" height="80"
             style="border:none;border-radius:50%;pointer-events:none;display:block"
@@ -1214,7 +1211,6 @@ st.components.v1.html("""
 </div>
 <p style="text-align:center;font-size:.72rem;color:#94a3b8;
    font-style:italic;margin:4px 0">Clique pour l'aide !</p>
-
 <style>
 @keyframes bounce {
   0%,100%{ transform:translateY(0) scale(1); }
