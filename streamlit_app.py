@@ -1118,7 +1118,7 @@ with st.sidebar:
             frameBorder="0"></iframe>
   </a>
   <p style="text-align:center;font-size:.72rem;color:#94a3b8;
-     font-style:italic;margin:0">Clique pour l'aide !</p>
+     font-style:italic;margin:0">Si tu as besoin d'aide, je suis là</p>
 </div>
 <style>
 @keyframes bounce {
