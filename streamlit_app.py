@@ -4293,9 +4293,9 @@ elif active == "historique":
         st.divider()
 
         hist_tab_plan, hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
+            "🗺️ Plan interactif",
             "📍 Stats par point",
             "🦠 Stats par germe",
-            "🗺️ Plan interactif",
             "👤 Répartition par préleveur",
             "📋 Liste des entrées",
         ])
