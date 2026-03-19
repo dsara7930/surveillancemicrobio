@@ -6967,7 +6967,7 @@ elif active == "parametres":
             except Exception as e:
                 st.error(f"❌ Erreur : {e}")
 
-    # ══════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════
     # SUPABASE
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_supabase:
@@ -7020,20 +7020,21 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             with syn1:
                 if can_edit:
                     if st.button("🔄 Forcer la synchronisation", use_container_width=True):
-                        save_germs(st.session_state.germs, supa=True)
+                        save_germs(st.session_state.germs)
                         save_prelevements(st.session_state.prelevements, supa=True)
                         save_schedules(st.session_state.schedules, supa=True)
-                        save_surveillance(st.session_state.surveillance, supa=True)
+                        save_surveillance(st.session_state.surveillance)
                         save_points(st.session_state.points, supa=True)
                         save_operators(st.session_state.operators, supa=True)
                         save_pending_identifications(st.session_state.pending_identifications, supa=True)
                         save_origin_measures(st.session_state.origin_measures, supa=True)
+                        save_faq(st.session_state.faq_items, supa=True)
                         st.session_state["_mesures_modifiees"] = False
                         st.success("✅ Toutes les données synchronisées !")
             with syn2:
                 if can_edit:
                     if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
-                        st.session_state.germs                   = load_germs()
+                        st.session_state.germs                   = load_germs()[0]
                         st.session_state.prelevements            = load_prelevements()
                         st.session_state.schedules               = load_schedules()
                         st.session_state.surveillance            = load_surveillance()
@@ -7041,23 +7042,15 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         st.session_state.operators               = load_operators()
                         st.session_state.pending_identifications = load_pending_identifications()
                         st.session_state.origin_measures         = load_origin_measures()
+                        st.session_state.faq_items               = load_faq()
                         st.success("✅ Données rechargées depuis Supabase !")
                         st.rerun()
-                        def render_faq_tab(can_edit: bool):
-    """
-    Contenu complet de l'onglet FAQ dans la section Paramètres.
-    Usage : render_faq_tab(can_edit)  dans  with subtab_faq:
-    """
-    faq_items = st.session_state.get("faq_items", [])
- 
-    st.markdown("### ❓ Gestion de la FAQ")
-    st.markdown("""
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
-    padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
-    ℹ️ Les questions et réponses définies ici apparaissent dans la fenêtre d'aide
-    accessibles via le <strong>🍄 champignon</strong>. Elles supportent le <strong>Markdown</strong>
-    pour le formatage (gras, listes, titres…).
-    </div>""", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FAQ
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_faq:
+        render_faq_tab(can_edit)
  
     # ── Stats rapides ──────────────────────────────────────────────────────
     cats_count = {}
