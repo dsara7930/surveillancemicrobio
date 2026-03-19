@@ -1109,14 +1109,14 @@ with st.sidebar:
     st.components.v1.html("""
 <div style="display:flex;flex-direction:column;align-items:center;gap:6px;
             margin:4px 0;padding-top:16px;overflow:visible">
-  <a href="?open_faq=1" target="_self"
-     style="display:block;cursor:pointer;border-radius:50%;
-            padding:6px;box-sizing:content-box">
+  <div onclick="window.parent.location.href='?open_faq=1'"
+       style="display:block;cursor:pointer;border-radius:50%;
+              padding:6px;box-sizing:content-box">
     <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
             width="100" height="100"
             style="border:none;border-radius:50%;pointer-events:none;display:block"
             frameBorder="0"></iframe>
-  </a>
+  </div>
   <p style="text-align:center;font-size:.72rem;color:#94a3b8;
      font-style:italic;margin:0">Si tu as besoin d'aide, je suis là</p>
 </div>
@@ -1131,12 +1131,16 @@ with st.sidebar:
   0%,100%{ filter:drop-shadow(0 0 0px rgba(124,58,237,0)); }
   50%{ filter:drop-shadow(0 0 14px rgba(124,58,237,.8)); }
 }
-a {
-  display:block;
+div[onclick] {
   animation:bounce 1.8s ease-in-out infinite, glow 2.6s ease-in-out infinite;
   overflow:visible;
 }
-a:hover { animation:none; transform:scale(1.2); transition:transform .15s; filter:brightness(1.15); }
+div[onclick]:hover {
+  animation:none;
+  transform:scale(1.2);
+  transition:transform .15s;
+  filter:brightness(1.15);
+}
 </style>
 """, height=160, scrolling=False)
 
