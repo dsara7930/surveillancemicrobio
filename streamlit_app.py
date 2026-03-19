@@ -7048,7 +7048,8 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
      # FAQ
     #---------------------------------------------------------------------------------------------------------------
     with subtab_faq:
-    faq_items = st.session_state.get("faq_items", [])
+        faq_items = st.session_state.get("faq_items", [])
+        render_faq_tab(can_edit)
 
     # ── Stats rapides ──────────────────────────────────────────────────────
     cats_count = {}
