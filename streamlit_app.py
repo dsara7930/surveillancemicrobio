@@ -1189,12 +1189,41 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── 🍄 Champignon dansant + bulle BD ──────────────────────────────────────
-    # On utilise un st.button natif Streamlit au lieu d'un composant HTML.
-    # C'est la seule approche fiable pour déclencher un @st.dialog depuis la sidebar.
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+# ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
+    st.markdown("""
+    <style>
+    /* Cache le bouton standard et le remplace visuellement par la bulle */
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button {
+        all: unset !important;
+        position: relative !important;
+        display: block !important;
+        background: #ffffff !important;
+        border: 2.5px solid #1e293b !important;
+        border-radius: 18px !important;
+        padding: 9px 13px !important;
+        box-shadow: 3px 3px 0px #1e293b !important;
+        cursor: pointer !important;
+        width: 100% !important;
+        transition: transform .12s ease, box-shadow .12s ease !important;
+        font-size: .72rem !important;
+        font-weight: 800 !important;
+        color: #1e293b !important;
+        line-height: 1.4 !important;
+        text-align: center !important;
+    }
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
+        transform: scale(1.04) !important;
+        box-shadow: 4px 4px 0px #2563eb !important;
+        border-color: #2563eb !important;
+        color: #2563eb !important;
+    }
+    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:active {
+        transform: scale(0.96) !important;
+        box-shadow: 1px 1px 0px #1e293b !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Ligne : gif champignon  |  bouton bulle
     _col_mush, _col_bubble = st.columns([1, 2], gap="small")
 
     with _col_mush:
@@ -1205,52 +1234,18 @@ with st.sidebar:
                 style="border:none;border-radius:10px;pointer-events:none;display:block"
                 frameBorder="0">
             </iframe>""",
-            height=76,
-            scrolling=False,
+            height=76, scrolling=False,
         )
 
     with _col_bubble:
-        # Bulle BD en HTML pur — juste visuelle, non cliquable
-        st.markdown(
-            """
-            <div style="
-                position:relative;
-                background:#ffffff;
-                border:2.5px solid #1e293b;
-                border-radius:18px;
-                padding:8px 11px;
-                box-shadow:3px 3px 0px #1e293b;
-                margin-top:4px;
-            ">
-              <!-- Queue gauche (bordure) -->
-              <div style="
-                position:absolute;left:-13px;top:50%;
-                transform:translateY(-50%);
-                width:0;height:0;
-                border-top:8px solid transparent;
-                border-bottom:8px solid transparent;
-                border-right:13px solid #1e293b;
-              "></div>
-              <!-- Queue gauche (fond blanc) -->
-              <div style="
-                position:absolute;left:-9px;top:50%;
-                transform:translateY(-50%);
-                width:0;height:0;
-                border-top:6px solid transparent;
-                border-bottom:6px solid transparent;
-                border-right:10px solid #ffffff;
-              "></div>
-              <div style="font-size:.68rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
-                Si tu as besoin<br>d'aide, je suis là !
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        # Vrai bouton Streamlit — déclenche le dialog directement, sans JS ni query param
-        if st.button("❓ Ouvrir la FAQ", key="mush_faq_btn", use_container_width=True):
+        # Le st.button EST la bulle — le CSS ci-dessus le déguise complètement
+        if st.button(
+            "Si tu as besoin\nd'aide, je suis là !\n\n❓ Clique ici pour la FAQ",
+            key="mush_faq_btn",
+            use_container_width=True,
+        ):
             show_faq_dialog()
-
+            
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
