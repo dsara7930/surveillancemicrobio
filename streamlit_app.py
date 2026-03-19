@@ -5887,8 +5887,8 @@ elif active == "parametres":
 
     (subtab_mesures, subtab_points, subtab_plans,
      subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
-        "📋 Mesures correctives", "📍 Points de prélèvement",
-        "🗺️ Plans", "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
+        "🗺️ Plans", "📋 Mesures correctives", "📍 Points de prélèvement",
+        "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
     ])
 
     # ── Constantes Points ──────────────────────────────────────────────────────
