@@ -1145,7 +1145,8 @@ with st.sidebar:
     supa_icon = "🟢" if supa_ok else "🔴"
     supa_txt  = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
     st.markdown(
-        f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
+        f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">'
+        f'{supa_icon} {supa_txt}</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -1170,7 +1171,7 @@ with st.sidebar:
         mime="application/json",
         use_container_width=True,
         key="sidebar_export",
-        help="Téléchargez ce fichier avant toute modification du code.",
+        help="Téléchargez ce fichier avant toute modification du code pour ne jamais perdre vos données",
     )
     if not supa_ok:
         st.markdown(
@@ -1180,27 +1181,26 @@ with st.sidebar:
         )
 
     # ── 🍄 Champignon dansant ─────────────────────────────────────────────
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div style='text-align:center;margin-bottom:4px;"
-        "font-size:.62rem;color:#94a3b8;text-transform:uppercase;"
-        "letter-spacing:.08em;font-weight:700'>❓ Aide & FAQ</div>",
-        unsafe_allow_html=True,
-    )
-    _c1, _c2, _c3 = st.columns([1, 1, 1])
-    with _c2:
-        if st.button(
-            "🍄", key="mush_faq_btn",
-            help="Ouvrir le centre d'aide — FAQ",
-            use_container_width=True,
-        ):
-            show_faq_dialog()
-    st.markdown(
-        "<div style='text-align:center;font-size:.6rem;color:#a78bfa;"
-        "margin-top:2px;font-style:italic'>Bonne surveillance :)</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.components.v1.html("""
+    <div style="text-align:center;margin-top:14px;padding-bottom:4px">
+      <iframe
+        src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+        width="100" height="100"
+        style="border:none;border-radius:12px;pointer-events:none"
+        frameBorder="0"
+        allowFullScreen>
+      </iframe>
+      <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
+                  font-family:'Segoe UI',sans-serif">
+        Bonne surveillance :) 🍄
+      </div>
+    </div>
+    """, height=140, scrolling=False)
+
+    # ── Bouton FAQ ────────────────────────────────────────────────────────
+    if st.button("❓ Aide & FAQ", key="mush_faq_btn", use_container_width=True,
+                 help="Ouvrir le centre d'aide"):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
