@@ -87,6 +87,10 @@ def next_working_day_offset(d, offset_working_days):
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(layout="wide", page_title="MicroSurveillance URC", page_icon="🦠")
 
+if st.query_params.get("open_faq") == "1":
+    st.query_params.clear()
+    show_faq_dialog()
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap');
@@ -1178,26 +1182,7 @@ with st.sidebar:
             '⚠️ Sans Supabase, exportez régulièrement vos données !</p>',
             unsafe_allow_html=True,
         )
-
-# ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
-# ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
-    st.markdown("""
-    <style>
-    /* Expulse le bouton OPEN_FAQ hors de l'écran */
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
-        position: fixed !important;
-        left: -9999px !important;
-        top: -9999px !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        pointer-events: none !important;
-        opacity: 0 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Composant HTML : champignon à gauche + bulle BD à droite
+# ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
     st.components.v1.html("""
     <div style="
         display: flex;
@@ -1217,7 +1202,7 @@ with st.sidebar:
           frameBorder="0">
         </iframe>
       </div>
-
+ 
       <!-- Bulle de BD -->
       <div id="faq-bubble" onclick="triggerFaq()" style="
           position: relative;
@@ -1251,6 +1236,7 @@ with st.sidebar:
             border-bottom: 6px solid transparent;
             border-right: 10px solid #ffffff;
         "></div>
+ 
         <div style="font-size:.72rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
           Si tu as besoin<br>d'aide, je suis là !
         </div>
@@ -1259,9 +1245,10 @@ with st.sidebar:
         </div>
       </div>
     </div>
-
+ 
     <script>
     function triggerFaq() {
+        // Effet visuel
         var bubble = document.getElementById('faq-bubble');
         bubble.style.transform = 'scale(0.95)';
         bubble.style.boxShadow = '1px 1px 0px #1e293b';
@@ -1269,14 +1256,13 @@ with st.sidebar:
             bubble.style.transform = 'scale(1)';
             bubble.style.boxShadow = '3px 3px 0px #1e293b';
         }, 120);
-        var allBtns = window.parent.document.querySelectorAll('[data-testid="stButton"] button');
-        for (var i = 0; i < allBtns.length; i++) {
-            if (allBtns[i].innerText.trim() === 'OPEN_FAQ') {
-                allBtns[i].click();
-                return;
-            }
-        }
+ 
+        // Change le query param → déclenche un rerun Streamlit → ouvre le dialog
+        var url = new URL(window.parent.location.href);
+        url.searchParams.set('open_faq', '1');
+        window.parent.location.href = url.toString();
     }
+ 
     var bubble = document.getElementById('faq-bubble');
     bubble.addEventListener('mouseover', function() {
         this.style.transform = 'scale(1.04)';
@@ -1291,10 +1277,6 @@ with st.sidebar:
     </script>
     """, height=115, scrolling=False)
 
-    # Bouton caché hors écran — déclenché par le JS
-    if st.button("OPEN_FAQ", key="mush_faq_hidden"):
-        show_faq_dialog()
-        
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
