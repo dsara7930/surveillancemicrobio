@@ -4890,7 +4890,7 @@ elif active == "historique":
                 plan_sel_name = st.selectbox(
                     "Plan à afficher",
                     [p["name"] for p in plans_dispo],
-                    key="hist_plan_sel")
+                    key="hist_tab_plan_sel")
                 plan_sel = next((p for p in plans_dispo if p["name"] == plan_sel_name), None)
 
                 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
