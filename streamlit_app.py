@@ -1180,24 +1180,19 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
+# ── 🍄 Champignon dansant + vraie bulle BD ───────────────────────────
     st.markdown("""
     <style>
-    /* Cache TOUS les boutons dont le texte est OPEN_FAQ */
-    [data-testid="stSidebar"] [data-testid="stButton"]:has(button) button[kind="secondary"] {
-        display: block;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]),
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) *,
-    [data-testid="stSidebar"] button[data-key="mush_faq_hidden"] {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
+    /* Expulse le bouton OPEN_FAQ hors de l'écran */
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
+        position: fixed !important;
+        left: -9999px !important;
+        top: -9999px !important;
         width: 0 !important;
+        height: 0 !important;
         overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        position: absolute !important;
         pointer-events: none !important;
+        opacity: 0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1296,10 +1291,10 @@ with st.sidebar:
     </script>
     """, height=115, scrolling=False)
 
-    # Bouton Streamlit caché — déclenché par le JS ci-dessus
+    # Bouton caché hors écran — déclenché par le JS
     if st.button("OPEN_FAQ", key="mush_faq_hidden"):
         show_faq_dialog()
-
+        
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
