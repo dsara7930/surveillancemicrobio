@@ -1106,13 +1106,11 @@ with st.sidebar:
     st.divider()
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    # ── 🍄 Champignon dansant cliquable ──────────────────────────
     st.components.v1.html("""
 <div style="display:flex;flex-direction:column;align-items:center;gap:6px;
             margin:4px 0;padding-top:16px;overflow:visible">
   <div onclick="window.parent.location.href='?open_faq=1'"
-       style="display:block;cursor:pointer;border-radius:50%;
-              padding:6px;box-sizing:content-box">
+       style="display:block;cursor:pointer;border-radius:50%;padding:6px">
     <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
             width="100" height="100"
             style="border:none;border-radius:50%;pointer-events:none;display:block"
@@ -1143,69 +1141,40 @@ div[onclick]:hover {
 </style>
 """, height=160, scrolling=False)
 
-# ── HEADER (une seule fois) ────────────────────────────────────────────────────
+# ── HEADER + FAQ ───────────────────────────────────────────────────────────────
 active = st.session_state.active_tab
 today  = datetime.today().date()
 
-# N'afficher le header QUE si le panel FAQ est fermé
-if not st.session_state.get("_faq_panel_open"):
-    st.markdown(
-        '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
-        'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
-        unsafe_allow_html=True,
-    )
-    st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
+st.markdown(
+    '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
+    'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
+    unsafe_allow_html=True,
+)
+st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
-# ── PANEL FAQ PLEINE PAGE ──────────────────────────────────────────────────────
+# ── PANEL FAQ ─────────────────────────────────────────────────────────────────
 if st.session_state.get("_faq_panel_open"):
-
-    # Overlay pleine page via CSS injecté
-    st.markdown("""
-    <style>
-    .faq-overlay {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(15,23,42,0.55);
-        z-index: 9990;
-    }
-    .faq-modal {
-        position: fixed;
-        top: 3vh;
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(92vw, 1100px);
-        max-height: 94vh;
-        background: #ffffff;
-        border-radius: 18px;
-        box-shadow: 0 24px 80px rgba(0,0,0,0.35);
-        z-index: 9999;
-        overflow-y: auto;
-        padding: 0;
-    }
-    </style>
-    <div class="faq-overlay"></div>
-    """, unsafe_allow_html=True)
+    from collections import defaultdict
+    import re as _re
 
     faq_items = sorted(
         st.session_state.get("faq_items", DEFAULT_FAQ),
         key=lambda x: x.get("order", 999),
     )
 
-    # Header violet
     st.markdown(
         "<div style='background:linear-gradient(135deg,#7c3aed,#a855f7);"
-        "border-radius:14px 14px 0 0;padding:20px 28px 16px 28px;margin-bottom:0'>"
+        "border-radius:14px;padding:20px 28px;margin:12px 0 16px 0'>"
         "<div style='color:#fff;font-size:1.3rem;font-weight:900'>🍄 Centre d'aide — FAQ</div>"
         f"<div style='color:#e9d5ff;font-size:.8rem;margin-top:3px'>"
         f"{len(faq_items)} questions & réponses disponibles</div>"
         "</div>",
         unsafe_allow_html=True)
 
-    # Barre recherche + fermer
     fc1, fc2, fc3 = st.columns([4, 1.5, 0.8])
     with fc1:
         faq_query = st.text_input(
-            "search", placeholder="🔍 Rechercher une question ou un mot-clé…",
+            "search", placeholder="🔍 Rechercher…",
             label_visibility="collapsed", key="faq_panel_search")
     with fc2:
         all_cats_panel = ["Toutes les catégories"] + sorted(
@@ -1238,13 +1207,9 @@ if st.session_state.get("_faq_panel_open"):
             "<div style='text-align:center;padding:48px 0;color:#94a3b8'>"
             "<div style='font-size:2.5rem;margin-bottom:10px'>🔍</div>"
             f"<div style='font-size:.9rem'>Aucun résultat pour "
-            f"<strong>« {faq_query} »</strong></div>"
-            "<div style='font-size:.75rem;margin-top:4px'>Essayez un autre mot-clé</div></div>",
+            f"<strong>« {faq_query} »</strong></div></div>",
             unsafe_allow_html=True)
     else:
-        from collections import defaultdict
-        import re as _re
-
         CAT_COLORS = {
             "Général":            "#2563eb",
             "Score & Seuils":     "#7c3aed",
@@ -1253,7 +1218,6 @@ if st.session_state.get("_faq_panel_open"):
             "Données":            "#d97706",
             "Mesures correctives":"#dc2626",
         }
-
         grouped_panel = defaultdict(list)
         for item in filtered_panel:
             grouped_panel[item.get("category", "Général")].append(item)
@@ -1290,7 +1254,6 @@ if st.session_state.get("_faq_panel_open"):
         "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
         unsafe_allow_html=True)
 
-    # Bloquer le reste de la page tant que FAQ est ouverte
     st.stop()
     
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
