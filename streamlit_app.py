@@ -5860,7 +5860,7 @@ elif active == "parametres":
     st.markdown("### ⚙️ Paramètres")
 
     (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
-     subtab_operateurs, subtab_backup, subtab_supabase, subtape_faq) = st.tabs([
+     subtab_operateurs, subtab_backup, subtab_supabase, subtab_faq) = st.tabs([
         "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans", 
         "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
     ])
