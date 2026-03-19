@@ -1107,18 +1107,15 @@ with st.sidebar:
 
     # ── 🍄 Champignon dansant cliquable ──────────────────────────
     st.components.v1.html("""
-<div style="display:flex;flex-direction:column;align-items:center;gap:6px;
-            margin:4px 0;padding-top:16px;overflow:visible">
-  <div onclick="window.parent.location.href='?open_faq=1'"
-       style="display:block;cursor:pointer;border-radius:50%;
-              padding:6px;box-sizing:content-box">
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0">
+  <a href="?open_faq=1" target="_self" style="display:block;cursor:pointer;border-radius:50%">
     <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-            width="100" height="100"
+            width="80" height="80"
             style="border:none;border-radius:50%;pointer-events:none;display:block"
             frameBorder="0"></iframe>
-  </div>
+  </a>
   <p style="text-align:center;font-size:.72rem;color:#94a3b8;
-     font-style:italic;margin:0">Si tu as besoin d'aide, je suis là</p>
+     font-style:italic;margin:0">Clique pour l'aide !</p>
 </div>
 <style>
 @keyframes bounce {
@@ -1129,20 +1126,12 @@ with st.sidebar:
 }
 @keyframes glow {
   0%,100%{ filter:drop-shadow(0 0 0px rgba(124,58,237,0)); }
-  50%{ filter:drop-shadow(0 0 14px rgba(124,58,237,.8)); }
+  50%{ filter:drop-shadow(0 0 10px rgba(124,58,237,.7)); }
 }
-div[onclick] {
-  animation:bounce 1.8s ease-in-out infinite, glow 2.6s ease-in-out infinite;
-  overflow:visible;
-}
-div[onclick]:hover {
-  animation:none;
-  transform:scale(1.2);
-  transition:transform .15s;
-  filter:brightness(1.15);
-}
+a { display:block; animation:bounce 1.8s ease-in-out infinite,glow 2.6s ease-in-out infinite; }
+a:hover { animation:none; transform:scale(1.2); transition:transform .15s; filter:brightness(1.15); }
 </style>
-""", height=160, scrolling=False)
+""", height=130, scrolling=False)
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
 active = st.session_state.active_tab
@@ -1273,7 +1262,7 @@ if st.session_state.get("_faq_panel_open"):
         unsafe_allow_html=True)
 
     st.divider()
-
+    
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
