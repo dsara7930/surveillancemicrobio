@@ -1711,9 +1711,9 @@ if active == "surveillance":
                         sel_plan = next((p for p in plans_available if p["name"] == sel_plan_name), None)
                     if sel_plan and sel_plan.get("image_b64"):
                         lc_plan, rc_plan = st.columns([1, 2])
-                        with lc_plan:
+                        
+                    with lc_plan:
                             _cur_pt = st.session_state.get("_new_prelev_plan_point")
-                            # Vérification défensive : le point doit avoir x et y
                             if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
                                 _cur_pt = None
                                 st.session_state["_new_prelev_plan_point"] = None
@@ -1729,22 +1729,31 @@ if active == "surveillance":
                                     unsafe_allow_html=True)
                             else:
                                 st.info("Aucun point placé.")
-                            col_val, col_clr = st.columns(2)
-                            with col_val:
-                                if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
+
+                            # Champ caché — mis à jour par le JS de la carte
+                            coords_raw = st.text_input(
+                                "coords", value="", key="np_coords_hidden",
+                                label_visibility="collapsed")
+
+                            if coords_raw and "," in coords_raw:
+                                try:
+                                    _cx, _cy = coords_raw.split(",")
                                     st.session_state["_new_prelev_plan_point"] = {
                                         "label":      selected_point.get("label",""),
                                         "room_class": selected_point.get("room_class",""),
                                         "loc_crit":   int(selected_point.get("location_criticality",1)),
                                         "survLabel":  None,
-                                        "x":          0.0,
-                                        "y":          0.0,
+                                        "x":          float(_cx),
+                                        "y":          float(_cy),
                                     }
                                     st.rerun()
-                            with col_clr:
-                                if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
-                                    st.session_state["_new_prelev_plan_point"] = None
-                                    st.rerun()
+                                except Exception:
+                                    pass
+
+                            if st.button("🗑️ Effacer le point", key="clear_np_pt", use_container_width=True):
+                                st.session_state["_new_prelev_plan_point"] = None
+                                st.rerun()
+
                         with rc_plan:
                             _np_img     = sel_plan["image_b64"]
                             _np_label   = selected_point.get("label","Point")
@@ -1768,9 +1777,11 @@ body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;display:
 .pt{{position:absolute;width:28px;height:28px;border-radius:50%;background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
 .pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
 .mw.add{{cursor:crosshair}}
+.placed{{background:#22c55e!important;animation:pop .3s ease}}
+@keyframes pop{{0%{{transform:translate(-50%,-50%) scale(0)}}60%{{transform:translate(-50%,-50%) scale(1.3)}}100%{{transform:translate(-50%,-50%) scale(1)}}}}
 </style></head><body>
 <div class="tb">
-  <button class="btn" id="ab" onclick="tog()">📍 Placer / Déplacer</button>
+  <button class="btn" id="ab" onclick="tog()">📍 Cliquer pour placer</button>
   <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
   <span id="st">—</span>
 </div>
@@ -1778,15 +1789,63 @@ body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;display:
 <script>
 let add=false,pt={_np_pt_json};
 const lbl="{_np_label}",rc="{_np_rc}",lc={_np_lc};
-function upd(){{document.getElementById('st').textContent=pt?'📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche':'Aucun point placé';}}
-function render(){{document.querySelectorAll('.pt').forEach(p=>p.remove());if(!pt)return;const d=document.createElement('div');d.className='pt';d.style.left=pt.x+'%';d.style.top=pt.y+'%';d.textContent='📍';d.title=lbl;document.getElementById('mi').appendChild(d);upd();}}
-function tog(){{add=!add;document.getElementById('ab').classList.toggle('active',add);document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';document.getElementById('mw').classList.toggle('add',add);}}
-function clr(){{pt=null;render();upd();}}
-document.getElementById('mi').addEventListener('click',function(e){{if(!add)return;if(e.target.classList.contains('pt'))return;const img=document.getElementById('img');const r=img.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;const x=((e.clientX-r.left)/r.width*100);const y=((e.clientY-r.top)/r.height*100);pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};render();tog();}});
-const img=document.getElementById('img');if(img.complete&&img.naturalWidth>0)render();else img.addEventListener('load',render);upd();
+
+function sendToStreamlit(x,y){{
+  // Trouve le text_input caché et met à jour sa valeur
+  const inputs=window.parent.document.querySelectorAll('input[type="text"]');
+  for(const inp of inputs){{
+    if(inp.value===''||inp.value.includes(',')){{
+      const nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+      nativeInputValueSetter.call(inp,x.toFixed(2)+','+y.toFixed(2));
+      inp.dispatchEvent(new Event('input',{{bubbles:true}}));
+      break;
+    }}
+  }}
+}}
+
+function upd(){{
+  document.getElementById('st').textContent=pt
+    ?'✅ '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'% — placé !'
+    :'Cliquez sur "📍 Cliquer pour placer" puis sur la carte';
+}}
+function render(){{
+  document.querySelectorAll('.pt').forEach(p=>p.remove());
+  if(!pt)return;
+  const d=document.createElement('div');
+  d.className='pt placed';d.style.left=pt.x+'%';d.style.top=pt.y+'%';
+  d.textContent='📍';d.title=lbl;
+  document.getElementById('mi').appendChild(d);
+  upd();
+}}
+function tog(){{
+  add=!add;
+  document.getElementById('ab').classList.toggle('active',add);
+  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Cliquer pour placer';
+  document.getElementById('mw').classList.toggle('add',add);
+  if(!add) upd();
+  else document.getElementById('st').textContent='Cliquez sur la carte pour placer le point';
+}}
+function clr(){{pt=null;render();upd();sendToStreamlit(-1,-1);}}
+document.getElementById('mi').addEventListener('click',function(e){{
+  if(!add)return;
+  if(e.target.classList.contains('pt'))return;
+  const img=document.getElementById('img');
+  const r=img.getBoundingClientRect();
+  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;
+  const x=((e.clientX-r.left)/r.width*100);
+  const y=((e.clientY-r.top)/r.height*100);
+  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
+  render();tog();
+  sendToStreamlit(x,y);
+}});
+const img=document.getElementById('img');
+if(img.complete&&img.naturalWidth>0)render();
+else img.addEventListener('load',render);
+upd();
 </script></body></html>"""
                             st.components.v1.html(_np_html, height=280, scrolling=False)
-                            st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
+                            st.caption("💡 Cliquez '📍 Cliquer pour placer' puis cliquez sur la carte — le point se sauvegarde automatiquement.")
+                            
                     elif sel_plan and not sel_plan.get("image_b64"):
                         st.markdown(
                             "<div style='background:#fffbeb;border:1px solid #fde047;"
@@ -1808,6 +1867,7 @@ const img=document.getElementById('img');if(img.complete&&img.naturalWidth>0)ren
                         "<div style='color:#94a3b8;font-size:.72rem;margin-top:4px'>"
                         "Ajoutez des plans dans <strong>Paramètres → Plans</strong></div></div>",
                         unsafe_allow_html=True)
+                    
             # Persiste point carte
             _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
             if _np_saved_pt:
