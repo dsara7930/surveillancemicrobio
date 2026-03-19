@@ -1746,20 +1746,37 @@ if active == "surveillance":
                                 st.info("Aucun point placé.")
                             # Champ caché — mis à jour par le JS de la carte
                             coords_raw = st.text_input(
-                                "coords", value="", key="np_coords_hidden",
+                                "coords", key="np_coords_hidden",
                                 label_visibility="collapsed")
                             if coords_raw and "," in coords_raw:
                                 try:
                                     _cx, _cy = coords_raw.split(",")
-                                    st.session_state["_new_prelev_plan_point"] = {
-                                        "label":      selected_point.get("label",""),
-                                        "room_class": selected_point.get("room_class",""),
-                                        "loc_crit":   int(selected_point.get("location_criticality",1)),
-                                        "survLabel":  None,
-                                        "x":          float(_cx),
-                                        "y":          float(_cy),
-                                    }
-                                    st.rerun()
+                                    _cx_f, _cy_f = float(_cx), float(_cy)
+                                    if _cx_f >= 0 and _cy_f >= 0:
+                                        _new_pt = {
+                                            "label":      selected_point.get("label",""),
+                                            "room_class": selected_point.get("room_class",""),
+                                            "loc_crit":   int(selected_point.get("location_criticality",1)),
+                                            "survLabel":  None,
+                                            "x":          _cx_f,
+                                            "y":          _cy_f,
+                                        }
+                                        if "map_points" not in st.session_state:
+                                            st.session_state.map_points = []
+                                        _existing_labels = [p.get("label") for p in st.session_state.map_points]
+                                        if _new_pt["label"] not in _existing_labels:
+                                            st.session_state.map_points.append(_new_pt)
+                                        else:
+                                            for _mp in st.session_state.map_points:
+                                                if _mp.get("label") == _new_pt["label"]:
+                                                    _mp.update(_new_pt)
+                                        # Persister immédiatement dans Supabase
+                                        _supa_upsert('map_points', json.dumps(
+                                            st.session_state.map_points, ensure_ascii=False))
+                                        st.session_state["_new_prelev_plan_point"] = _new_pt
+                                        # Vider le champ pour éviter re-lecture au prochain rerun
+                                        st.session_state["np_coords_hidden"] = ""
+                                        st.rerun()
                                 except Exception:
                                     pass
                             if st.button("🗑️ Effacer le point", key="clear_np_pt", use_container_width=True):
@@ -1926,20 +1943,6 @@ upd();
                         f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
                         f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
-            # Persiste point carte
-            _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
-            if _np_saved_pt:
-                if "map_points" not in st.session_state:
-                    st.session_state.map_points = []
-                _existing = [p.get("label") for p in st.session_state.map_points]
-                if _np_saved_pt["label"] not in _existing:
-                    st.session_state.map_points.append(_np_saved_pt)
-                else:
-                    for _mp in st.session_state.map_points:
-                        if _mp.get("label") == _np_saved_pt["label"]:
-                            _mp.update(_np_saved_pt)
-                st.session_state["_new_prelev_plan_point"] = None
-                st.rerun()
 
             # ── Prélèvements actifs ────────────────────────────────────────────
             st.divider()
