@@ -1729,26 +1729,6 @@ if active == "surveillance":
                                     unsafe_allow_html=True)
                             else:
                                 st.info("Aucun point placé.")
-
-                            if sel_plan and sel_plan.get("image_b64"):
-                        lc_plan, rc_plan = st.columns([1, 2])
-                        with lc_plan:
-                            _cur_pt = st.session_state.get("_new_prelev_plan_point")
-                            if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
-                                _cur_pt = None
-                                st.session_state["_new_prelev_plan_point"] = None
-                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
-                            if _cur_pt:
-                                _px = float(_cur_pt.get("x", 0))
-                                _py = float(_cur_pt.get("y", 0))
-                                st.markdown(
-                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;"
-                                    f"color:#166534;margin-top:4px'>"
-                                    f"📌 Point placé : <b>{_px:.1f}% / {_py:.1f}%</b></div>",
-                                    unsafe_allow_html=True)
-                            else:
-                                st.info("Aucun point placé.")
                             # Champ caché — mis à jour par le JS de la carte
                             coords_raw = st.text_input(
                                 "coords", value="", key="np_coords_hidden",
