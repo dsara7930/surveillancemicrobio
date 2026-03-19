@@ -1072,8 +1072,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<p style="font-size:.75rem;color:#94a3b8;text-align:center">'
-        'MicroSurveillance URC v5.0</p>',
         unsafe_allow_html=True,
     )
 
