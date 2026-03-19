@@ -7045,148 +7045,137 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         st.rerun()
 
     #---------------------------------------------------------------------------------------------------------------
-     # FAQ
+    # FAQ
     #---------------------------------------------------------------------------------------------------------------
     with subtab_faq:
-        render_faq_tab(can_edit)
+        faq_items = st.session_state.get("faq_items", [])
 
-    # ── Stats rapides ──────────────────────────────────────────────────────
-    cats_count = {}
-    for f in faq_items:
-        c = f.get("category", "Général")
-        cats_count[c] = cats_count.get(c, 0) + 1
+        # ── Stats ─────────────────────────────────────────────────────────
+        cats_count = {}
+        for f in faq_items:
+            c = f.get("category", "Général")
+            cats_count[c] = cats_count.get(c, 0) + 1
 
-    cols_stat = st.columns(len(cats_count) + 1 if cats_count else 2)
-    with cols_stat[0]:
-        st.metric("Total Q&R", len(faq_items))
-    for i, (cat, cnt) in enumerate(cats_count.items(), 1):
-        if i < len(cols_stat):
+        cols_stat = st.columns(min(len(cats_count) + 1, 5))
+        with cols_stat[0]:
+            st.metric("Total Q&R", len(faq_items))
+        for i, (cat, cnt) in enumerate(list(cats_count.items())[:4], 1):
             with cols_stat[i]:
-                st.metric(cat, cnt)
+                st.metric(cat[:14], cnt)
 
-    st.divider()
+        st.divider()
 
-    # ── Formulaire ajout / édition ─────────────────────────────────────────
-    edit_idx = st.session_state.get("_faq_edit_idx")
+        # ── Formulaire ajout / édition ────────────────────────────────────
+        edit_idx = st.session_state.get("_faq_edit_idx")
 
-    if can_edit and st.session_state.get("_faq_show_form", False):
-        is_edit = edit_idx is not None
-        form_title = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
-        existing = faq_items[edit_idx] if is_edit else {}
-        form_bg = "#eff6ff" if is_edit else "#f0fdf4"
-        form_border = "#93c5fd" if is_edit else "#86efac"
+        if can_edit and st.session_state.get("_faq_show_form", False):
+            is_edit  = edit_idx is not None
+            existing = faq_items[edit_idx] if is_edit else {}
+            form_bg  = "#eff6ff" if is_edit else "#f0fdf4"
+            form_bdr = "#93c5fd" if is_edit else "#86efac"
+            form_ttl = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
 
-        st.markdown(
-            f"<div style='background:{form_bg};border:1.5px solid {form_border};"
-            f"border-radius:12px;padding:18px;margin-bottom:16px'>",
-            unsafe_allow_html=True
-        )
-        st.markdown(f"#### {form_title}")
-
-        fc1, fc2 = st.columns([3, 1])
-        with fc1:
-            faq_question = st.text_input(
-                "Question *",
-                value=existing.get("question", ""),
-                placeholder="Ex: Comment ajouter un point de prélèvement ?",
-                key="faq_form_question"
+            st.markdown(
+                f"<div style='background:{form_bg};border:1.5px solid {form_bdr};"
+                f"border-radius:12px;padding:18px;margin-bottom:16px'>",
+                unsafe_allow_html=True,
             )
-        with fc2:
-            cur_cat = existing.get("category", "Général")
-            cat_idx = FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0
-            faq_category = st.selectbox(
-                "Catégorie",
-                FAQ_CATEGORIES,
-                index=cat_idx,
-                key="faq_form_category"
+            st.markdown(f"#### {form_ttl}")
+
+            fc1, fc2 = st.columns([3, 1])
+            with fc1:
+                faq_q = st.text_input(
+                    "Question *", value=existing.get("question", ""),
+                    placeholder="Ex: Comment ajouter un point de prélèvement ?",
+                    key="faq_form_question",
+                )
+            with fc2:
+                cur_cat = existing.get("category", "Général")
+                faq_c = st.selectbox(
+                    "Catégorie", FAQ_CATEGORIES,
+                    index=FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0,
+                    key="faq_form_category",
+                )
+
+            faq_a = st.text_area(
+                "Réponse * (Markdown supporté)", value=existing.get("answer", ""),
+                height=150,
+                placeholder="Décrivez la réponse. **Gras**, *italique*, listes…",
+                key="faq_form_answer",
             )
+            if faq_a.strip():
+                with st.expander("👁️ Aperçu", expanded=False):
+                    st.markdown(faq_a)
 
-        faq_answer = st.text_area(
-            "Réponse * (Markdown supporté)",
-            value=existing.get("answer", ""),
-            height=150,
-            placeholder="Décrivez la réponse. Vous pouvez utiliser **gras**, *italique*, listes…",
-            key="faq_form_answer"
-        )
-
-        if faq_answer.strip():
-            with st.expander("👁️ Aperçu du rendu Markdown", expanded=False):
-                st.markdown(faq_answer)
-
-        fb1, fb2 = st.columns(2)
-        with fb1:
-            btn_label = "✔️ Mettre à jour" if is_edit else "✅ Ajouter"
-            if st.button(btn_label, use_container_width=True, type="primary", key="faq_form_submit"):
-                if not faq_question.strip():
-                    st.error("La question est obligatoire.")
-                elif not faq_answer.strip():
-                    st.error("La réponse est obligatoire.")
-                else:
-                    if is_edit:
-                        faq_items[edit_idx]["question"] = faq_question.strip()
-                        faq_items[edit_idx]["answer"]   = faq_answer.strip()
-                        faq_items[edit_idx]["category"] = faq_category
+            fb1, fb2 = st.columns(2)
+            with fb1:
+                if st.button(
+                    "✔️ Mettre à jour" if is_edit else "✅ Ajouter",
+                    use_container_width=True, type="primary", key="faq_form_submit",
+                ):
+                    if not faq_q.strip():
+                        st.error("La question est obligatoire.")
+                    elif not faq_a.strip():
+                        st.error("La réponse est obligatoire.")
                     else:
-                        faq_items.append({
-                            "id":       f"faq_{int(datetime.now().timestamp())}",
-                            "category": faq_category,
-                            "question": faq_question.strip(),
-                            "answer":   faq_answer.strip(),
-                            "order":    len(faq_items),
-                        })
-                    save_faq(faq_items, supa=True)
-                    st.session_state["faq_items"]      = faq_items
+                        if is_edit:
+                            faq_items[edit_idx].update(
+                                question=faq_q.strip(), answer=faq_a.strip(), category=faq_c
+                            )
+                        else:
+                            faq_items.append({
+                                "id":       f"faq_{int(datetime.now().timestamp())}",
+                                "category": faq_c,
+                                "question": faq_q.strip(),
+                                "answer":   faq_a.strip(),
+                                "order":    len(faq_items),
+                            })
+                        save_faq(faq_items, supa=True)
+                        st.session_state["faq_items"]      = faq_items
+                        st.session_state["_faq_show_form"] = False
+                        st.session_state["_faq_edit_idx"]  = None
+                        st.success("✅ FAQ mise à jour !")
+                        st.rerun()
+            with fb2:
+                if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
                     st.session_state["_faq_show_form"] = False
                     st.session_state["_faq_edit_idx"]  = None
-                    st.success("✅ FAQ mise à jour !")
                     st.rerun()
-        with fb2:
-            if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
-                st.session_state["_faq_show_form"] = False
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        elif can_edit and not st.session_state.get("_faq_show_form", False):
+            if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
+                st.session_state["_faq_show_form"] = True
                 st.session_state["_faq_edit_idx"]  = None
                 st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    elif can_edit and not st.session_state.get("_faq_show_form", False):
-        if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
-            st.session_state["_faq_show_form"] = True
-            st.session_state["_faq_edit_idx"]  = None
-            st.rerun()
-
-    # ── Liste des Q&R ──────────────────────────────────────────────────────
-    if faq_items:
-        all_cats_tab = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
-        faq_filter_cat = st.selectbox(
-            "Filtrer par catégorie",
-            all_cats_tab,
-            key="faq_tab_cat_filter",
-            label_visibility="collapsed"
-        )
-
-        st.markdown(
-            "<div style='display:grid;grid-template-columns:2fr 1fr 0.4fr 0.4fr;"
-            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
-            "padding:10px 14px;margin-top:8px'>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
-            "<div></div><div></div></div>",
-            unsafe_allow_html=True
-        )
-
-        displayed = [
-            (i, f) for i, f in enumerate(faq_items)
-            if faq_filter_cat == "Toutes" or f.get("category") == faq_filter_cat
-        ]
-
-        if not displayed:
+        # ── Liste ─────────────────────────────────────────────────────────
+        if not faq_items:
             st.markdown(
-                "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
-                "border-radius:0 0 10px 10px;padding:20px;text-align:center;"
-                "color:#94a3b8;font-size:.82rem'>Aucune question dans cette catégorie</div>",
-                unsafe_allow_html=True
+                "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
+                "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
+                "<div style='font-weight:700;color:#475569'>Aucune question définie</div>"
+                "<div style='font-size:.8rem;color:#94a3b8;margin-top:4px'>"
+                "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
+                unsafe_allow_html=True,
             )
         else:
+            all_cats_tab = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
+            faq_filter_cat = st.selectbox(
+                "Filtrer", all_cats_tab, key="faq_tab_cat_filter", label_visibility="collapsed"
+            )
+
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:2fr 1fr;"
+                "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
+                "padding:10px 14px;margin-top:8px'>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
             CAT_COL = {
                 "Général":            "#2563eb",
                 "Score & Seuils":     "#7c3aed",
@@ -7195,86 +7184,88 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 "Données":            "#d97706",
                 "Mesures correctives":"#dc2626",
             }
-            for display_pos, (real_idx, item) in enumerate(displayed):
-                cat_col = CAT_COL.get(item.get("category", "Général"), "#475569")
-                row_bg = "#f8fafc" if display_pos % 2 == 0 else "#ffffff"
 
-                rc1, rc2 = st.columns([6, 1])
-                with rc1:
-                    st.markdown(
-                        f"<div style='display:grid;grid-template-columns:2fr 1fr;"
-                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-top:none;padding:10px 14px;align-items:center'>"
-                        f"<div style='font-size:.82rem;font-weight:600;color:#0f172a'>"
-                        f"{item['question']}</div>"
-                        f"<div style='text-align:center'>"
-                        f"<span style='background:{cat_col}18;color:{cat_col};"
-                        f"border:1px solid {cat_col}44;border-radius:12px;"
-                        f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
-                        f"{item.get('category', 'Général')}</span></div>"
-                        f"</div>",
-                        unsafe_allow_html=True
-                    )
-                with rc2:
-                    act1, act2, act3, act4 = st.columns(4)
-                    with act1:
-                        if can_edit and real_idx > 0:
-                            if st.button("↑", key=f"faq_up_{real_idx}", help="Monter"):
-                                faq_items[real_idx], faq_items[real_idx-1] = faq_items[real_idx-1], faq_items[real_idx]
-                                for k, f in enumerate(faq_items): f["order"] = k
-                                save_faq(faq_items, supa=True)
-                                st.session_state["faq_items"] = faq_items
-                                st.rerun()
-                    with act2:
-                        if can_edit and real_idx < len(faq_items)-1:
-                            if st.button("↓", key=f"faq_dn_{real_idx}", help="Descendre"):
-                                faq_items[real_idx], faq_items[real_idx+1] = faq_items[real_idx+1], faq_items[real_idx]
-                                for k, f in enumerate(faq_items): f["order"] = k
-                                save_faq(faq_items, supa=True)
-                                st.session_state["faq_items"] = faq_items
-                                st.rerun()
-                    with act3:
-                        if can_edit:
-                            if st.button("✏️", key=f"faq_edit_{real_idx}"):
-                                st.session_state["_faq_edit_idx"]  = real_idx
-                                st.session_state["_faq_show_form"] = True
-                                st.rerun()
-                    with act4:
-                        if can_edit:
-                            if st.button("🗑️", key=f"faq_del_{real_idx}"):
-                                faq_items.pop(real_idx)
-                                for k, f in enumerate(faq_items): f["order"] = k
-                                save_faq(faq_items, supa=True)
-                                st.session_state["faq_items"] = faq_items
-                                st.rerun()
+            displayed = [
+                (i, f) for i, f in enumerate(faq_items)
+                if faq_filter_cat == "Toutes" or f.get("category") == faq_filter_cat
+            ]
 
-            st.markdown(
-                f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
-                f"padding:8px 14px'>"
-                f"<div style='font-size:.75rem;color:#94a3b8'>"
-                f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
-                f"</div></div>",
-                unsafe_allow_html=True
-            )
-    else:
-        st.markdown(
-            "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-            "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
-            "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
-            "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucune question définie</div>"
-            "<div style='font-size:.8rem;color:#94a3b8'>"
-            "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
-            unsafe_allow_html=True
-        )
+            if not displayed:
+                st.markdown(
+                    "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
+                    "border-radius:0 0 10px 10px;padding:20px;text-align:center;"
+                    "color:#94a3b8;font-size:.82rem'>Aucune question dans cette catégorie</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                for dp, (ri, item) in enumerate(displayed):
+                    cc     = CAT_COL.get(item.get("category", "Général"), "#475569")
+                    row_bg = "#f8fafc" if dp % 2 == 0 else "#ffffff"
 
-    st.divider()
+                    rc1, rc2 = st.columns([6, 1])
+                    with rc1:
+                        st.markdown(
+                            f"<div style='display:grid;grid-template-columns:2fr 1fr;"
+                            f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
+                            f"border-top:none;padding:10px 14px;align-items:center'>"
+                            f"<div style='font-size:.82rem;font-weight:600;color:#0f172a'>"
+                            f"{item['question']}</div>"
+                            f"<div style='text-align:center'>"
+                            f"<span style='background:{cc}18;color:{cc};"
+                            f"border:1px solid {cc}44;border-radius:12px;"
+                            f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
+                            f"{item.get('category','Général')}</span></div></div>",
+                            unsafe_allow_html=True,
+                        )
+                    with rc2:
+                        a1, a2, a3, a4 = st.columns(4)
+                        with a1:
+                            if can_edit and ri > 0:
+                                if st.button("↑", key=f"faq_up_{ri}", help="Monter"):
+                                    faq_items[ri], faq_items[ri-1] = faq_items[ri-1], faq_items[ri]
+                                    for k, f in enumerate(faq_items): f["order"] = k
+                                    save_faq(faq_items, supa=True)
+                                    st.session_state["faq_items"] = faq_items
+                                    st.rerun()
+                        with a2:
+                            if can_edit and ri < len(faq_items)-1:
+                                if st.button("↓", key=f"faq_dn_{ri}", help="Descendre"):
+                                    faq_items[ri], faq_items[ri+1] = faq_items[ri+1], faq_items[ri]
+                                    for k, f in enumerate(faq_items): f["order"] = k
+                                    save_faq(faq_items, supa=True)
+                                    st.session_state["faq_items"] = faq_items
+                                    st.rerun()
+                        with a3:
+                            if can_edit:
+                                if st.button("✏️", key=f"faq_edit_{ri}"):
+                                    st.session_state["_faq_edit_idx"]  = ri
+                                    st.session_state["_faq_show_form"] = True
+                                    st.rerun()
+                        with a4:
+                            if can_edit:
+                                if st.button("🗑️", key=f"faq_del_{ri}"):
+                                    faq_items.pop(ri)
+                                    for k, f in enumerate(faq_items): f["order"] = k
+                                    save_faq(faq_items, supa=True)
+                                    st.session_state["faq_items"] = faq_items
+                                    st.rerun()
 
-    # ── Réinitialiser FAQ ──────────────────────────────────────────────────
-    if can_edit:
-        st.markdown("#### ↩️ Réinitialiser la FAQ")
-        st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
-        if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
-            st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
-            save_faq(st.session_state["faq_items"], supa=True)
-            st.success("✅ FAQ réinitialisée avec les questions par défaut.")
-            st.rerun()
+                st.markdown(
+                    f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                    f"padding:8px 14px'><div style='font-size:.75rem;color:#94a3b8'>"
+                    f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
+                    f"</div></div>",
+                    unsafe_allow_html=True,
+                )
+
+        st.divider()
+
+        # ── Réinitialiser ─────────────────────────────────────────────────
+        if can_edit:
+            st.markdown("#### ↩️ Réinitialiser la FAQ")
+            st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
+            if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
+                st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
+                save_faq(st.session_state["faq_items"], supa=True)
+                st.success("✅ FAQ réinitialisée.")
+                st.rerun()
