@@ -1190,41 +1190,23 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
-    st.markdown("""
-    <style>
-    /* ... (garde tout le CSS existant) ... */
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::after {
-        right: auto !important;
-        left: -11px !important;
-        border-left: none !important;
-        border-right: 11px solid #1e293b !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::before {
-        right: auto !important;
-        left: -7px !important;
-        border-left: none !important;
-        border-right: 8px solid #ffffff !important;
-        z-index: 1 !important;
-    }
-    </style>
-
+   st.markdown("""
     <div style="
         display:flex;align-items:center;justify-content:center;
         gap:3px;margin-top:8px;padding:0 6px;
-        font-family:'Segoe UI',sans-serif;
         pointer-events:none;
     ">
-      <div style="display:flex;align-items:center;gap:3px;margin-right:4px">
-        <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
-        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
-        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
-      </div>
       <iframe
         src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
         width="78" height="78"
         style="border:none;border-radius:10px;pointer-events:none;display:block"
         frameBorder="0">
       </iframe>
+      <div style="display:flex;align-items:center;gap:3px;margin:0 2px">
+        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
+        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+        <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
