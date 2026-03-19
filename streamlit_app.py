@@ -1185,12 +1185,12 @@ with st.sidebar:
 # ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
     st.markdown("""
     <style>
-    /* Conteneur relatif pour positionner le bouton derrière la bulle */
+    /* Bouton couleur fond sidebar (#ffffff), sans bordure ni ombre */
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
         position: absolute !important;
         right: 16px !important;
         margin-top: -80px !important;
-        z-index: 0 !important;
+        z-index: 999 !important;
         width: 148px !important;
         height: 72px !important;
     }
@@ -1199,28 +1199,26 @@ with st.sidebar:
         height: 72px !important;
         min-height: unset !important;
         padding: 0 !important;
-        background: transparent !important;
+        background: #ffffff !important;
         border: none !important;
         box-shadow: none !important;
-        color: transparent !important;
+        color: #ffffff !important;
         font-size: 0 !important;
         border-radius: 18px !important;
         cursor: pointer !important;
-        opacity: 0 !important;
     }
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:hover,
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:focus,
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button:active {
-        background: transparent !important;
+        background: #ffffff !important;
         border: none !important;
         box-shadow: none !important;
         outline: none !important;
-        opacity: 0 !important;
+        color: #ffffff !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Champignon + bulle BD en HTML (non cliquable — le bouton Streamlit derrière gère le clic)
     st.components.v1.html("""
     <div style="
         display: flex;
@@ -1232,7 +1230,6 @@ with st.sidebar:
         font-family: 'Segoe UI', sans-serif;
         pointer-events: none;
     ">
-      <!-- Champignon dansant -->
       <div style="flex-shrink:0">
         <iframe
           src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
@@ -1242,7 +1239,6 @@ with st.sidebar:
         </iframe>
       </div>
 
-      <!-- Bulle BD (visuelle uniquement, le bouton Streamlit derrière capte le clic) -->
       <div style="
           position: relative;
           background: #ffffff;
@@ -1253,7 +1249,6 @@ with st.sidebar:
           max-width: 148px;
           user-select: none;
       ">
-        <!-- Queue gauche (bordure) -->
         <div style="
             position: absolute; left: -13px; top: 50%;
             transform: translateY(-50%);
@@ -1262,7 +1257,6 @@ with st.sidebar:
             border-bottom: 8px solid transparent;
             border-right: 13px solid #1e293b;
         "></div>
-        <!-- Queue gauche (fond blanc) -->
         <div style="
             position: absolute; left: -9px; top: 50%;
             transform: translateY(-50%);
@@ -1281,7 +1275,6 @@ with st.sidebar:
     </div>
     """, height=115, scrolling=False)
 
-    # Bouton Streamlit transparent positionné DERRIÈRE la bulle via CSS absolu
     if st.button(" ", key="mush_faq_hidden", use_container_width=False):
         show_faq_dialog()
 
