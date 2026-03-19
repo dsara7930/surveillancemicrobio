@@ -7044,17 +7044,18 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         st.success("✅ Données rechargées depuis Supabase !")
                         st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # FAQ
-    # ══════════════════════════════════════════════════════════════════════════
-   
- 
+    #---------------------------------------------------------------------------------------------------------------
+     # FAQ
+    #---------------------------------------------------------------------------------------------------------------
+    with subtab_faq:
+    faq_items = st.session_state.get("faq_items", [])
+
     # ── Stats rapides ──────────────────────────────────────────────────────
     cats_count = {}
     for f in faq_items:
         c = f.get("category", "Général")
         cats_count[c] = cats_count.get(c, 0) + 1
- 
+
     cols_stat = st.columns(len(cats_count) + 1 if cats_count else 2)
     with cols_stat[0]:
         st.metric("Total Q&R", len(faq_items))
@@ -7062,26 +7063,26 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
         if i < len(cols_stat):
             with cols_stat[i]:
                 st.metric(cat, cnt)
- 
+
     st.divider()
- 
+
     # ── Formulaire ajout / édition ─────────────────────────────────────────
     edit_idx = st.session_state.get("_faq_edit_idx")
- 
+
     if can_edit and st.session_state.get("_faq_show_form", False):
         is_edit = edit_idx is not None
-        form_title = f"✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
+        form_title = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
         existing = faq_items[edit_idx] if is_edit else {}
         form_bg = "#eff6ff" if is_edit else "#f0fdf4"
         form_border = "#93c5fd" if is_edit else "#86efac"
- 
+
         st.markdown(
             f"<div style='background:{form_bg};border:1.5px solid {form_border};"
             f"border-radius:12px;padding:18px;margin-bottom:16px'>",
             unsafe_allow_html=True
         )
         st.markdown(f"#### {form_title}")
- 
+
         fc1, fc2 = st.columns([3, 1])
         with fc1:
             faq_question = st.text_input(
@@ -7099,7 +7100,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 index=cat_idx,
                 key="faq_form_category"
             )
- 
+
         faq_answer = st.text_area(
             "Réponse * (Markdown supporté)",
             value=existing.get("answer", ""),
@@ -7107,12 +7108,11 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             placeholder="Décrivez la réponse. Vous pouvez utiliser **gras**, *italique*, listes…",
             key="faq_form_answer"
         )
- 
-        # Aperçu
+
         if faq_answer.strip():
             with st.expander("👁️ Aperçu du rendu Markdown", expanded=False):
                 st.markdown(faq_answer)
- 
+
         fb1, fb2 = st.columns(2)
         with fb1:
             btn_label = "✔️ Mettre à jour" if is_edit else "✅ Ajouter"
@@ -7127,19 +7127,17 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         faq_items[edit_idx]["answer"]   = faq_answer.strip()
                         faq_items[edit_idx]["category"] = faq_category
                     else:
-                        new_faq_item = {
+                        faq_items.append({
                             "id":       f"faq_{int(datetime.now().timestamp())}",
                             "category": faq_category,
                             "question": faq_question.strip(),
                             "answer":   faq_answer.strip(),
                             "order":    len(faq_items),
-                        }
-                        faq_items.append(new_faq_item)
- 
+                        })
                     save_faq(faq_items, supa=True)
-                    st.session_state["faq_items"]       = faq_items
-                    st.session_state["_faq_show_form"]  = False
-                    st.session_state["_faq_edit_idx"]   = None
+                    st.session_state["faq_items"]      = faq_items
+                    st.session_state["_faq_show_form"] = False
+                    st.session_state["_faq_edit_idx"]  = None
                     st.success("✅ FAQ mise à jour !")
                     st.rerun()
         with fb2:
@@ -7147,27 +7145,25 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 st.session_state["_faq_show_form"] = False
                 st.session_state["_faq_edit_idx"]  = None
                 st.rerun()
- 
+
         st.markdown("</div>", unsafe_allow_html=True)
- 
+
     elif can_edit and not st.session_state.get("_faq_show_form", False):
         if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
             st.session_state["_faq_show_form"] = True
             st.session_state["_faq_edit_idx"]  = None
             st.rerun()
- 
-    # ── Filtre catégorie ────────────────────────────────────────────────────
+
+    # ── Liste des Q&R ──────────────────────────────────────────────────────
     if faq_items:
-        all_cats_tab = ["Toutes"] + sorted(set(f.get("category","Général") for f in faq_items))
+        all_cats_tab = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
         faq_filter_cat = st.selectbox(
             "Filtrer par catégorie",
             all_cats_tab,
             key="faq_tab_cat_filter",
             label_visibility="collapsed"
         )
- 
-        # ── Liste des Q&R ───────────────────────────────────────────────────
-        # En-tête tableau
+
         st.markdown(
             "<div style='display:grid;grid-template-columns:2fr 1fr 0.4fr 0.4fr;"
             "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
@@ -7177,12 +7173,12 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             "<div></div><div></div></div>",
             unsafe_allow_html=True
         )
- 
+
         displayed = [
             (i, f) for i, f in enumerate(faq_items)
             if faq_filter_cat == "Toutes" or f.get("category") == faq_filter_cat
         ]
- 
+
         if not displayed:
             st.markdown(
                 "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
@@ -7191,19 +7187,18 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 unsafe_allow_html=True
             )
         else:
+            CAT_COL = {
+                "Général":            "#2563eb",
+                "Score & Seuils":     "#7c3aed",
+                "Prélèvements":       "#0891b2",
+                "Paramètres":         "#059669",
+                "Données":            "#d97706",
+                "Mesures correctives":"#dc2626",
+            }
             for display_pos, (real_idx, item) in enumerate(displayed):
-                cat_col = {
-                    "Général":            "#2563eb",
-                    "Score & Seuils":     "#7c3aed",
-                    "Prélèvements":       "#0891b2",
-                    "Paramètres":         "#059669",
-                    "Données":            "#d97706",
-                    "Mesures correctives":"#dc2626",
-                }.get(item.get("category","Général"), "#475569")
- 
+                cat_col = CAT_COL.get(item.get("category", "Général"), "#475569")
                 row_bg = "#f8fafc" if display_pos % 2 == 0 else "#ffffff"
-                border_r = "none" if display_pos < len(displayed)-1 else ""
- 
+
                 rc1, rc2 = st.columns([6, 1])
                 with rc1:
                     st.markdown(
@@ -7216,54 +7211,43 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         f"<span style='background:{cat_col}18;color:{cat_col};"
                         f"border:1px solid {cat_col}44;border-radius:12px;"
                         f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
-                        f"{item.get('category','Général')}</span></div>"
+                        f"{item.get('category', 'Général')}</span></div>"
                         f"</div>",
                         unsafe_allow_html=True
                     )
                 with rc2:
                     act1, act2, act3, act4 = st.columns(4)
-                    # Monter
                     with act1:
                         if can_edit and real_idx > 0:
-                            if st.button("↑", key=f"faq_up_{real_idx}",
-                                         help="Monter"):
-                                faq_items[real_idx], faq_items[real_idx-1] = \
-                                    faq_items[real_idx-1], faq_items[real_idx]
-                                for k, f in enumerate(faq_items):
-                                    f["order"] = k
+                            if st.button("↑", key=f"faq_up_{real_idx}", help="Monter"):
+                                faq_items[real_idx], faq_items[real_idx-1] = faq_items[real_idx-1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items): f["order"] = k
                                 save_faq(faq_items, supa=True)
                                 st.session_state["faq_items"] = faq_items
                                 st.rerun()
-                    # Descendre
                     with act2:
                         if can_edit and real_idx < len(faq_items)-1:
-                            if st.button("↓", key=f"faq_dn_{real_idx}",
-                                         help="Descendre"):
-                                faq_items[real_idx], faq_items[real_idx+1] = \
-                                    faq_items[real_idx+1], faq_items[real_idx]
-                                for k, f in enumerate(faq_items):
-                                    f["order"] = k
+                            if st.button("↓", key=f"faq_dn_{real_idx}", help="Descendre"):
+                                faq_items[real_idx], faq_items[real_idx+1] = faq_items[real_idx+1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items): f["order"] = k
                                 save_faq(faq_items, supa=True)
                                 st.session_state["faq_items"] = faq_items
                                 st.rerun()
-                    # Éditer
                     with act3:
                         if can_edit:
                             if st.button("✏️", key=f"faq_edit_{real_idx}"):
                                 st.session_state["_faq_edit_idx"]  = real_idx
                                 st.session_state["_faq_show_form"] = True
                                 st.rerun()
-                    # Supprimer
                     with act4:
                         if can_edit:
                             if st.button("🗑️", key=f"faq_del_{real_idx}"):
                                 faq_items.pop(real_idx)
-                                for k, f in enumerate(faq_items):
-                                    f["order"] = k
+                                for k, f in enumerate(faq_items): f["order"] = k
                                 save_faq(faq_items, supa=True)
                                 st.session_state["faq_items"] = faq_items
                                 st.rerun()
- 
+
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
                 f"padding:8px 14px'>"
@@ -7272,7 +7256,6 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 f"</div></div>",
                 unsafe_allow_html=True
             )
- 
     else:
         st.markdown(
             "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
@@ -7283,10 +7266,10 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
             unsafe_allow_html=True
         )
- 
+
     st.divider()
- 
-    # ── Réinitialiser FAQ par défaut ────────────────────────────────────────
+
+    # ── Réinitialiser FAQ ──────────────────────────────────────────────────
     if can_edit:
         st.markdown("#### ↩️ Réinitialiser la FAQ")
         st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
