@@ -5885,7 +5885,7 @@ elif active == "parametres":
         st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
     st.markdown("### ⚙️ Paramètres")
 
-    (subtab_mesures, subtab_points, subtab_plans,
+    (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
      subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
         "🗺️ Plans", "📋 Mesures correctives", "📍 Points de prélèvement",
         "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
