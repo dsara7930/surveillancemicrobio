@@ -1071,10 +1071,6 @@ with st.sidebar:
         f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
         unsafe_allow_html=True,
     )
-    st.markdown(
-        unsafe_allow_html=True,
-    )
-
     st.divider()
 
     st.markdown(
