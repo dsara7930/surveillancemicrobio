@@ -1192,83 +1192,32 @@ with st.sidebar:
 # ── 🍄 Champignon + petites bulles BD + bulle cliquable ───────────────────
     st.markdown("""
     <style>
-    /* ── Conteneur flex champignon + bulles + bouton ── */
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 0 !important;
-        margin-top: 8px !important;
-    }
-    /* ── Le bouton = la bulle BD ── */
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button {
-        position: relative !important;
-        background: #ffffff !important;
-        border: 2.5px solid #1e293b !important;
-        border-radius: 18px !important;
-        padding: 9px 13px !important;
-        box-shadow: 3px 3px 0px #1e293b !important;
-        cursor: pointer !important;
-        font-size: .70rem !important;
-        font-weight: 800 !important;
-        color: #1e293b !important;
-        line-height: 1.4 !important;
-        text-align: center !important;
-        width: auto !important;
-        min-width: 0 !important;
-        transition: transform .12s ease, box-shadow .12s ease, border-color .12s !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
-        transform: scale(1.04) !important;
-        box-shadow: 4px 4px 0px #2563eb !important;
-        border-color: #2563eb !important;
-        color: #2563eb !important;
-        background: #ffffff !important;
-    }
-    div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:active {
-        transform: scale(0.96) !important;
-        box-shadow: 1px 1px 0px #1e293b !important;
-    }
-    /* ── Queue droite de la bulle (pseudo-éléments impossibles sur button, on la fait via le wrapper) ── */
+    /* ... (garde tout le CSS existant) ... */
     div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::after {
-        content: '' !important;
-        position: absolute !important;
-        right: -11px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        width: 0 !important;
-        height: 0 !important;
-        border-top: 7px solid transparent !important;
-        border-bottom: 7px solid transparent !important;
-        border-left: 11px solid #1e293b !important;
+        right: auto !important;
+        left: -11px !important;
+        border-left: none !important;
+        border-right: 11px solid #1e293b !important;
     }
     div[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button::before {
-        content: '' !important;
-        position: absolute !important;
-        right: -7px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        width: 0 !important;
-        height: 0 !important;
-        border-top: 5px solid transparent !important;
-        border-bottom: 5px solid transparent !important;
-        border-left: 8px solid #ffffff !important;
+        right: auto !important;
+        left: -7px !important;
+        border-left: none !important;
+        border-right: 8px solid #ffffff !important;
         z-index: 1 !important;
     }
     </style>
 
-    <!-- Petites bulles + champignon à droite du bouton -->
     <div style="
         display:flex;align-items:center;justify-content:center;
         gap:3px;margin-top:8px;padding:0 6px;
         font-family:'Segoe UI',sans-serif;
         pointer-events:none;
     ">
-      <div style="width:0;height:0"></div><!-- placeholder alignement bouton -->
-      <div style="display:flex;align-items:center;gap:3px;margin-left:4px">
-        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
-        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+      <div style="display:flex;align-items:center;gap:3px;margin-right:4px">
         <div style="width:6px;height:6px;background:#1e293b;border-radius:50%;opacity:.7"></div>
+        <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+        <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
       </div>
       <iframe
         src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
