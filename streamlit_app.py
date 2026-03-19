@@ -1060,6 +1060,7 @@ with st.sidebar:
     for key, icon, label in tabs_cfg:
         if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
             st.session_state.active_tab = key
+            st.session_state["_faq_panel_open"] = False
             st.rerun()
 
     st.divider()
@@ -1071,6 +1072,12 @@ with st.sidebar:
         f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
         unsafe_allow_html=True,
     )
+    st.markdown(
+        '<p style="font-size:.75rem;color:#94a3b8;text-align:center">'
+        'MicroSurveillance URC v5.0</p>',
+        unsafe_allow_html=True,
+    )
+
     st.divider()
 
     st.markdown(
@@ -1101,15 +1108,18 @@ with st.sidebar:
 
     # ── 🍄 Champignon dansant cliquable ──────────────────────────
     st.components.v1.html("""
-<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0">
-  <a href="?open_faq=1" target="_self" style="display:block;cursor:pointer;border-radius:50%">
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px;
+            margin:4px 0;padding-top:16px;overflow:visible">
+  <div onclick="window.parent.location.href='?open_faq=1'"
+       style="display:block;cursor:pointer;border-radius:50%;
+              padding:6px;box-sizing:content-box">
     <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-            width="80" height="80"
+            width="100" height="100"
             style="border:none;border-radius:50%;pointer-events:none;display:block"
             frameBorder="0"></iframe>
-  </a>
+  </div>
   <p style="text-align:center;font-size:.72rem;color:#94a3b8;
-     font-style:italic;margin:0">Clique pour l'aide !</p>
+     font-style:italic;margin:0">Si tu as besoin d'aide, je suis là</p>
 </div>
 <style>
 @keyframes bounce {
@@ -1120,70 +1130,95 @@ with st.sidebar:
 }
 @keyframes glow {
   0%,100%{ filter:drop-shadow(0 0 0px rgba(124,58,237,0)); }
-  50%{ filter:drop-shadow(0 0 10px rgba(124,58,237,.7)); }
+  50%{ filter:drop-shadow(0 0 14px rgba(124,58,237,.8)); }
 }
-a { display:block; animation:bounce 1.8s ease-in-out infinite,glow 2.6s ease-in-out infinite; }
-a:hover { animation:none; transform:scale(1.2); transition:transform .15s; filter:brightness(1.15); }
+div[onclick] {
+  animation:bounce 1.8s ease-in-out infinite, glow 2.6s ease-in-out infinite;
+  overflow:visible;
+}
+div[onclick]:hover {
+  animation:none; transform:scale(1.2);
+  transition:transform .15s; filter:brightness(1.15);
+}
 </style>
-""", height=130, scrolling=False)
+""", height=160, scrolling=False)
 
-# ── HEADER ─────────────────────────────────────────────────────────────────────
+# ── HEADER (une seule fois) ────────────────────────────────────────────────────
 active = st.session_state.active_tab
 today  = datetime.today().date()
 
-st.markdown(
-    '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
-    'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
-    unsafe_allow_html=True,
-)
-st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
+# N'afficher le header QUE si le panel FAQ est fermé
+if not st.session_state.get("_faq_panel_open"):
+    st.markdown(
+        '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
+        'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
 # ── PANEL FAQ PLEINE PAGE ──────────────────────────────────────────────────────
 if st.session_state.get("_faq_panel_open"):
+
+    # Overlay pleine page via CSS injecté
+    st.markdown("""
+    <style>
+    .faq-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(15,23,42,0.55);
+        z-index: 9990;
+    }
+    .faq-modal {
+        position: fixed;
+        top: 3vh;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(92vw, 1100px);
+        max-height: 94vh;
+        background: #ffffff;
+        border-radius: 18px;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+        z-index: 9999;
+        overflow-y: auto;
+        padding: 0;
+    }
+    </style>
+    <div class="faq-overlay"></div>
+    """, unsafe_allow_html=True)
+
     faq_items = sorted(
         st.session_state.get("faq_items", DEFAULT_FAQ),
         key=lambda x: x.get("order", 999),
     )
 
-    # Header
-    h1, h2, h3 = st.columns([6, 1, 1])
-    with h1:
-        st.markdown(
-            "<div style='background:linear-gradient(135deg,#7c3aed,#a855f7);"
-            "border-radius:14px;padding:16px 22px;margin-bottom:12px'>"
-            "<div style='color:#fff;font-size:1.2rem;font-weight:900'>"
-            "🍄 Centre d'aide — FAQ</div>"
-            f"<div style='color:#e9d5ff;font-size:.78rem;margin-top:3px'>"
-            f"{len(faq_items)} questions & réponses disponibles</div>"
-            "</div>",
-            unsafe_allow_html=True)
-    with h2:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        if st.button("⛶ Réduire", key="faq_minimize", use_container_width=True):
-            st.session_state["_faq_panel_open"] = False
-            st.rerun()
-    with h3:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        if st.button("✕ Fermer", key="faq_close", use_container_width=True):
-            st.session_state["_faq_panel_open"] = False
-            st.rerun()
+    # Header violet
+    st.markdown(
+        "<div style='background:linear-gradient(135deg,#7c3aed,#a855f7);"
+        "border-radius:14px 14px 0 0;padding:20px 28px 16px 28px;margin-bottom:0'>"
+        "<div style='color:#fff;font-size:1.3rem;font-weight:900'>🍄 Centre d'aide — FAQ</div>"
+        f"<div style='color:#e9d5ff;font-size:.8rem;margin-top:3px'>"
+        f"{len(faq_items)} questions & réponses disponibles</div>"
+        "</div>",
+        unsafe_allow_html=True)
 
-    # Recherche + filtre
-    sc1, sc2 = st.columns([3, 1])
-    with sc1:
+    # Barre recherche + fermer
+    fc1, fc2, fc3 = st.columns([4, 1.5, 0.8])
+    with fc1:
         faq_query = st.text_input(
             "search", placeholder="🔍 Rechercher une question ou un mot-clé…",
             label_visibility="collapsed", key="faq_panel_search")
-    with sc2:
+    with fc2:
         all_cats_panel = ["Toutes les catégories"] + sorted(
             set(f.get("category", "Général") for f in faq_items))
         sel_cat_panel = st.selectbox(
             "cat", all_cats_panel,
             label_visibility="collapsed", key="faq_panel_cat")
+    with fc3:
+        if st.button("✕ Fermer", key="faq_close", use_container_width=True, type="primary"):
+            st.session_state["_faq_panel_open"] = False
+            st.rerun()
 
-    st.markdown(
-        "<hr style='margin:8px 0 14px;border-color:#e2e8f0'>",
-        unsafe_allow_html=True)
+    st.markdown("<hr style='margin:8px 0 16px;border-color:#e2e8f0'>", unsafe_allow_html=True)
 
     q_panel = faq_query.strip().lower()
 
@@ -1251,11 +1286,12 @@ if st.session_state.get("_faq_panel_open"):
     st.markdown(
         "<div style='margin-top:24px;padding:12px 16px;background:#f8fafc;"
         "border:1px solid #e2e8f0;border-radius:10px;"
-        "font-size:.72rem;color:#94a3b8;text-align:center'>"
+        "font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:20px'>"
         "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
         unsafe_allow_html=True)
 
-    st.divider()
+    # Bloquer le reste de la page tant que FAQ est ouverte
+    st.stop()
     
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
