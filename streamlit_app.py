@@ -1145,8 +1145,7 @@ with st.sidebar:
     supa_icon = "🟢" if supa_ok else "🔴"
     supa_txt  = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
     st.markdown(
-        f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">'
-        f'{supa_icon} {supa_txt}</p>',
+        f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -1171,7 +1170,7 @@ with st.sidebar:
         mime="application/json",
         use_container_width=True,
         key="sidebar_export",
-        help="Téléchargez ce fichier avant toute modification du code pour ne jamais perdre vos données",
+        help="Téléchargez ce fichier avant toute modification du code.",
     )
     if not supa_ok:
         st.markdown(
@@ -1180,26 +1179,26 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── 🍄 Champignon dansant + bouton invisible centré dessus ────────────
+ # ── 🍄 Champignon dansant + bouton invisible centré dessus ────────────
     st.markdown("""
     <style>
-    /* Conteneur relatif pour le positionnement absolu du bouton */
+    /* Cible le conteneur du bouton FAQ */
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) {
-        position: relative !important;
-        /* remonte le bouton pour le superposer sur l'iframe juste au-dessus */
-        margin-top: -114px !important;
-        /* centre horizontalement */
         display: flex !important;
         justify-content: center !important;
-        height: 0px !important;
+        margin-top: -126px !important;
+        margin-bottom: 0px !important;
+        height: 110px !important;
+        z-index: 1000 !important;
+        position: relative !important;
     }
+    /* Le bouton lui-même : taille du gif, totalement invisible */
     [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button {
-        /* taille exacte du gif champignon */
-        width: 100px !important;
-        height: 100px !important;
+        width: 110px !important;
+        height: 110px !important;
         min-height: unset !important;
         padding: 0 !important;
-        /* totalement invisible */
+        margin: 0 !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -1207,17 +1206,14 @@ with st.sidebar:
         font-size: 0 !important;
         border-radius: 50% !important;
         cursor: pointer !important;
-        position: relative !important;
-        z-index: 1000 !important;
     }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:hover {
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:hover,
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:focus,
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:active {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:focus {
         outline: none !important;
-        box-shadow: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1227,19 +1223,19 @@ with st.sidebar:
     <div style="text-align:center;margin-top:14px;padding-bottom:4px">
       <iframe
         src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-        width="100" height="100"
+        width="110" height="110"
         style="border:none;border-radius:12px;pointer-events:none;display:block;margin:0 auto"
         frameBorder="0"
         allowFullScreen>
       </iframe>
-      <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;font-style:italic;
                   font-family:'Segoe UI',sans-serif">
         Bonne surveillance :) 🍄
       </div>
     </div>
-    """, height=130, scrolling=False)
+    """, height=140, scrolling=False)
 
-    # Bouton invisible 100x100px centré pile sur le champignon
+    # Bouton invisible 110x110px superposé pile sur le champignon
     if st.button(" ", key="mush_faq_btn", use_container_width=False,
                  help="❓ Aide & FAQ"):
         show_faq_dialog()
