@@ -196,6 +196,7 @@ SCHEDULES_FILE = "schedules.json"
 PENDING_FILE = "pending_identifications.json"
 ARCHIVED_FILE = "archived_samples.json"
 OPERATORS_FILE = "operators.json"
+PLANS_FILE = "plans_data.json"
 
 DEFAULT_ORIGIN_MEASURES = [
     {"id":"m001","text":"Documenter l'événement dans le registre qualité","scope":"all","risk":"all","type":"alert"},
@@ -281,10 +282,8 @@ DEFAULT_GERMS = [
     dict(name="Methylobacterium spp.",path=["Germes","Bactéries","Environnemental","Humidité"],notes=None,comment=None),
     dict(name="Caulobacter crescentus",path=["Germes","Bactéries","Environnemental","Humidité"],notes=None,comment=None),
     dict(name="Mycobacterium non tuberculeux",path=["Germes","Bactéries","Environnemental","Humidité"],notes=None,comment=None),
-    dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Humidité"],notes=None,comment=None),
     dict(name="Burkholderia cepacia",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],notes=None,comment=None),
     dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],notes=None,comment=None),
-    dict(name="Massilia spp.",path=["Germes","Bactéries","Environnemental","Humidité"],notes=None,comment=None),
     dict(name="Bacillus spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],notes="Sporulé",comment=None),
     dict(name="Clostridium spp. (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],notes="Sporulé",comment=None),
     dict(name="Geobacillus stearothermophilus (SPORULES)",path=["Germes","Bactéries","Environnemental","Sol / Carton / Surface sèche"],notes="Sporulé thermophile",comment=None),
@@ -562,6 +561,11 @@ def save_operators(d, supa=True):
     _save_json_key('operators', d, OPERATORS_FILE)
     if supa: _supa_upsert('operators', json.dumps(d, ensure_ascii=False))
 
+def load_plans(): return _load_json_key('plans', PLANS_FILE)
+def save_plans(d, supa=True):
+    _save_json_key('plans', d, PLANS_FILE)
+    if supa: _supa_upsert('plans', json.dumps(d, ensure_ascii=False))
+
 def load_surveillance():
     raw_json = _supa_get('surveillance')
     if raw_json:
@@ -611,6 +615,7 @@ def export_all_data():
         "origin_measures":          st.session_state.origin_measures,
         "points":                   st.session_state.points,
         "operators":                st.session_state.operators,
+        "plans":                    st.session_state.plans,
         "prelevements":             st.session_state.prelevements,
         "schedules":                st.session_state.schedules,
         "pending_identifications":  st.session_state.pending_identifications,
@@ -633,6 +638,7 @@ def import_all_data(data: dict):
         st.session_state.origin_measures         = [dict(m) for m in data.get("origin_measures", [])] or [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
         st.session_state.points                  = [dict(p) for p in data.get("points", [])]
         st.session_state.operators               = [dict(o) for o in data.get("operators", [])]
+        st.session_state.plans                   = [dict(p) for p in data.get("plans", [])]
         st.session_state.prelevements            = [dict(p) for p in data.get("prelevements", [])]
         st.session_state.schedules               = [dict(s) for s in data.get("schedules", [])]
         st.session_state.pending_identifications = [dict(x) for x in data.get("pending_identifications", [])]
@@ -646,6 +652,7 @@ def import_all_data(data: dict):
         save_origin_measures(st.session_state.origin_measures)
         save_points(st.session_state.points)
         save_operators(st.session_state.operators)
+        save_plans(st.session_state.plans)
         save_prelevements(st.session_state.prelevements)
         save_schedules(st.session_state.schedules)
         save_pending_identifications(st.session_state.pending_identifications)
@@ -830,6 +837,8 @@ if "points" not in st.session_state:
     st.session_state.points = load_points()
 if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
+if "plans" not in st.session_state:
+    st.session_state.plans = load_plans()
 if "due_alert_shown" not in st.session_state:
     st.session_state.due_alert_shown = False
 if "current_process" not in st.session_state:
@@ -1680,104 +1689,72 @@ if active == "surveillance":
 
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
+# ── Localisation sur plan ─────────────────────────────────────────
+            plans_available = st.session_state.get("plans", [])
+            plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_available]
+
             map_col, btn_col = st.columns([5, 1])
             with map_col:
                 st.markdown(
                     "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
-                    "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                    "🗺️ Localiser sur le plan URC <span style='font-weight:400;font-style:italic'>"
+                    "(optionnel)</span></div>",
                     unsafe_allow_html=True)
-                lc_plan, rc_plan = st.columns([1, 2])
-                with lc_plan:
-                    plan_upload_new = st.file_uploader(
-                        "Plan URC (PNG / JPG / PDF)", type=["png","jpg","jpeg","pdf"],
-                        key="plan_upload_new_prelev")
-                    if plan_upload_new:
-                        import base64 as _b64_np
-                        if plan_upload_new.type == "application/pdf":
-                            try:
-                                import fitz
-                                raw_pdf = plan_upload_new.read()
-                                doc = fitz.open(stream=raw_pdf, filetype="pdf")
-                                page = doc[0]
-                                mat  = fitz.Matrix(2, 2)
-                                pix  = page.get_pixmap(matrix=mat)
-                                img_bytes = pix.tobytes("png")
-                                b64_np = _b64_np.b64encode(img_bytes).decode()
-                                st.session_state.map_image = f"data:image/png;base64,{b64_np}"
-                                st.session_state["_new_prelev_plan_point"] = None
-                                st.success("✅ PDF converti — première page utilisée comme plan")
-                            except ImportError:
-                                st.error("❌ PyMuPDF non installé — ajoutez `pymupdf` dans requirements.txt")
-                            except Exception as e:
-                                st.error(f"❌ Erreur conversion PDF : {e}")
-                        else:
-                            raw_np = plan_upload_new.read()
-                            b64_np = _b64_np.b64encode(raw_np).decode()
-                            st.session_state.map_image = f"data:{plan_upload_new.type};base64,{b64_np}"
-                            st.session_state["_new_prelev_plan_point"] = None
-
-                    _cur_pt = st.session_state.get("_new_prelev_plan_point")
-                    if st.session_state.get("map_image"):
-                        st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
-                        if _cur_pt:
-                            st.markdown(
-                                f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                                f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                                f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
-                                unsafe_allow_html=True)
-                        else:
-                            st.info("Aucun point placé.")
-                        col_val, col_clr = st.columns(2)
-                        with col_val:
-                            if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
-                                st.session_state["_new_prelev_plan_point"] = {
-                                    "label":      selected_point.get("label",""),
-                                    "room_class": selected_point.get("room_class",""),
-                                    "loc_crit":   int(selected_point.get("location_criticality",1)),
-                                    "survLabel":  None,
-                                }
-                                st.rerun()
-                        with col_clr:
-                            if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
-                                st.session_state["_new_prelev_plan_point"] = None
-                                st.rerun()
-                    else:
-                        st.markdown(
-                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                            "padding:16px;text-align:center;color:#94a3b8;font-size:.72rem'>"
-                            "📁 Uploadez d'abord le plan URC</div>",
-                            unsafe_allow_html=True)
-
-                with rc_plan:
-                    if st.session_state.get("map_image"):
-                        _np_img     = st.session_state["map_image"]
-                        _np_label   = selected_point.get("label","Point")
-                        _np_point   = st.session_state.get("_new_prelev_plan_point")
-                        _np_pt_json = json.dumps(_np_point) if _np_point else "null"
-                        _np_lc      = int(selected_point.get("location_criticality",1))
-                        _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
-                        _np_rc      = selected_point.get("room_class","")
-
-                        _np_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+                if plans_available:
+                    sel_plan_name = st.selectbox(
+                        "Choisir un plan de localisation",
+                        plan_names,
+                        key="new_prelev_plan_sel",
+                        help="Plans disponibles — gérez-les dans Paramètres → Plans")
+                    sel_plan = None
+                    if sel_plan_name != "— Aucun plan —":
+                        sel_plan = next((p for p in plans_available if p["name"] == sel_plan_name), None)
+                    if sel_plan and sel_plan.get("image_b64"):
+                        lc_plan, rc_plan = st.columns([1, 2])
+                        with lc_plan:
+                            _cur_pt = st.session_state.get("_new_prelev_plan_point")
+                            st.caption("✅ Plan chargé — cliquez sur la carte pour placer le point")
+                            if _cur_pt:
+                                st.markdown(
+                                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                                    f"border-radius:6px;padding:6px 10px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                                    f"📌 Point placé : <b>{_cur_pt['x']:.1f}% / {_cur_pt['y']:.1f}%</b></div>",
+                                    unsafe_allow_html=True)
+                            else:
+                                st.info("Aucun point placé.")
+                            col_val, col_clr = st.columns(2)
+                            with col_val:
+                                if st.button("📌 Valider", key="np_validate_pt", use_container_width=True):
+                                    st.session_state["_new_prelev_plan_point"] = {
+                                        "label":      selected_point.get("label",""),
+                                        "room_class": selected_point.get("room_class",""),
+                                        "loc_crit":   int(selected_point.get("location_criticality",1)),
+                                        "survLabel":  None,
+                                    }
+                                    st.rerun()
+                            with col_clr:
+                                if st.button("🗑️ Effacer", key="clear_np_pt", use_container_width=True):
+                                    st.session_state["_new_prelev_plan_point"] = None
+                                    st.rerun()
+                        with rc_plan:
+                            _np_img     = sel_plan["image_b64"]
+                            _np_label   = selected_point.get("label","Point")
+                            _np_point   = st.session_state.get("_new_prelev_plan_point")
+                            _np_pt_json = json.dumps(_np_point) if _np_point else "null"
+                            _np_lc      = int(selected_point.get("location_criticality",1))
+                            _lc_col_map = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_np_lc),"#3b82f6")
+                            _np_rc      = selected_point.get("room_class","")
+                            _np_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
-     display:flex;flex-direction:column;overflow:hidden}}
-.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;
-     display:flex;gap:6px;align-items:center;flex-shrink:0}}
-.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;
-      padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
+body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}}
+.tb{{padding:6px 10px;background:#fff;border-bottom:1.5px solid #e2e8f0;display:flex;gap:6px;align-items:center;flex-shrink:0}}
+.btn{{background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;padding:4px 8px;color:#1e293b;font-size:.7rem;cursor:pointer;white-space:nowrap}}
 .btn.active{{background:#2563eb;border-color:#2563eb;color:#fff}}
 #st{{font-size:.62rem;color:#64748b;margin-left:auto;padding-right:4px}}
-.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;
-     align-items:flex-start;justify-content:center}}
-.mi{{position:relative;display:inline-block;margin:8px;
-     box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
+.mw{{flex:1;overflow:auto;background:#1e293b;display:flex;align-items:flex-start;justify-content:center}}
+.mi{{position:relative;display:inline-block;margin:8px;box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:4px;overflow:visible}}
 #img{{display:block;max-width:100%;border-radius:4px;user-select:none}}
-.pt{{position:absolute;width:28px;height:28px;border-radius:50%;
-     background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;
-     transform:translate(-50%,-50%);display:flex;align-items:center;
-     justify-content:center;font-size:13px;font-weight:800;color:#fff;
-     box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
+.pt{{position:absolute;width:28px;height:28px;border-radius:50%;background:{_lc_col_map};border:2.5px solid #fff;cursor:pointer;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:20;transition:transform .15s}}
 .pt:hover{{transform:translate(-50%,-50%) scale(1.3)}}
 .mw.add{{cursor:crosshair}}
 </style></head><body>
@@ -1786,62 +1763,55 @@ body{{background:#1e293b;font-family:'Segoe UI',sans-serif;height:100vh;
   <button class="btn" onclick="clr()" style="color:#dc2626">🗑️ Effacer</button>
   <span id="st">—</span>
 </div>
-<div class="mw" id="mw">
-  <div class="mi" id="mi">
-    <img id="img" src="{_np_img}" draggable="false">
-  </div>
-</div>
+<div class="mw" id="mw"><div class="mi" id="mi"><img id="img" src="{_np_img}" draggable="false"></div></div>
 <script>
-let add=false;
-let pt={_np_pt_json};
-const lbl="{_np_label}";
-const rc="{_np_rc}";
-const lc={_np_lc};
-function upd(){{
-  document.getElementById('st').textContent =
-    pt ? '📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche'
-       : 'Aucun point placé';
-}}
-function render(){{
-  document.querySelectorAll('.pt').forEach(p=>p.remove());
-  if(!pt) return;
-  const d=document.createElement('div');
-  d.className='pt'; d.style.left=pt.x+'%'; d.style.top=pt.y+'%';
-  d.textContent='📍'; d.title=lbl;
-  document.getElementById('mi').appendChild(d);
-  upd();
-}}
-function tog(){{
-  add=!add;
-  document.getElementById('ab').classList.toggle('active',add);
-  document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';
-  document.getElementById('mw').classList.toggle('add',add);
-}}
-function clr(){{ pt=null; render(); upd(); }}
-document.getElementById('mi').addEventListener('click',function(e){{
-  if(!add) return;
-  if(e.target.classList.contains('pt')) return;
-  const img=document.getElementById('img');
-  const r=img.getBoundingClientRect();
-  if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom) return;
-  const x=((e.clientX-r.left)/r.width*100);
-  const y=((e.clientY-r.top)/r.height*100);
-  pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};
-  render(); tog();
-}});
-const img=document.getElementById('img');
-if(img.complete&&img.naturalWidth>0) render();
-else img.addEventListener('load',render);
-upd();
+let add=false,pt={_np_pt_json};
+const lbl="{_np_label}",rc="{_np_rc}",lc={_np_lc};
+function upd(){{document.getElementById('st').textContent=pt?'📍 '+pt.x.toFixed(1)+'% / '+pt.y.toFixed(1)+'%  — cliquez Valider à gauche':'Aucun point placé';}}
+function render(){{document.querySelectorAll('.pt').forEach(p=>p.remove());if(!pt)return;const d=document.createElement('div');d.className='pt';d.style.left=pt.x+'%';d.style.top=pt.y+'%';d.textContent='📍';d.title=lbl;document.getElementById('mi').appendChild(d);upd();}}
+function tog(){{add=!add;document.getElementById('ab').classList.toggle('active',add);document.getElementById('ab').textContent=add?'✋ Annuler':'📍 Placer / Déplacer';document.getElementById('mw').classList.toggle('add',add);}}
+function clr(){{pt=null;render();upd();}}
+document.getElementById('mi').addEventListener('click',function(e){{if(!add)return;if(e.target.classList.contains('pt'))return;const img=document.getElementById('img');const r=img.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)return;const x=((e.clientX-r.left)/r.width*100);const y=((e.clientY-r.top)/r.height*100);pt={{x,y,label:lbl,room_class:rc,loc_crit:lc,survLabel:null}};render();tog();}});
+const img=document.getElementById('img');if(img.complete&&img.naturalWidth>0)render();else img.addEventListener('load',render);upd();
 </script></body></html>"""
-                        st.components.v1.html(_np_html, height=280, scrolling=False)
-                        st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
+                            st.components.v1.html(_np_html, height=280, scrolling=False)
+                            st.caption("💡 Cliquez '📍 Placer / Déplacer', puis cliquez sur la carte, puis '📌 Valider' à gauche.")
+                    elif sel_plan and not sel_plan.get("image_b64"):
+                        st.markdown(
+                            "<div style='background:#fffbeb;border:1px solid #fde047;"
+                            "border-radius:8px;padding:16px;text-align:center;color:#92400e;font-size:.78rem'>"
+                            "⚠️ Ce plan n'a pas d'image. Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
+                            unsafe_allow_html=True)
                     else:
                         st.markdown(
-                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;"
-                            "padding:40px;text-align:center;color:#94a3b8;font-size:.75rem'>"
-                            "🗺️ La carte apparaîtra ici après upload du plan</div>",
+                            "<div style='background:#f8fafc;border:1px dashed #cbd5e1;"
+                            "border-radius:8px;padding:20px;text-align:center;color:#94a3b8;font-size:.72rem'>"
+                            "Sélectionnez un plan ci-dessus pour afficher la carte</div>",
                             unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                        "border-radius:10px;padding:24px;text-align:center'>"
+                        "<div style='font-size:1.5rem;margin-bottom:6px'>🗺️</div>"
+                        "<div style='color:#64748b;font-size:.8rem;font-weight:600'>Aucun plan disponible</div>"
+                        "<div style='color:#94a3b8;font-size:.72rem;margin-top:4px'>"
+                        "Ajoutez des plans dans <strong>Paramètres → Plans</strong></div></div>",
+                        unsafe_allow_html=True)
+
+            # Persiste point carte
+            _np_saved_pt = st.session_state.get("_new_prelev_plan_point")
+            if _np_saved_pt:
+                if "map_points" not in st.session_state:
+                    st.session_state.map_points = []
+                _existing = [p.get("label") for p in st.session_state.map_points]
+                if _np_saved_pt["label"] not in _existing:
+                    st.session_state.map_points.append(_np_saved_pt)
+                else:
+                    for _mp in st.session_state.map_points:
+                        if _mp.get("label") == _np_saved_pt["label"]:
+                            _mp.update(_np_saved_pt)
+                st.session_state["_new_prelev_plan_point"] = None
+                st.rerun()
 
             with btn_col:
                 st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
@@ -1854,12 +1824,12 @@ upd();
                         "gelose":               selected_point.get('gelose','—'),
                         "room_class":           selected_point.get('room_class',''),
                         "location_criticality": pt_loc_crit,
-                        "operateur":            p_oper,
-                        "date":                 str(p_date),
+                        "operateur":            p_oper if p_oper else "Non renseigné",
+                        "date":                 str(p_date) if p_date else str(today),
                         "archived":             False,
                         "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
                         "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
-                        "commentaire":          p_commentaire
+                        "commentaire":          p_commentaire if p_commentaire else ""
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
@@ -5008,10 +4978,10 @@ elif active == "parametres":
         st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
     st.markdown("### ⚙️ Paramètres")
 
-    (subtab_mesures, subtab_points,
+    (subtab_mesures, subtab_points, subtab_plans,
      subtab_operateurs, subtab_backup, subtab_supabase) = st.tabs([
         "📋 Mesures correctives", "📍 Points de prélèvement",
-        "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
+        "🗺️ Plans", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données"
     ])
 
     # ── Constantes Points ──────────────────────────────────────────────────────
@@ -5512,6 +5482,167 @@ elif active == "parametres":
                     })
                     save_points(st.session_state.points, supa=True)
                     st.success(f"✅ Point **{np_label}** ajouté")
+                    st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════
+    # PLANS DE LOCALISATION
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_plans:
+        st.markdown("### 🗺️ Gestion des plans de localisation")
+        st.markdown("""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+        ℹ️ Les plans permettent de localiser visuellement les points de prélèvement.<br>
+        Dans <strong>Surveillance → Nouveau prélèvement</strong>, choisissez un plan
+        dans le menu déroulant pour afficher la carte et positionner le point.
+        </div>""", unsafe_allow_html=True)
+
+        if not st.session_state.plans:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                "border-radius:12px;padding:32px;text-align:center'>"
+                "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
+                "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucun plan défini</div>"
+                "<div style='font-size:.8rem;color:#94a3b8'>Ajoutez un plan ci-dessous</div></div>",
+                unsafe_allow_html=True)
+        else:
+            st.markdown(
+                f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
+                f"padding:12px 16px;margin-bottom:16px'>"
+                f"<span style='font-size:.75rem;color:#0369a1;font-weight:700'>"
+                f"🗺️ {len(st.session_state.plans)} plan(s)</span></div>",
+                unsafe_allow_html=True)
+            for pi, plan in enumerate(list(st.session_state.plans)):
+                has_img = bool(plan.get("image_b64"))
+                pc1, pc2, pc3 = st.columns([5, 1, 1])
+                with pc1:
+                    img_badge = (
+                        " <span style='background:#f0fdf4;color:#166534;border:1px solid #86efac;"
+                        "border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700'>"
+                        "🖼️ Image</span>"
+                        if has_img else
+                        " <span style='background:#f8fafc;color:#94a3b8;border:1px solid #e2e8f0;"
+                        "border-radius:4px;padding:1px 7px;font-size:.62rem'>Pas d'image</span>")
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border:1.5px solid #e2e8f0;"
+                        f"border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px'>"
+                        f"<span style='font-size:1.3rem'>🗺️</span><div>"
+                        f"<div style='font-weight:700;color:#0f172a'>{plan['name']}</div>"
+                        f"<div style='font-size:.7rem;color:#64748b;margin-top:2px'>"
+                        f"ID: {plan['id']}{img_badge}</div></div></div>",
+                        unsafe_allow_html=True)
+                with pc2:
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_plan_{pi}"):
+                            st.session_state["_edit_plan_idx"] = pi
+                            st.session_state.pop("_ep_image_b64", None)
+                            st.rerun()
+                with pc3:
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_plan_{pi}"):
+                            st.session_state.plans.pop(pi)
+                            save_plans(st.session_state.plans)
+                            st.success("Plan supprimé.")
+                            st.rerun()
+
+        st.divider()
+
+        edit_plan_idx = st.session_state.get("_edit_plan_idx")
+        if edit_plan_idx is not None and edit_plan_idx < len(st.session_state.plans):
+            plan_e = st.session_state.plans[edit_plan_idx]
+            st.markdown(f"### ✏️ Modifier — {plan_e['name']}")
+            ep1, ep2 = st.columns([3, 2])
+            with ep1:
+                ep_name = st.text_input("Nom du plan *", value=plan_e.get("name",""), key="ep_name")
+            with ep2:
+                ep_upload = st.file_uploader(
+                    "Remplacer l'image (PNG/JPG/PDF)",
+                    type=["png","jpg","jpeg","pdf"], key="ep_upload")
+            if ep_upload:
+                import base64 as _b64ep
+                if ep_upload.type == "application/pdf":
+                    try:
+                        import fitz
+                        doc = fitz.open(stream=ep_upload.read(), filetype="pdf")
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        st.session_state["_ep_image_b64"] = (
+                            f"data:image/png;base64,{_b64ep.b64encode(pix.tobytes('png')).decode()}")
+                        st.success("PDF converti.")
+                    except Exception as e:
+                        st.error(f"Erreur PDF : {e}")
+                else:
+                    raw_ep = ep_upload.read()
+                    st.session_state["_ep_image_b64"] = (
+                        f"data:{ep_upload.type};base64,{_b64ep.b64encode(raw_ep).decode()}")
+            cur_img = st.session_state.get("_ep_image_b64", plan_e.get("image_b64",""))
+            if cur_img:
+                st.image(cur_img, caption="Aperçu du plan", use_column_width=True)
+            eb1, eb2 = st.columns(2)
+            with eb1:
+                if st.button("✅ Enregistrer", key="ep_save", use_container_width=True, type="primary"):
+                    if ep_name.strip():
+                        st.session_state.plans[edit_plan_idx]["name"] = ep_name.strip()
+                        if st.session_state.get("_ep_image_b64"):
+                            st.session_state.plans[edit_plan_idx]["image_b64"] = st.session_state["_ep_image_b64"]
+                        save_plans(st.session_state.plans)
+                        st.session_state["_edit_plan_idx"] = None
+                        st.session_state.pop("_ep_image_b64", None)
+                        st.success("✅ Plan mis à jour")
+                        st.rerun()
+                    else:
+                        st.error("Le nom est obligatoire.")
+            with eb2:
+                if st.button("Annuler", key="ep_cancel", use_container_width=True):
+                    st.session_state["_edit_plan_idx"] = None
+                    st.session_state.pop("_ep_image_b64", None)
+                    st.rerun()
+        elif can_edit:
+            st.markdown("### ➕ Ajouter un plan")
+            np1, np2 = st.columns([3, 2])
+            with np1:
+                np_plan_name = st.text_input(
+                    "Nom du plan *",
+                    placeholder="Ex: ZAC — Isolateur ISO 16, Salle de préparation B...",
+                    key="np_plan_name")
+            with np2:
+                np_plan_upload = st.file_uploader(
+                    "Image du plan (PNG / JPG / PDF)",
+                    type=["png","jpg","jpeg","pdf"], key="np_plan_upload")
+            np_plan_b64 = ""
+            if np_plan_upload:
+                import base64 as _b64np2
+                if np_plan_upload.type == "application/pdf":
+                    try:
+                        import fitz
+                        doc = fitz.open(stream=np_plan_upload.read(), filetype="pdf")
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        np_plan_b64 = (
+                            f"data:image/png;base64,{_b64np2.b64encode(pix.tobytes('png')).decode()}")
+                        st.success("✅ PDF converti — première page utilisée comme plan")
+                    except ImportError:
+                        st.error("❌ PyMuPDF non installé — ajoutez pymupdf dans requirements.txt")
+                    except Exception as e:
+                        st.error(f"Erreur PDF : {e}")
+                else:
+                    np_plan_b64 = (
+                        f"data:{np_plan_upload.type};base64,"
+                        f"{_b64np2.b64encode(np_plan_upload.read()).decode()}")
+            if np_plan_b64:
+                st.image(np_plan_b64, caption="Aperçu du plan", use_column_width=True)
+            if st.button("➕ Ajouter ce plan", key="np_plan_add",
+                         use_container_width=True, type="primary"):
+                if not np_plan_name.strip():
+                    st.error("Le nom du plan est obligatoire.")
+                else:
+                    import time as _time_plans
+                    plan_id = f"plan_{len(st.session_state.plans)+1}_{int(_time_plans.time())}"
+                    st.session_state.plans.append({
+                        "id":        plan_id,
+                        "name":      np_plan_name.strip(),
+                        "image_b64": np_plan_b64,
+                    })
+                    save_plans(st.session_state.plans)
+                    st.success(f"✅ Plan **{np_plan_name}** ajouté avec succès !")
                     st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
