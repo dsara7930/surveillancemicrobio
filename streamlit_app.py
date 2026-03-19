@@ -1180,26 +1180,55 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── 🍄 Champignon dansant ─────────────────────────────────────────────
+    # ── 🍄 Champignon dansant — cliquable pour ouvrir la FAQ ─────────────
+    # CSS : rend le bouton Streamlit transparent et le superpose sur l'iframe
+    st.markdown("""
+    <style>
+    /* Bouton FAQ invisible superposé sur le champignon */
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) {
+        margin-top: -148px !important;
+        height: 130px !important;
+        position: relative !important;
+        z-index: 999 !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        width: 100% !important;
+        height: 130px !important;
+        cursor: pointer !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        padding: 0 !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_btn"]) button:hover {
+        background: rgba(124,58,237,.08) !important;
+        border-radius: 12px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # L'iframe Giphy (champignon dansant)
     st.components.v1.html("""
     <div style="text-align:center;margin-top:14px;padding-bottom:4px">
       <iframe
         src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
         width="100" height="100"
-        style="border:none;border-radius:12px;pointer-events:none"
+        style="border:none;border-radius:12px;pointer-events:none;display:block;margin:0 auto"
         frameBorder="0"
         allowFullScreen>
       </iframe>
       <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-style:italic;
                   font-family:'Segoe UI',sans-serif">
-        Bonne surveillance :) 🍄
+        Cliquez pour l'aide 🍄
       </div>
     </div>
-    """, height=140, scrolling=False)
+    """, height=148, scrolling=False)
 
-    # ── Bouton FAQ ────────────────────────────────────────────────────────
-    if st.button("❓ Aide & FAQ", key="mush_faq_btn", use_container_width=True,
-                 help="Ouvrir le centre d'aide"):
+    # Bouton invisible superposé sur le champignon
+    if st.button(" ", key="mush_faq_btn", use_container_width=True,
+                 help="❓ Ouvrir le centre d'aide — FAQ"):
         show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
