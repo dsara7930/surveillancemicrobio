@@ -1296,6 +1296,9 @@ with st.sidebar:
     </script>
     """, height=115, scrolling=False)
 
+    # Bouton Streamlit caché — déclenché par le JS ci-dessus
+    if st.button("OPEN_FAQ", key="mush_faq_hidden"):
+        show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
@@ -5007,4 +5010,2389 @@ elif active == "historique":
                     key="hist_pt_evol", label_visibility="collapsed")
 
                 pt_records = sorted(
-                    [r for r in surv_f if r.get("prelevement"
+                    [r for r in surv_f if r.get("prelevement") == selected_pt],
+                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+
+                evol_dates = []
+                evol_j2    = []
+                evol_j7    = []
+                seuil_alerte = None
+                seuil_action = None
+
+                for r in pt_records:
+                    d = _parse_date(r.get("date",""))
+                    if not d:
+                        continue
+                    evol_dates.append(d.strftime("%d/%m/%y"))
+                    evol_j2.append(int(r.get("ufc_48h", r.get("ufc", 0)) or 0))
+                    evol_j7.append(int(r.get("ufc_5j",  r.get("ufc", 0)) or 0))
+                    if seuil_alerte is None:
+                        try:
+                            seuil_alerte = int(float(r.get("alert_threshold",  50) or 50))
+                        except (ValueError, TypeError):
+                            seuil_alerte = 50
+                        try:
+                            seuil_action = int(float(r.get("action_threshold", 100) or 100))
+                        except (ValueError, TypeError):
+                            seuil_action = 100
+
+                if evol_dates:
+                    evol_data = {
+                        "dates": evol_dates, "j2": evol_j2, "j7": evol_j7,
+                        "alerte": seuil_alerte, "action": seuil_action,
+                    }
+                    evol_html = f"""
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
+                                padding:16px;margin-bottom:8px">
+                      <div style="font-size:.78rem;font-weight:700;color:#334155;margin-bottom:10px">
+                        📍 {selected_pt} — UFC/m³ au fil du temps
+                      </div>
+                      <div style="width:100%;height:220px"><canvas id="evolChart"></canvas></div>
+                    </div>
+                    <script>
+                    (function(){{
+                      const d = {_json_pts.dumps(evol_data)};
+                      const threshPlugin = {{
+                        id: 'thr',
+                        afterDraw(chart) {{
+                          const {{ ctx, chartArea: {{ left, right }}, scales: {{ y }} }} = chart;
+                          if (!y) return;
+                          function drawLine(val, color, lbl) {{
+                            const yp = y.getPixelForValue(val);
+                            ctx.save();
+                            ctx.beginPath(); ctx.setLineDash([6,4]);
+                            ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+                            ctx.moveTo(left, yp); ctx.lineTo(right, yp); ctx.stroke();
+                            ctx.setLineDash([]); ctx.fillStyle = color;
+                            ctx.font = 'bold 10px sans-serif';
+                            ctx.fillText(lbl, right - 56, yp - 4);
+                            ctx.restore();
+                          }}
+                          drawLine(d.alerte, '#f59e0b', '⚠ Alerte');
+                          drawLine(d.action, '#ef4444', '🚨 Action');
+                        }}
+                      }};
+                      new Chart(document.getElementById('evolChart'), {{
+                        type: 'line', plugins: [threshPlugin],
+                        data: {{
+                          labels: d.dates,
+                          datasets: [
+                            {{ label: '🔵 J2 (48h)', data: d.j2,
+                               borderColor: '#0ea5e9', backgroundColor: '#0ea5e922',
+                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }},
+                            {{ label: '🟣 J7 (5j)', data: d.j7,
+                               borderColor: '#8b5cf6', backgroundColor: '#8b5cf622',
+                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }}
+                          ]
+                        }},
+                        options: {{
+                          responsive: true, maintainAspectRatio: false,
+                          interaction: {{ mode: 'index', intersect: false }},
+                          plugins: {{
+                            legend: {{ position: 'top', labels: {{ font: {{ size: 11 }}, boxWidth: 14 }} }},
+                            tooltip: {{
+                              callbacks: {{
+                                footer: items => {{
+                                  const v = items[0]?.parsed?.y ?? 0;
+                                  return v >= d.action ? '🚨 Seuil ACTION dépassé'
+                                       : v >= d.alerte ? '⚠️ Seuil ALERTE dépassé'
+                                       : '✅ Conforme';
+                                }}
+                              }}
+                            }}
+                          }},
+                          scales: {{
+                            x: {{ ticks: {{ font: {{ size: 10 }}, maxRotation: 45 }} }},
+                            y: {{ beginAtZero: true,
+                                  title: {{ display: true, text: 'UFC/m³', font: {{ size: 10 }} }},
+                                  ticks: {{ font: {{ size: 10 }} }} }}
+                          }}
+                        }}
+                      }});
+                    }})();
+                    </script>
+                    """
+                    st.components.v1.html(evol_html, height=290)
+                    st.caption(
+                        f"Seuils calculés pour ce point : "
+                        f"⚠️ Alerte ≥ {seuil_alerte} UFC/m³ — "
+                        f"🚨 Action ≥ {seuil_action} UFC/m³ — "
+                        f"{len(evol_dates)} mesure(s)")
+                else:
+                    st.info("Aucune donnée datée pour ce point.")
+
+            st.divider()
+
+            # ── Alertes pondérées ─────────────────────────────────────────────
+            st.markdown(
+                "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:4px'>"
+                "🚨 Alertes pondérées</div>"
+                "<div style='font-size:.72rem;color:#64748b;margin-bottom:10px'>"
+                "Score = criticité du germe (1→5) + dépassement (Alerte +1 / Action +3)</div>",
+                unsafe_allow_html=True)
+
+            alertes_list = []
+            for r in surv_f:
+                germ  = r.get("germ_match", "") or ""
+                st_r  = r.get("status", "ok")
+                ufc   = int(r.get("ufc", 0) or 0)
+                if germ in ("Négatif", "—", "") or ufc == 0:
+                    continue
+                crit  = _get_criticite(germ)
+                if st_r == "ok" and crit < 4:
+                    continue  # seuls les dépassements ou criticité haute sont listés
+                score = crit
+                if st_r == "action":
+                    score += 3
+                    niveau = "ACTION"
+                elif st_r == "alert":
+                    score += 1
+                    niveau = "ALERTE"
+                else:
+                    niveau = "—"
+                if score >= 7:
+                    gravite = "🔴 CRITIQUE"
+                    g_bg    = "#fef2f2"
+                    g_brd   = "#fca5a5"
+                elif score >= 5:
+                    gravite = "🟠 MAJEUR"
+                    g_bg    = "#fff7ed"
+                    g_brd   = "#fed7aa"
+                elif score >= 3:
+                    gravite = "🟡 MODÉRÉ"
+                    g_bg    = "#fefce8"
+                    g_brd   = "#fde68a"
+                else:
+                    gravite = "🟢 LIMITÉ"
+                    g_bg    = "#f0fdf4"
+                    g_brd   = "#bbf7d0"
+                alertes_list.append({
+                    "date":    r.get("date", "—"),
+                    "point":   r.get("prelevement", "—"),
+                    "germ":    germ,
+                    "ufc":     ufc,
+                    "crit":    crit,
+                    "crit_lbl": _crit_label(crit),
+                    "niveau":  niveau,
+                    "score":   score,
+                    "gravite": gravite,
+                    "g_bg":    g_bg,
+                    "g_brd":   g_brd,
+                })
+
+            alertes_list.sort(key=lambda x: -x["score"])
+
+            if not alertes_list:
+                st.success("✅ Aucune alerte pondérée sur la période.")
+            else:
+                st.markdown(
+                    "<div style='display:grid;"
+                    "grid-template-columns:0.8fr 1.5fr 1.8fr 0.6fr 0.7fr 0.6fr 0.5fr 1fr;"
+                    "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Date</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germe</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>UFC</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Criticité</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Niveau</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Score</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Gravité</div>"
+                    "</div>",
+                    unsafe_allow_html=True)
+
+                for ai, a in enumerate(alertes_list[:30]):
+                    row_bg = a["g_bg"] if ai % 2 == 0 else "#ffffff"
+                    st.markdown(
+                        "<div style='display:grid;"
+                        "grid-template-columns:0.8fr 1.5fr 1.8fr 0.6fr 0.7fr 0.6fr 0.5fr 1fr;"
+                        "gap:4px;background:" + row_bg + ";border:1px solid " + a["g_brd"] + ";border-top:none;"
+                        "padding:8px 14px;align-items:center'>"
+                        "<div style='font-size:.75rem;color:#475569'>" + a["date"] + "</div>"
+                        "<div style='font-size:.8rem;font-weight:600;color:#0f172a'>" + a["point"][:20] + "</div>"
+                        "<div style='font-size:.8rem;font-weight:700;color:#1e293b'>🦠 " + a["germ"][:22] + "</div>"
+                        "<div style='font-size:.85rem;font-weight:800;color:#1e40af;text-align:center'>" + str(a["ufc"]) + "</div>"
+                        "<div style='text-align:center'><span style='background:" + _crit_color(a["crit"]) + "22;"
+                        "color:" + _crit_color(a["crit"]) + ";border:1px solid " + _crit_color(a["crit"]) + "55;"
+                        "border-radius:5px;padding:1px 6px;font-size:.72rem;font-weight:700'>"
+                        + a["crit_lbl"] + "</span></div>"
+                        "<div style='font-size:.78rem;font-weight:700;text-align:center;"
+                        "color:" + ("#ef4444" if a["niveau"]=="ACTION" else "#f59e0b" if a["niveau"]=="ALERTE" else "#94a3b8") + "'>"
+                        + a["niveau"] + "</div>"
+                        "<div style='font-size:1.1rem;font-weight:900;text-align:center;color:#1e40af'>" + str(a["score"]) + "</div>"
+                        "<div style='font-size:.85rem;font-weight:700;text-align:center'>" + a["gravite"] + "</div>"
+                        "</div>",
+                        unsafe_allow_html=True)
+
+                st.markdown(
+                    "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+                    "<div style='font-size:.78rem;color:#94a3b8'>"
+                    + str(len(alertes_list)) + " alerte(s)"
+                    + (" — affichage limité aux 30 premières" if len(alertes_list) > 30 else "")
+                    + "</div></div>",
+                    unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # ONGLET 2 : STATS PAR GERME
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_germs:
+            from collections import defaultdict
+            import json as _json_germs
+
+            germs_stats = defaultdict(lambda: {
+                "count": 0, "ufc_sum": 0, "points": set(), "criticite": 0
+            })
+            total_pos = 0
+            for r in surv_f:
+                germ = r.get("germ_match", "") or ""
+                if germ in ("Négatif", "—", "") or int(r.get("ufc", 0) or 0) == 0:
+                    continue
+                total_pos += 1
+                germs_stats[germ]["count"]    += 1
+                germs_stats[germ]["ufc_sum"]  += int(r.get("ufc", 0) or 0)
+                germs_stats[germ]["points"].add(r.get("prelevement", "—"))
+                if germs_stats[germ]["criticite"] == 0:
+                    germs_stats[germ]["criticite"] = _get_criticite(germ)
+
+            if not germs_stats:
+                st.info("Aucun germe positif dans l'historique.")
+            else:
+                sorted_germs = sorted(germs_stats.items(), key=lambda x: -x[1]["count"])
+                palette = ["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e",
+                           "#06b6d4","#6366f1","#a855f7","#ec4899","#14b8a6"]
+                g_labels = [g[:28] for g, _ in sorted_germs]
+                g_counts = [d["count"] for _, d in sorted_germs]
+                g_colors = [palette[i % len(palette)] for i in range(len(g_labels))]
+
+                gchart_html = f"""
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
+                            padding:16px;margin-bottom:18px">
+                  <div style="font-size:.8rem;font-weight:700;color:#1e40af;margin-bottom:10px">
+                    📊 Distribution des germes positifs
+                  </div>
+                  <div style="width:100%;max-width:400px;height:280px;margin:0 auto">
+                    <canvas id="germDoughnut"></canvas>
+                  </div>
+                </div>
+                <script>
+                (function(){{
+                  const d = {_json_germs.dumps({"labels": g_labels, "counts": g_counts, "colors": g_colors})};
+                  new Chart(document.getElementById('germDoughnut'), {{
+                    type: 'doughnut',
+                    data: {{
+                      labels: d.labels,
+                      datasets: [{{ data: d.counts, backgroundColor: d.colors, borderWidth: 2 }}]
+                    }},
+                    options: {{
+                      responsive: true, maintainAspectRatio: false,
+                      plugins: {{ legend: {{ position: 'bottom',
+                        labels: {{ font: {{ size: 11 }}, boxWidth: 14, padding: 10 }} }} }}
+                    }}
+                  }});
+                }})();
+                </script>
+                """
+                st.components.v1.html(gchart_html, height=360)
+
+                # Tableau germes avec criticité
+                st.markdown(
+                    "<div style='display:grid;"
+                    "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
+                    "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germe</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Cas</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>% positifs</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Moy. UFC</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Criticité</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Points touchés</div>"
+                    "</div>",
+                    unsafe_allow_html=True)
+
+                for gi, (gname, gdata) in enumerate(sorted_germs):
+                    pct     = gdata["count"] / total_pos * 100 if total_pos > 0 else 0
+                    avg_ufc = gdata["ufc_sum"] / gdata["count"] if gdata["count"] > 0 else 0
+                    pts_str = ", ".join(list(gdata["points"])[:3])
+                    bar_w   = int(pct)
+                    crit    = gdata["criticite"]
+                    cc      = _crit_color(crit)
+                    row_bg  = "#f8fafc" if gi % 2 == 0 else "#ffffff"
+                    st.markdown(
+                        "<div style='display:grid;"
+                        "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
+                        "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
+                        "padding:9px 14px;align-items:center'>"
+                        "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>🦠 " + gname + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(gdata["count"]) + "</div>"
+                        "<div style='text-align:center'>"
+                        "<div style='background:#e2e8f0;border-radius:4px;height:8px;margin-bottom:2px'>"
+                        "<div style='background:#ef4444;border-radius:4px;height:8px;width:" + str(bar_w) + "%'></div></div>"
+                        "<span style='font-size:.75rem;font-weight:700;color:#ef4444'>" + str(round(pct, 1)) + "%</span></div>"
+                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>" + str(round(avg_ufc)) + "</div>"
+                        "<div style='text-align:center'>"
+                        + ("<span style='background:" + cc + "22;color:" + cc + ";border:1px solid " + cc + "55;"
+                           "border-radius:5px;padding:1px 7px;font-size:.72rem;font-weight:700'>"
+                           + str(crit) + " – " + _crit_label(crit) + "</span>" if crit > 0 else "<span style='color:#94a3b8'>—</span>")
+                        + "</div>"
+                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + pts_str + "</div>"
+                        "</div>",
+                        unsafe_allow_html=True)
+
+                st.markdown(
+                    "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+                    "<div style='font-size:.78rem;color:#94a3b8'>"
+                    + str(len(germs_stats)) + " germe(s) distinct(s) — " + str(total_pos) + " positifs"
+                    "</div></div>",
+                    unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════
+        # ONGLET 0 : PLAN INTERACTIF
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_plan:
+            import json as _json_plan
+
+            plans_dispo = st.session_state.get("plans", [])
+
+            if not plans_dispo:
+                st.markdown(
+                    "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                    "border-radius:12px;padding:40px;text-align:center'>"
+                    "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
+                    "<div style='font-weight:700;color:#475569;margin-bottom:4px'>"
+                    "Aucun plan disponible</div>"
+                    "<div style='font-size:.8rem;color:#94a3b8'>"
+                    "Créez des plans dans <strong>Paramètres → Plans</strong>, "
+                    "puis associez-y des points via Nouveau prélèvement.</div></div>",
+                    unsafe_allow_html=True)
+            else:
+                # ── Sélecteur plan ────────────────────────────────────────────
+                plan_sel_name = st.selectbox(
+                    "Plan à afficher",
+                    [p["name"] for p in plans_dispo],
+                    key="hist_tab_plan_sel")
+                plan_sel = next((p for p in plans_dispo if p["name"] == plan_sel_name), None)
+
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+                # ── Filtres ───────────────────────────────────────────────────
+                st.markdown(
+                    "<div style='background:#f0f9ff;border:1px solid #bae6fd;"
+                    "border-radius:10px;padding:12px 16px;margin-bottom:12px'>"
+                    "<div style='font-size:.8rem;font-weight:700;color:#0369a1;"
+                    "margin-bottom:8px'>🔍 Filtres</div>",
+                    unsafe_allow_html=True)
+
+                fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 2, 2])
+
+                all_dates_plan = [
+                    _parse_date(r.get("date", ""))
+                    for r in surv_f if _parse_date(r.get("date", ""))
+                ]
+                d_min_plan = min(all_dates_plan) if all_dates_plan else dt_date.today()
+                d_max_plan = max(all_dates_plan) if all_dates_plan else dt_date.today()
+
+                with fc1:
+                    filt_date_debut = st.date_input(
+                        "Du", value=d_min_plan,
+                        min_value=d_min_plan, max_value=d_max_plan,
+                        key="hist_tab_plan_date_debut")
+                with fc2:
+                    filt_date_fin = st.date_input(
+                        "Au", value=d_max_plan,
+                        min_value=d_min_plan, max_value=d_max_plan,
+                        key="hist_tab_plan_date_fin")
+
+                all_pt_labels_plan = sorted({
+                    r.get("prelevement", "") for r in surv_f
+                    if r.get("prelevement")
+                })
+                all_germs_plan = sorted({
+                    r.get("germ_match", "") for r in surv_f
+                    if r.get("germ_match") and r.get("germ_match") not in ("Négatif", "—", "")
+                })
+
+                with fc3:
+                    filt_points = st.multiselect(
+                        "Points", all_pt_labels_plan,
+                        placeholder="Tous les points",
+                        key="hist_tab_plan_filt_pts")
+                with fc4:
+                    filt_germs = st.multiselect(
+                        "Germes", all_germs_plan,
+                        placeholder="Tous les germes",
+                        key="hist_tab_plan_filt_germs")
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                # ── Appliquer filtres ─────────────────────────────────────────
+                surv_plan = [
+                    r for r in surv_f
+                    if (_parse_date(r.get("date", "")) is not None
+                        and filt_date_debut <= _parse_date(r.get("date", "")) <= filt_date_fin)
+                    and (not filt_points or r.get("prelevement", "") in filt_points)
+                    and (not filt_germs  or r.get("germ_match", "")  in filt_germs)
+                ]
+
+                # ── Calcul statut par point ───────────────────────────────────
+                pt_stats_plan = {}
+                for r in surv_plan:
+                    pt = r.get("prelevement", "—")
+                    if pt not in pt_stats_plan:
+                        pt_stats_plan[pt] = {
+                            "total": 0, "ok": 0, "alert": 0, "action": 0,
+                            "germes": [], "last_status": "ok",
+                            "last_date": "", "last_ufc": 0,
+                            "worst_status": "ok",
+                        }
+                    s = pt_stats_plan[pt]
+                    s["total"] += 1
+                    st_r = r.get("status", "ok")
+                    s[st_r] = s.get(st_r, 0) + 1
+                    germ = r.get("germ_match", "")
+                    if germ and germ not in ("Négatif", "—", ""):
+                        s["germes"].append(germ)
+                    d_r = r.get("date", "")
+                    if d_r >= s["last_date"]:
+                        s["last_date"]   = d_r
+                        s["last_status"] = st_r
+                        s["last_ufc"]    = int(r.get("ufc", 0) or 0)
+                    prio = {"action": 2, "alert": 1, "ok": 0}
+                    if prio.get(st_r, 0) > prio.get(s["worst_status"], 0):
+                        s["worst_status"] = st_r
+
+                # ── Récupérer coordonnées map_points (session + Supabase) ─────
+                map_points_store = list(st.session_state.get("map_points", []))
+                _raw_mp = _supa_get('map_points')
+                if _raw_mp:
+                    try:
+                        _supa_mp = json.loads(_raw_mp)
+                        _labels_mem = {mp.get("label", "") for mp in map_points_store}
+                        for _mp in _supa_mp:
+                            if _mp.get("label", "") not in _labels_mem:
+                                map_points_store.append(_mp)
+                        st.session_state["map_points"] = map_points_store
+                    except Exception:
+                        pass
+                pt_coords = {mp.get("label", ""): mp for mp in map_points_store}
+
+                STATUS_COL = {"action": "#ef4444", "alert": "#f59e0b", "ok": "#22c55e", "none": "#94a3b8"}
+                STATUS_IC  = {"action": "🚨", "alert": "⚠️", "ok": "✅", "none": "⬜"}
+                STATUS_LBL = {"action": "ACTION", "alert": "ALERTE", "ok": "Conforme", "none": "Aucune donnée"}
+
+                # ── Métriques résumé ──────────────────────────────────────────
+                nb_action = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "action")
+                nb_alert  = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "alert")
+                nb_ok     = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "ok")
+                nb_total  = len(surv_plan)
+
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("📋 Résultats filtrés", nb_total)
+                m2.metric("✅ Conformes", nb_ok)
+                m3.metric("⚠️ Alertes", nb_alert)
+                m4.metric("🚨 Actions", nb_action)
+                m5.metric("📍 Points actifs", len(pt_stats_plan))
+
+                # ── Info sur les points sans coordonnées ──────────────────────
+                all_pts_with_data = set(pt_stats_plan.keys())
+                pts_with_coords   = set(pt_coords.keys())
+                pts_no_coords     = all_pts_with_data - pts_with_coords
+
+                if pts_no_coords:
+                    st.info(
+                        f"💡 **{len(pts_no_coords)} point(s)** ont des résultats mais pas encore "
+                        f"de position sur ce plan : {', '.join(sorted(pts_no_coords))}. "
+                        f"Positionnez-les via **Surveillance → Nouveau prélèvement** en "
+                        f"sélectionnant ce plan, puis cliquez sur la carte.")
+
+                # ── Plan interactif HTML ──────────────────────────────────────
+                if plan_sel and plan_sel.get("image_b64"):
+                    pts_on_plan = []
+                    for pt_label, coords in pt_coords.items():
+                        if not isinstance(coords.get("x"), (int, float)):
+                            continue
+                        stats  = pt_stats_plan.get(pt_label)
+                        status = stats["worst_status"] if stats else "none"
+                        col    = STATUS_COL[status]
+                        total  = stats["total"] if stats else 0
+                        germes = ", ".join(sorted(set(stats["germes"]))[:2]) if stats else "—"
+                        pts_on_plan.append({
+                            "label":  pt_label,
+                            "x":      float(coords.get("x", 0)),
+                            "y":      float(coords.get("y", 0)),
+                            "status": status,
+                            "color":  col,
+                            "total":  total,
+                            "germes": germes,
+                        })
+
+                    pts_json = _json_plan.dumps(pts_on_plan, ensure_ascii=False)
+                    img_b64  = plan_sel["image_b64"]
+
+                    plan_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0f172a;font-family:'Segoe UI',sans-serif;height:100vh;
+     display:flex;flex-direction:column;overflow:hidden;color:#f8fafc}}
+.header{{padding:8px 14px;background:#1e293b;border-bottom:1px solid #334155;
+         display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}}
+.title{{font-size:.82rem;font-weight:800;color:#e2e8f0}}
+.legend{{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}}
+.leg-item{{display:flex;align-items:center;gap:5px;font-size:.65rem;color:#94a3b8}}
+.leg-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
+.main{{flex:1;overflow:auto;background:#1e293b;display:flex;
+       align-items:flex-start;justify-content:center;padding:10px}}
+.mi{{position:relative;display:inline-block;
+     box-shadow:0 6px 32px rgba(0,0,0,.6);border-radius:6px;overflow:visible}}
+#img{{display:block;max-width:100%;border-radius:6px;user-select:none}}
+.pt{{position:absolute;width:32px;height:32px;border-radius:50%;
+     border:3px solid #fff;cursor:pointer;
+     transform:translate(-50%,-50%);
+     display:flex;align-items:center;justify-content:center;
+     font-size:11px;font-weight:900;color:#fff;
+     box-shadow:0 3px 14px rgba(0,0,0,.6);
+     z-index:20;transition:transform .15s,box-shadow .15s}}
+.pt:hover{{transform:translate(-50%,-50%) scale(1.25);
+           box-shadow:0 6px 20px rgba(0,0,0,.8)}}
+.pt.pulse{{animation:pulse 2s infinite}}
+@keyframes pulse{{0%,100%{{box-shadow:0 3px 14px rgba(0,0,0,.6)}}
+                 50%{{box-shadow:0 0 0 8px rgba(239,68,68,.25),0 3px 14px rgba(0,0,0,.6)}}}}
+.tooltip{{position:fixed;background:#0f172a;border:1.5px solid #334155;
+          border-radius:10px;padding:10px 14px;font-size:.72rem;
+          color:#e2e8f0;z-index:9999;pointer-events:none;
+          max-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.7);
+          display:none;line-height:1.6}}
+.tooltip.show{{display:block}}
+.tt-name{{font-weight:800;font-size:.82rem;margin-bottom:4px}}
+.tt-badge{{display:inline-block;border-radius:4px;padding:1px 8px;
+           font-size:.62rem;font-weight:700;margin-bottom:6px}}
+.tt-row{{color:#94a3b8;font-size:.65rem}}
+.tt-row b{{color:#e2e8f0}}
+.empty{{flex:1;display:flex;align-items:center;justify-content:center;
+        color:#475569;font-size:.85rem;text-align:center;padding:40px}}
+</style></head><body>
+<div class="header">
+  <div class="title">🗺️ {plan_sel_name}</div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Conforme</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Aucune donnée</div>
+  </div>
+</div>
+<div class="main">
+  <div class="mi" id="mi">
+    <img id="img" src="{img_b64}" draggable="false">
+  </div>
+</div>
+<div class="tooltip" id="tt"></div>
+<script>
+const PTS={pts_json};
+const STATUS_LABELS={{"action":"🚨 ACTION","alert":"⚠️ ALERTE","ok":"✅ Conforme","none":"⬜ Aucune donnée"}};
+const STATUS_BG={{"action":"rgba(239,68,68,.2)","alert":"rgba(245,158,11,.2)","ok":"rgba(34,197,94,.2)","none":"rgba(148,163,184,.2)"}};
+const STATUS_COL={{"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}};
+const tt=document.getElementById('tt');
+function render(){{
+  document.querySelectorAll('.pt').forEach(p=>p.remove());
+  if(!PTS.length){{
+    const em=document.createElement('div');
+    em.className='empty';
+    em.innerHTML='<div>📍 Aucun point positionné sur ce plan.<br><span style="font-size:.72rem;color:#64748b">Placez des points via Surveillance → Nouveau prélèvement</span></div>';
+    document.getElementById('mi').appendChild(em);
+    return;
+  }}
+  PTS.forEach(pt=>{{
+    const el=document.createElement('div');
+    el.className='pt'+(pt.status==='action'?' pulse':'');
+    el.style.left=pt.x+'%';
+    el.style.top=pt.y+'%';
+    el.style.background=pt.color;
+    el.textContent=pt.total||'?';
+    el.title=pt.label;
+    el.addEventListener('mouseenter',function(e){{showTT(e,pt)}});
+    el.addEventListener('mouseleave',hideTT);
+    el.addEventListener('mousemove',moveTT);
+    document.getElementById('mi').appendChild(el);
+  }});
+}}
+function showTT(e,pt){{
+  const lbl=STATUS_LABELS[pt.status]||pt.status;
+  const bg=STATUS_BG[pt.status]||'rgba(148,163,184,.2)';
+  const col=STATUS_COL[pt.status]||'#94a3b8';
+  tt.innerHTML=`
+    <div class="tt-name">${{pt.label}}</div>
+    <div class="tt-badge" style="background:${{bg}};color:${{col}};border:1px solid ${{col}}44">${{lbl}}</div>
+    <div class="tt-row">📋 Résultats : <b>${{pt.total}}</b></div>
+    ${{pt.germes&&pt.germes!='—'?'<div class="tt-row">🦠 Germes : <b>'+pt.germes+'</b></div>':''}}
+  `;
+  tt.classList.add('show');
+  moveTT(e);
+}}
+function moveTT(e){{
+  let x=e.clientX+14,y=e.clientY-10;
+  if(x+230>window.innerWidth) x=e.clientX-230;
+  if(y+120>window.innerHeight) y=e.clientY-120;
+  tt.style.left=x+'px'; tt.style.top=y+'px';
+}}
+function hideTT(){{tt.classList.remove('show');}}
+const img=document.getElementById('img');
+if(img.complete&&img.naturalWidth>0) render();
+else img.addEventListener('load',render);
+</script></body></html>"""
+
+                    st.components.v1.html(plan_html, height=520, scrolling=False)
+
+                else:
+                    st.markdown(
+                        "<div style='background:#fffbeb;border:1px solid #fde047;"
+                        "border-radius:10px;padding:20px;text-align:center;color:#92400e'>"
+                        "⚠️ Ce plan n'a pas d'image. "
+                        "Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
+                        unsafe_allow_html=True)
+
+                st.divider()
+
+                # ── Tableau récapitulatif filtré ──────────────────────────────
+                st.markdown(
+                    "<div style='font-size:.88rem;font-weight:700;color:#1e40af;margin-bottom:10px'>"
+                    "📋 Récapitulatif par point — période filtrée</div>",
+                    unsafe_allow_html=True)
+
+                if not pt_stats_plan:
+                    st.info("Aucun résultat pour les filtres sélectionnés.")
+                else:
+                    st.markdown(
+                        "<div style='display:grid;"
+                        "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
+                        "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Pire statut</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Dernier résultat</div>"
+                        "</div>",
+                        unsafe_allow_html=True)
+
+                    sorted_pts_plan = sorted(
+                        pt_stats_plan.items(),
+                        key=lambda x: (
+                            {"action": 0, "alert": 1, "ok": 2, "none": 3}.get(x[1]["worst_status"], 3),
+                            x[0]))
+
+                    for ri, (pt_label, s) in enumerate(sorted_pts_plan):
+                        ws  = s["worst_status"]
+                        wsc = STATUS_COL.get(ws, "#94a3b8")
+                        wsl = STATUS_LBL.get(ws, "—")
+                        wsi = STATUS_IC.get(ws, "⬜")
+                        germes_str = ", ".join(sorted(set(s["germes"]))[:3]) or "—"
+                        has_pos = pt_label in pt_coords
+                        pos_badge = (
+                            " <span style='background:#dbeafe;color:#1e40af;"
+                            "border-radius:3px;padding:0 4px;font-size:.55rem'>📍</span>"
+                            if has_pos else
+                            " <span style='background:#fef2f2;color:#991b1b;"
+                            "border-radius:3px;padding:0 4px;font-size:.55rem'>?</span>")
+                        row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
+                        _ls  = s['last_status']
+                        _lsc = STATUS_COL.get(_ls, '#94a3b8')
+                        _lsi = STATUS_IC.get(_ls, '⬜')
+                        _lsl = STATUS_LBL.get(_ls, '—')
+                        _ld  = s['last_date'][:10] if s['last_date'] else '—'
+
+                        st.markdown(
+                            "<div style='display:grid;"
+                            "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
+                            f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
+                            "padding:9px 14px;align-items:center'>"
+                            f"<div style='font-size:.85rem;font-weight:700;color:#0f172a'>"
+                            f"📍 {pt_label}{pos_badge}</div>"
+                            f"<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"
+                            f"{s['total']}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#22c55e;text-align:center'>"
+                            f"{s.get('ok', 0)}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#f59e0b;text-align:center'>"
+                            f"{s.get('alert', 0)}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#ef4444;text-align:center'>"
+                            f"{s.get('action', 0)}</div>"
+                            f"<div style='text-align:center'>"
+                            f"<span style='background:{wsc}22;color:{wsc};"
+                            f"border:1px solid {wsc}55;border-radius:6px;"
+                            f"padding:2px 8px;font-size:.68rem;font-weight:700'>"
+                            f"{wsi} {wsl}</span></div>"
+                            f"<div style='font-size:.72rem;color:#475569;font-style:italic'>"
+                            f"{germes_str}</div>"
+                            f"<div style='font-size:.72rem;font-weight:600;color:#475569;text-align:center'>"
+                            f"{_ld}<br>"
+                            f"<span style='color:{_lsc};font-size:.62rem'>{_lsi} {_lsl}</span></div>"
+                            "</div>",
+                            unsafe_allow_html=True)
+
+                    st.markdown(
+                        f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                        f"padding:8px 14px'>"
+                        f"<div style='font-size:.78rem;color:#94a3b8'>"
+                        f"{len(pt_stats_plan)} point(s) · {nb_total} résultat(s) "
+                        f"· <span style='color:#86efac'>📍 = positionné sur le plan</span> "
+                        f"· <span style='color:#fca5a5'>? = pas encore positionné</span>"
+                        f"</div></div>",
+                        unsafe_allow_html=True)
+
+                    # ── Liste détaillée filtrée ───────────────────────────────
+                    if surv_plan:
+                        with st.expander(
+                            f"📋 Voir les {len(surv_plan)} résultat(s) détaillés",
+                            expanded=False):
+                            for r in reversed(surv_plan[-50:]):
+                                sc  = "#ef4444" if r["status"] == "action" else \
+                                      "#f59e0b" if r["status"] == "alert"  else "#22c55e"
+                                ic  = "🚨" if r["status"] == "action" else \
+                                      "⚠️" if r["status"] == "alert"  else "✅"
+                                ufc = int(r.get("ufc", 0) or 0)
+                                ts  = r.get("total_score", "—")
+                                st.markdown(
+                                    f"<div style='background:#f8fafc;border-left:3px solid {sc};"
+                                    f"border-radius:8px;padding:8px 14px;margin-bottom:5px;"
+                                    f"display:flex;align-items:center;gap:12px'>"
+                                    f"<span style='font-size:1rem'>{ic}</span>"
+                                    f"<div style='flex:1'>"
+                                    f"<div style='font-size:.78rem;font-weight:600;color:#1e293b'>"
+                                    f"{r['prelevement']} — "
+                                    f"<span style='font-style:italic'>{r.get('germ_match', '—')}</span>"
+                                    f"</div>"
+                                    f"<div style='font-size:.65rem;color:#475569;margin-top:2px'>"
+                                    f"{r.get('date', '—')} · {ufc} UFC"
+                                    f"{'  · Score ' + str(ts) if ts != '—' else ''}"
+                                    f" · {r.get('operateur', '—')}</div>"
+                                    f"</div>"
+                                    f"<span style='font-size:.72rem;color:{sc};"
+                                    f"font-weight:700'>{ufc} UFC</span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_prev:
+            from collections import defaultdict
+
+            prev_stats = defaultdict(lambda: {
+                "total": 0, "positives": 0, "negatives": 0,
+                "alertes": 0, "actions": 0, "germes": defaultdict(int)
+            })
+            for r in surv_f:
+                op   = (r.get("operateur", "") or "Non renseigné").strip() or "Non renseigné"
+                ufc  = int(r.get("ufc", 0) or 0)
+                germ = r.get("germ_match", "") or ""
+                st_r = r.get("status", "ok")
+                prev_stats[op]["total"] += 1
+                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                    prev_stats[op]["positives"] += 1
+                    prev_stats[op]["germes"][germ] += 1
+                else:
+                    prev_stats[op]["negatives"] += 1
+                if st_r == "alert":
+                    prev_stats[op]["alertes"] += 1
+                elif st_r == "action":
+                    prev_stats[op]["actions"] += 1
+
+            op_list   = sorted(prev_stats.items(), key=lambda x: -x[1]["total"])
+            card_cols = st.columns(min(len(op_list), 4))
+            for ci, (op_name, op_data) in enumerate(op_list):
+                t        = op_data["total"]
+                pos      = op_data["positives"]
+                taux_pos = pos / t * 100 if t > 0 else 0
+                tc       = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
+                ini      = op_name[0].upper() if op_name != "Non renseigné" else "?"
+                with card_cols[ci % len(card_cols)]:
+                    st.markdown(
+                        "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;"
+                        "padding:18px 14px;text-align:center;margin-bottom:12px'>"
+                        "<div style='background:#2563eb;color:#fff;border-radius:50%;width:48px;height:48px;"
+                        "display:flex;align-items:center;justify-content:center;font-weight:800;"
+                        "font-size:1.2rem;margin:0 auto 10px auto'>" + ini + "</div>"
+                        "<div style='font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px'>" + op_name + "</div>"
+                        "<div style='font-size:2rem;font-weight:900;color:#1e40af'>" + str(t) + "</div>"
+                        "<div style='font-size:.68rem;color:#64748b;margin-bottom:10px'>résultat(s)</div>"
+                        "<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px'>"
+                        "<div style='background:#f0fdf4;border-radius:8px;padding:6px'>"
+                        "<div style='font-size:1rem;font-weight:800;color:#22c55e'>" + str(op_data["negatives"]) + "</div>"
+                        "<div style='font-size:.6rem;color:#166534'>✅ Nég.</div></div>"
+                        "<div style='background:#fef2f2;border-radius:8px;padding:6px'>"
+                        "<div style='font-size:1rem;font-weight:800;color:#ef4444'>" + str(pos) + "</div>"
+                        "<div style='font-size:.6rem;color:#991b1b'>🦠 Pos.</div></div>"
+                        "<div style='background:#fffbeb;border-radius:8px;padding:6px'>"
+                        "<div style='font-size:1rem;font-weight:800;color:#f59e0b'>" + str(op_data["alertes"]) + "</div>"
+                        "<div style='font-size:.6rem;color:#92400e'>⚠️ Alerte</div></div>"
+                        "<div style='background:#fef2f2;border-radius:8px;padding:6px'>"
+                        "<div style='font-size:1rem;font-weight:800;color:#dc2626'>" + str(op_data["actions"]) + "</div>"
+                        "<div style='font-size:.6rem;color:#991b1b'>🚨 Action</div></div></div>"
+                        "<div style='margin-top:10px;background:" + tc + "22;border:1px solid " + tc + "55;"
+                        "border-radius:8px;padding:5px'>"
+                        "<div style='font-size:.8rem;font-weight:800;color:" + tc + "'>"
+                        + str(round(taux_pos)) + "% positifs</div></div></div>",
+                        unsafe_allow_html=True)
+
+            st.divider()
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;"
+                "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff'>Préleveur</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🦠</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div>"
+                "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes fréquents</div>"
+                "</div>",
+                unsafe_allow_html=True)
+
+            for ri, (op_name, op_data) in enumerate(op_list):
+                t        = op_data["total"]
+                pos      = op_data["positives"]
+                taux_pos = pos / t * 100 if t > 0 else 0
+                tc       = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
+                top_g    = ", ".join(
+                    g + "(" + str(n) + "x)"
+                    for g, n in sorted(op_data["germes"].items(), key=lambda x: -x[1])[:3]
+                ) or "—"
+                row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
+                st.markdown(
+                    "<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;"
+                    "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
+                    "padding:9px 14px;align-items:center'>"
+                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>👤 " + op_name + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(op_data["negatives"]) + "</div>"
+                    "<div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";"
+                    "border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#f59e0b;text-align:center'>" + str(op_data["alertes"]) + "</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#ef4444;text-align:center'>" + str(op_data["actions"]) + "</div>"
+                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + top_g + "</div>"
+                    "</div>",
+                    unsafe_allow_html=True)
+
+            st.markdown(
+                "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+                "<div style='font-size:.78rem;color:#94a3b8'>"
+                + str(len(op_list)) + " préleveur(s)"
+                "</div></div>",
+                unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # ONGLET 4 : LISTE DES ENTRÉES
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_liste:
+            for r in reversed(surv_f):
+                real_i = surv.index(r)
+                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
+                with st.expander(
+                    ic + " " + r["date"] + " — " + r["prelevement"]
+                    + " — " + r["germ_match"] + " — " + str(r["ufc"]) + " UFC/m³"
+                ):
+                    if st.session_state.get("edit_surv_idx") == real_i:
+                        st.markdown("**✏️ Modifier cette entrée**")
+                        e1, e2 = st.columns(2)
+                        with e1:
+                            new_germ      = st.text_input("Germe",      value=r.get("germ_match",""),  key=f"es_germ_{real_i}")
+                            new_ufc       = st.number_input("UFC",       value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
+                            new_operateur = st.text_input("Opérateur",   value=r.get("operateur",""),   key=f"es_oper_{real_i}")
+                        with e2:
+                            new_remarque    = st.text_area("Remarque",    value=r.get("remarque",""),    height=70, key=f"es_rem_{real_i}")
+                            new_commentaire = st.text_area("Commentaire", value=r.get("commentaire",""), height=70, key=f"es_com_{real_i}")
+                        sb1, sb2 = st.columns(2)
+                        with sb1:
+                            if st.button("💾 Sauvegarder", key=f"es_save_{real_i}", use_container_width=True, type="primary"):
+                                st.session_state.surveillance[real_i]["germ_match"]   = new_germ
+                                st.session_state.surveillance[real_i]["germ_saisi"]   = new_germ
+                                st.session_state.surveillance[real_i]["ufc"]          = new_ufc
+                                st.session_state.surveillance[real_i]["operateur"]    = new_operateur
+                                st.session_state.surveillance[real_i]["remarque"]     = new_remarque
+                                st.session_state.surveillance[real_i]["commentaire"]  = new_commentaire
+                                save_surveillance(st.session_state.surveillance)
+                                st.session_state["edit_surv_idx"] = None
+                                st.rerun()
+                        with sb2:
+                            if st.button("✕ Annuler", key=f"es_cancel_{real_i}", use_container_width=True):
+                                st.session_state["edit_surv_idx"] = None
+                                st.rerun()
+                    else:
+                        c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
+                        crit_r = _get_criticite(r["germ_match"])
+                        c1.markdown(
+                            "**Germe saisi :** " + r["germ_saisi"]
+                            + "\n\n**Correspondance :** " + r["germ_match"]
+                            + " (" + str(r["match_score"]) + ")"
+                            + ("\n\n**Criticité :** " + str(crit_r) + " – " + _crit_label(crit_r) if crit_r > 0 else ""))
+                        c2.markdown(
+                            "**UFC/m³ :** " + str(r["ufc"])
+                            + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"])
+                            + " | **Seuil action :** ≥" + str(r["action_threshold"]))
+                        c3.markdown(
+                            "**Opérateur :** " + str(r.get("operateur", "N/A"))
+                            + "\n\n**Remarque :** " + str(r.get("remarque", "—")))
+                        if r.get("commentaire"):
+                            c3.markdown(
+                                f"<div style='background:#f5f3ff;border:1px solid #c4b5fd;"
+                                f"border-radius:6px;padding:6px 10px;margin-top:6px;"
+                                f"font-size:.78rem;color:#5b21b6'>"
+                                f"💬 <b>Commentaire :</b> {r['commentaire']}</div>",
+                                unsafe_allow_html=True)
+                        with c4:
+                            if st.button("✏️", key=f"edit_surv_{real_i}", use_container_width=True):
+                                st.session_state["edit_surv_idx"] = real_i
+                                st.rerun()
+                            if st.button("🗑️", key=f"del_surv_{real_i}", use_container_width=True):
+                                st.session_state.surveillance.pop(real_i)
+                                save_surveillance(st.session_state.surveillance)
+                                st.rerun()
+    else:
+        st.info("Aucun prélèvement enregistré.")
+        # ═══════════════════════════════════════════════════════════════════════════════
+# TAB : PARAMÈTRES — COMPLET
+# Suppression des onglets "Seuils par germe" et "Seuils par classe"
+# Criticité du lieu (1–3) dans les Points de prélèvement
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif active == "parametres":
+    can_edit = check_access_protege("Paramètres & Seuils")
+    if not can_edit:
+        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
+    st.markdown("### ⚙️ Paramètres")
+
+    (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
+     subtab_operateurs, subtab_backup, subtab_supabase, subtape_faq) = st.tabs([
+        "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans", 
+        "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
+    ])
+
+    # ── Constantes Points ──────────────────────────────────────────────────────
+    LOC_CRIT_OPTS = [
+        "1 — Zone non critique (locaux techniques, couloirs...)",
+        "2 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)",
+        "3 — Zone critique (ZAC, salles blanches, isolateurs...)",
+    ]
+    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}
+    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique"}
+    PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # MESURES CORRECTIVES
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_mesures:
+        om = st.session_state.origin_measures
+        scope_labels = {
+            "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
+            "Flore fécale": "🦠 Flore fécale",
+            "Oropharynx / Gouttelettes": "😷 Oropharynx",
+            "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
+            "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
+        }
+        type_labels = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
+        type_colors = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
+        scope_r_map = {v: k for k, v in scope_labels.items()}
+        risk_opts_map = {
+            "all": "🌐 Toutes", "1": "🟢 1", "2": "🟢 2", "3": "🟡 3",
+            "4": "🟠 4", "5": "🔴 5", "[3,4,5]": "3-4-5",
+            "[4,5]": "4-5", "[1,2,3]": "1-2-3"
+        }
+        risk_opts_rev = {v: k for k, v in risk_opts_map.items()}
+
+        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 1.5, 1.5, 1])
+        with col_f1:
+            filter_scope = st.selectbox("Origine",
+                ["Tout afficher"] + list(scope_labels.values()),
+                label_visibility="collapsed", key="filter_scope")
+        with col_f2:
+            filter_risk_lbl = st.selectbox("Criticité",
+                ["🌐 Tout", "🟢 1", "🟢 2", "🟡 3", "🟠 4", "🔴 5"],
+                label_visibility="collapsed", key="filter_risk")
+        with col_f3:
+            filter_type = st.selectbox("Type",
+                ["Tout", "⚠️ Alerte", "🚨 Action"],
+                label_visibility="collapsed", key="filter_type")
+        with col_f4:
+            if can_edit:
+                if st.button("➕ Nouvelle", use_container_width=True):
+                    st.session_state.show_new_measure = True
+                    st.session_state["_edit_mesure_idx"] = None
+                    st.rerun()
+
+        active_scope = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
+        active_risk  = filter_risk_lbl.split()[-1] if filter_risk_lbl != "🌐 Tout" else None
+        active_type  = ("alert" if "Alerte" in filter_type else "action") if filter_type != "Tout" else None
+
+        if can_edit and st.session_state.get("show_new_measure", False):
+            with st.container():
+                st.markdown(
+                    "<div style='background:#f0fdf4;border:1.5px solid #86efac;"
+                    "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                    unsafe_allow_html=True)
+                st.markdown("#### ➕ Nouvelle mesure")
+                nmc1, nmc2, nmc3, nmc4 = st.columns([3, 2, 1.5, 1.5])
+                with nmc1:
+                    nm_text = st.text_input("Texte *", key="nm_text")
+                with nmc2:
+                    nm_scope_label = st.selectbox("Origine", list(scope_labels.values()), key="nm_scope")
+                    nm_scope = scope_r_map.get(nm_scope_label, "all")
+                with nmc3:
+                    nm_risk_lbl = st.selectbox("Criticité", list(risk_opts_map.values()), key="nm_risk")
+                    nm_risk_key = risk_opts_rev.get(nm_risk_lbl, "all")
+                    nm_risk = ("all" if nm_risk_key == "all"
+                               else json.loads(nm_risk_key) if nm_risk_key.startswith("[")
+                               else int(nm_risk_key))
+                with nmc4:
+                    nm_type_label = st.selectbox("Type", list(type_labels.values()), key="nm_type")
+                    nm_type = {v: k for k, v in type_labels.items()}.get(nm_type_label, "alert")
+                nb1, nb2 = st.columns(2)
+                with nb1:
+                    if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
+                        if nm_text.strip():
+                            om.append({
+                                "id":    f"m{len(om)+1:03d}_custom",
+                                "text":  nm_text.strip(),
+                                "scope": nm_scope,
+                                "risk":  nm_risk,
+                                "type":  nm_type
+                            })
+                            save_origin_measures(om, supa=False)
+                            st.session_state.origin_measures  = om
+                            st.session_state.show_new_measure = False
+                            st.rerun()
+                with nb2:
+                    if st.button("Annuler", use_container_width=True, key="nm_cancel"):
+                        st.session_state.show_new_measure = False
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        def _passes_filter(m):
+            if active_scope and m["scope"] != active_scope:
+                return False
+            if active_type and m["type"] != active_type and m["type"] != "both":
+                return False
+            if active_risk:
+                mr = m.get("risk", "all")
+                if mr != "all":
+                    if isinstance(mr, list):
+                        if int(active_risk) not in mr: return False
+                    else:
+                        if str(mr) != active_risk: return False
+            return True
+
+        if st.session_state.get("_mesures_modifiees"):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;"
+                "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#92400e'>"
+                "⚠️ Modifications non sauvegardées — cliquez sur <strong>💾 Sauvegarder</strong>."
+                "</div>", unsafe_allow_html=True)
+
+        for m in [m for m in om if _passes_filter(m)]:
+            real_idx = om.index(m)
+            tcol = type_colors.get(m["type"], "#0f172a")
+            tlbl = type_labels.get(m["type"], m["type"])
+
+            if st.session_state.get("_edit_mesure_idx") == real_idx:
+                with st.container():
+                    st.markdown(
+                        "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                        "border-radius:10px;padding:14px;margin-bottom:8px'>",
+                        unsafe_allow_html=True)
+                    st.markdown("**✏️ Modifier la mesure**")
+                    ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
+                    with ec1:
+                        new_text = st.text_input("Texte *", value=m.get("text",""), key=f"em_text_{real_idx}")
+                    with ec2:
+                        cur_scope_lbl = scope_labels.get(m.get("scope","all"), "🌐 Toutes")
+                        scope_opts    = list(scope_labels.values())
+                        scope_idx     = scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0
+                        new_scope_lbl = st.selectbox("Origine", scope_opts, index=scope_idx, key=f"em_scope_{real_idx}")
+                        new_scope = scope_r_map.get(new_scope_lbl, "all")
+                    with ec3:
+                        cur_risk     = m.get("risk","all")
+                        cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
+                                        else json.dumps(cur_risk).replace(" ",""))
+                        cur_risk_lbl = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
+                        risk_opts_list = list(risk_opts_map.values())
+                        risk_idx = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
+                        new_risk_lbl = st.selectbox("Criticité", risk_opts_list, index=risk_idx, key=f"em_risk_{real_idx}")
+                        new_risk_key = risk_opts_rev.get(new_risk_lbl, "all")
+                        new_risk = ("all" if new_risk_key == "all"
+                                    else json.loads(new_risk_key) if new_risk_key.startswith("[")
+                                    else int(new_risk_key))
+                    with ec4:
+                        cur_type_lbl = type_labels.get(m.get("type","alert"), "⚠️ Alerte")
+                        type_opts    = list(type_labels.values())
+                        type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
+                        new_type_lbl = st.selectbox("Type", type_opts, index=type_idx, key=f"em_type_{real_idx}")
+                        new_type = {v: k for k, v in type_labels.items()}.get(new_type_lbl, "alert")
+                    sb1, sb2 = st.columns(2)
+                    with sb1:
+                        if st.button("✔️ Valider", key=f"em_save_{real_idx}", use_container_width=True, type="primary"):
+                            if new_text.strip():
+                                om[real_idx]["text"]  = new_text.strip()
+                                om[real_idx]["scope"] = new_scope
+                                om[real_idx]["risk"]  = new_risk
+                                om[real_idx]["type"]  = new_type
+                                save_origin_measures(om, supa=False)
+                                st.session_state.origin_measures     = om
+                                st.session_state["_edit_mesure_idx"] = None
+                                st.session_state["_mesures_modifiees"] = True
+                                st.rerun()
+                            else:
+                                st.error("Le texte est obligatoire.")
+                    with sb2:
+                        if st.button("✕ Annuler", key=f"em_cancel_{real_idx}", use_container_width=True):
+                            st.session_state["_edit_mesure_idx"] = None
+                            st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                rc1, rc2, rc3, rc4, rc5 = st.columns([4.5, 1.2, 1.5, 0.8, 0.8])
+                with rc1:
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m["text"]}</div>',
+                        unsafe_allow_html=True)
+                with rc3:
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};"'
+                        f'font-weight:600;text-align:center">{tlbl}</div>',
+                        unsafe_allow_html=True)
+                with rc4:
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_btn_{real_idx}"):
+                            st.session_state["_edit_mesure_idx"] = real_idx
+                            st.session_state["show_new_measure"] = False
+                            st.rerun()
+                with rc5:
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_m_{real_idx}"):
+                            om.pop(real_idx)
+                            save_origin_measures(om, supa=False)
+                            st.session_state.origin_measures       = om
+                            st.session_state["_mesures_modifiees"] = True
+                            st.rerun()
+
+        col_sr, col_def = st.columns(2)
+        with col_sr:
+            if can_edit:
+                if st.button("💾 Sauvegarder", use_container_width=True, key="save_mesures"):
+                    save_origin_measures(om, supa=True)
+                    st.session_state["_mesures_modifiees"] = False
+                    st.success("✅ Mesures sauvegardées et synchronisées !")
+        with col_def:
+            if can_edit:
+                if st.button("↩️ Réinitialiser", use_container_width=True, key="reinit_mesures"):
+                    st.session_state.origin_measures = [dict(m) for m in DEFAULT_ORIGIN_MEASURES]
+                    save_origin_measures(st.session_state.origin_measures, supa=True)
+                    st.session_state["_mesures_modifiees"] = False
+                    st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # POINTS DE PRÉLÈVEMENT
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_points:
+        st.markdown("""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+        ℹ️ Le <strong>niveau de criticité du lieu</strong> (1–3) est automatiquement repris
+        lors de l'identification microbiologique.<br>
+        Score total = criticité lieu × score germe · ⚠️ Alerte : 16–24 · 🚨 Action : &gt; 24
+        </div>""", unsafe_allow_html=True)
+
+        if not st.session_state.points:
+            st.info("Aucun point défini.")
+        else:
+            st.markdown("""
+            <div style="display:grid;
+            grid-template-columns:2.2fr 0.7fr 0.7fr 1.3fr 0.9fr 1.1fr 0.5fr 0.5fr;
+            gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px">
+              <div style="font-size:.72rem;font-weight:800;color:#fff">Point</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Type</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Classe</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Criticité lieu</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Gélose</div>
+              <div style="font-size:.72rem;font-weight:800;color:#fff;text-align:center">Fréquence</div>
+              <div></div><div></div>
+            </div>""", unsafe_allow_html=True)
+
+            for i, pt in enumerate(list(st.session_state.points)):
+                pt_type   = pt.get('type', '—')
+                type_icon = "💨" if pt_type == "Air" else "🧴"
+                loc_crit  = str(pt.get('location_criticality', 1))
+                lc_color  = LOC_CRIT_COLORS.get(loc_crit, "#94a3b8")
+                lc_label  = LOC_CRIT_LABELS.get(loc_crit, "—")
+                room_cl   = pt.get('room_class', '—') or '—'
+                freq      = pt.get('frequency', 1)
+                freq_unit = pt.get('frequency_unit', '/ semaine')
+                freq_short = (str(freq) + "x/" +
+                              ("j" if "jour" in freq_unit else
+                               "sem" if "sem" in freq_unit else "mois"))
+                row_bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
+
+                c1, c2 = st.columns([8, 1])
+                with c1:
+                    st.markdown(
+                        f"<div style='display:grid;"
+                        f"grid-template-columns:2.2fr 0.7fr 0.7fr 1.3fr 0.9fr 1.1fr;"
+                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
+                        f"border-top:none;padding:9px 14px;align-items:center'>"
+                        f"<div style='font-size:.88rem;font-weight:700;color:#0f172a'>"
+                        f"{type_icon} {pt['label']}</div>"
+                        f"<div style='font-size:.75rem;color:#475569;text-align:center'>{pt_type}</div>"
+                        f"<div style='text-align:center'>"
+                        f"<span style='background:#dbeafe;color:#1e40af;"
+                        f"border:1px solid #93c5fd;border-radius:6px;"
+                        f"padding:2px 8px;font-size:.78rem;font-weight:800'>{room_cl}</span></div>"
+                        f"<div style='text-align:center'>"
+                        f"<span style='background:{lc_color}22;color:{lc_color};"
+                        f"border:1px solid {lc_color}55;border-radius:6px;"
+                        f"padding:3px 8px;font-size:.68rem;font-weight:700'>"
+                        f"Nv.{loc_crit} — {lc_label}</span></div>"
+                        f"<div style='font-size:.72rem;color:#1d4ed8;text-align:center'>"
+                        f"🧫 {pt.get('gelose','—')[:12]}</div>"
+                        f"<div style='text-align:center'>"
+                        f"<span style='background:#eff6ff;color:#1e40af;"
+                        f"border:1px solid #bfdbfe;border-radius:6px;"
+                        f"padding:2px 8px;font-size:.75rem;font-weight:700'>"
+                        f"🔁 {freq_short}</span></div>"
+                        f"</div>", unsafe_allow_html=True)
+                with c2:
+                    be, bd = st.columns(2)
+                    with be:
+                        if can_edit:
+                            if st.button("✏️", key=f"edit_pt_{i}"):
+                                st.session_state._edit_point = i
+                                st.rerun()
+                    with bd:
+                        if can_edit:
+                            if st.button("🗑️", key=f"del_pt_{i}"):
+                                st.session_state.points.pop(i)
+                                save_points(st.session_state.points, supa=True)
+                                st.rerun()
+
+            st.markdown(
+                f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                f"padding:8px 14px;margin-bottom:16px'>"
+                f"<div style='font-size:.78rem;font-weight:700;color:#94a3b8'>"
+                f"{len(st.session_state.points)} point(s)</div></div>",
+                unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Formulaire édition ─────────────────────────────────────────────────
+        if st.session_state.get('_edit_point') is not None:
+            idx = st.session_state._edit_point
+            pt  = st.session_state.points[idx]
+            st.markdown(f"### ✏️ Modifier — {pt['label']}")
+
+            er1, er2, er3, er_room = st.columns([3, 1.5, 1, 1.5])
+            with er1:
+                new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
+            with er2:
+                new_type = st.selectbox(
+                    "Type", ["Air", "Surface"],
+                    index=["Air","Surface"].index(pt.get('type','Air'))
+                    if pt.get('type','Air') in ["Air","Surface"] else 0,
+                    key="pt_edit_type")
+            with er_room:
+                new_room = st.text_input(
+                    "Classe ISO / GMP", value=pt.get('room_class', ''),
+                    placeholder="Ex: A, B, C, D…", key="pt_edit_room")
+            with er3:
+                cur_lc  = int(pt.get('location_criticality', 1))
+                lc_idx  = max(0, min(cur_lc - 1, 2))
+                new_lc_lbl = st.selectbox(
+                    "🏷️ Criticité du lieu *", LOC_CRIT_OPTS,
+                    index=lc_idx, key="pt_edit_lc")
+                new_lc = int(new_lc_lbl[0])
+                lc_c   = LOC_CRIT_COLORS[str(new_lc)]
+                st.markdown(
+                    f"<div style='background:{lc_c}22;border:1px solid {lc_c}55;"
+                    f"border-radius:6px;padding:4px 8px;text-align:center;"
+                    f"font-size:.72rem;font-weight:700;color:{lc_c};margin-top:2px'>"
+                    f"Niveau {new_lc} — {LOC_CRIT_LABELS[str(new_lc)]}</div>",
+                    unsafe_allow_html=True)
+
+            er4, er5, er6 = st.columns([2, 1, 2])
+            with er4:
+                g_opts = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                          if new_type == "Air"
+                          else ["Gélose contact TSA","Ecouvillonnage","Autre"])
+                cur_g = pt.get('gelose', g_opts[0])
+                g_idx = g_opts.index(cur_g) if cur_g in g_opts else 0
+                new_gel = st.selectbox("Gélose", g_opts, index=g_idx, key="pt_edit_gelose")
+            with er5:
+                new_freq = st.number_input(
+                    "🔁 Fréquence", min_value=1, max_value=31,
+                    value=int(pt.get('frequency', 1)), step=1, key="pt_edit_freq")
+            with er6:
+                cur_unit = pt.get('frequency_unit', '/ semaine')
+                unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 1
+                new_fu   = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
+
+            # Aperçu grille seuils
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+            padding:10px 14px;margin-top:6px">
+              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
+              font-weight:700;margin-bottom:8px">
+                Grille d'alerte — criticité lieu {new_lc} (score = lieu × germe)
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #86efac">
+                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
+                  <div style="font-size:.78rem;color:#166534;font-weight:800;margin-top:2px">Score &lt; 16</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe ≤ {int(15/new_lc)}</div>
+                </div>
+                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fcd34d">
+                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
+                  <div style="font-size:.78rem;color:#92400e;font-weight:800;margin-top:2px">Score 16–24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe {round(16/new_lc,1)}–{round(24/new_lc,1)}</div>
+                </div>
+                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:8px;
+                text-align:center;border:1px solid #fca5a5">
+                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
+                  <div style="font-size:.78rem;color:#dc2626;font-weight:800;margin-top:2px">Score &gt; 24</div>
+                  <div style="font-size:.58rem;color:#94a3b8;margin-top:2px">
+                    Germe &gt; {round(24/new_lc,1)}</div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            eb1, eb2 = st.columns(2)
+            with eb1:
+                if st.button("✅ Enregistrer", key="pt_save_edit"):
+                    st.session_state.points[idx] = {
+                        "id":                   pt.get('id', f"p{idx+1}"),
+                        "label":                new_label,
+                        "type":                 new_type,
+                        "gelose":               new_gel,
+                        "location_criticality": new_lc,
+                        "frequency":            new_freq,
+                        "frequency_unit":       new_fu,
+                        "room_class":           new_room.strip(),
+                    }
+                    save_points(st.session_state.points, supa=True)
+                    st.session_state._edit_point = None
+                    st.success("✅ Point mis à jour")
+                    st.rerun()
+            with eb2:
+                if st.button("Annuler", key="pt_cancel_edit"):
+                    st.session_state._edit_point = None
+                    st.rerun()
+
+        # ── Formulaire ajout ───────────────────────────────────────────────────
+        elif can_edit:
+            st.markdown("### ➕ Ajouter un point de prélèvement")
+
+            np1, np2, np3, np_room_col = st.columns([3, 1.5, 1.5, 1.5])
+            with np1:
+                np_label = st.text_input(
+                    "Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
+            with np2:
+                np_type = st.selectbox("Type", ["Air", "Surface"], key="np_type")
+            with np_room_col:
+                np_room = st.text_input(
+                    "Classe ISO / GMP", placeholder="Ex: A, B, C, D…", key="np_room")
+            with np3:
+                np_lc_lbl = st.selectbox("🏷️ Criticité du lieu *", LOC_CRIT_OPTS, key="np_lc")
+                np_lc = int(np_lc_lbl[0])
+                lc_c  = LOC_CRIT_COLORS[str(np_lc)]
+                st.markdown(
+                    f"<div style='background:{lc_c}22;border:1px solid {lc_c}55;"
+                    f"border-radius:6px;padding:4px 8px;text-align:center;"
+                    f"font-size:.72rem;font-weight:700;color:{lc_c};margin-top:2px'>"
+                    f"Niveau {np_lc} — {LOC_CRIT_LABELS[str(np_lc)]}</div>",
+                    unsafe_allow_html=True)
+
+            np4, np5, np6 = st.columns([2, 1, 2])
+            with np4:
+                g_opts_new = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                              if np_type == "Air"
+                              else ["Gélose contact TSA","Ecouvillonnage","Autre"])
+                np_gel = st.selectbox("Gélose", g_opts_new, key="np_gelose")
+            with np5:
+                np_freq = st.number_input(
+                    "🔁 Fréquence", min_value=1, max_value=31, value=1, step=1, key="np_freq")
+            with np6:
+                np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
+
+            # Aperçu grille
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+            padding:10px 14px;margin-top:4px;margin-bottom:10px">
+              <div style="font-size:.65rem;color:#475569;text-transform:uppercase;
+              font-weight:700;margin-bottom:8px">
+                Aperçu grille (criticité lieu {np_lc} × score germe)
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;background:#f0fdf4;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #86efac">
+                  <div style="font-size:.6rem;color:#166534;font-weight:700">✅ Conforme</div>
+                  <div style="font-size:.72rem;color:#166534;font-weight:800">Score &lt; 16</div>
+                </div>
+                <div style="flex:1;background:#fffbeb;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #fcd34d">
+                  <div style="font-size:.6rem;color:#92400e;font-weight:700">⚠️ Alerte</div>
+                  <div style="font-size:.72rem;color:#92400e;font-weight:800">Score 16–24</div>
+                </div>
+                <div style="flex:1;background:#fef2f2;border-radius:6px;padding:7px;
+                text-align:center;border:1px solid #fca5a5">
+                  <div style="font-size:.6rem;color:#991b1b;font-weight:700">🚨 Action</div>
+                  <div style="font-size:.72rem;color:#dc2626;font-weight:800">Score &gt; 24</div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            if st.button("➕ Ajouter", key="np_add"):
+                if not np_label.strip():
+                    st.error("Le nom est requis")
+                else:
+                    nid = f"p{len(st.session_state.points)+1}_{int(datetime.now().timestamp())}"
+                    st.session_state.points.append({
+                        "id":                   nid,
+                        "label":                np_label.strip(),
+                        "type":                 np_type,
+                        "gelose":               np_gel,
+                        "location_criticality": np_lc,
+                        "frequency":            np_freq,
+                        "frequency_unit":       np_fu,
+                        "room_class":           np_room.strip(),
+                    })
+                    save_points(st.session_state.points, supa=True)
+                    st.success(f"✅ Point **{np_label}** ajouté")
+                    st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════
+    # PLANS DE LOCALISATION
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_plans:
+        st.markdown("### 🗺️ Gestion des plans de localisation")
+        st.markdown("""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
+        ℹ️ Les plans permettent de localiser visuellement les points de prélèvement.<br>
+        Dans <strong>Surveillance → Nouveau prélèvement</strong>, choisissez un plan
+        dans le menu déroulant pour afficher la carte et positionner le point.
+        </div>""", unsafe_allow_html=True)
+
+        if not st.session_state.plans:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                "border-radius:12px;padding:32px;text-align:center'>"
+                "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
+                "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucun plan défini</div>"
+                "<div style='font-size:.8rem;color:#94a3b8'>Ajoutez un plan ci-dessous</div></div>",
+                unsafe_allow_html=True)
+        else:
+            st.markdown(
+                f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
+                f"padding:12px 16px;margin-bottom:16px'>"
+                f"<span style='font-size:.75rem;color:#0369a1;font-weight:700'>"
+                f"🗺️ {len(st.session_state.plans)} plan(s)</span></div>",
+                unsafe_allow_html=True)
+            for pi, plan in enumerate(list(st.session_state.plans)):
+                has_img = bool(plan.get("image_b64"))
+                pc1, pc2, pc3 = st.columns([5, 1, 1])
+                with pc1:
+                    img_badge = (
+                        " <span style='background:#f0fdf4;color:#166534;border:1px solid #86efac;"
+                        "border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700'>"
+                        "🖼️ Image</span>"
+                        if has_img else
+                        " <span style='background:#f8fafc;color:#94a3b8;border:1px solid #e2e8f0;"
+                        "border-radius:4px;padding:1px 7px;font-size:.62rem'>Pas d'image</span>")
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border:1.5px solid #e2e8f0;"
+                        f"border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px'>"
+                        f"<span style='font-size:1.3rem'>🗺️</span><div>"
+                        f"<div style='font-weight:700;color:#0f172a'>{plan['name']}</div>"
+                        f"<div style='font-size:.7rem;color:#64748b;margin-top:2px'>"
+                        f"ID: {plan['id']}{img_badge}</div></div></div>",
+                        unsafe_allow_html=True)
+                with pc2:
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_plan_{pi}"):
+                            st.session_state["_edit_plan_idx"] = pi
+                            st.session_state.pop("_ep_image_b64", None)
+                            st.rerun()
+                with pc3:
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_plan_{pi}"):
+                            st.session_state.plans.pop(pi)
+                            save_plans(st.session_state.plans)
+                            st.success("Plan supprimé.")
+                            st.rerun()
+
+        st.divider()
+
+        edit_plan_idx = st.session_state.get("_edit_plan_idx")
+        if edit_plan_idx is not None and edit_plan_idx < len(st.session_state.plans):
+            plan_e = st.session_state.plans[edit_plan_idx]
+            st.markdown(f"### ✏️ Modifier — {plan_e['name']}")
+            ep1, ep2 = st.columns([3, 2])
+            with ep1:
+                ep_name = st.text_input("Nom du plan *", value=plan_e.get("name",""), key="ep_name")
+            with ep2:
+                ep_upload = st.file_uploader(
+                    "Remplacer l'image (PNG/JPG/PDF)",
+                    type=["png","jpg","jpeg","pdf"], key="ep_upload")
+            if ep_upload:
+                import base64 as _b64ep
+                if ep_upload.type == "application/pdf":
+                    try:
+                        import fitz
+                        doc = fitz.open(stream=ep_upload.read(), filetype="pdf")
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        st.session_state["_ep_image_b64"] = (
+                            f"data:image/png;base64,{_b64ep.b64encode(pix.tobytes('png')).decode()}")
+                        st.success("PDF converti.")
+                    except Exception as e:
+                        st.error(f"Erreur PDF : {e}")
+                else:
+                    raw_ep = ep_upload.read()
+                    st.session_state["_ep_image_b64"] = (
+                        f"data:{ep_upload.type};base64,{_b64ep.b64encode(raw_ep).decode()}")
+            cur_img = st.session_state.get("_ep_image_b64", plan_e.get("image_b64",""))
+            if cur_img:
+                st.image(cur_img, caption="Aperçu du plan", use_column_width=True)
+            eb1, eb2 = st.columns(2)
+            with eb1:
+                if st.button("✅ Enregistrer", key="ep_save", use_container_width=True, type="primary"):
+                    if ep_name.strip():
+                        st.session_state.plans[edit_plan_idx]["name"] = ep_name.strip()
+                        if st.session_state.get("_ep_image_b64"):
+                            st.session_state.plans[edit_plan_idx]["image_b64"] = st.session_state["_ep_image_b64"]
+                        save_plans(st.session_state.plans)
+                        st.session_state["_edit_plan_idx"] = None
+                        st.session_state.pop("_ep_image_b64", None)
+                        st.success("✅ Plan mis à jour")
+                        st.rerun()
+                    else:
+                        st.error("Le nom est obligatoire.")
+            with eb2:
+                if st.button("Annuler", key="ep_cancel", use_container_width=True):
+                    st.session_state["_edit_plan_idx"] = None
+                    st.session_state.pop("_ep_image_b64", None)
+                    st.rerun()
+        elif can_edit:
+            st.markdown("### ➕ Ajouter un plan")
+            np1, np2 = st.columns([3, 2])
+            with np1:
+                np_plan_name = st.text_input(
+                    "Nom du plan *",
+                    placeholder="Ex: ZAC — Isolateur ISO 16, Salle de préparation B...",
+                    key="np_plan_name")
+            with np2:
+                np_plan_upload = st.file_uploader(
+                    "Image du plan (PNG / JPG / PDF)",
+                    type=["png","jpg","jpeg","pdf"], key="np_plan_upload")
+            np_plan_b64 = ""
+            if np_plan_upload:
+                import base64 as _b64np2
+                if np_plan_upload.type == "application/pdf":
+                    try:
+                        import fitz
+                        doc = fitz.open(stream=np_plan_upload.read(), filetype="pdf")
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        np_plan_b64 = (
+                            f"data:image/png;base64,{_b64np2.b64encode(pix.tobytes('png')).decode()}")
+                        st.success("✅ PDF converti — première page utilisée comme plan")
+                    except ImportError:
+                        st.error("❌ PyMuPDF non installé — ajoutez pymupdf dans requirements.txt")
+                    except Exception as e:
+                        st.error(f"Erreur PDF : {e}")
+                else:
+                    np_plan_b64 = (
+                        f"data:{np_plan_upload.type};base64,"
+                        f"{_b64np2.b64encode(np_plan_upload.read()).decode()}")
+            if np_plan_b64:
+                st.image(np_plan_b64, caption="Aperçu du plan", use_column_width=True)
+            if st.button("➕ Ajouter ce plan", key="np_plan_add",
+                         use_container_width=True, type="primary"):
+                if not np_plan_name.strip():
+                    st.error("Le nom du plan est obligatoire.")
+                else:
+                    import time as _time_plans
+                    plan_id = f"plan_{len(st.session_state.plans)+1}_{int(_time_plans.time())}"
+                    st.session_state.plans.append({
+                        "id":        plan_id,
+                        "name":      np_plan_name.strip(),
+                        "image_b64": np_plan_b64,
+                    })
+                    save_plans(st.session_state.plans)
+                    st.success(f"✅ Plan **{np_plan_name}** ajouté avec succès !")
+                    st.rerun()
+# ══════════════════════════════════════════════════════════════════════════
+    # SEUILS D'ALERTE ET D'ACTION
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_seuils:
+        st.markdown("### ⚖️ Seuils d'alerte et d'action")
+
+        # ── Explication du calcul ─────────────────────────────────────────────
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+        border-radius:14px;padding:20px 24px;margin-bottom:20px">
+          <div style="font-size:1rem;font-weight:800;color:#1e40af;margin-bottom:14px">
+            🧮 Comment est calculé le score de criticité ?
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">🧬</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Pathogénicité</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Non pathogène<br>
+                <b>2</b> — Pathogène opportuniste<br>
+                <b>3</b> — Pathogène MR / primaire
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">🧴</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Résistance désinfectants</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Sensible<br>
+                <b>2</b> — Résistant Surfa'Safe<br>
+                <b>3</b> — Résistant Surfa'Safe + APA
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
+              <div style="font-size:1.4rem;margin-bottom:4px">💨</div>
+              <div style="font-weight:800;color:#1e40af;font-size:.88rem">Dissémination</div>
+              <div style="font-size:.72rem;color:#475569;margin-top:6px;line-height:1.6">
+                <b>1</b> — Environnemental<br>
+                <b>2</b> — Manuporté<br>
+                <b>3</b> — Aéroporté
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#1e293b;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px">
+            <div style="font-size:.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
+              Formule du score total
+            </div>
+            <div style="font-size:1rem;color:#e2e8f0;font-weight:700">
+              Score total = <span style="color:#60a5fa">Criticité lieu (1–3)</span>
+              × <span style="color:#34d399">Pathogénicité (1–3)</span>
+              × <span style="color:#fbbf24">Résistance (1–3)</span>
+              × <span style="color:#f87171">Dissémination (1–3)</span>
+            </div>
+            <div style="font-size:.72rem;color:#64748b;margin-top:8px">
+              Score minimum : 1×1×1×1 = <b style="color:#94a3b8">1</b>
+              &nbsp;·&nbsp;
+              Score maximum : 3×3×3×3 = <b style="color:#f87171">81</b>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">✅</div>
+              <div style="font-weight:800;color:#166534;font-size:.85rem;margin-top:4px">CONFORME</div>
+              <div style="font-size:.78rem;color:#166534;margin-top:4px">Score &lt; seuil alerte</div>
+            </div>
+            <div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">⚠️</div>
+              <div style="font-weight:800;color:#92400e;font-size:.85rem;margin-top:4px">ALERTE</div>
+              <div style="font-size:.78rem;color:#92400e;margin-top:4px">Seuil alerte ≤ Score ≤ seuil action</div>
+            </div>
+            <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:1.1rem">🚨</div>
+              <div style="font-weight:800;color:#991b1b;font-size:.85rem;margin-top:4px">ACTION</div>
+              <div style="font-size:.78rem;color:#991b1b;margin-top:4px">Score &gt; seuil action</div>
+            </div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── Seuils actuels ────────────────────────────────────────────────────
+        _seuil_alerte  = st.session_state.get("_seuil_alerte", 24)
+        _seuil_action  = st.session_state.get("_seuil_action", 36)
+
+        st.markdown("#### ⚙️ Modifier les seuils")
+
+        if not can_edit:
+            st.info("👁️ Mode lecture seule — connectez-vous pour modifier les seuils.")
+
+        sc1, sc2, sc3 = st.columns([2, 2, 3])
+        with sc1:
+            new_seuil_alerte = st.number_input(
+                "⚠️ Seuil ALERTE",
+                min_value=1, max_value=80, value=int(_seuil_alerte), step=1,
+                disabled=not can_edit,
+                help="En dessous : conforme. À partir de ce score : alerte.",
+                key="input_seuil_alerte")
+        with sc2:
+            new_seuil_action = st.number_input(
+                "🚨 Seuil ACTION",
+                min_value=1, max_value=81, value=int(_seuil_action), step=1,
+                disabled=not can_edit,
+                help="Au-dessus de ce score : action immédiate requise.",
+                key="input_seuil_action")
+        with sc3:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if can_edit:
+                if st.button("💾 Sauvegarder les seuils", use_container_width=True,
+                             key="save_seuils", type="primary"):
+                    if new_seuil_alerte >= new_seuil_action:
+                        st.error("❌ Le seuil d'alerte doit être strictement inférieur au seuil d'action.")
+                    else:
+                        st.session_state["_seuil_alerte"] = new_seuil_alerte
+                        st.session_state["_seuil_action"] = new_seuil_action
+                        _supa_upsert('seuils', json.dumps({
+                            "alerte": new_seuil_alerte,
+                            "action": new_seuil_action
+                        }, ensure_ascii=False))
+                        st.success(
+                            f"✅ Seuils sauvegardés — Alerte : {new_seuil_alerte} · Action : {new_seuil_action}")
+                        st.rerun()
+
+        # Validation visuelle
+        if new_seuil_alerte >= new_seuil_action:
+            st.error("❌ Le seuil d'alerte doit être strictement inférieur au seuil d'action.")
+        else:
+            st.markdown(f"""
+            <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
+            padding:14px 18px;margin-top:8px">
+              <div style="font-size:.78rem;font-weight:700;color:#475569;margin-bottom:10px">
+                Aperçu de la grille avec ces seuils
+              </div>
+              <div style="display:flex;gap:0;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0">
+                <div style="flex:1;background:#f0fdf4;padding:10px;text-align:center;border-right:1px solid #e2e8f0">
+                  <div style="font-size:.65rem;color:#166534;font-weight:700;text-transform:uppercase">✅ Conforme</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#166534;margin-top:2px">
+                    Score &lt; {new_seuil_alerte}
+                  </div>
+                </div>
+                <div style="flex:1;background:#fffbeb;padding:10px;text-align:center;border-right:1px solid #e2e8f0">
+                  <div style="font-size:.65rem;color:#92400e;font-weight:700;text-transform:uppercase">⚠️ Alerte</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#92400e;margin-top:2px">
+                    {new_seuil_alerte} – {new_seuil_action}
+                  </div>
+                </div>
+                <div style="flex:1;background:#fef2f2;padding:10px;text-align:center">
+                  <div style="font-size:.65rem;color:#991b1b;font-weight:700;text-transform:uppercase">🚨 Action</div>
+                  <div style="font-size:1.1rem;font-weight:900;color:#dc2626;margin-top:2px">
+                    Score &gt; {new_seuil_action}
+                  </div>
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Tableau des scores limites par criticité de lieu ──────────────────
+        st.markdown("#### 📊 Tableau de référence — scores limites par criticité de lieu")
+        st.caption(
+            "Montre à quel score germe (pathogénicité × résistance × dissémination) "
+            "les seuils sont déclenchés selon la criticité du lieu.")
+
+        _sa = new_seuil_alerte
+        _sc_val = new_seuil_action
+
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 2fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Criticité lieu</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Score lieu</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → ⚠️ Alerte</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → 🚨 Action</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Exemples de germes concernés</div>"
+            "</div>",
+            unsafe_allow_html=True)
+
+        lc_examples = {
+            1: "Couloirs, locaux techniques, zones administratives",
+            2: "Préparations non stériles, zones annexes ZAC, vestiaires",
+            3: "ZAC, salles blanches ISO A/B, isolateurs",
+        }
+        lc_labels = {1: "Non critique", 2: "Semi-critique", 3: "Critique"}
+        lc_colors = {1: "#22c55e", 2: "#f59e0b", 3: "#ef4444"}
+
+        for lci, (loc_crit_val, lc_lbl) in enumerate([
+            (1, "Nv.1 — Non critique"),
+            (2, "Nv.2 — Semi-critique"),
+            (3, "Nv.3 — Critique"),
+        ]):
+            # Score germe minimum pour déclencher alerte / action
+            germe_alerte = _sa / loc_crit_val
+            germe_action = _sc_val / loc_crit_val
+            lc_col = lc_colors[loc_crit_val]
+            row_bg = "#f8fafc" if lci % 2 == 0 else "#ffffff"
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 2fr;"
+                f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
+                "padding:10px 14px;align-items:center'>"
+                f"<div style='font-size:.85rem;font-weight:700'>"
+                f"<span style='color:{lc_col}'>●</span> {lc_lbl}</div>"
+                f"<div style='text-align:center'>"
+                f"<span style='background:{lc_col}22;color:{lc_col};"
+                f"border:1px solid {lc_col}55;border-radius:6px;"
+                f"padding:2px 10px;font-size:.82rem;font-weight:800'>× {loc_crit_val}</span></div>"
+                f"<div style='text-align:center;font-size:.82rem;font-weight:700;color:#92400e'>"
+                f"Score germe ≥ {germe_alerte:.1f}</div>"
+                f"<div style='text-align:center;font-size:.82rem;font-weight:700;color:#dc2626'>"
+                f"Score germe &gt; {germe_action:.1f}</div>"
+                f"<div style='font-size:.7rem;color:#64748b;font-style:italic'>"
+                f"{lc_examples[loc_crit_val]}</div>"
+                "</div>",
+                unsafe_allow_html=True)
+
+        st.markdown(
+            "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+            f"<div style='font-size:.75rem;color:#94a3b8'>"
+            f"Score germe = Pathogénicité × Résistance × Dissémination (min 1 · max 27) "
+            f"· Seuil alerte actuel : <b style='color:#fbbf24'>{_sa}</b> "
+            f"· Seuil action actuel : <b style='color:#f87171'>{_sc_val}</b>"
+            f"</div></div>",
+            unsafe_allow_html=True)
+
+        st.divider()
+
+        # ── Réinitialiser aux valeurs par défaut ──────────────────────────────
+        st.markdown("#### ↩️ Réinitialiser aux valeurs par défaut")
+        st.markdown(
+            "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"
+            "padding:10px 14px;font-size:.78rem;color:#475569;margin-bottom:8px'>"
+            "Les valeurs par défaut sont <b>Alerte : 24</b> et <b>Action : 36</b>.<br>"
+            "Ces seuils correspondent à :<br>"
+            "• Alerte dès qu'un germe de score 8 est trouvé en zone critique (3×8=24)<br>"
+            "• Action dès qu'un germe de score 12 est trouvé en zone critique (3×12=36)"
+            "</div>",
+            unsafe_allow_html=True)
+        if can_edit:
+            if st.button("↩️ Remettre Alerte=24 / Action=36", key="reset_seuils"):
+                st.session_state["_seuil_alerte"] = 24
+                st.session_state["_seuil_action"] = 36
+                _supa_upsert('seuils', json.dumps({"alerte": 24, "action": 36}, ensure_ascii=False))
+                st.success("✅ Seuils réinitialisés — Alerte : 24 · Action : 36")
+                st.rerun()
+
+    
+    # ══════════════════════════════════════════════════════════════════════════
+    # OPÉRATEURS
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_operateurs:
+        ops = st.session_state.operators
+        if not ops:
+            st.info("Aucun opérateur enregistré.")
+        else:
+            st.markdown(
+                f'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;'
+                f'padding:12px 16px;margin-bottom:16px">'
+                f'<span style="font-size:.75rem;color:#0369a1;font-weight:700">'
+                f'👥 {len(ops)} opérateur(s)</span></div>',
+                unsafe_allow_html=True)
+            for i, op in enumerate(ops):
+                nom        = op.get('nom', '—')
+                profession = op.get('profession', '—')
+                oc1, oc2, oc3 = st.columns([5, 1, 1])
+                with oc1:
+                    st.markdown(f"""
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+                    padding:10px 14px;display:flex;gap:16px;align-items:center">
+                      <div style="background:#2563eb;color:#fff;border-radius:50%;
+                      width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                      font-weight:700;font-size:.9rem;flex-shrink:0">
+                        {nom[0].upper() if nom else '?'}
+                      </div>
+                      <div>
+                        <div style="font-weight:700;font-size:.9rem;color:#0f172a">{nom}</div>
+                        <div style="font-size:.72rem;color:#475569;margin-top:2px">👔 {profession}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+                with oc2:
+                    if can_edit:
+                        if st.button("✏️", key=f"edit_op_{i}"):
+                            st.session_state._edit_operator = i
+                            st.rerun()
+                with oc3:
+                    if can_edit:
+                        if st.button("🗑️", key=f"del_op_{i}"):
+                            ops.pop(i)
+                            save_operators(ops, supa=True)
+                            st.session_state.operators = ops
+                            st.rerun()
+
+        st.divider()
+        p_opts = ["Préparateur en pharmacie hospitalière", "Pharmacien", "Interne de pharmacie"]
+
+        if st.session_state.get('_edit_operator') is not None:
+            idx = st.session_state._edit_operator
+            op  = st.session_state.operators[idx]
+            st.markdown(f"### ✏️ Modifier — {op.get('nom','')}")
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                edit_nom = st.text_input("Nom *", value=op.get('nom',''), key="op_edit_nom")
+            with ec2:
+                cur_p    = op.get('profession','')
+                p_idx    = p_opts.index(cur_p) if cur_p in p_opts else 0
+                edit_pro = st.selectbox("Profession *", p_opts, index=p_idx, key="op_edit_prof")
+            eb1, eb2 = st.columns(2)
+            with eb1:
+                if st.button("✅ Enregistrer", use_container_width=True, key="op_save_edit"):
+                    if edit_nom.strip():
+                        st.session_state.operators[idx] = {
+                            "nom": edit_nom.strip(), "profession": edit_pro}
+                        save_operators(st.session_state.operators, supa=True)
+                        st.session_state._edit_operator = None
+                        st.success("✅ Mis à jour")
+                        st.rerun()
+                    else:
+                        st.error("Le nom est obligatoire.")
+            with eb2:
+                if st.button("Annuler", use_container_width=True, key="op_cancel_edit"):
+                    st.session_state._edit_operator = None
+                    st.rerun()
+        elif can_edit:
+            st.markdown("### ➕ Ajouter un opérateur")
+            nc1, nc2 = st.columns(2)
+            with nc1:
+                new_nom = st.text_input("Nom *", placeholder="Ex: Marie Dupont", key="op_new_nom")
+            with nc2:
+                new_pro = st.selectbox("Profession *", p_opts, key="op_new_prof")
+            if st.button("➕ Ajouter", key="op_add"):
+                if not new_nom.strip():
+                    st.error("Le nom est obligatoire.")
+                elif any(o['nom'].lower() == new_nom.strip().lower() for o in st.session_state.operators):
+                    st.error("Cet opérateur existe déjà.")
+                else:
+                    st.session_state.operators.append({"nom": new_nom.strip(), "profession": new_pro})
+                    save_operators(st.session_state.operators, supa=True)
+                    st.success(f"✅ **{new_nom}** ajouté")
+                    st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SAUVEGARDE
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_backup:
+        st.markdown("### 💾 Sauvegarde & Restauration")
+        supa_connected = get_supabase_client() is not None
+        if supa_connected:
+            st.success("✅ **Supabase actif** — données persistantes dans le cloud.")
+        else:
+            st.warning("⚠️ **Supabase non configuré** — données perdues au redémarrage.")
+
+        st.markdown("""
+        <div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;
+        padding:16px 20px;margin:12px 0">
+          <div style="font-weight:800;color:#92400e;font-size:.95rem;margin-bottom:8px">
+            📋 Pourquoi sauvegarder ?
+          </div>
+          <div style="font-size:.82rem;color:#78350f;line-height:1.8">
+            Chaque modification du code provoque un redémarrage. Sans Supabase, toutes
+            les données locales sont <strong>effacées</strong>.<br>
+            ✅ <strong>Solution 1</strong> : configurer Supabase (onglet ☁️).<br>
+            ✅ <strong>Solution 2</strong> : exporter avant chaque update, réimporter après.
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("#### ⬇️ Exporter toutes les données")
+        backup_data = export_all_data()
+        backup_json     = json.dumps(backup_data, ensure_ascii=False, indent=2)
+        backup_filename = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        b1, b2, b3, b4 = st.columns(4)
+        b1.metric("🦠 Germes",          len(backup_data.get("germs", [])))
+        b2.metric("🧪 Prélèvements",    len(backup_data.get("prelevements", [])))
+        b3.metric("📅 Lectures planif.", len(backup_data.get("schedules", [])))
+        b4.metric("📋 Historique",       len(backup_data.get("surveillance", [])))
+        st.download_button(
+            label=f"⬇️ Télécharger ({len(backup_json)//1024 + 1} Ko)",
+            data=backup_json, file_name=backup_filename,
+            mime="application/json",
+            use_container_width=True, key="main_export_btn")
+
+        st.divider()
+        st.markdown("#### ⬆️ Restaurer depuis une sauvegarde")
+        st.markdown("""
+        <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;
+        padding:12px 16px;margin-bottom:12px">
+          <span style="color:#dc2626;font-weight:700;font-size:.82rem">
+            ⚠️ La restauration remplace TOUTES les données sans possibilité d'annulation.
+          </span>
+        </div>""", unsafe_allow_html=True)
+
+        uploaded_backup = st.file_uploader(
+            "Fichier de sauvegarde (.json)", type=["json"], key="backup_uploader")
+        if uploaded_backup is not None:
+            try:
+                backup_content = json.loads(uploaded_backup.read().decode("utf-8"))
+                meta = backup_content.get("_meta", {})
+                st.markdown(f"""
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;
+                padding:14px 18px;margin-bottom:12px">
+                  <div style="font-weight:700;color:#166534;font-size:.85rem;margin-bottom:8px">
+                    📁 Contenu détecté
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+                  font-size:.75rem;color:#0f172a">
+                    <div>🦠 Germes : <strong>{len(backup_content.get("germs",[]))}</strong></div>
+                    <div>🧪 Prélèvements : <strong>{len(backup_content.get("prelevements",[]))}</strong></div>
+                    <div>📅 Lectures : <strong>{len(backup_content.get("schedules",[]))}</strong></div>
+                    <div>👤 Opérateurs : <strong>{len(backup_content.get("operators",[]))}</strong></div>
+                    <div>📍 Points : <strong>{len(backup_content.get("points",[]))}</strong></div>
+                    <div>📋 Historique : <strong>{len(backup_content.get("surveillance",[]))}</strong></div>
+                  </div>
+                  <div style="font-size:.68rem;color:#475569;margin-top:8px">
+                    Exporté le : {meta.get("exported_at","—")[:19].replace("T"," ")}
+                    | Version : {meta.get("version","?")}
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+                if st.session_state.get("confirm_restore", False):
+                    st.error("🚨 Dernière confirmation — toutes les données seront remplacées.")
+                    rc1, rc2 = st.columns(2)
+                    with rc1:
+                        if st.button("✅ OUI — Restaurer maintenant",
+                                     use_container_width=True, key="confirm_restore_yes"):
+                            ok, msg = import_all_data(backup_content)
+                            st.session_state.confirm_restore = False
+                            if ok: st.success(f"✅ {msg}"); st.rerun()
+                            else:  st.error(msg)
+                    with rc2:
+                        if st.button("❌ Annuler", use_container_width=True, key="confirm_restore_no"):
+                            st.session_state.confirm_restore = False
+                            st.rerun()
+                else:
+                    if can_edit:
+                        if st.button("⬆️ Restaurer ces données",
+                                     use_container_width=True, key="restore_btn"):
+                            st.session_state.confirm_restore = True
+                            st.rerun()
+            except json.JSONDecodeError:
+                st.error("❌ Fichier JSON invalide.")
+            except Exception as e:
+                st.error(f"❌ Erreur : {e}")
+
+# ══════════════════════════════════════════════════════════════════════════
+    # SUPABASE
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_supabase:
+        st.markdown("### ☁️ Configuration Supabase")
+        supa_ok = get_supabase_client() is not None
+        if supa_ok:
+            st.success("✅ **Supabase connecté** — modifications synchronisées en temps réel.")
+        else:
+            st.error("🔴 **Supabase non connecté** — sauvegarde locale uniquement.")
+
+        st.markdown("""
+        <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;
+        padding:20px;margin-top:16px">
+          <div style="font-size:.95rem;font-weight:700;color:#0f172a;margin-bottom:12px">
+            📋 Comment configurer Supabase
+          </div>
+          <div style="font-size:.82rem;color:#1e293b;line-height:1.8">
+            <strong>1.</strong> Créez un compte sur <strong>supabase.com</strong><br>
+            <strong>2.</strong> Créez un nouveau projet<br>
+            <strong>3.</strong> Dans l'éditeur SQL, exécutez le code ci-dessous
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        st.code("""CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE app_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON app_state FOR ALL USING (true) WITH CHECK (true);""",
+                language="sql")
+
+        st.markdown("""
+        <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;
+        padding:20px;margin-top:12px">
+          <div style="font-size:.82rem;color:#1e293b;line-height:1.8">
+            <strong>4.</strong> Dans <em>Project Settings → API</em>, copiez :<br>
+            &nbsp;&nbsp;• <strong>Project URL</strong> → <code>SUPABASE_URL</code><br>
+            &nbsp;&nbsp;• <strong>anon/public key</strong> → <code>SUPABASE_KEY</code>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        st.code("""SUPABASE_URL = "https://xxxxx.supabase.co"
+SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
+
+        if supa_ok:
+            st.divider()
+            st.markdown("### 🔄 Actions Supabase")
+            syn1, syn2 = st.columns(2)
+            with syn1:
+                if can_edit:
+                    if st.button("🔄 Forcer la synchronisation", use_container_width=True):
+                        save_germs(st.session_state.germs)
+                        save_prelevements(st.session_state.prelevements, supa=True)
+                        save_schedules(st.session_state.schedules, supa=True)
+                        save_surveillance(st.session_state.surveillance)
+                        save_points(st.session_state.points, supa=True)
+                        save_operators(st.session_state.operators, supa=True)
+                        save_pending_identifications(st.session_state.pending_identifications, supa=True)
+                        save_origin_measures(st.session_state.origin_measures, supa=True)
+                        save_faq(st.session_state.faq_items, supa=True)
+                        st.session_state["_mesures_modifiees"] = False
+                        st.success("✅ Toutes les données synchronisées !")
+            with syn2:
+                if can_edit:
+                    if st.button("🔃 Recharger depuis Supabase", use_container_width=True):
+                        st.session_state.germs                   = load_germs()[0]
+                        st.session_state.prelevements            = load_prelevements()
+                        st.session_state.schedules               = load_schedules()
+                        st.session_state.surveillance            = load_surveillance()
+                        st.session_state.points                  = load_points()
+                        st.session_state.operators               = load_operators()
+                        st.session_state.pending_identifications = load_pending_identifications()
+                        st.session_state.origin_measures         = load_origin_measures()
+                        st.session_state.faq_items               = load_faq()
+                        st.success("✅ Données rechargées depuis Supabase !")
+                        st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # FAQ
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_faq:
+        render_faq_tab(can_edit)
+ 
+    # ── Stats rapides ──────────────────────────────────────────────────────
+    cats_count = {}
+    for f in faq_items:
+        c = f.get("category", "Général")
+        cats_count[c] = cats_count.get(c, 0) + 1
+ 
+    cols_stat = st.columns(len(cats_count) + 1 if cats_count else 2)
+    with cols_stat[0]:
+        st.metric("Total Q&R", len(faq_items))
+    for i, (cat, cnt) in enumerate(cats_count.items(), 1):
+        if i < len(cols_stat):
+            with cols_stat[i]:
+                st.metric(cat, cnt)
+ 
+    st.divider()
+ 
+    # ── Formulaire ajout / édition ─────────────────────────────────────────
+    edit_idx = st.session_state.get("_faq_edit_idx")
+ 
+    if can_edit and st.session_state.get("_faq_show_form", False):
+        is_edit = edit_idx is not None
+        form_title = f"✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
+        existing = faq_items[edit_idx] if is_edit else {}
+        form_bg = "#eff6ff" if is_edit else "#f0fdf4"
+        form_border = "#93c5fd" if is_edit else "#86efac"
+ 
+        st.markdown(
+            f"<div style='background:{form_bg};border:1.5px solid {form_border};"
+            f"border-radius:12px;padding:18px;margin-bottom:16px'>",
+            unsafe_allow_html=True
+        )
+        st.markdown(f"#### {form_title}")
+ 
+        fc1, fc2 = st.columns([3, 1])
+        with fc1:
+            faq_question = st.text_input(
+                "Question *",
+                value=existing.get("question", ""),
+                placeholder="Ex: Comment ajouter un point de prélèvement ?",
+                key="faq_form_question"
+            )
+        with fc2:
+            cur_cat = existing.get("category", "Général")
+            cat_idx = FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0
+            faq_category = st.selectbox(
+                "Catégorie",
+                FAQ_CATEGORIES,
+                index=cat_idx,
+                key="faq_form_category"
+            )
+ 
+        faq_answer = st.text_area(
+            "Réponse * (Markdown supporté)",
+            value=existing.get("answer", ""),
+            height=150,
+            placeholder="Décrivez la réponse. Vous pouvez utiliser **gras**, *italique*, listes…",
+            key="faq_form_answer"
+        )
+ 
+        # Aperçu
+        if faq_answer.strip():
+            with st.expander("👁️ Aperçu du rendu Markdown", expanded=False):
+                st.markdown(faq_answer)
+ 
+        fb1, fb2 = st.columns(2)
+        with fb1:
+            btn_label = "✔️ Mettre à jour" if is_edit else "✅ Ajouter"
+            if st.button(btn_label, use_container_width=True, type="primary", key="faq_form_submit"):
+                if not faq_question.strip():
+                    st.error("La question est obligatoire.")
+                elif not faq_answer.strip():
+                    st.error("La réponse est obligatoire.")
+                else:
+                    if is_edit:
+                        faq_items[edit_idx]["question"] = faq_question.strip()
+                        faq_items[edit_idx]["answer"]   = faq_answer.strip()
+                        faq_items[edit_idx]["category"] = faq_category
+                    else:
+                        new_faq_item = {
+                            "id":       f"faq_{int(datetime.now().timestamp())}",
+                            "category": faq_category,
+                            "question": faq_question.strip(),
+                            "answer":   faq_answer.strip(),
+                            "order":    len(faq_items),
+                        }
+                        faq_items.append(new_faq_item)
+ 
+                    save_faq(faq_items, supa=True)
+                    st.session_state["faq_items"]       = faq_items
+                    st.session_state["_faq_show_form"]  = False
+                    st.session_state["_faq_edit_idx"]   = None
+                    st.success("✅ FAQ mise à jour !")
+                    st.rerun()
+        with fb2:
+            if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
+                st.session_state["_faq_show_form"] = False
+                st.session_state["_faq_edit_idx"]  = None
+                st.rerun()
+ 
+        st.markdown("</div>", unsafe_allow_html=True)
+ 
+    elif can_edit and not st.session_state.get("_faq_show_form", False):
+        if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
+            st.session_state["_faq_show_form"] = True
+            st.session_state["_faq_edit_idx"]  = None
+            st.rerun()
+ 
+    # ── Filtre catégorie ────────────────────────────────────────────────────
+    if faq_items:
+        all_cats_tab = ["Toutes"] + sorted(set(f.get("category","Général") for f in faq_items))
+        faq_filter_cat = st.selectbox(
+            "Filtrer par catégorie",
+            all_cats_tab,
+            key="faq_tab_cat_filter",
+            label_visibility="collapsed"
+        )
+ 
+        # ── Liste des Q&R ───────────────────────────────────────────────────
+        # En-tête tableau
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:2fr 1fr 0.4fr 0.4fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
+            "padding:10px 14px;margin-top:8px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
+            "<div></div><div></div></div>",
+            unsafe_allow_html=True
+        )
+ 
+        displayed = [
+            (i, f) for i, f in enumerate(faq_items)
+            if faq_filter_cat == "Toutes" or f.get("category") == faq_filter_cat
+        ]
+ 
+        if not displayed:
+            st.markdown(
+                "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
+                "border-radius:0 0 10px 10px;padding:20px;text-align:center;"
+                "color:#94a3b8;font-size:.82rem'>Aucune question dans cette catégorie</div>",
+                unsafe_allow_html=True
+            )
+        else:
+            for display_pos, (real_idx, item) in enumerate(displayed):
+                cat_col = {
+                    "Général":            "#2563eb",
+                    "Score & Seuils":     "#7c3aed",
+                    "Prélèvements":       "#0891b2",
+                    "Paramètres":         "#059669",
+                    "Données":            "#d97706",
+                    "Mesures correctives":"#dc2626",
+                }.get(item.get("category","Général"), "#475569")
+ 
+                row_bg = "#f8fafc" if display_pos % 2 == 0 else "#ffffff"
+                border_r = "none" if display_pos < len(displayed)-1 else ""
+ 
+                rc1, rc2 = st.columns([6, 1])
+                with rc1:
+                    st.markdown(
+                        f"<div style='display:grid;grid-template-columns:2fr 1fr;"
+                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
+                        f"border-top:none;padding:10px 14px;align-items:center'>"
+                        f"<div style='font-size:.82rem;font-weight:600;color:#0f172a'>"
+                        f"{item['question']}</div>"
+                        f"<div style='text-align:center'>"
+                        f"<span style='background:{cat_col}18;color:{cat_col};"
+                        f"border:1px solid {cat_col}44;border-radius:12px;"
+                        f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
+                        f"{item.get('category','Général')}</span></div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                with rc2:
+                    act1, act2, act3, act4 = st.columns(4)
+                    # Monter
+                    with act1:
+                        if can_edit and real_idx > 0:
+                            if st.button("↑", key=f"faq_up_{real_idx}",
+                                         help="Monter"):
+                                faq_items[real_idx], faq_items[real_idx-1] = \
+                                    faq_items[real_idx-1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+                    # Descendre
+                    with act2:
+                        if can_edit and real_idx < len(faq_items)-1:
+                            if st.button("↓", key=f"faq_dn_{real_idx}",
+                                         help="Descendre"):
+                                faq_items[real_idx], faq_items[real_idx+1] = \
+                                    faq_items[real_idx+1], faq_items[real_idx]
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+                    # Éditer
+                    with act3:
+                        if can_edit:
+                            if st.button("✏️", key=f"faq_edit_{real_idx}"):
+                                st.session_state["_faq_edit_idx"]  = real_idx
+                                st.session_state["_faq_show_form"] = True
+                                st.rerun()
+                    # Supprimer
+                    with act4:
+                        if can_edit:
+                            if st.button("🗑️", key=f"faq_del_{real_idx}"):
+                                faq_items.pop(real_idx)
+                                for k, f in enumerate(faq_items):
+                                    f["order"] = k
+                                save_faq(faq_items, supa=True)
+                                st.session_state["faq_items"] = faq_items
+                                st.rerun()
+ 
+            st.markdown(
+                f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+                f"padding:8px 14px'>"
+                f"<div style='font-size:.75rem;color:#94a3b8'>"
+                f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
+                f"</div></div>",
+                unsafe_allow_html=True
+            )
+ 
+    else:
+        st.markdown(
+            "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+            "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
+            "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
+            "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucune question définie</div>"
+            "<div style='font-size:.8rem;color:#94a3b8'>"
+            "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
+            unsafe_allow_html=True
+        )
+ 
+    st.divider()
+ 
+    # ── Réinitialiser FAQ par défaut ────────────────────────────────────────
+    if can_edit:
+        st.markdown("#### ↩️ Réinitialiser la FAQ")
+        st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
+        if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
+            st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
+            save_faq(st.session_state["faq_items"], supa=True)
+            st.success("✅ FAQ réinitialisée avec les questions par défaut.")
+            st.rerun()
