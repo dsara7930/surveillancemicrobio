@@ -1199,25 +1199,38 @@ with st.sidebar:
         )
 
 # ── 🍄 Champignon dansant + bulle cliquable ───────────────────
-    st.markdown("""
-    <style>
-    div[data-testid="stButton"]:has(button#mush_faq_btn) button,
-    button[kind="secondary"] {
-        font-style: italic;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # ── 🍄 Champignon dansant cliquable ───────────────────────────
+st.components.v1.html("""
+<div style="display:flex;justify-content:center;margin:8px 0">
+  <a href="?open_faq=1" target="_self" style="display:block;cursor:pointer;
+     border-radius:50%;overflow:hidden;
+     animation:bounce 1.8s ease-in-out infinite,glow 2.6s ease-in-out infinite;
+     box-shadow:0 0 0 0 rgba(124,58,237,0)">
+    <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" 
+            width="80" height="80"
+            style="border:none;border-radius:50%;pointer-events:none;display:block"
+            frameBorder="0"></iframe>
+  </a>
+</div>
+<p style="text-align:center;font-size:.72rem;color:#94a3b8;
+   font-style:italic;margin:4px 0">Clique pour l'aide !</p>
 
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.components.v1.html("""
-        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="78" height="78"
-            style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
-        """, height=100, scrolling=False)
-    with col2:
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
-            show_faq_dialog()
+<style>
+@keyframes bounce {
+  0%,100%{ transform:translateY(0) scale(1); }
+  25%     { transform:translateY(-7px) rotate(-6deg) scale(1.05); }
+  50%     { transform:translateY(-10px) scale(1.08); }
+  75%     { transform:translateY(-7px) rotate(6deg) scale(1.05); }
+}
+@keyframes glow {
+  0%,100%{ box-shadow:0 0 0 0 rgba(124,58,237,0); }
+  50%    { box-shadow:0 0 22px 8px rgba(124,58,237,.45); }
+}
+a { animation:bounce 1.8s ease-in-out infinite,glow 2.6s ease-in-out infinite; }
+a:hover { filter:brightness(1.15) saturate(1.3);
+          animation:none;transform:scale(1.2);transition:transform .15s; }
+</style>
+""", height=120, scrolling=False)
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
@@ -3576,7 +3589,18 @@ if active == "planning":
             for pt in st.session_state.points
             if (pt.get('room_class') or '').strip()
         })
-        # Initialiser les valeurs par défaut si absent
+        # Charger les contraintes Supabase une seule fois par session
+        if "class_constraints_loaded" not in st.session_state:
+            _raw_cc = _supa_get('class_constraints')
+            if _raw_cc:
+                try:
+                    for _cls_k, _cls_v in json.loads(_raw_cc).items():
+                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
+                except Exception:
+                    pass
+            st.session_state["class_constraints_loaded"] = True
+
+        # Initialiser à 0 uniquement si vraiment absent (nouvelle classe)
         for _cls in all_classes:
             _key = f"class_max_{_cls}"
             if _key not in st.session_state:
