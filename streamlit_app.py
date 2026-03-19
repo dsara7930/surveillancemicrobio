@@ -5153,8 +5153,8 @@ else img.addEventListener('load',render);
                             f"{germes_str}</div>"
                             f"<div style='font-size:.72rem;font-weight:600;color:#475569;text-align:center'>"
                             f"{s['last_date'][:10] if s['last_date'] else '—'}<br>"
-                            f"<span style='color:{STATUS_COL.get(s[\"last_status\"],\"#94a3b8\")};"
-                            f"font-size:.62rem'>{STATUS_IC.get(s['last_status'],'⬜')} "
+                            f"<span style='color:{STATUS_COL.get(s['last_status'],'#94a3b8')};"
+                            f"{STATUS_IC.get(s['last_status'],'⬜')} "
                             f"{STATUS_LBL.get(s['last_status'],'—')}</span></div>"
                             "</div>",
                             unsafe_allow_html=True)
