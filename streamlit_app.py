@@ -1193,12 +1193,19 @@ with st.sidebar:
     col1, col2 = st.columns([1, 2])
     with col1:
         st.components.v1.html("""
-        <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="78" height="78"
+        <div style="display:flex;align-items:center;">
+          <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD" width="68" height="68"
             style="border:none;border-radius:10px;pointer-events:none;display:block" frameBorder="0"></iframe>
-        """, height=82, scrolling=False)
+          <div style="display:flex;flex-direction:column;gap:3px;margin-left:4px">
+            <div style="width:5px;height:5px;background:#1e293b;border-radius:50%;opacity:.7"></div>
+            <div style="width:4px;height:4px;background:#1e293b;border-radius:50%;opacity:.5"></div>
+            <div style="width:3px;height:3px;background:#1e293b;border-radius:50%;opacity:.35"></div>
+          </div>
+        </div>
+        """, height=78, scrolling=False)
     with col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("Si tu as besoin\nd'aide, je suis là !\n❓ FAQ", key="mush_faq_btn", use_container_width=True):
+        if st.button("Si tu as besoin\nd'aide, je suis là !", key="mush_faq_btn", use_container_width=True):
             show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
