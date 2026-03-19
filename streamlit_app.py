@@ -87,9 +87,8 @@ def next_working_day_offset(d, offset_working_days):
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(layout="wide", page_title="MicroSurveillance URC", page_icon="🦠")
 
-if st.query_params.get("open_faq") == "1":
-    st.query_params.clear()
-    show_faq_dialog()
+# ⚠️  NE PAS appeler show_faq_dialog() ici — la fonction n'est pas encore définie.
+#     Le déclencheur open_faq est placé APRÈS la définition du dialog (voir plus bas).
 
 st.markdown("""
 <style>
@@ -150,7 +149,7 @@ hr{border-color:#e2e8f0!important}
 [data-testid="stRadio"] label,[data-testid="stRadio"] span{font-size:1rem!important}
 [data-testid="stDateInput"] input{font-size:1rem!important}
 
-/* ── Champignon dansant ─────────────────────────────────────────────────── */
+/* ── Bouton champignon FAQ ───────────────────────────────────────────────── */
 @keyframes mush-bounce {
     0%,100%{ transform:translateY(0) rotate(0deg) scale(1); }
     25%     { transform:translateY(-7px) rotate(-6deg) scale(1.05); }
@@ -169,9 +168,9 @@ hr{border-color:#e2e8f0!important}
     80% { transform:rotate(-4deg) scale(1); }
     100%{ transform:rotate(0deg) scale(1); }
 }
-/* Cible le bouton champignon via son data-key */
-[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-testid="baseButton-secondary"][key="mush_faq_btn"]) button,
-[data-testid="stSidebar"] div[data-testid="stButton"] button[aria-label="🍄"] {
+/* Bouton champignon dans la sidebar */
+[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button,
+[data-testid="stSidebar"] button[key="mush_faq_btn"] {
     background: linear-gradient(135deg,#7c3aed,#a855f7) !important;
     color: #fff !important;
     border: none !important;
@@ -188,7 +187,7 @@ hr{border-color:#e2e8f0!important}
     align-items: center !important;
     justify-content: center !important;
 }
-[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[aria-label="🍄"]) button:hover {
+[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
     animation: mush-dance .55s ease-in-out forwards !important;
     filter: brightness(1.18) !important;
 }
@@ -1031,6 +1030,7 @@ if "planning_overrides" not in st.session_state:
     st.session_state["planning_overrides"] = json.loads(raw) if raw else {}
 
 # ── DIALOG FAQ ─────────────────────────────────────────────────────────────────
+# La fonction est définie ICI, avant tout appel — c'est la règle absolue avec @st.dialog.
 @st.dialog("🍄 FAQ — Centre d'aide", width="large")
 def show_faq_dialog():
     faq_items = sorted(
@@ -1124,6 +1124,12 @@ def show_faq_dialog():
         unsafe_allow_html=True,
     )
 
+# ── DÉCLENCHEUR FAQ (query param) ─────────────────────────────────────────────
+# Placé ICI, après la définition du @st.dialog — c'est le fix principal.
+if st.query_params.get("open_faq") == "1":
+    st.query_params.clear()
+    show_faq_dialog()
+
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -1182,92 +1188,68 @@ with st.sidebar:
             '⚠️ Sans Supabase, exportez régulièrement vos données !</p>',
             unsafe_allow_html=True,
         )
-# ── 🍄 Champignon dansant + bulle BD cliquable ────────────────────
-    st.markdown("""
-    <style>
-    /* Bouton opacity:0 superposé pile sur la bulle */
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) {
-        position: absolute !important;
-        right: 12px !important;
-        margin-top: -82px !important;
-        z-index: 10 !important;
-        width: 152px !important;
-        height: 74px !important;
-        pointer-events: all !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stButton"]:has(button[data-key="mush_faq_hidden"]) button {
-        width: 152px !important;
-        height: 74px !important;
-        min-height: unset !important;
-        padding: 0 !important;
-        border-radius: 18px !important;
-        cursor: pointer !important;
-        opacity: 0 !important;
-        border: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
-    # Bulle + champignon (visuels uniquement)
-    st.components.v1.html("""
-    <div style="
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        margin-top: 10px;
-        padding: 0 8px;
-        font-family: 'Segoe UI', sans-serif;
-        pointer-events: none;
-    ">
-      <div style="flex-shrink:0">
-        <iframe
-          src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-          width="85" height="85"
-          style="border:none;border-radius:10px;pointer-events:none;display:block"
-          frameBorder="0">
-        </iframe>
-      </div>
+    # ── 🍄 Champignon dansant + bulle BD ──────────────────────────────────────
+    # On utilise un st.button natif Streamlit au lieu d'un composant HTML.
+    # C'est la seule approche fiable pour déclencher un @st.dialog depuis la sidebar.
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-      <div style="
-          position: relative;
-          background: #ffffff;
-          border: 2.5px solid #1e293b;
-          border-radius: 18px;
-          padding: 9px 13px;
-          box-shadow: 3px 3px 0px #1e293b;
-          max-width: 152px;
-          user-select: none;
-      ">
-        <div style="
-            position: absolute; left: -13px; top: 50%;
-            transform: translateY(-50%);
-            width: 0; height: 0;
-            border-top: 8px solid transparent;
-            border-bottom: 8px solid transparent;
-            border-right: 13px solid #1e293b;
-        "></div>
-        <div style="
-            position: absolute; left: -9px; top: 50%;
-            transform: translateY(-50%);
-            width: 0; height: 0;
-            border-top: 6px solid transparent;
-            border-bottom: 6px solid transparent;
-            border-right: 10px solid #ffffff;
-        "></div>
-        <div style="font-size:.72rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
-          Si tu as besoin<br>d'aide, je suis là !
-        </div>
-        <div style="text-align:center;font-size:.62rem;color:#64748b;margin-top:4px">
-          ❓ Cliquer pour la FAQ
-        </div>
-      </div>
-    </div>
-    """, height=115, scrolling=False)
+    # Ligne : gif champignon  |  bouton bulle
+    _col_mush, _col_bubble = st.columns([1, 2], gap="small")
 
-    # Bouton opacity:0 — invisible mais cliquable, superposé sur la bulle
-    if st.button(" ", key="mush_faq_hidden", use_container_width=False):
-        show_faq_dialog()
+    with _col_mush:
+        st.components.v1.html(
+            """<iframe
+                src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+                width="72" height="72"
+                style="border:none;border-radius:10px;pointer-events:none;display:block"
+                frameBorder="0">
+            </iframe>""",
+            height=76,
+            scrolling=False,
+        )
+
+    with _col_bubble:
+        # Bulle BD en HTML pur — juste visuelle, non cliquable
+        st.markdown(
+            """
+            <div style="
+                position:relative;
+                background:#ffffff;
+                border:2.5px solid #1e293b;
+                border-radius:18px;
+                padding:8px 11px;
+                box-shadow:3px 3px 0px #1e293b;
+                margin-top:4px;
+            ">
+              <!-- Queue gauche (bordure) -->
+              <div style="
+                position:absolute;left:-13px;top:50%;
+                transform:translateY(-50%);
+                width:0;height:0;
+                border-top:8px solid transparent;
+                border-bottom:8px solid transparent;
+                border-right:13px solid #1e293b;
+              "></div>
+              <!-- Queue gauche (fond blanc) -->
+              <div style="
+                position:absolute;left:-9px;top:50%;
+                transform:translateY(-50%);
+                width:0;height:0;
+                border-top:6px solid transparent;
+                border-bottom:6px solid transparent;
+                border-right:10px solid #ffffff;
+              "></div>
+              <div style="font-size:.68rem;font-weight:800;color:#1e293b;line-height:1.4;text-align:center">
+                Si tu as besoin<br>d'aide, je suis là !
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Vrai bouton Streamlit — déclenche le dialog directement, sans JS ni query param
+        if st.button("❓ Ouvrir la FAQ", key="mush_faq_btn", use_container_width=True):
+            show_faq_dialog()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
@@ -1282,7 +1264,6 @@ def render_faq_tab(can_edit: bool):
     Le formatage <strong>Markdown</strong> est supporté dans les réponses.
     </div>""", unsafe_allow_html=True)
 
-    # Métriques
     cats_count = {}
     for f in faq_items:
         c = f.get("category", "Général")
