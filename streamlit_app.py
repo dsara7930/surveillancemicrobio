@@ -1478,16 +1478,6 @@ def render_faq_tab(can_edit: bool):
             st.success("✅ FAQ réinitialisée.")
             st.rerun()
 
-# ── HEADER ─────────────────────────────────────────────────────────────────────
-active = st.session_state.active_tab
-today  = datetime.today().date()
-
-st.markdown(
-    '<h1 style="font-size:1.3rem;letter-spacing:.1em;text-transform:uppercase;'
-    'color:#1e40af!important;margin-bottom:0">🦠 MicroSurveillance URC</h1>',
-    unsafe_allow_html=True,
-)
-st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
