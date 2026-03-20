@@ -1037,7 +1037,7 @@ if "class_constraints_loaded" not in st.session_state:
 if "_faq_panel_open" not in st.session_state:
     st.session_state["_faq_panel_open"] = False
 
-# ── DÉCLENCHEUR FAQ (query param) ─────────────────────────────────────────────
+# ── DÉCLENCHEUR FAQ ────────────────────────────────────────────────────────────
 if st.query_params.get("open_faq") == "1":
     st.query_params.clear()
     st.session_state["_faq_panel_open"] = True
@@ -1141,7 +1141,7 @@ div[onclick]:hover {
 </style>
 """, height=160, scrolling=False)
 
-# ── HEADER + FAQ ───────────────────────────────────────────────────────────────
+# ── HEADER ─────────────────────────────────────────────────────────────────────
 active = st.session_state.active_tab
 today  = datetime.today().date()
 
@@ -1152,7 +1152,7 @@ st.markdown(
 )
 st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
-# ── PANEL FAQ ─────────────────────────────────────────────────────────────────
+# ── PANEL FAQ PLEINE PAGE ──────────────────────────────────────────────────────
 if st.session_state.get("_faq_panel_open"):
     from collections import defaultdict
     import re as _re
@@ -1183,11 +1183,14 @@ if st.session_state.get("_faq_panel_open"):
             "cat", all_cats_panel,
             label_visibility="collapsed", key="faq_panel_cat")
     with fc3:
-        if st.button("✕ Fermer", key="faq_close", use_container_width=True, type="primary"):
+        if st.button("✕ Fermer", key="faq_close",
+                     use_container_width=True, type="primary"):
             st.session_state["_faq_panel_open"] = False
             st.rerun()
 
-    st.markdown("<hr style='margin:8px 0 16px;border-color:#e2e8f0'>", unsafe_allow_html=True)
+    st.markdown(
+        "<hr style='margin:8px 0 16px;border-color:#e2e8f0'>",
+        unsafe_allow_html=True)
 
     q_panel = faq_query.strip().lower()
 
@@ -1255,7 +1258,7 @@ if st.session_state.get("_faq_panel_open"):
         unsafe_allow_html=True)
 
     st.stop()
-    
+
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
     faq_items = st.session_state.get("faq_items", [])
@@ -1376,7 +1379,8 @@ def render_faq_tab(can_edit: bool):
             unsafe_allow_html=True,
         )
     else:
-        all_cats_f = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
+        all_cats_f = ["Toutes"] + sorted(
+            set(f.get("category", "Général") for f in faq_items))
         sel_f = st.selectbox(
             "Filtrer", all_cats_f, key="faq_tab_cat", label_visibility="collapsed"
         )
@@ -1407,8 +1411,8 @@ def render_faq_tab(can_edit: bool):
         ]
 
         for dp, (ri, item) in enumerate(displayed):
-            cc     = CAT_COL.get(item.get("category", "Général"), "#475569")
-            row_bg = "#f8fafc" if dp % 2 == 0 else "#ffffff"
+            cc      = CAT_COL.get(item.get("category", "Général"), "#475569")
+            row_bg  = "#f8fafc" if dp % 2 == 0 else "#ffffff"
             is_last = dp == len(displayed) - 1
             r_bdr   = "border-radius:0 0 10px 10px" if is_last else ""
 
@@ -1431,7 +1435,7 @@ def render_faq_tab(can_edit: bool):
                 with a1:
                     if can_edit and ri > 0:
                         if st.button("↑", key=f"faq_up_{ri}", help="Monter"):
-                            faq_items[ri], faq_items[ri - 1] = faq_items[ri - 1], faq_items[ri]
+                            faq_items[ri], faq_items[ri-1] = faq_items[ri-1], faq_items[ri]
                             for k, f in enumerate(faq_items): f["order"] = k
                             save_faq(faq_items, supa=True)
                             st.session_state["faq_items"] = faq_items
@@ -1439,7 +1443,7 @@ def render_faq_tab(can_edit: bool):
                 with a2:
                     if can_edit and ri < len(faq_items) - 1:
                         if st.button("↓", key=f"faq_dn_{ri}", help="Descendre"):
-                            faq_items[ri], faq_items[ri + 1] = faq_items[ri + 1], faq_items[ri]
+                            faq_items[ri], faq_items[ri+1] = faq_items[ri+1], faq_items[ri]
                             for k, f in enumerate(faq_items): f["order"] = k
                             save_faq(faq_items, supa=True)
                             st.session_state["faq_items"] = faq_items
@@ -1477,7 +1481,6 @@ def render_faq_tab(can_edit: bool):
             save_faq(st.session_state["faq_items"], supa=True)
             st.success("✅ FAQ réinitialisée.")
             st.rerun()
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
