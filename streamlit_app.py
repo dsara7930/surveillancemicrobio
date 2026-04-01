@@ -3783,118 +3783,140 @@ if active == "planning":
             "lc":    int(pt.get("location_criticality", 1)),
             "gel":   pt.get("gelose", ""),
         }
-    # ── Algorithme central : planning mensuel ─────────────────────────────────
-    # Contrainte :  max N prélèvements / classe / semaine
-    #               répartition proportionnelle au poids (fréquence individuelle)
-    #               jamais 2× le même point le même jour (sauf freq > 1/jour)
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
-        """
-        Retourne {date: [{"label","type","risk","room_class"}, ...]}
-        class_max_dict = {classe: max_prelev_par_semaine}  (0 = pas de limite)
+        """"
+        Planning mensuel  fréquences intrinsèques respectées :
+        - class_max = 0  → fréquence individuelle du point utilisée directement
+        - class_max > 0  → plafonne à class_max réparti proportionnellement
+        - mensuel        → 1 passage par mois (semaine désignée uniquement)
+        - hebdomadaire   → au plus freq×/semaine, JAMAIS 2× le même jour
+        - journalier     → freq×/jour (max_per_day = freq)
         """
         import calendar as _cm
-        import random   as _rnd
-
+        import random as _rnd
+    
         _, n_days = _cm.monthrange(year, month)
-        first     = date_type(year, month, 1)
-        last      = date_type(year, month, n_days)
-        cur       = first - timedelta(days=first.weekday())
-        mondays   = []
+        first = date_type(year, month, 1)
+        last  = date_type(year, month, n_days)
+        cur   = first - timedelta(days=first.weekday())
+        mondays = []
         while cur <= last:
-            mondays.append(cur); cur += timedelta(weeks=1)
-
+            mondays.append(cur)
+            cur += timedelta(weeks=1)
+    
         planning = {}
-
+    
+        def _active_week_for_monthly(freq_mois_val, week_monday):
+            semaines = []
+            c2 = first - timedelta(days=first.weekday())
+            while c2 <= last:
+                semaines.append(c2)
+                c2 += timedelta(weeks=1)
+            nb_sem = len(semaines)
+            try:
+                idx = semaines.index(week_monday)
+            except ValueError:
+                return False
+            n = max(1, min(int(freq_mois_val), nb_sem))
+            if n >= nb_sem:
+                return True
+            step = nb_sem / n
+            actives = {int(i * step) for i in range(n)}
+            return idx in actives
+    
         for week_idx, week_monday in enumerate(mondays):
-            # 5 jours ouvrés complets de la semaine (sans limite de mois)
             wd_week = [
                 week_monday + timedelta(days=i)
                 for i in range(5)
                 if (week_monday + timedelta(days=i)) not in holidays_set
             ]
-            if not wd_week: continue
+            if not wd_week:
+                continue
             nb_wd = len(wd_week)
             for d in wd_week:
-                if d not in planning: planning[d] = []
-
-            all_classes = sorted({
-                (pt.get('room_class') or '').strip()
-                for pt in st.session_state.points
-                if (pt.get('room_class') or '').strip()
-            })
-
-            tasks = []  # {label, type, risk, room_class, alloc, max_per_day}
-
-            for cls in all_classes:
-                pts_cls     = [pt for pt in st.session_state.points
-                               if (pt.get('room_class') or '').strip() == cls]
-                freqs_sem   = [max(0.01, _freq_en_semaine(pt, nb_wd)) for pt in pts_cls]
-                total_poids = sum(freqs_sem) or 1
-                max_cls     = int(class_max_dict.get(cls, 0))
-
-                for i, (pt, f_sem) in enumerate(zip(pts_cls, freqs_sem)):
-                    fpj = _freq_par_jour(pt)  # >0 si unité = /jour
-
-                    if max_cls > 0:
-                        # Répartition proportionnelle dans le plafond de la classe
-                        if i < len(pts_cls) - 1:
-                            alloc = round(f_sem / total_poids * max_cls)
-                        else:
-                            # Dernier point : ajuste pour ne pas dépasser le total
-                            already = sum(round(freqs_sem[j] / total_poids * max_cls)
-                                          for j in range(i))
-                            alloc   = max(0, max_cls - already)
-                    else:
-                        # 0 = aucun prélèvement pour cette classe
-                        alloc = 0
-
-                    # Passages max autorisés par jour pour ce point
-                    max_pd = max(1, int(fpj)) if fpj > 1 else 1
-
-                    tasks.append({
-                        "label":       pt['label'],
-                        "type":        pt.get('type','—'),
-                        "risk":        int(pt.get('risk_level', 1)),
-                        "room_class":  cls,
-                        "alloc":       alloc,
-                        "max_per_day": max_pd,
-                    })
-
-            # Répartition sur les jours ouvrés
-            day_counts = {d: 0   for d in wd_week}
-            day_labels = {d: {}  for d in wd_week}  # {label: count}
-
-            # Tri déterministe : risque décroissant puis label alphabétique
-            tasks_sorted = sorted(tasks, key=lambda x: (-x["risk"], x["label"]))
+                if d not in planning:
+                    planning[d] = []
+    
+            day_counts = {d: 0  for d in wd_week}
+            day_labels = {d: {} for d in wd_week}
+    
+            tasks = []
+            for pt in st.session_state.points:
+                rc        = (pt.get('room_class') or '').strip()
+                max_cls   = int(class_max_dict.get(rc, 0))
+                freq_raw  = pt.get('frequency')
+                freq_unit = pt.get('frequency_unit', '/ semaine')
+    
+                try:
+                    freq_val = float(freq_raw) if freq_raw else 0.0
+                except (TypeError, ValueError):
+                    freq_val = 0.0
+    
+                # ── Calcul alloc intrinsèque ──────────────────────────────────
+                if freq_val <= 0:
+                    default_by_class = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
+                    alloc       = default_by_class.get(rc[:1] if rc else '', 2)
+                    max_per_day = 1
+                elif '/ jour' in freq_unit:
+                    alloc       = int(freq_val) * nb_wd
+                    max_per_day = int(freq_val)
+                elif '/ semaine' in freq_unit:
+                    alloc       = int(freq_val)
+                    max_per_day = 1          # jamais 2× le même jour
+                elif '/ mois' in freq_unit:
+                    alloc       = 1 if _active_week_for_monthly(freq_val, week_monday) else 0
+                    max_per_day = 1
+                else:
+                    alloc       = int(freq_val)
+                    max_per_day = 1
+    
+                # ── Plafond classe (si activé) ────────────────────────────────
+                if max_cls > 0:
+                    pts_cls   = [p for p in st.session_state.points
+                                if (p.get('room_class') or '').strip() == rc]
+                    freqs_cls = [max(0.01, _freq_en_semaine(p, nb_wd)) for p in pts_cls]
+                    tot_cls   = sum(freqs_cls) or 1
+                    my_f      = max(0.01, _freq_en_semaine(pt, nb_wd))
+                    alloc_cls = round(my_f / tot_cls * max_cls)
+                    alloc     = min(alloc, alloc_cls)
+                # class_max = 0 → pas de plafond, fréquence intrinsèque conservée
+    
+                tasks.append({
+                    'label':       pt['label'],
+                    'type':        pt.get('type', '—'),
+                    'risk':        int(pt.get('risk_level', 1)),
+                    'room_class':  rc,
+                    'alloc':       max(0, alloc),
+                    'max_per_day': max(1, max_per_day),
+                })
+    
+            tasks.sort(key=lambda x: (-x['risk'], x['label']))
             rng = _rnd.Random(year * 10000 + month * 100 + week_idx)
-
-            for task in tasks_sorted:
-                remaining    = task["alloc"]
-                mpd          = task["max_per_day"]
+    
+            for task in tasks:
+                remaining    = task['alloc']
+                mpd          = task['max_per_day']
                 max_attempts = max(remaining * nb_wd * 4, 50)
                 attempts     = 0
-
                 while remaining > 0 and attempts < max_attempts:
                     attempts += 1
-                    # Candidats : jours où le point n'a pas encore atteint sa limite journalière
                     candidates = [
                         d for d in wd_week
-                        if day_labels[d].get(task["label"], 0) < mpd
+                        if day_labels[d].get(task['label'], 0) < mpd
                     ]
-                    if not candidates: break  # Plus de place possible cette semaine
-
-                    # Jour le moins chargé parmi les candidats (+ léger bruit pour l'étalement)
+                    if not candidates:
+                        break
                     best = min(candidates, key=lambda d: (day_counts[d], rng.random()))
                     planning[best].append({
-                        "label":      task["label"],
-                        "type":       task["type"],
-                        "risk":       task["risk"],
-                        "room_class": task["room_class"],
+                        'label':      task['label'],
+                        'type':       task['type'],
+                        'risk':       task['risk'],
+                        'room_class': task['room_class'],
                     })
                     day_counts[best] += 1
-                    day_labels[best][task["label"]] = day_labels[best].get(task["label"], 0) + 1
+                    day_labels[best][task['label']] = day_labels[best].get(task['label'], 0) + 1
                     remaining -= 1
-
+    
         return planning
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -4151,142 +4173,85 @@ if active == "planning":
 
     st.divider()
 
-    # ── Tableau détail par point (semaine sélectionnée) ───────────────────
-    st.markdown("#### 📍 Détail par point — semaine sélectionnée")
-    risk_colors_ch = {
-        "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-        "4": "#f97316", "5": "#ef4444",
-    }
-
-    if st.session_state.points:
-        hdr_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
-        for _hc, _hl in zip(
-            hdr_cols,
-            ["Point", "Type", "Classe", "Risque",
-             "Fréquence / poids", "Prévu cette sem. ✏️", "Réalisé", "Statut"]
-        ):
-            _hc.markdown(
-                f"<div style='background:#1e40af;border-radius:6px;padding:7px 8px;"
-                f"font-size:.68rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
-                unsafe_allow_html=True)
-
-        total_prevu = 0
-        total_realise = 0
-
-        for pt_i, pt in enumerate(st.session_state.points):
-            rc        = (pt.get('room_class') or '').strip()
-            row_bg    = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
-            risk_val  = str(pt.get('risk_level', '—'))
-            risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
-            type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
-
-            max_cls   = int(class_max_dict.get(rc, 0))
-            pts_cls_w = [p for p in st.session_state.points
-                         if (p.get('room_class') or '').strip() == rc]
-            freqs_cls = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_w]
-            tot_cls   = sum(freqs_cls) or 1
-            my_f      = max(0.01, _freq_en_semaine(pt, nb_jours))
-
-            class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else 0
-
-            nb_prevu, freq_label, sess_key = _get_prevu_semaine(
-                pt, ch_sel_ws, nb_jours, class_alloc)
-            realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
-
-            if nb_prevu == 0:
-                st_bg = "#f8fafc"; st_border = "#e2e8f0"
-                st_txt = "#94a3b8"; st_icon = "⏸️"; st_label = "Non planifié"
-            elif realise >= nb_prevu:
-                st_bg = "#f0fdf4"; st_border = "#86efac"
-                st_txt = "#166534"; st_icon = "✅"; st_label = "Complet"
-            elif realise > 0:
-                pct = int(realise / nb_prevu * 100)
-                st_bg = "#fffbeb"; st_border = "#fcd34d"
-                st_txt = "#92400e"; st_icon = "⏳"; st_label = f"{pct}%"
-            else:
-                st_bg = "#fef2f2"; st_border = "#fca5a5"
-                st_txt = "#991b1b"; st_icon = "🔴"; st_label = f"0/{nb_prevu}"
-
-            total_prevu   += nb_prevu
-            total_realise += realise
-
-            row_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
-            with row_cols[0]:
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px 12px;font-size:.85rem;"
-                    f"font-weight:700;color:#0f172a'>{type_icon} {pt['label']}</div>",
-                    unsafe_allow_html=True)
-            with row_cols[1]:
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px;font-size:.78rem;"
-                    f"color:#475569;text-align:center'>{pt.get('type', '—')}</div>",
-                    unsafe_allow_html=True)
-            with row_cols[2]:
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px;font-size:.78rem;"
-                    f"color:#475569;text-align:center'>{rc or '—'}</div>",
-                    unsafe_allow_html=True)
-            with row_cols[3]:
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px;text-align:center'>"
-                    f"<span style='background:{risk_col}22;color:{risk_col};"
-                    f"border:1px solid {risk_col}55;border-radius:6px;"
-                    f"padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>",
-                    unsafe_allow_html=True)
-            with row_cols[4]:
-                badge = (
-                    " <span style='background:#dbeafe;color:#1e40af;"
-                    "border-radius:4px;padding:1px 4px;font-size:.58rem'>▲ classe</span>"
-                    if max_cls > 0 else "")
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px;font-size:.72rem;"
-                    f"color:#475569;text-align:center'>{freq_label}{badge}</div>",
-                    unsafe_allow_html=True)
-            with row_cols[5]:
-                st.number_input(
-                    "Prévu", min_value=0, max_value=100,
-                    value=nb_prevu, step=1, key=sess_key,
-                    label_visibility="collapsed", on_change=_persist_overrides)
-            with row_cols[6]:
-                st.markdown(
-                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-radius:6px;padding:8px;font-size:1rem;"
-                    f"font-weight:800;color:#0f172a;text-align:center'>{realise}</div>",
-                    unsafe_allow_html=True)
-            with row_cols[7]:
-                st.markdown(
-                    f"<div style='background:{st_bg};border:1px solid {st_border};"
-                    f"border-radius:8px;padding:8px;text-align:center;"
-                    f"font-size:.78rem;font-weight:700;color:{st_txt}'>"
-                    f"{st_icon} {st_label}</div>",
-                    unsafe_allow_html=True)
-
-        st.divider()
-        taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
-        taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
-        st.markdown(
-            f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
-            f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
-            f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
-            f"<div style='display:flex;gap:20px;align-items:center'>"
-            f"<div style='text-align:center'>"
-            f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div>"
-            f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
-            f"<div style='text-align:center'>"
-            f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div>"
-            f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
-            f"<div style='background:rgba(255,255,255,.15);border-radius:8px;"
-            f"padding:8px 16px;font-size:1rem;font-weight:800;color:{taux_col}'>"
-            f"{taux}% réalisé</div>"
-            f"</div></div>",
-            unsafe_allow_html=True)
-
     st.divider()
+ 
+    # ── Avancement au cours de la semaine (expander) ──────────────────
+    _av_prevu_total   = 0
+    _av_realise_total = 0
+    _av_rows          = []
+ 
+    for pt_av in st.session_state.points:
+        rc_av  = (pt_av.get('room_class') or '').strip()
+        max_av = int(class_max_dict.get(rc_av, 0))
+ 
+        pts_cls_av  = [p for p in st.session_state.points
+                       if (p.get('room_class') or '').strip() == rc_av]
+        freqs_av    = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_av]
+        tot_av      = sum(freqs_av) or 1
+        my_f_av     = max(0.01, _freq_en_semaine(pt_av, nb_jours))
+        alloc_av    = round(my_f_av / tot_av * max_av) if max_av > 0 else 0
+ 
+        nb_prevu_av, _, _ = _get_prevu_semaine(pt_av, ch_sel_ws, nb_jours, alloc_av)
+        realise_av = sum(1 for p in ch_j0 if p.get('label') == pt_av['label'])
+        _av_prevu_total   += nb_prevu_av
+        _av_realise_total += realise_av
+        _av_rows.append((pt_av, nb_prevu_av, realise_av))
+ 
+    taux_av  = int(_av_realise_total / _av_prevu_total * 100) if _av_prevu_total > 0 else 0
+    taux_ic  = "✅" if taux_av >= 100 else "⏳" if taux_av >= 50 else "🔴"
+    taux_col = "#22c55e" if taux_av >= 100 else "#f59e0b" if taux_av >= 50 else "#ef4444"
+ 
+    with st.expander(
+        f"📊 Avancement au cours de la semaine "
+        f"— {_av_realise_total}/{_av_prevu_total} réalisé(s) {taux_ic} {taux_av}%",
+        expanded=False,
+    ):
+        st.markdown(
+            "<div style='display:grid;grid-template-columns:3fr 0.8fr 1.4fr;"
+            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Réalisé</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Statut</div>"
+            "</div>",
+            unsafe_allow_html=True)
+ 
+        for pt_av, nb_prevu_av, realise_av in _av_rows:
+            type_icon_av = "💨" if pt_av.get('type') == 'Air' else "🧴"
+            if nb_prevu_av == 0:
+                st_bg_av="#f8fafc"; st_brd_av="#e2e8f0"; st_col_av="#94a3b8"; st_lbl_av="⏸️ Non planifié"
+            elif realise_av >= nb_prevu_av:
+                st_bg_av="#f0fdf4"; st_brd_av="#86efac"; st_col_av="#166534"; st_lbl_av="✅ Complet"
+            elif realise_av > 0:
+                pct_av=int(realise_av/nb_prevu_av*100)
+                st_bg_av="#fffbeb"; st_brd_av="#fcd34d"; st_col_av="#92400e"; st_lbl_av=f"⏳ {pct_av}%"
+            else:
+                st_bg_av="#fef2f2"; st_brd_av="#fca5a5"; st_col_av="#991b1b"; st_lbl_av=f"🔴 0/{nb_prevu_av}"
+ 
+            st.markdown(
+                "<div style='display:grid;grid-template-columns:3fr 0.8fr 1.4fr;"
+                "gap:4px;background:#fff;border:1px solid #e2e8f0;border-top:none;"
+                "padding:8px 14px;align-items:center'>"
+                f"<div style='font-size:.85rem;font-weight:600;color:#0f172a'>"
+                f"{type_icon_av} {pt_av['label']}</div>"
+                f"<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"
+                f"{realise_av}</div>"
+                f"<div style='text-align:center'>"
+                f"<span style='background:{st_bg_av};border:1px solid {st_brd_av};"
+                f"border-radius:8px;padding:3px 10px;font-size:.72rem;"
+                f"font-weight:700;color:{st_col_av}'>{st_lbl_av}</span>"
+                f"</div></div>",
+                unsafe_allow_html=True)
+ 
+        st.markdown(
+            "<div style='background:#1e293b;border-radius:0 0 10px 10px;"
+            "padding:8px 14px;display:flex;justify-content:space-between;align-items:center'>"
+            f"<div style='font-size:.78rem;font-weight:700;color:#94a3b8'>TOTAL SEMAINE</div>"
+            f"<div style='display:flex;gap:16px;align-items:center'>"
+            f"<span style='font-size:.78rem;color:#93c5fd'>Prévu : {_av_prevu_total}</span>"
+            f"<span style='font-size:.78rem;color:#86efac'>Réalisé : {_av_realise_total}</span>"
+            f"<span style='font-size:.88rem;font-weight:800;color:{taux_col}'>"
+            f"{taux_av}% réalisé</span></div></div>",
+            unsafe_allow_html=True)
 
     # ── Planning mensuel automatique ──────────────────────────────────────
     st.markdown("#### 📅 Planning mensuel automatique")
