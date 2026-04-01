@@ -7,6 +7,9 @@ import base64
 import calendar as cal_module
 from datetime import datetime, timedelta, date as date_type
 import difflib
+import qrcode
+import qrcode.image.pil
+from io import BytesIO
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
@@ -87,9 +90,6 @@ def next_working_day_offset(d, offset_working_days):
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(layout="wide", page_title="MicroSurveillance URC", page_icon="🦠")
 
-# ⚠️  NE PAS appeler show_faq_dialog() ici — la fonction n'est pas encore définie.
-#     Le déclencheur open_faq est placé APRÈS la définition du dialog (voir plus bas).
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap');
@@ -148,7 +148,10 @@ hr{border-color:#e2e8f0!important}
 [data-testid="stSelectbox"] div,[data-testid="stSelectbox"] span{font-size:1rem!important}
 [data-testid="stRadio"] label,[data-testid="stRadio"] span{font-size:1rem!important}
 [data-testid="stDateInput"] input{font-size:1rem!important}
-
+/* ── Cacher le bouton FAQ dans la nav ──────────────────────────────────── */
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:has(div p) {
+    display: block;
+}
 /* ── Bouton champignon FAQ ───────────────────────────────────────────────── */
 @keyframes mush-bounce {
     0%,100%{ transform:translateY(0) rotate(0deg) scale(1); }
@@ -167,29 +170,6 @@ hr{border-color:#e2e8f0!important}
     60% { transform:rotate(9deg) scale(1.08); }
     80% { transform:rotate(-4deg) scale(1); }
     100%{ transform:rotate(0deg) scale(1); }
-}
-/* Bouton champignon dans la sidebar */
-[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button,
-[data-testid="stSidebar"] button[key="mush_faq_btn"] {
-    background: linear-gradient(135deg,#7c3aed,#a855f7) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 50% !important;
-    width: 54px !important;
-    height: 54px !important;
-    min-height: 54px !important;
-    font-size: 1.7rem !important;
-    padding: 0 !important;
-    animation: mush-bounce 1.8s ease-in-out infinite,
-               mush-glow 2.6s ease-in-out infinite !important;
-    transition: transform .15s ease, filter .2s !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-[data-testid="stSidebar"] div[data-testid="stButton"]:has(button[key="mush_faq_btn"]) button:hover {
-    animation: mush-dance .55s ease-in-out forwards !important;
-    filter: brightness(1.18) !important;
 }
 </style>""", unsafe_allow_html=True)
 
@@ -278,9 +258,9 @@ DEFAULT_FAQ = [
         "question": "Que signifie la criticité du lieu (1–3) ?",
         "answer": (
             "La criticité du lieu qualifie l'importance environnementale du point de prélèvement :\n\n"
-            "- **Niveau 1** 🟢 — Zone non critique (couloirs, locaux techniques…)\n"
-            "- **Niveau 2** 🟡 — Zone semi-critique (préparations non stériles, zones annexes ZAC…)\n"
-            "- **Niveau 3** 🔴 — Zone critique (ZAC, salles blanches, isolateurs…)\n\n"
+            "- **Niveau 1** 🟢 — Zone non critique (couloirs, locaux techniques...)\n"
+            "- **Niveau 2** 🟡 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)\n"
+            "- **Niveau 3** 🔴 — Zone critique (ZAC, salles blanches, isolateurs...)\n\n"
             "Ce niveau est défini dans **Paramètres → Points de prélèvement** et est "
             "automatiquement repris lors de l'identification microbiologique."
         ),
@@ -338,7 +318,7 @@ DEFAULT_FAQ = [
         "answer": (
             "Dans **Paramètres → Sauvegarde** :\n\n"
             "- **⬇️ Exporter** : télécharge un fichier JSON contenant toutes vos données "
-            "(germes, prélèvements, points, opérateurs, historique…)\n"
+            "(germes, prélèvements, points, opérateurs, historique...)\n"
             "- **⬆️ Restaurer** : importez un fichier de sauvegarde pour remplacer "
             "toutes les données actuelles\n\n"
             "⚠️ La restauration est irréversible — effectuez toujours une exportation avant."
@@ -349,7 +329,7 @@ DEFAULT_FAQ = [
         "question": "Pourquoi configurer Supabase ?",
         "answer": (
             "Sans Supabase, les données sont **perdues à chaque redémarrage** de l'application "
-            "(mise à jour du code, timeout Streamlit Cloud…).\n\n"
+            "(mise à jour du code, timeout Streamlit Cloud...).\n\n"
             "Supabase est une base de données cloud **gratuite** qui garantit la persistance. "
             "Configuration dans **Paramètres → Base de données** — il suffit de coller "
             "votre `SUPABASE_URL` et `SUPABASE_KEY` dans les secrets Streamlit."
@@ -362,7 +342,7 @@ DEFAULT_FAQ = [
             "Les mesures correctives sont des actions prédéfinies suggérées automatiquement "
             "lors d'une alerte ou d'une action microbiologique.\n\n"
             "Chaque mesure est associée à :\n"
-            "- Une **origine** (Air, Surface, Flore fécale…)\n"
+            "- Une **origine** (Air, Surface, Flore fécale...)\n"
             "- Un **niveau de criticité** (1 à 5)\n"
             "- Un **type** (⚠️ Alerte ou 🚨 Action)\n\n"
             "Gérez-les dans **Paramètres → Mesures correctives**."
@@ -523,7 +503,6 @@ def load_germs():
     defaults_by_name = {d["name"]: d for d in DEFAULT_GERMS}
     saved_germs = []
     known_defaults = set()
-
     raw_json = _supa_get('germs')
     if raw_json:
         try:
@@ -535,7 +514,6 @@ def load_germs():
                 saved_germs = raw
         except Exception:
             saved_germs = []
-
     if not saved_germs and os.path.exists(GERMS_FILE):
         try:
             with open(GERMS_FILE) as f:
@@ -547,14 +525,11 @@ def load_germs():
                 saved_germs = raw
         except Exception:
             saved_germs = []
-
     if not saved_germs:
         return [dict(d) for d in DEFAULT_GERMS], len(DEFAULT_GERMS)
-
     saved_by_name = {g.get("name", ""): g for g in saved_germs}
     merged = []
     new_defaults_added = 0
-
     for dflt in DEFAULT_GERMS:
         name = dflt["name"]
         if name in saved_by_name:
@@ -562,12 +537,10 @@ def load_germs():
         elif name not in known_defaults:
             merged.append(dict(dflt))
             new_defaults_added += 1
-
     for g in saved_germs:
         name = g.get("name", "")
         if name and name not in defaults_by_name:
             merged.append(dict(g))
-
     return merged, new_defaults_added
 
 def load_thresholds():
@@ -893,7 +866,6 @@ def check_access_protege(onglet_nom: str) -> bool:
     key_mode = f"access_mode_{onglet_nom}"
     key_pwd  = f"pwd_input_{onglet_nom}"
     key_err  = f"pwd_error_{onglet_nom}"
-
     if st.session_state.get(key_mode) == "admin":
         col_info, col_lock = st.columns([5, 1])
         with col_info:
@@ -903,7 +875,6 @@ def check_access_protege(onglet_nom: str) -> bool:
                 st.session_state[key_mode] = None
                 st.rerun()
         return True
-
     if st.session_state.get(key_mode) == "lecture":
         col_info, col_conn = st.columns([5, 1])
         with col_info:
@@ -913,7 +884,6 @@ def check_access_protege(onglet_nom: str) -> bool:
                 st.session_state[key_mode] = None
                 st.rerun()
         return False
-
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
     st.markdown(
         "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;"
@@ -1034,14 +1004,6 @@ if "class_constraints_loaded" not in st.session_state:
         except Exception:
             pass
     st.session_state["class_constraints_loaded"] = True
-if "_faq_panel_open" not in st.session_state:
-    st.session_state["_faq_panel_open"] = False
-
-# ── DÉCLENCHEUR FAQ ────────────────────────────────────────────────────────────
-if st.query_params.get("open_faq") == "1":
-    st.query_params.clear()
-    st.session_state["_faq_panel_open"] = True
-    st.rerun()
 
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -1060,7 +1022,6 @@ with st.sidebar:
     for key, icon, label in tabs_cfg:
         if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True):
             st.session_state.active_tab = key
-            st.session_state["_faq_panel_open"] = False
             st.rerun()
 
     st.divider()
@@ -1106,40 +1067,27 @@ with st.sidebar:
     st.divider()
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    st.components.v1.html("""
-<div style="display:flex;flex-direction:column;align-items:center;gap:6px;
-            margin:4px 0;padding-top:16px;overflow:visible">
-  <div onclick="window.parent.location.href='?open_faq=1'"
-       style="display:block;cursor:pointer;border-radius:50%;padding:6px">
-    <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-            width="100" height="100"
-            style="border:none;border-radius:50%;pointer-events:none;display:block"
-            frameBorder="0"></iframe>
-  </div>
-  <p style="text-align:center;font-size:.72rem;color:#94a3b8;
-     font-style:italic;margin:0">Si tu as besoin d'aide, je suis là</p>
+    # ── 🍄 Champignon + bouton FAQ en 2 colonnes ──────────────────────────
+    col_gif, col_btn = st.columns([1, 2])
+    with col_gif:
+        st.components.v1.html("""
+<div style="display:flex;justify-content:center;align-items:center;padding-top:4px">
+  <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+          width="90" height="90"
+          style="border:none;pointer-events:none;display:block"
+          frameBorder="0"></iframe>
 </div>
-<style>
-@keyframes bounce {
-  0%,100%{ transform:translateY(0) scale(1); }
-  25%{ transform:translateY(-7px) rotate(-6deg) scale(1.05); }
-  50%{ transform:translateY(-10px) scale(1.08); }
-  75%{ transform:translateY(-7px) rotate(6deg) scale(1.05); }
-}
-@keyframes glow {
-  0%,100%{ filter:drop-shadow(0 0 0px rgba(124,58,237,0)); }
-  50%{ filter:drop-shadow(0 0 14px rgba(124,58,237,.8)); }
-}
-div[onclick] {
-  animation:bounce 1.8s ease-in-out infinite, glow 2.6s ease-in-out infinite;
-  overflow:visible;
-}
-div[onclick]:hover {
-  animation:none; transform:scale(1.2);
-  transition:transform .15s; filter:brightness(1.15);
-}
-</style>
-""", height=160, scrolling=False)
+""", height=100, scrolling=False)
+
+    with col_btn:
+        st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+        if st.button(
+            "Si tu as besoin\nd'aide, je suis là !",
+            key="faq_open_btn",
+            use_container_width=True,
+        ):
+            st.session_state.active_tab = "faq"
+            st.rerun()
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
 active = st.session_state.active_tab
@@ -1152,8 +1100,8 @@ st.markdown(
 )
 st.caption("Surveillance microbiologique — Unité de Reconstitution des Chimiothérapies")
 
-# ── PANEL FAQ PLEINE PAGE ──────────────────────────────────────────────────────
-if st.session_state.get("_faq_panel_open"):
+# ── ONGLET FAQ ─────────────────────────────────────────────────────────────────
+if active == "faq":
     from collections import defaultdict
     import re as _re
 
@@ -1161,6 +1109,10 @@ if st.session_state.get("_faq_panel_open"):
         st.session_state.get("faq_items", DEFAULT_FAQ),
         key=lambda x: x.get("order", 999),
     )
+
+    if st.button("← Retour", key="faq_back"):
+        st.session_state.active_tab = "logigramme"
+        st.rerun()
 
     st.markdown(
         "<div style='background:linear-gradient(135deg,#7c3aed,#a855f7);"
@@ -1171,41 +1123,36 @@ if st.session_state.get("_faq_panel_open"):
         "</div>",
         unsafe_allow_html=True)
 
-    fc1, fc2, fc3 = st.columns([4, 1.5, 0.8])
+    fc1, fc2 = st.columns([3, 1])
     with fc1:
         faq_query = st.text_input(
-            "search", placeholder="🔍 Rechercher…",
-            label_visibility="collapsed", key="faq_panel_search")
+            "search", placeholder="🔍 Rechercher...",
+            label_visibility="collapsed", key="faq_page_search")
     with fc2:
-        all_cats_panel = ["Toutes les catégories"] + sorted(
+        all_cats_p = ["Toutes les catégories"] + sorted(
             set(f.get("category", "Général") for f in faq_items))
-        sel_cat_panel = st.selectbox(
-            "cat", all_cats_panel,
-            label_visibility="collapsed", key="faq_panel_cat")
-    with fc3:
-        if st.button("✕ Fermer", key="faq_close",
-                     use_container_width=True, type="primary"):
-            st.session_state["_faq_panel_open"] = False
-            st.rerun()
+        sel_cat_p = st.selectbox(
+            "cat", all_cats_p,
+            label_visibility="collapsed", key="faq_page_cat")
 
     st.markdown(
         "<hr style='margin:8px 0 16px;border-color:#e2e8f0'>",
         unsafe_allow_html=True)
 
-    q_panel = faq_query.strip().lower()
+    q_p = faq_query.strip().lower()
 
-    def _faq_matches(item):
-        if sel_cat_panel != "Toutes les catégories" and item.get("category") != sel_cat_panel:
+    def _faq_match(item):
+        if sel_cat_p != "Toutes les catégories" and item.get("category") != sel_cat_p:
             return False
-        if q_panel:
-            return (q_panel in item["question"].lower()
-                    or q_panel in item["answer"].lower()
-                    or q_panel in item.get("category", "").lower())
+        if q_p:
+            return (q_p in item["question"].lower()
+                    or q_p in item["answer"].lower()
+                    or q_p in item.get("category", "").lower())
         return True
 
-    filtered_panel = [f for f in faq_items if _faq_matches(f)]
+    filtered = [f for f in faq_items if _faq_match(f)]
 
-    if not filtered_panel:
+    if not filtered:
         st.markdown(
             "<div style='text-align:center;padding:48px 0;color:#94a3b8'>"
             "<div style='font-size:2.5rem;margin-bottom:10px'>🔍</div>"
@@ -1221,11 +1168,11 @@ if st.session_state.get("_faq_panel_open"):
             "Données":            "#d97706",
             "Mesures correctives":"#dc2626",
         }
-        grouped_panel = defaultdict(list)
-        for item in filtered_panel:
-            grouped_panel[item.get("category", "Général")].append(item)
+        grouped = defaultdict(list)
+        for item in filtered:
+            grouped[item.get("category", "Général")].append(item)
 
-        cats_sorted = sorted(grouped_panel.keys())
+        cats_sorted = sorted(grouped.keys())
         mid = (len(cats_sorted) + 1) // 2
         col_left, col_right = st.columns(2)
 
@@ -1239,9 +1186,9 @@ if st.session_state.get("_faq_panel_open"):
                     f"font-size:.68rem;font-weight:700;text-transform:uppercase;"
                     f"letter-spacing:.06em;margin:12px 0 6px'>📂 {cat}</div>",
                     unsafe_allow_html=True)
-                for item in grouped_panel[cat]:
+                for item in grouped[cat]:
                     q_display = item["question"]
-                    if q_panel:
+                    if q_p:
                         q_display = _re.sub(
                             f"({_re.escape(faq_query)})",
                             r"<mark style='background:#fef08a;border-radius:3px;"
@@ -1253,11 +1200,9 @@ if st.session_state.get("_faq_panel_open"):
     st.markdown(
         "<div style='margin-top:24px;padding:12px 16px;background:#f8fafc;"
         "border:1px solid #e2e8f0;border-radius:10px;"
-        "font-size:.72rem;color:#94a3b8;text-align:center;margin-bottom:20px'>"
+        "font-size:.72rem;color:#94a3b8;text-align:center'>"
         "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
         unsafe_allow_html=True)
-
-    st.stop()
 
 # ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
 def render_faq_tab(can_edit: bool):
@@ -1293,14 +1238,12 @@ def render_faq_tab(can_edit: bool):
         form_bg  = "#eff6ff" if is_edit else "#f0fdf4"
         form_bdr = "#93c5fd" if is_edit else "#86efac"
         form_ttl = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
-
         st.markdown(
             f"<div style='background:{form_bg};border:1.5px solid {form_bdr};"
             f"border-radius:12px;padding:18px;margin-bottom:16px'>",
             unsafe_allow_html=True,
         )
         st.markdown(f"#### {form_ttl}")
-
         fc1, fc2 = st.columns([3, 1])
         with fc1:
             faq_q = st.text_input(
@@ -1315,17 +1258,15 @@ def render_faq_tab(can_edit: bool):
                 index=FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0,
                 key="faq_form_c",
             )
-
         faq_a = st.text_area(
             "Réponse * (Markdown supporté)", value=existing.get("answer", ""),
             height=160,
-            placeholder="Décrivez la réponse. **Gras**, *italique*, listes…",
+            placeholder="Décrivez la réponse. **Gras**, *italique*, listes...",
             key="faq_form_a",
         )
         if faq_a.strip():
             with st.expander("👁️ Aperçu du rendu", expanded=False):
                 st.markdown(faq_a)
-
         fb1, fb2 = st.columns(2)
         with fb1:
             if st.button(
@@ -1384,7 +1325,6 @@ def render_faq_tab(can_edit: bool):
         sel_f = st.selectbox(
             "Filtrer", all_cats_f, key="faq_tab_cat", label_visibility="collapsed"
         )
-
         st.markdown(
             "<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr;"
             "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
@@ -1395,7 +1335,6 @@ def render_faq_tab(can_edit: bool):
             "</div>",
             unsafe_allow_html=True,
         )
-
         CAT_COL = {
             "Général":            "#2563eb",
             "Score & Seuils":     "#7c3aed",
@@ -1404,18 +1343,15 @@ def render_faq_tab(can_edit: bool):
             "Données":            "#d97706",
             "Mesures correctives":"#dc2626",
         }
-
         displayed = [
             (i, f) for i, f in enumerate(faq_items)
             if sel_f == "Toutes" or f.get("category") == sel_f
         ]
-
         for dp, (ri, item) in enumerate(displayed):
             cc      = CAT_COL.get(item.get("category", "Général"), "#475569")
             row_bg  = "#f8fafc" if dp % 2 == 0 else "#ffffff"
             is_last = dp == len(displayed) - 1
             r_bdr   = "border-radius:0 0 10px 10px" if is_last else ""
-
             rc1, rc2 = st.columns([7, 1])
             with rc1:
                 st.markdown(
@@ -1462,7 +1398,6 @@ def render_faq_tab(can_edit: bool):
                             save_faq(faq_items, supa=True)
                             st.session_state["faq_items"] = faq_items
                             st.rerun()
-
         st.markdown(
             f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
             f"padding:8px 14px'><div style='font-size:.75rem;color:#94a3b8'>"
@@ -2074,11 +2009,39 @@ renderList();
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    tab_nouveau, tab_j2, tab_j7, tab_ident = st.tabs([
+    # ── Calcul indicateurs sous-onglets ───────────────────────────────────────
+    _active_sids_surv = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+
+    _j2_red    = sum(1 for s in st.session_state.schedules
+                     if s["when"]=="J2" and s["status"]=="pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and datetime.fromisoformat(s["due_date"]).date() <= today)
+    _j2_orange = sum(1 for s in st.session_state.schedules
+                     if s["when"]=="J2" and s["status"]=="pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and datetime.fromisoformat(s["due_date"]).date() > today)
+    _j7_red    = sum(1 for s in st.session_state.schedules
+                     if s["when"]=="J7" and s["status"]=="pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and datetime.fromisoformat(s["due_date"]).date() <= today)
+    _j7_orange = sum(1 for s in st.session_state.schedules
+                     if s["when"]=="J7" and s["status"]=="pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and datetime.fromisoformat(s["due_date"]).date() > today)
+    _id_red    = sum(1 for p in st.session_state.pending_identifications
+                     if p.get("status") == "pending")
+
+    _dot_j2 = " 🔴" if _j2_red > 0 else (" 🟠" if _j2_orange > 0 else "")
+    _dot_j7 = " 🔴" if _j7_red > 0 else (" 🟠" if _j7_orange > 0 else "")
+    _dot_id = " 🔴" if _id_red > 0 else ""
+
+    # ── Sous-onglets ──────────────────────────────────────────────────────────
+    tab_nouveau, tab_scan, tab_j2, tab_j7, tab_ident = st.tabs([
         "🧪 Nouveau prélèvement",
-        "📖 Lecture J2",
-        "📗 Lecture J7",
-        "🔴 Identifications en attente",
+        "📷 Scan QR",
+        f"📖 Lecture J2{_dot_j2}",
+        f"📗 Lecture J7{_dot_j7}",
+        f"🔴 Identifications en attente{_dot_id}",
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -2159,7 +2122,6 @@ if active == "surveillance":
                 </div>""", unsafe_allow_html=True)
                 p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
-            # ── Classe A ──────────────────────────────────────────────────────
             p_isolateur = ""
             p_poste     = "Poste 1"
             if str(pt_room).strip().upper() == "A":
@@ -2184,7 +2146,6 @@ if active == "surveillance":
 
             # ── Localisation sur plan ─────────────────────────────────────────
             plans_available = st.session_state.get("plans", [])
-
             st.markdown(
                 "<div style='font-size:.75rem;font-weight:700;color:#475569;margin-bottom:6px'>"
                 "🗺️ Localiser sur le plan URC "
@@ -2217,9 +2178,6 @@ if active == "surveillance":
                     if _cur_pt and not isinstance(_cur_pt.get("x"), (int, float)):
                         _cur_pt = None
 
-                    _lc_col = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#3b82f6")
-
-                    # ── Statut point actuel ───────────────────────────────────
                     if _cur_pt:
                         st.markdown(
                             f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
@@ -2236,11 +2194,10 @@ if active == "surveillance":
                             "⬜ Aucune position enregistrée</div>",
                             unsafe_allow_html=True)
 
-                    # ── Image du plan avec overlay du pin via PIL ─────────────
                     import base64, io
                     from PIL import Image, ImageDraw
+                    from streamlit_image_coordinates import streamlit_image_coordinates
 
-                    # Décoder l'image base64
                     _img_b64 = sel_plan["image_b64"]
                     if "," in _img_b64:
                         _img_b64 = _img_b64.split(",", 1)[1]
@@ -2248,84 +2205,96 @@ if active == "surveillance":
                     _pil_img   = Image.open(io.BytesIO(_img_bytes)).convert("RGBA")
                     _iw, _ih   = _pil_img.size
 
-                    # Dessiner le pin si position enregistrée
-                    if _cur_pt:
-                        _draw = ImageDraw.Draw(_pil_img)
-                        _px   = int(float(_cur_pt["x"]) / 100 * _iw)
-                        _py   = int(float(_cur_pt["y"]) / 100 * _ih)
-                        _r    = max(12, min(24, _iw // 40))
-                        # Cercle coloré selon criticité
+                    _click_key = f"map_pending_{_cur_label}"
+                    _pending   = st.session_state.get(_click_key)
+
+                    _draw_img  = _pil_img.copy()
+                    _draw      = ImageDraw.Draw(_draw_img)
+                    _r         = max(12, min(24, _iw // 40))
+
+                    if _pending:
+                        _dpx = int(_pending["x"] / 100 * _iw)
+                        _dpy = int(_pending["y"] / 100 * _ih)
+                        _draw.ellipse([_dpx-_r, _dpy-_r, _dpx+_r, _dpy+_r],
+                                      fill=(59,130,246,200), outline=(255,255,255,255), width=3)
+                    elif _cur_pt:
+                        _dpx = int(float(_cur_pt["x"]) / 100 * _iw)
+                        _dpy = int(float(_cur_pt["y"]) / 100 * _ih)
                         _col_map = {"1":(34,197,94),"2":(245,158,11),"3":(239,68,68)}.get(str(pt_loc_crit),(59,130,246))
-                        _draw.ellipse([_px-_r, _py-_r, _px+_r, _py+_r], fill=_col_map+(220,), outline=(255,255,255,255), width=3)
+                        _draw.ellipse([_dpx-_r, _dpy-_r, _dpx+_r, _dpy+_r],
+                                      fill=_col_map+(220,), outline=(255,255,255,255), width=3)
 
-                    # Afficher l'image
-                    st.image(_pil_img, use_container_width=True,
-                             caption="Plan de localisation — saisissez X% et Y% ci-dessous puis cliquez Enregistrer")
-
-                    # ── Saisie X / Y + bouton Enregistrer ────────────────────
                     st.markdown(
                         "<div style='background:#f0f9ff;border:1px solid #bae6fd;"
                         "border-radius:8px;padding:8px 12px;margin-bottom:8px;"
                         "font-size:.73rem;color:#0369a1;line-height:1.7'>"
                         "💡 <b>Comment placer le point :</b> "
-                        "regardez l'image ci-dessus et estimez la position en pourcentage "
-                        "(ex : point à mi-largeur = X 50%, au tiers de la hauteur = Y 33%). "
-                        "Saisissez X% et Y% puis cliquez <b>📌 Enregistrer</b>."
+                        "cliquez directement sur l'image pour positionner le marqueur, "
+                        "puis cliquez <b>📌 Enregistrer</b>."
                         "</div>", unsafe_allow_html=True)
 
-                    _c1, _c2, _c3 = st.columns([1, 1, 2])
-                    with _c1:
-                        _px_val = st.number_input(
-                            "X (% largeur →)",
-                            min_value=0.0, max_value=100.0,
-                            value=float(_cur_pt["x"]) if _cur_pt else 50.0,
-                            step=0.5, format="%.1f",
-                            key=f"map_x_{_cur_label}")
-                    with _c2:
-                        _py_val = st.number_input(
-                            "Y (% hauteur ↓)",
-                            min_value=0.0, max_value=100.0,
-                            value=float(_cur_pt["y"]) if _cur_pt else 50.0,
-                            step=0.5, format="%.1f",
-                            key=f"map_y_{_cur_label}")
-                    with _c3:
-                        st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
-                        _bc1, _bc2 = st.columns(2)
-                        with _bc1:
-                            if st.button("📌 Enregistrer", key=f"map_save_{_cur_label}",
-                                         use_container_width=True, type="primary"):
-                                _new_pt = {
-                                    "label":      _cur_label,
-                                    "room_class": selected_point.get("room_class",""),
-                                    "loc_crit":   pt_loc_crit,
-                                    "survLabel":  None,
-                                    "x":          float(_px_val),
-                                    "y":          float(_py_val),
-                                }
-                                if "map_points" not in st.session_state:
-                                    st.session_state.map_points = []
-                                _lbls = [p.get("label") for p in st.session_state.map_points]
-                                if _cur_label not in _lbls:
-                                    st.session_state.map_points.append(_new_pt)
-                                else:
-                                    for _mp in st.session_state.map_points:
-                                        if _mp.get("label") == _cur_label:
-                                            _mp.update(_new_pt)
-                                _supa_upsert('map_points', json.dumps(
-                                    st.session_state.map_points, ensure_ascii=False))
-                                st.success(f"📌 Enregistré : {_px_val:.1f}% · {_py_val:.1f}%")
-                                st.rerun()
-                        with _bc2:
-                            if st.button("🗑️ Effacer", key=f"map_clear_{_cur_label}",
-                                         use_container_width=True,
-                                         disabled=_cur_pt is None):
-                                st.session_state.map_points = [
-                                    p for p in st.session_state.get("map_points",[])
-                                    if p.get("label") != _cur_label
-                                ]
-                                _supa_upsert('map_points', json.dumps(
-                                    st.session_state.map_points, ensure_ascii=False))
-                                st.rerun()
+                    _click = streamlit_image_coordinates(
+                        _draw_img,
+                        key=f"map_click_{_cur_label}",
+                        use_column_width=True
+                    )
+
+                    if _click is not None:
+                        _click_x = max(0.0, min(100.0, round(_click["x"] / _click["width"]  * 100, 1)))
+                        _click_y = max(0.0, min(100.0, round(_click["y"] / _click["height"] * 100, 1)))
+                        _new_pending = {"x": _click_x, "y": _click_y}
+                        if st.session_state.get(_click_key) != _new_pending:
+                            st.session_state[_click_key] = _new_pending
+                            st.rerun()
+
+                    if _pending:
+                        st.markdown(
+                            f"<div style='background:#fffbeb;border:1px solid #fcd34d;"
+                            f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
+                            f"color:#92400e;font-weight:700;margin-bottom:8px'>"
+                            f"🖱️ Position sélectionnée : "
+                            f"<b>{_pending['x']}% · {_pending['y']}%</b> — cliquez Enregistrer pour confirmer"
+                            f"</div>", unsafe_allow_html=True)
+
+                    _bc1, _bc2 = st.columns(2)
+                    with _bc1:
+                        if st.button("📌 Enregistrer", key=f"map_save_{_cur_label}",
+                                     use_container_width=True, type="primary",
+                                     disabled=_pending is None):
+                            _new_pt = {
+                                "label":      _cur_label,
+                                "room_class": selected_point.get("room_class", ""),
+                                "loc_crit":   pt_loc_crit,
+                                "survLabel":  None,
+                                "x":          _pending["x"],
+                                "y":          _pending["y"],
+                            }
+                            if "map_points" not in st.session_state:
+                                st.session_state.map_points = []
+                            _lbls = [p.get("label") for p in st.session_state.map_points]
+                            if _cur_label not in _lbls:
+                                st.session_state.map_points.append(_new_pt)
+                            else:
+                                for _mp in st.session_state.map_points:
+                                    if _mp.get("label") == _cur_label:
+                                        _mp.update(_new_pt)
+                            _supa_upsert('map_points', json.dumps(
+                                st.session_state.map_points, ensure_ascii=False))
+                            st.session_state.pop(_click_key, None)
+                            st.success(f"📌 Enregistré : {_pending['x']}% · {_pending['y']}%")
+                            st.rerun()
+                    with _bc2:
+                        if st.button("🗑️ Effacer", key=f"map_clear_{_cur_label}",
+                                     use_container_width=True,
+                                     disabled=_cur_pt is None):
+                            st.session_state.map_points = [
+                                p for p in st.session_state.get("map_points", [])
+                                if p.get("label") != _cur_label
+                            ]
+                            _supa_upsert('map_points', json.dumps(
+                                st.session_state.map_points, ensure_ascii=False))
+                            st.session_state.pop(_click_key, None)
+                            st.rerun()
 
                 elif sel_plan and not sel_plan.get("image_b64"):
                     st.markdown(
@@ -2343,43 +2312,44 @@ if active == "surveillance":
                         "Sélectionnez un plan pour afficher la carte</div>",
                         unsafe_allow_html=True)
 
+            # ── Enregistrer le prélèvement ────────────────────────────────────
             st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
             if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
                          key="save_prelev", type="primary"):
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    sample = {
-                        "id":                   pid,
-                        "label":                selected_point['label'],
-                        "type":                 selected_point.get('type'),
-                        "gelose":               selected_point.get('gelose','—'),
-                        "room_class":           selected_point.get('room_class',''),
-                        "location_criticality": pt_loc_crit,
-                        "operateur":            p_oper if p_oper else "Non renseigné",
-                        "date":                 str(p_date) if p_date else str(today),
-                        "archived":             False,
-                        "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                        "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
-                        "commentaire":          p_commentaire if p_commentaire else ""
-                    }
-                    st.session_state.prelevements.append(sample)
-                    save_prelevements(st.session_state.prelevements)
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J2", "sample_id": pid,
-                        "label": sample['label'], "due_date": j2_date_calc.isoformat(),
-                        "when": "J2", "status": "pending"
-                    })
-                    st.session_state.schedules.append({
-                        "id": f"sch_{pid}_J7", "sample_id": pid,
-                        "label": sample['label'], "due_date": j7_date_calc.isoformat(),
-                        "when": "J7", "status": "pending"
-                    })
-                    save_schedules(st.session_state.schedules)
-                    st.success(
-                        f"✅ **{sample['label']}** enregistré !\n"
-                        f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                        f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
+                pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                sample = {
+                    "id":                   pid,
+                    "label":                selected_point['label'],
+                    "type":                 selected_point.get('type'),
+                    "gelose":               selected_point.get('gelose','—'),
+                    "room_class":           selected_point.get('room_class',''),
+                    "location_criticality": pt_loc_crit,
+                    "operateur":            p_oper if p_oper else "Non renseigné",
+                    "date":                 str(p_date) if p_date else str(today),
+                    "archived":             False,
+                    "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                    "poste":                p_poste     if str(pt_room).strip().upper() == "A" else "",
+                    "commentaire":          p_commentaire if p_commentaire else ""
+                }
+                st.session_state.prelevements.append(sample)
+                save_prelevements(st.session_state.prelevements)
+                st.session_state.schedules.append({
+                    "id": f"sch_{pid}_J2", "sample_id": pid,
+                    "label": sample['label'], "due_date": j2_date_calc.isoformat(),
+                    "when": "J2", "status": "pending"
+                })
+                st.session_state.schedules.append({
+                    "id": f"sch_{pid}_J7", "sample_id": pid,
+                    "label": sample['label'], "due_date": j7_date_calc.isoformat(),
+                    "when": "J7", "status": "pending"
+                })
+                save_schedules(st.session_state.schedules)
+                st.success(
+                    f"✅ **{sample['label']}** enregistré !\n"
+                    f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
+                    f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
-            # ── Prélèvements actifs ───────────────────────────────────────────
+            # ── Liste prélèvements en cours ───────────────────────────────────
             st.divider()
             st.markdown("#### 📋 Prélèvements en cours")
             for idx, samp in enumerate(st.session_state.prelevements):
@@ -2496,7 +2466,389 @@ if active == "surveillance":
                                 st.session_state["edit_prelev_id"] = None
                                 st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════
+    # ONGLET SCAN QR
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_scan:
+        st.markdown("### 📷 Création rapide par QR code")
 
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+        border-radius:14px;padding:16px 20px;margin-bottom:16px">
+          <div style="font-weight:800;color:#1e40af;font-size:.95rem;margin-bottom:8px">
+            🔳 Comment utiliser le scan QR
+          </div>
+          <div style="font-size:.82rem;color:#1e293b;line-height:1.9">
+            <strong>1.</strong> Générez les étiquettes PDF depuis <em>Planning → Planning mensuel</em> 🖨️<br>
+            <strong>2.</strong> Imprimez-les et collez-les sur vos boîtes de gélose<br>
+            <strong>3.</strong> Scannez le QR code avec votre douchette ou utilisez la caméra ci-dessous<br>
+            <strong>4.</strong> Le formulaire se pré-remplit — confirmez l'opérateur et enregistrez !
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── Panneau scan douchette (input texte) + caméra ──────────────────
+        scan_col1, scan_col2 = st.columns([1, 1])
+
+        with scan_col1:
+            st.markdown(
+                "<div style='background:#fff;border:2px solid #2563eb;border-radius:12px;"
+                "padding:16px;text-align:center;margin-bottom:8px'>"
+                "<div style='font-size:2rem;margin-bottom:6px'>🔫</div>"
+                "<div style='font-weight:800;color:#1e40af;margin-bottom:6px'>Douchette USB</div>"
+                "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
+                "Cliquez dans le champ ci-dessous, puis scannez l'étiquette.</div>"
+                "</div>", unsafe_allow_html=True)
+
+            qr_raw = st.text_input(
+                "Zone de scan douchette",
+                key="qr_scan_input",
+                placeholder='{"app":"URC","label":"..."}  ← scanné automatiquement',
+                label_visibility="collapsed",
+                help="Le curseur doit être ici quand vous scannez"
+            )
+
+        with scan_col2:
+            # ── Scan caméra via jsQR ──────────────────────────────────────
+            st.markdown(
+                "<div style='background:#fff;border:2px solid #7c3aed;border-radius:12px;"
+                "padding:16px;text-align:center;margin-bottom:8px'>"
+                "<div style='font-size:2rem;margin-bottom:6px'>📷</div>"
+                "<div style='font-weight:800;color:#7c3aed;margin-bottom:6px'>Caméra</div>"
+                "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
+                "Activez la caméra et présentez le QR code.</div>"
+                "</div>", unsafe_allow_html=True)
+
+            camera_html = """
+<div id="cam-wrap" style="position:relative;background:#0f172a;border-radius:10px;overflow:hidden">
+  <video id="video" autoplay muted playsinline
+         style="width:100%;max-height:180px;object-fit:cover;display:block"></video>
+  <canvas id="canvas" style="display:none"></canvas>
+  <div id="overlay" style="position:absolute;inset:0;display:flex;align-items:center;
+       justify-content:center;pointer-events:none">
+    <div style="width:120px;height:120px;border:3px solid #7c3aed;border-radius:10px;
+         box-shadow:0 0 0 2000px rgba(15,23,42,.4)"></div>
+  </div>
+  <div id="cam-status" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
+       font-size:.65rem;color:#e2e8f0;font-weight:600">En attente d'autorisation…</div>
+</div>
+<button id="start-btn" onclick="startCam()"
+  style="margin-top:8px;width:100%;padding:8px;background:#7c3aed;color:#fff;
+         border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem">
+  📷 Activer la caméra
+</button>
+<div id="result-box" style="display:none;margin-top:8px;background:#f0fdf4;
+     border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;
+     font-size:.75rem;font-weight:700;color:#166534"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+let stream = null;
+let scanning = false;
+let lastResult = null;
+
+function startCam() {
+  document.getElementById('start-btn').style.display = 'none';
+  document.getElementById('cam-status').textContent = 'Démarrage…';
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+    .then(s => {
+      stream = s;
+      const v = document.getElementById('video');
+      v.srcObject = s;
+      v.onloadedmetadata = () => { scanning = true; scan(); };
+      document.getElementById('cam-status').textContent = '🟢 Scan actif — présentez le QR code';
+    })
+    .catch(e => {
+      document.getElementById('cam-status').textContent = '❌ ' + e.message;
+      document.getElementById('start-btn').style.display = 'block';
+    });
+}
+
+function scan() {
+  if (!scanning) return;
+  const v = document.getElementById('video');
+  const c = document.getElementById('canvas');
+  if (v.readyState === v.HAVE_ENOUGH_DATA) {
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    const img = ctx.getImageData(0, 0, c.width, c.height);
+    const code = jsQR(img.data, img.width, img.height, {inversionAttempts:'dontInvert'});
+    if (code && code.data !== lastResult) {
+      lastResult = code.data;
+      try {
+        const d = JSON.parse(code.data);
+        if (d.app === 'URC') {
+          scanning = false;
+          if (stream) stream.getTracks().forEach(t => t.stop());
+          const box = document.getElementById('result-box');
+          box.style.display = 'block';
+          box.innerHTML = '✅ Scanné : <b>' + (d.label || '?') + '</b> — ' + (d.rc || '?');
+          document.getElementById('cam-status').textContent = '✅ QR code détecté !';
+          // Envoyer vers Streamlit via l'input texte caché
+          const ev = new CustomEvent('qr-scanned', {detail: code.data});
+          window.parent.document.dispatchEvent(ev);
+          // Stratégie : copier dans le clipboard → l'utilisateur peut coller dans la douchette
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(code.data).catch(()=>{});
+          }
+          // Afficher un bouton pour copier manuellement
+          box.innerHTML += '<br><button onclick="navigator.clipboard.writeText(' +
+            JSON.stringify(JSON.stringify(code.data)) + ').then(()=>alert(' +
+            "'Copié ! Collez maintenant dans le champ Douchette.'" + '))" ' +
+            'style="margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;' +
+            'border:none;border-radius:6px;cursor:pointer;font-size:.72rem">' +
+            '📋 Copier &amp; coller dans Douchette</button>';
+        }
+      } catch(e) {}
+    }
+  }
+  requestAnimationFrame(scan);
+}
+</script>"""
+            st.components.v1.html(camera_html, height=320, scrolling=False)
+
+        # ── Traitement du scan douchette ───────────────────────────────────
+        _scanned_data = None
+        if qr_raw and qr_raw.strip().startswith("{"):
+            try:
+                _scanned_data = json.loads(qr_raw.strip())
+            except Exception:
+                st.error("❌ QR code non reconnu — format JSON invalide.")
+
+        if _scanned_data and _scanned_data.get("app") == "URC":
+            _lbl    = _scanned_data.get("label", "")
+            _type   = _scanned_data.get("type", "")
+            _rc     = _scanned_data.get("rc", "")
+            _lc     = int(_scanned_data.get("lc", 1))
+            _gel    = _scanned_data.get("gel", "")
+            _pt_ref = next(
+                (p for p in st.session_state.points if p.get("label") == _lbl),
+                None)
+            lc_col_s = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_lc),"#94a3b8")
+
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
+                f"border:2.5px solid #22c55e;border-radius:14px;padding:18px 22px;margin:12px 0'>"
+                f"<div style='font-size:1.1rem;font-weight:900;color:#166534;margin-bottom:10px'>"
+                f"✅ QR code reconnu — {_lbl}</div>"
+                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
+                f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div>"
+                f"<div style='font-size:.85rem;font-weight:700'>{'💨' if _type=='Air' else '🧴'} {_type}</div></div>"
+                f"<div style='background:#dbeafe;border-radius:8px;padding:8px;text-align:center;border:1px solid #93c5fd'>"
+                f"<div style='font-size:.58rem;color:#1e40af;text-transform:uppercase'>Classe</div>"
+                f"<div style='font-size:.85rem;font-weight:800;color:#1e40af'>{_rc or '—'}</div></div>"
+                f"<div style='background:{lc_col_s}11;border-radius:8px;padding:8px;text-align:center;border:1px solid {lc_col_s}44'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Criticité</div>"
+                f"<div style='font-size:.85rem;font-weight:700;color:{lc_col_s}'>Nv.{_lc}</div></div>"
+                f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Gélose</div>"
+                f"<div style='font-size:.85rem;font-weight:700;color:#1d4ed8'>🧫 {_gel[:12]}</div></div>"
+                f"</div></div>",
+                unsafe_allow_html=True)
+
+            # ── Mini-formulaire de confirmation ────────────────────────────
+            st.markdown(
+                "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;"
+                "padding:16px;margin-top:8px'>",
+                unsafe_allow_html=True)
+            st.markdown("#### ✏️ Confirmer et enregistrer le prélèvement")
+
+            sf1, sf2 = st.columns(2)
+            with sf1:
+                oper_list_s = [
+                    o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                    for o in st.session_state.operators
+                ]
+                if oper_list_s:
+                    scan_oper = st.selectbox(
+                        "👤 Opérateur / Préleveur *",
+                        ["— Sélectionner —"] + oper_list_s,
+                        key="scan_oper_sel")
+                    scan_oper = scan_oper if scan_oper != "— Sélectionner —" else ""
+                else:
+                    scan_oper = st.text_input(
+                        "👤 Opérateur *",
+                        placeholder="Nom du préleveur",
+                        key="scan_oper_manual")
+                scan_date = st.date_input(
+                    "📅 Date de prélèvement",
+                    value=datetime.today(),
+                    key="scan_date")
+            with sf2:
+                scan_comment = st.text_area(
+                    "💬 Commentaire",
+                    placeholder="Remarques, contexte…",
+                    height=80,
+                    key="scan_comment")
+                _scan_j2 = next_working_day_offset(scan_date, 2)
+                _scan_j7 = next_working_day_offset(scan_date, 5)
+                st.markdown(
+                    f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
+                    f"padding:8px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                    f"📅 J2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>"
+                    f"📅 J7 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>",
+                    unsafe_allow_html=True)
+
+            # ── Localisation sur plan (optionnel) ──────────────────────────
+            from streamlit_image_coordinates import streamlit_image_coordinates
+
+            plans_avail_scan = st.session_state.get("plans", [])
+            coords = None  # important
+
+            if plans_avail_scan:
+                st.markdown(
+                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:8px 0 4px'>"
+                    "🗺️ Localiser sur le plan <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                    unsafe_allow_html=True
+                )
+
+                _scan_plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_avail_scan]
+                _scan_plan_sel = st.selectbox("Plan", _scan_plan_names, key="scan_plan_sel")
+
+                if _scan_plan_sel != "— Aucun plan —":
+                    _scan_plan = next((p for p in plans_avail_scan if p["name"] == _scan_plan_sel), None)
+
+                    if _scan_plan and _scan_plan.get("image_b64"):
+
+                        # 📍 CLIC SUR IMAGE
+                        coords = streamlit_image_coordinates(
+                            _scan_plan["image_b64"],
+                            key="scan_coords"
+                        )
+
+                        # 📌 Position existante
+                        _cur_pt_scan = next(
+                            (mp for mp in st.session_state.get("map_points", [])
+                            if mp.get("label") == _lbl),
+                            None
+                        )
+
+                        if _cur_pt_scan and isinstance(_cur_pt_scan.get("x"), (int, float)):
+                            st.markdown(
+                                f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
+                                f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
+                                f"color:#166534;font-weight:700'>"
+                                f"📌 Position existante : {float(_cur_pt_scan['x']):.1f}% · "
+                                f"{float(_cur_pt_scan['y']):.1f}%</div>",
+                                unsafe_allow_html=True
+                            )
+
+                        # 📍 Nouvelle position cliquée
+                        if coords:
+                            x = coords["x"]
+                            y = coords["y"]
+                            st.success(f"📍 Nouvelle position : {x:.1f}% · {y:.1f}%")
+
+                    else:
+                        st.warning("⚠️ Plan sans image.")
+
+                # ── Bouton d'enregistrement ────────────────────────────────────
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                scan_bc1, scan_bc2 = st.columns([3, 1])
+                with scan_bc1:
+                    if st.button(
+                        f"💾 Créer le prélèvement — {_lbl}",
+                        use_container_width=True,
+                        type="primary",
+                        key="scan_save_btn"
+                    ):
+                        if not scan_oper:
+                            st.error("⚠️ Veuillez sélectionner un opérateur.")
+                        else:
+                            _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                            _sample_scan = {
+                                "id":                   _pid,
+                                "label":                _lbl,
+                                "type":                 _type,
+                                "gelose":               _gel,
+                                "room_class":           _rc,
+                                "location_criticality": _lc,
+                                "operateur":            scan_oper,
+                                "date":                 str(scan_date),
+                                "archived":             False,
+                                "num_isolateur":        "",
+                                "poste":                "Poste 1",
+                                "commentaire":          scan_comment or "",
+                                "created_via":          "qr_scan",
+                            }
+                            # ── Sauvegarde position ─────────────────────────────
+                            if coords:
+                                new_point = {
+                                    "label": _lbl,
+                                    "x": coords["x"],
+                                    "y": coords["y"]
+                                }
+
+                                # remplace si déjà existant
+                                st.session_state["map_points"] = [
+                                    mp for mp in st.session_state.get("map_points", [])
+                                    if mp.get("label") != _lbl
+                                ] + [new_point]
+
+                                # sauvegarde persistante
+                                try:
+                                    _supa_upsert("map_points", json.dumps(st.session_state["map_points"], ensure_ascii=False))
+                                except Exception:
+                                    pass
+                            st.session_state.prelevements.append(_sample_scan)
+                            save_prelevements(st.session_state.prelevements)
+                            st.session_state.schedules.append({
+                                "id":        f"sch_{_pid}_J2",
+                                "sample_id": _pid,
+                                "label":     _lbl,
+                                "due_date":  _scan_j2.isoformat(),
+                                "when":      "J2",
+                                "status":    "pending"
+                            })
+                            st.session_state.schedules.append({
+                                "id":        f"sch_{_pid}_J7",
+                                "sample_id": _pid,
+                                "label":     _lbl,
+                                "due_date":  _scan_j7.isoformat(),
+                                "when":      "J7",
+                                "status":    "pending"
+                            })
+                            save_schedules(st.session_state.schedules)
+                            # Vider le champ de scan
+                            st.session_state["qr_scan_input"] = ""
+                            st.success(
+                                f"✅ **{_lbl}** créé par scan QR !\n"
+                                f"J2 → {_scan_j2.strftime('%d/%m/%Y')} | "
+                                f"J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                            st.rerun()
+                with scan_bc2:
+                    if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
+                        st.session_state["qr_scan_input"] = ""
+                        st.rerun()
+
+            elif qr_raw and qr_raw.strip():
+                st.warning("⚠️ Ce QR code ne provient pas de MicroSurveillance URC.")
+
+        # ── Historique des derniers scans ──────────────────────────────────
+        _scan_recent = [
+            p for p in st.session_state.prelevements
+            if p.get("created_via") == "qr_scan" and not p.get("archived")
+        ]
+        if _scan_recent:
+            st.divider()
+            st.markdown(
+                f"<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
+                f"🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>",
+                unsafe_allow_html=True)
+            for _sp in reversed(_scan_recent[-5:]):
+                lc_s = int(_sp.get("location_criticality", 1))
+                lcs_col = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(lc_s),"#94a3b8")
+                st.markdown(
+                    f"<div style='background:#f8fafc;border-left:3px solid #2563eb;"
+                    f"border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'>"
+                    f"<span style='font-weight:700'>🔳 {_sp['label']}</span>"
+                    f" · Classe {_sp.get('room_class','—')}"
+                    f" · <span style='color:{lcs_col}'>Nv.{lc_s}</span>"
+                    f" · {_sp.get('date','—')}"
+                    f" · {_sp.get('operateur','—')}"
+                    f"</div>",
+                    unsafe_allow_html=True)
     # ══════════════════════════════════════════════════════════════════════════
     # HELPERS PARTAGÉS
     # ══════════════════════════════════════════════════════════════════════════
@@ -2706,7 +3058,6 @@ if active == "surveillance":
                 st.session_state.current_process = None
                 st.rerun()
 
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
     # ══════════════════════════════════════════════════════════════════════════
@@ -2792,7 +3143,6 @@ if active == "surveillance":
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
     with tab_ident:
-        # ── Carte alerte mesures correctives ──────────────────────────────────
         def _render_alerte_mesures(pop_data, key_suffix):
             _is_action   = pop_data["status"] == "action"
             _border      = "#ef4444" if _is_action else "#f59e0b"
@@ -2895,7 +3245,6 @@ if active == "surveillance":
         if st.session_state.get("_show_mesures_popup"):
             _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
 
-        # ── Récapitulatif dernière alerte ─────────────────────────────────────
         if not st.session_state.get("_show_mesures_popup") and st.session_state.get("_last_mesures_popup"):
             _last      = st.session_state["_last_mesures_popup"]
             _is_action = _last["status"] == "action"
@@ -2943,7 +3292,6 @@ if active == "surveillance":
                     st.session_state["_last_mesures_popup"] = None
                     st.rerun()
 
-        # ── Identifications en attente ─────────────────────────────────────────
         st.markdown("#### 🔴 Identifications en attente")
 
         def _j7_done_or_absent(sample_id):
@@ -3059,7 +3407,6 @@ if active == "surveillance":
                         st.session_state[germs_list_key].append({"germ": "— Sélectionner un germe —", "ufc": 0})
                         st.rerun()
 
-                    # Aperçu score
                     valid_germs = [
                         g for g in current_germs
                         if g["germ"] and g["germ"] != "— Sélectionner un germe —"
@@ -3119,7 +3466,7 @@ if active == "surveillance":
 
                         ic1, ic2 = st.columns([3, 1])
                         with ic1:
-                            remarque = st.text_area("Remarque", height=60, key=f"rem_id_{_key}")
+                            remarque = st.text_area("Remarque", height=68, key=f"rem_id_{_key}")
                         with ic2:
                             date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{_key}")
 
@@ -3249,7 +3596,6 @@ if active == "surveillance":
                                 del st.session_state[germs_list_key]
                             st.rerun()
 
-        # ── Derniers résultats ─────────────────────────────────────────────────
         if st.session_state.surveillance:
             st.divider()
             st.markdown("### 📋 Derniers résultats")
@@ -3292,7 +3638,6 @@ if active == "surveillance":
                     <span style="font-size:.75rem;color:{sc};font-weight:800">{ufc_display}</span>
                   </div>
                 </div>""", unsafe_allow_html=True)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
@@ -3410,7 +3755,34 @@ if active == "planning":
     def fmt_week(ws):
         we = ws + timedelta(days=6)
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
+        # ── QR Code helpers ────────────────────────────────────────────────────────────
+    def _make_qr_bytes(data_dict: dict) -> bytes:
+        """Génère un QR code PNG en bytes à partir d'un dict."""
+        payload = json.dumps(data_dict, ensure_ascii=False, separators=(',', ':'))
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=4,
+            border=2,
+        )
+        qr.add_data(payload)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
 
+    def _qr_payload(pt: dict) -> dict:
+        """Construit le payload JSON minimal d'un point pour le QR code."""
+        return {
+            "app":   "URC",
+            "id":    pt.get("id", ""),
+            "label": pt.get("label", ""),
+            "type":  pt.get("type", ""),
+            "rc":    pt.get("room_class", ""),
+            "lc":    int(pt.get("location_criticality", 1)),
+            "gel":   pt.get("gelose", ""),
+        }
     # ── Algorithme central : planning mensuel ─────────────────────────────────
     # Contrainte :  max N prélèvements / classe / semaine
     #               répartition proportionnelle au poids (fréquence individuelle)
@@ -3542,527 +3914,598 @@ if active == "planning":
     ])
 
     # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET : CHARGE HEBDO & PLANNING MENSUEL
-    # ═════════════════════════════════════════════════════════════════════════
+# ONGLET : CHARGE HEBDO & PLANNING MENSUEL
+# ═════════════════════════════════════════════════════════════════════════
     with plan_tab_charge:
         st.markdown("### 📊 Charge hebdomadaire")
 
-        # Navigation mois
-        nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
-        with nav_c1:
-            if st.button("◀◀", use_container_width=True, key="ch_prev_year"):
-                st.session_state.cal_year -= 1
-                st.rerun()
-        with nav_c2:
-            if st.button("◀", use_container_width=True, key="ch_prev_month"):
-                if st.session_state.cal_month == 1:
-                    st.session_state.cal_month = 12
-                    st.session_state.cal_year -= 1
-                else:
-                    st.session_state.cal_month -= 1
-                st.rerun()
-        with nav_c3:
-            _ch_year  = st.session_state.get("cal_year",  _today_dt.year)
-            _ch_month = st.session_state.get("cal_month", _today_dt.month)
-            st.markdown(
-                f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
-                f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
-                f"📅 {MOIS_FR[_ch_month]} {_ch_year}</div>",
-                unsafe_allow_html=True)
-        with nav_c4:
-            if st.button("▶", use_container_width=True, key="ch_next_month"):
-                if st.session_state.cal_month == 12:
-                    st.session_state.cal_month = 1
-                    st.session_state.cal_year += 1
-                else:
-                    st.session_state.cal_month += 1
-                st.rerun()
-        with nav_c5:
-            if st.button("▶▶", use_container_width=True, key="ch_next_year"):
-                st.session_state.cal_year += 1
-                st.rerun()
-        if st.button("📍 Mois courant", key="ch_today_btn"):
-            st.session_state.cal_year  = _today_dt.year
-            st.session_state.cal_month = _today_dt.month
+    # Navigation mois
+    nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
+    with nav_c1:
+        if st.button("◀◀", use_container_width=True, key="ch_prev_year"):
+            st.session_state.cal_year -= 1
             st.rerun()
+    with nav_c2:
+        if st.button("◀", use_container_width=True, key="ch_prev_month"):
+            if st.session_state.cal_month == 1:
+                st.session_state.cal_month = 12
+                st.session_state.cal_year -= 1
+            else:
+                st.session_state.cal_month -= 1
+            st.rerun()
+    with nav_c3:
+        _ch_year  = st.session_state.get("cal_year",  _today_dt.year)
+        _ch_month = st.session_state.get("cal_month", _today_dt.month)
+        st.markdown(
+            f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
+            f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
+            f"📅 {MOIS_FR[_ch_month]} {_ch_year}</div>",
+            unsafe_allow_html=True)
+    with nav_c4:
+        if st.button("▶", use_container_width=True, key="ch_next_month"):
+            if st.session_state.cal_month == 12:
+                st.session_state.cal_month = 1
+                st.session_state.cal_year += 1
+            else:
+                st.session_state.cal_month += 1
+            st.rerun()
+    with nav_c5:
+        if st.button("▶▶", use_container_width=True, key="ch_next_year"):
+            st.session_state.cal_year += 1
+            st.rerun()
+    if st.button("📍 Mois courant", key="ch_today_btn"):
+        st.session_state.cal_year  = _today_dt.year
+        st.session_state.cal_month = _today_dt.month
+        st.rerun()
 
-        _ch_year     = st.session_state.get("cal_year",  _today_dt.year)
-        _ch_month    = st.session_state.get("cal_month", _today_dt.month)
-        _ch_holidays = get_holidays_cached(_ch_year)
+    _ch_year     = st.session_state.get("cal_year",  _today_dt.year)
+    _ch_month    = st.session_state.get("cal_month", _today_dt.month)
+    _ch_holidays = get_holidays_cached(_ch_year)
 
-        st.divider()
+    st.divider()
 
-        # ── Contraintes max / classe / semaine ────────────────────────────────
-        st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
-        st.caption(
-            "**0 = aucun prélèvement** pour cette classe (tous les points sont désactivés). "
-            "**> 0** = le total hebdomadaire de la classe est plafonné à cette valeur, "
-            "puis réparti proportionnellement aux fréquences individuelles (utilisées comme poids). "
-            "**Un même point ne peut pas apparaître 2× le même jour**, "
-            "sauf si sa fréquence est définie en > 1/jour.")
+    # ── Contraintes max / classe / semaine ────────────────────────────────
+    st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
+    st.caption(
+        "**0 = aucun prélèvement** pour cette classe (tous les points sont désactivés). "
+        "**> 0** = le total hebdomadaire de la classe est plafonné à cette valeur, "
+        "puis réparti proportionnellement aux fréquences individuelles (utilisées comme poids). "
+        "**Un même point ne peut pas apparaître 2× le même jour**, "
+        "sauf si sa fréquence est définie en > 1/jour.")
 
-        all_classes = sorted({
-            (pt.get('room_class') or '').strip()
-            for pt in st.session_state.points
-            if (pt.get('room_class') or '').strip()
-        })
-        # Charger les contraintes Supabase une seule fois par session
-        if "class_constraints_loaded" not in st.session_state:
-            _raw_cc = _supa_get('class_constraints')
-            if _raw_cc:
-                try:
-                    for _cls_k, _cls_v in json.loads(_raw_cc).items():
-                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
-                except Exception:
-                    pass
-            st.session_state["class_constraints_loaded"] = True
-
-        # Initialiser à 0 uniquement si vraiment absent (nouvelle classe)
-        for _cls in all_classes:
-            _key = f"class_max_{_cls}"
-            if _key not in st.session_state:
-                st.session_state[_key] = 0
-        class_max_dict = {}
-
-        if all_classes:
-            rc_colors = {
-                "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
-                "D": "#f97316", "E": "#ef4444",
-            }
-            cls_cols = st.columns(min(len(all_classes), 6))
-            for ci, cls in enumerate(all_classes):
-                rc_col  = rc_colors.get(cls.replace(' ', '').upper()[:1], "#6366f1")
-                pts_cls = [pt for pt in st.session_state.points
-                           if (pt.get('room_class') or '').strip() == cls]
-                with cls_cols[ci % len(cls_cols)]:
-                    st.markdown(
-                        f"<div style='background:{rc_col}15;border:1.5px solid {rc_col}55;"
-                        f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
-                        f"<div style='font-size:.9rem;font-weight:900;color:{rc_col}'>Classe {cls}</div>"
-                        f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls)} point(s)</div>"
-                        f"</div>",
-                        unsafe_allow_html=True)
-                    st.number_input(
-                        f"Max/sem Cl.{cls}", min_value=0, max_value=500,
-                        step=1, key=f"class_max_{cls}",
-                        label_visibility="collapsed",
-                        help=f"0 = aucun prélèvement · >0 = plafond hebdomadaire classe {cls}")
-                    new_max = int(st.session_state.get(f"class_max_{cls}", 0))
-                    class_max_dict[cls] = new_max
-
-                    if new_max > 0:
-                        # Aperçu de la répartition proportionnelle
-                        freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls]
-                        tot_p    = sum(freqs_p) or 1
-                        allocs   = []
-                        assigned = 0
-                        for ii, (pt, f) in enumerate(zip(pts_cls, freqs_p)):
-                            if ii < len(pts_cls) - 1:
-                                a = round(f / tot_p * new_max)
-                            else:
-                                a = max(0, new_max - assigned)
-                            assigned += a
-                            allocs.append(a)
-                        preview = "".join(
-                            f"<div style='font-size:.6rem;color:#1e40af'>"
-                            f"{pt['label'][:20]}: <b>{a}×/sem</b></div>"
-                            for pt, a in zip(pts_cls, allocs))
-                        st.markdown(
-                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                            f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
-                            unsafe_allow_html=True)
-                    else:
-                        # 0 = aucun prélèvement pour cette classe
-                        st.markdown(
-                            f"<div style='background:#fef2f2;border:1px solid #fca5a5;"
-                            f"border-radius:6px;padding:6px 8px;margin-top:2px;"
-                            f"text-align:center'>"
-                            f"<div style='font-size:.62rem;font-weight:700;color:#991b1b'>"
-                            f"🚫 Aucun prélèvement planifié</div>"
-                            f"<div style='font-size:.58rem;color:#b91c1c;margin-top:1px'>"
-                            f"Définissez une valeur &gt; 0 pour activer</div>"
-                            f"</div>",
-                            unsafe_allow_html=True)
-        else:
-            st.info("Aucune classe de salle définie sur les points de prélèvement.")
-            class_max_dict = {}
-
-        if all_classes:
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-            sv_col, _ = st.columns([1, 3])
-            with sv_col:
-                if st.button("💾 Sauvegarder les contraintes", 
-                             key="save_class_constraints",
-                             use_container_width=True, type="primary"):
-                    payload = {
-                        cls: int(st.session_state.get(f"class_max_{cls}", 0))
-                        for cls in all_classes
-                    }
-                    if _supa_upsert('class_constraints', 
-                                    json.dumps(payload, ensure_ascii=False)):
-                        st.success("✅ Contraintes sauvegardées dans Supabase !")
-                    else:
-                        st.warning("⚠️ Supabase non connecté — contraintes non sauvegardées.")
-        st.divider()
-
-        # ── Sélecteur semaine ─────────────────────────────────────────────────
-        ch_ws_set = {get_week_start(_today_dt)}
-        for _p in st.session_state.prelevements:
+    all_classes = sorted({
+        (pt.get('room_class') or '').strip()
+        for pt in st.session_state.points
+        if (pt.get('room_class') or '').strip()
+    })
+    if "class_constraints_loaded" not in st.session_state:
+        _raw_cc = _supa_get('class_constraints')
+        if _raw_cc:
             try:
-                ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
+                for _cls_k, _cls_v in json.loads(_raw_cc).items():
+                    st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
             except Exception:
                 pass
-        for _i in range(1, 9):
-            ch_ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
-        ch_week_starts = sorted(ch_ws_set)
-        ch_week_labels = [fmt_week(ws) for ws in ch_week_starts]
-        ch_cur_idx = 0
-        for _i, _ws in enumerate(ch_week_starts):
-            if _ws <= _today_dt < _ws + timedelta(days=7):
-                ch_cur_idx = _i
-                break
+        st.session_state["class_constraints_loaded"] = True
 
-        ch_sel_label = st.selectbox(
-            "Semaine à détailler", ch_week_labels, index=ch_cur_idx, key="ch_week_sel")
-        ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
-        ch_sel_we       = ch_sel_ws + timedelta(days=6)
-        ch_holidays     = get_holidays_cached(ch_sel_ws.year)
-        ch_working_days = [
-            ch_sel_ws + timedelta(days=i)
-            for i in range(5)
-            if (ch_sel_ws + timedelta(days=i)) not in ch_holidays
-        ]
-        nb_jours = len(ch_working_days)
+    for _cls in all_classes:
+        _key = f"class_max_{_cls}"
+        if _key not in st.session_state:
+            st.session_state[_key] = 0
+    class_max_dict = {}
 
-        ch_j0 = [
-            p for p in st.session_state.prelevements
-            if p.get('date')
-            and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
-            and not p.get('archived', False)
-        ]
-        ch_j2 = [
-            s for s in st.session_state.schedules
-            if s['when'] == 'J2'
-            and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
-        ]
-        ch_j7 = [
-            s for s in st.session_state.schedules
-            if s['when'] == 'J7'
-            and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
-        ]
-        total_actes    = len(ch_j0) + len(ch_j2) + len(ch_j7)
-        actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
-
-        st.markdown(
-            f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
-            padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
-            justify-content:space-between;flex-wrap:wrap;gap:10px">
-            <div style="color:#fff">
-              <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
-              <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
-                {nb_jours} jour(s) ouvré(s)
-              </div>
-            </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
-                <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
-              </div>
-              <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-                <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
-                <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
-              </div>
-            </div></div>""",
-            unsafe_allow_html=True)
-
-        m2, m3, m4, m5 = st.columns(4)
-        m2.metric("📍 Points actifs", len(st.session_state.points))
-        m3.metric("🧪 Prélèv. J0",   len(ch_j0))
-        m4.metric("📖 Lectures J2",  len(ch_j2))
-        m5.metric("📗 Lectures J7",  len(ch_j7))
-
-        st.divider()
-
-        # ── Tableau détail par point (semaine sélectionnée) ───────────────────
-        st.markdown("#### 📍 Détail par point — semaine sélectionnée")
-        risk_colors_ch = {
-            "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-            "4": "#f97316", "5": "#ef4444",
+    if all_classes:
+        rc_colors = {
+            "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
+            "D": "#f97316", "E": "#ef4444",
         }
-
-        if st.session_state.points:
-            hdr_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
-            for _hc, _hl in zip(
-                hdr_cols,
-                ["Point", "Type", "Classe", "Risque",
-                 "Fréquence / poids", "Prévu cette sem. ✏️", "Réalisé", "Statut"]
-            ):
-                _hc.markdown(
-                    f"<div style='background:#1e40af;border-radius:6px;padding:7px 8px;"
-                    f"font-size:.68rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
+        cls_cols = st.columns(min(len(all_classes), 6))
+        for ci, cls in enumerate(all_classes):
+            rc_col  = rc_colors.get(cls.replace(' ', '').upper()[:1], "#6366f1")
+            pts_cls = [pt for pt in st.session_state.points
+                       if (pt.get('room_class') or '').strip() == cls]
+            with cls_cols[ci % len(cls_cols)]:
+                st.markdown(
+                    f"<div style='background:{rc_col}15;border:1.5px solid {rc_col}55;"
+                    f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
+                    f"<div style='font-size:.9rem;font-weight:900;color:{rc_col}'>Classe {cls}</div>"
+                    f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls)} point(s)</div>"
+                    f"</div>",
                     unsafe_allow_html=True)
+                st.number_input(
+                    f"Max/sem Cl.{cls}", min_value=0, max_value=500,
+                    step=1, key=f"class_max_{cls}",
+                    label_visibility="collapsed",
+                    help=f"0 = aucun prélèvement · >0 = plafond hebdomadaire classe {cls}")
+                new_max = int(st.session_state.get(f"class_max_{cls}", 0))
+                class_max_dict[cls] = new_max
 
-            total_prevu = 0
-            total_realise = 0
-
-            for pt_i, pt in enumerate(st.session_state.points):
-                rc        = (pt.get('room_class') or '').strip()
-                row_bg    = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
-                risk_val  = str(pt.get('risk_level', '—'))
-                risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
-                type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
-
-                max_cls   = int(class_max_dict.get(rc, 0))
-                pts_cls_w = [p for p in st.session_state.points
-                             if (p.get('room_class') or '').strip() == rc]
-                freqs_cls = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_w]
-                tot_cls   = sum(freqs_cls) or 1
-                my_f      = max(0.01, _freq_en_semaine(pt, nb_jours))
-
-                # CORRECTION : 0 = aucun prélèvement → class_alloc = 0
-                # > 0 = plafond hebdomadaire réparti proportionnellement
-                class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else 0
-
-                nb_prevu, freq_label, sess_key = _get_prevu_semaine(
-                    pt, ch_sel_ws, nb_jours, class_alloc)
-                realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
-
-                if nb_prevu == 0:
-                    st_bg = "#f8fafc"; st_border = "#e2e8f0"
-                    st_txt = "#94a3b8"; st_icon = "⏸️"; st_label = "Non planifié"
-                elif realise >= nb_prevu:
-                    st_bg = "#f0fdf4"; st_border = "#86efac"
-                    st_txt = "#166534"; st_icon = "✅"; st_label = "Complet"
-                elif realise > 0:
-                    pct = int(realise / nb_prevu * 100)
-                    st_bg = "#fffbeb"; st_border = "#fcd34d"
-                    st_txt = "#92400e"; st_icon = "⏳"; st_label = f"{pct}%"
+                if new_max > 0:
+                    freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls]
+                    tot_p    = sum(freqs_p) or 1
+                    allocs   = []
+                    assigned = 0
+                    for ii, (pt, f) in enumerate(zip(pts_cls, freqs_p)):
+                        if ii < len(pts_cls) - 1:
+                            a = round(f / tot_p * new_max)
+                        else:
+                            a = max(0, new_max - assigned)
+                        assigned += a
+                        allocs.append(a)
+                    preview = "".join(
+                        f"<div style='font-size:.6rem;color:#1e40af'>"
+                        f"{pt['label'][:20]}: <b>{a}×/sem</b></div>"
+                        for pt, a in zip(pts_cls, allocs))
+                    st.markdown(
+                        f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
+                        f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
+                        unsafe_allow_html=True)
                 else:
-                    st_bg = "#fef2f2"; st_border = "#fca5a5"
-                    st_txt = "#991b1b"; st_icon = "🔴"; st_label = f"0/{nb_prevu}"
+                    st.markdown(
+                        f"<div style='background:#fef2f2;border:1px solid #fca5a5;"
+                        f"border-radius:6px;padding:6px 8px;margin-top:2px;"
+                        f"text-align:center'>"
+                        f"<div style='font-size:.62rem;font-weight:700;color:#991b1b'>"
+                        f"🚫 Aucun prélèvement planifié</div>"
+                        f"<div style='font-size:.58rem;color:#b91c1c;margin-top:1px'>"
+                        f"Définissez une valeur &gt; 0 pour activer</div>"
+                        f"</div>",
+                        unsafe_allow_html=True)
+    else:
+        st.info("Aucune classe de salle définie sur les points de prélèvement.")
+        class_max_dict = {}
 
-                total_prevu   += nb_prevu
-                total_realise += realise
+    if all_classes:
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        sv_col, _ = st.columns([1, 3])
+        with sv_col:
+            if st.button("💾 Sauvegarder les contraintes",
+                         key="save_class_constraints",
+                         use_container_width=True, type="primary"):
+                payload = {
+                    cls: int(st.session_state.get(f"class_max_{cls}", 0))
+                    for cls in all_classes
+                }
+                if _supa_upsert('class_constraints',
+                                json.dumps(payload, ensure_ascii=False)):
+                    st.success("✅ Contraintes sauvegardées dans Supabase !")
+                else:
+                    st.warning("⚠️ Supabase non connecté — contraintes non sauvegardées.")
+    st.divider()
 
-                row_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
-                with row_cols[0]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px 12px;font-size:.85rem;"
-                        f"font-weight:700;color:#0f172a'>{type_icon} {pt['label']}</div>",
-                        unsafe_allow_html=True)
-                with row_cols[1]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px;font-size:.78rem;"
-                        f"color:#475569;text-align:center'>{pt.get('type', '—')}</div>",
-                        unsafe_allow_html=True)
-                with row_cols[2]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px;font-size:.78rem;"
-                        f"color:#475569;text-align:center'>{rc or '—'}</div>",
-                        unsafe_allow_html=True)
-                with row_cols[3]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px;text-align:center'>"
-                        f"<span style='background:{risk_col}22;color:{risk_col};"
-                        f"border:1px solid {risk_col}55;border-radius:6px;"
-                        f"padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>",
-                        unsafe_allow_html=True)
-                with row_cols[4]:
-                    badge = (
-                        " <span style='background:#dbeafe;color:#1e40af;"
-                        "border-radius:4px;padding:1px 4px;font-size:.58rem'>▲ classe</span>"
-                        if max_cls > 0 else "")
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px;font-size:.72rem;"
-                        f"color:#475569;text-align:center'>{freq_label}{badge}</div>",
-                        unsafe_allow_html=True)
-                with row_cols[5]:
-                    st.number_input(
-                        "Prévu", min_value=0, max_value=100,
-                        value=nb_prevu, step=1, key=sess_key,
-                        label_visibility="collapsed", on_change=_persist_overrides)
-                with row_cols[6]:
-                    st.markdown(
-                        f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
-                        f"border-radius:6px;padding:8px;font-size:1rem;"
-                        f"font-weight:800;color:#0f172a;text-align:center'>{realise}</div>",
-                        unsafe_allow_html=True)
-                with row_cols[7]:
-                    st.markdown(
-                        f"<div style='background:{st_bg};border:1px solid {st_border};"
-                        f"border-radius:8px;padding:8px;text-align:center;"
-                        f"font-size:.78rem;font-weight:700;color:{st_txt}'>"
-                        f"{st_icon} {st_label}</div>",
-                        unsafe_allow_html=True)
+    # ── Sélecteur semaine ─────────────────────────────────────────────────
+    ch_ws_set = {get_week_start(_today_dt)}
+    for _p in st.session_state.prelevements:
+        try:
+            ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
+        except Exception:
+            pass
+    for _i in range(1, 9):
+        ch_ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
+    ch_week_starts = sorted(ch_ws_set)
+    ch_week_labels = [fmt_week(ws) for ws in ch_week_starts]
+    ch_cur_idx = 0
+    for _i, _ws in enumerate(ch_week_starts):
+        if _ws <= _today_dt < _ws + timedelta(days=7):
+            ch_cur_idx = _i
+            break
 
-            st.divider()
-            taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
-            taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
-            st.markdown(
-                f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
-                f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
-                f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
-                f"<div style='display:flex;gap:20px;align-items:center'>"
-                f"<div style='text-align:center'>"
-                f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div>"
-                f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
-                f"<div style='text-align:center'>"
-                f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div>"
-                f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
-                f"<div style='background:rgba(255,255,255,.15);border-radius:8px;"
-                f"padding:8px 16px;font-size:1rem;font-weight:800;color:{taux_col}'>"
-                f"{taux}% réalisé</div>"
-                f"</div></div>",
+    ch_sel_label = st.selectbox(
+        "Semaine à détailler", ch_week_labels, index=ch_cur_idx, key="ch_week_sel")
+    ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
+    ch_sel_we       = ch_sel_ws + timedelta(days=6)
+    ch_holidays     = get_holidays_cached(ch_sel_ws.year)
+    ch_working_days = [
+        ch_sel_ws + timedelta(days=i)
+        for i in range(5)
+        if (ch_sel_ws + timedelta(days=i)) not in ch_holidays
+    ]
+    nb_jours = len(ch_working_days)
+
+    ch_j0 = [
+        p for p in st.session_state.prelevements
+        if p.get('date')
+        and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
+        and not p.get('archived', False)
+    ]
+    ch_j2 = [
+        s for s in st.session_state.schedules
+        if s['when'] == 'J2'
+        and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
+    ]
+    ch_j7 = [
+        s for s in st.session_state.schedules
+        if s['when'] == 'J7'
+        and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
+    ]
+    total_actes    = len(ch_j0) + len(ch_j2) + len(ch_j7)
+    actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
+
+    st.markdown(
+        f"""<div style="background:linear-gradient(135deg,#1e40af,#2563eb);border-radius:14px;
+        padding:16px 22px;margin:10px 0 18px 0;display:flex;align-items:center;
+        justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="color:#fff">
+          <div style="font-size:1.05rem;font-weight:800">📅 {ch_sel_label}</div>
+          <div style="font-size:.82rem;color:#bfdbfe;margin-top:3px">
+            {nb_jours} jour(s) ouvré(s)
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
+            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
+            <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
+          </div>
+          <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
+            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
+            <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
+          </div>
+        </div></div>""",
+        unsafe_allow_html=True)
+
+    m2, m3, m4, m5 = st.columns(4)
+    m2.metric("📍 Points actifs", len(st.session_state.points))
+    m3.metric("🧪 Prélèv. J0",   len(ch_j0))
+    m4.metric("📖 Lectures J2",  len(ch_j2))
+    m5.metric("📗 Lectures J7",  len(ch_j7))
+
+    st.divider()
+
+    # ── Tableau détail par point (semaine sélectionnée) ───────────────────
+    st.markdown("#### 📍 Détail par point — semaine sélectionnée")
+    risk_colors_ch = {
+        "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+        "4": "#f97316", "5": "#ef4444",
+    }
+
+    if st.session_state.points:
+        hdr_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
+        for _hc, _hl in zip(
+            hdr_cols,
+            ["Point", "Type", "Classe", "Risque",
+             "Fréquence / poids", "Prévu cette sem. ✏️", "Réalisé", "Statut"]
+        ):
+            _hc.markdown(
+                f"<div style='background:#1e40af;border-radius:6px;padding:7px 8px;"
+                f"font-size:.68rem;font-weight:800;color:#fff;text-align:center'>{_hl}</div>",
                 unsafe_allow_html=True)
 
+        total_prevu = 0
+        total_realise = 0
+
+        for pt_i, pt in enumerate(st.session_state.points):
+            rc        = (pt.get('room_class') or '').strip()
+            row_bg    = "#f8fafc" if pt_i % 2 == 0 else "#ffffff"
+            risk_val  = str(pt.get('risk_level', '—'))
+            risk_col  = risk_colors_ch.get(risk_val, "#94a3b8")
+            type_icon = "💨" if pt.get('type') == 'Air' else "🧴"
+
+            max_cls   = int(class_max_dict.get(rc, 0))
+            pts_cls_w = [p for p in st.session_state.points
+                         if (p.get('room_class') or '').strip() == rc]
+            freqs_cls = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_w]
+            tot_cls   = sum(freqs_cls) or 1
+            my_f      = max(0.01, _freq_en_semaine(pt, nb_jours))
+
+            class_alloc = round(my_f / tot_cls * max_cls) if max_cls > 0 else 0
+
+            nb_prevu, freq_label, sess_key = _get_prevu_semaine(
+                pt, ch_sel_ws, nb_jours, class_alloc)
+            realise = sum(1 for p in ch_j0 if p.get('label') == pt['label'])
+
+            if nb_prevu == 0:
+                st_bg = "#f8fafc"; st_border = "#e2e8f0"
+                st_txt = "#94a3b8"; st_icon = "⏸️"; st_label = "Non planifié"
+            elif realise >= nb_prevu:
+                st_bg = "#f0fdf4"; st_border = "#86efac"
+                st_txt = "#166534"; st_icon = "✅"; st_label = "Complet"
+            elif realise > 0:
+                pct = int(realise / nb_prevu * 100)
+                st_bg = "#fffbeb"; st_border = "#fcd34d"
+                st_txt = "#92400e"; st_icon = "⏳"; st_label = f"{pct}%"
+            else:
+                st_bg = "#fef2f2"; st_border = "#fca5a5"
+                st_txt = "#991b1b"; st_icon = "🔴"; st_label = f"0/{nb_prevu}"
+
+            total_prevu   += nb_prevu
+            total_realise += realise
+
+            row_cols = st.columns([2.2, 0.7, 0.8, 0.6, 1.6, 1.3, 0.8, 1.4])
+            with row_cols[0]:
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px 12px;font-size:.85rem;"
+                    f"font-weight:700;color:#0f172a'>{type_icon} {pt['label']}</div>",
+                    unsafe_allow_html=True)
+            with row_cols[1]:
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px;font-size:.78rem;"
+                    f"color:#475569;text-align:center'>{pt.get('type', '—')}</div>",
+                    unsafe_allow_html=True)
+            with row_cols[2]:
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px;font-size:.78rem;"
+                    f"color:#475569;text-align:center'>{rc or '—'}</div>",
+                    unsafe_allow_html=True)
+            with row_cols[3]:
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px;text-align:center'>"
+                    f"<span style='background:{risk_col}22;color:{risk_col};"
+                    f"border:1px solid {risk_col}55;border-radius:6px;"
+                    f"padding:2px 4px;font-size:.68rem;font-weight:700'>Nv.{risk_val}</span></div>",
+                    unsafe_allow_html=True)
+            with row_cols[4]:
+                badge = (
+                    " <span style='background:#dbeafe;color:#1e40af;"
+                    "border-radius:4px;padding:1px 4px;font-size:.58rem'>▲ classe</span>"
+                    if max_cls > 0 else "")
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px;font-size:.72rem;"
+                    f"color:#475569;text-align:center'>{freq_label}{badge}</div>",
+                    unsafe_allow_html=True)
+            with row_cols[5]:
+                st.number_input(
+                    "Prévu", min_value=0, max_value=100,
+                    value=nb_prevu, step=1, key=sess_key,
+                    label_visibility="collapsed", on_change=_persist_overrides)
+            with row_cols[6]:
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:6px;padding:8px;font-size:1rem;"
+                    f"font-weight:800;color:#0f172a;text-align:center'>{realise}</div>",
+                    unsafe_allow_html=True)
+            with row_cols[7]:
+                st.markdown(
+                    f"<div style='background:{st_bg};border:1px solid {st_border};"
+                    f"border-radius:8px;padding:8px;text-align:center;"
+                    f"font-size:.78rem;font-weight:700;color:{st_txt}'>"
+                    f"{st_icon} {st_label}</div>",
+                    unsafe_allow_html=True)
+
         st.divider()
+        taux     = int(total_realise / total_prevu * 100) if total_prevu > 0 else 0
+        taux_col = "#22c55e" if taux >= 100 else "#f59e0b" if taux >= 50 else "#ef4444"
+        st.markdown(
+            f"<div style='background:#1e293b;border-radius:10px;padding:12px 16px;"
+            f"display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>"
+            f"<div style='font-size:.9rem;font-weight:800;color:#fff'>TOTAL SEMAINE</div>"
+            f"<div style='display:flex;gap:20px;align-items:center'>"
+            f"<div style='text-align:center'>"
+            f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Prévu</div>"
+            f"<div style='font-size:1.4rem;font-weight:900;color:#93c5fd'>{total_prevu}</div></div>"
+            f"<div style='text-align:center'>"
+            f"<div style='font-size:.65rem;color:#94a3b8;text-transform:uppercase'>Réalisé</div>"
+            f"<div style='font-size:1.4rem;font-weight:900;color:#86efac'>{total_realise}</div></div>"
+            f"<div style='background:rgba(255,255,255,.15);border-radius:8px;"
+            f"padding:8px 16px;font-size:1rem;font-weight:800;color:{taux_col}'>"
+            f"{taux}% réalisé</div>"
+            f"</div></div>",
+            unsafe_allow_html=True)
 
-        # ── Planning mensuel automatique ──────────────────────────────────────
-        st.markdown("#### 📅 Planning mensuel automatique")
-        st.caption(
-            "Répartition basée sur les contraintes max/classe/semaine définies ci-dessus. "
-            "**0 = aucun prélèvement** pour la classe concernée. "
-            "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
+    st.divider()
 
-        class_max_dict = {
-            cls: int(st.session_state.get(f"class_max_{cls}", 0))
-            for cls in all_classes
+    # ── Planning mensuel automatique ──────────────────────────────────────
+    st.markdown("#### 📅 Planning mensuel automatique")
+    st.caption(
+        "Répartition basée sur les contraintes max/classe/semaine définies ci-dessus. "
+        "**0 = aucun prélèvement** pour la classe concernée. "
+        "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
+
+    class_max_dict = {
+        cls: int(st.session_state.get(f"class_max_{cls}", 0))
+        for cls in all_classes
+    }
+
+    monthly_plan = _compute_monthly_planning(
+        _ch_year, _ch_month,
+        class_max_dict,
+        _ch_holidays)
+
+    import calendar as _cal_pm
+    _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
+    _pm_start    = date_type(_ch_year, _ch_month, 1)
+    _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
+    cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
+    pm_mondays   = []
+    while cur_pm <= _pm_end:
+        pm_mondays.append(cur_pm)
+        cur_pm += timedelta(weeks=1)
+
+    if "pm_selected_day" not in st.session_state:
+        st.session_state["pm_selected_day"] = None
+
+    rcp_pm = {
+        "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+        "4": "#f97316", "5": "#ef4444",
+    }
+
+    def _generate_pdf_etiquettes(tasks, date_obj_or_list):
+        """
+        Génère le PDF d'étiquettes.
+        - date_obj_or_list peut être une date unique (un jour)
+          ou une liste de tuples [(date, [tasks]), ...] pour l'impression semaine.
+        Retourne les bytes du PDF.
+        """
+        import io as _io
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units     import cm as rl_cm
+        from reportlab.lib           import colors as rlc
+        from reportlab.platypus      import (
+            SimpleDocTemplate, Table, TableStyle,
+            Paragraph, HRFlowable, Spacer)
+        from reportlab.lib.styles    import ParagraphStyle
+        from reportlab.lib.enums     import TA_RIGHT
+
+        _RISK_COLORS_ETQ = {
+            "1": "#22c55e", "2": "#84cc16",
+            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
         }
+        W_ETQ  = 4.5  * rl_cm
+        H_ETQ  = 3.2  * rl_cm
+        N_COLS = 4
+        GAP    = 0.25 * rl_cm
+        MARGIN = 0.7  * rl_cm
 
-        monthly_plan = _compute_monthly_planning(
-            _ch_year, _ch_month,
-            class_max_dict,
-            _ch_holidays)
+        buf     = _io.BytesIO()
+        RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
 
-        import calendar as _cal_pm
-        _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
-        _pm_start    = date_type(_ch_year, _ch_month, 1)
-        _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
-        cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
-        pm_mondays   = []
-        while cur_pm <= _pm_end:
-            pm_mondays.append(cur_pm)
-            cur_pm += timedelta(weeks=1)
+        s_titre   = ParagraphStyle("et_t", fontName="Helvetica-Bold",
+                                   fontSize=7.5, leading=9, spaceAfter=2,
+                                   textColor=rlc.HexColor("#0f172a"))
+        s_lbl     = ParagraphStyle("et_l", fontName="Helvetica",
+                                   fontSize=5.5, leading=7,
+                                   textColor=rlc.HexColor("#64748b"))
+        s_date    = ParagraphStyle("et_d", fontName="Helvetica-Bold",
+                                   fontSize=9, leading=10,
+                                   textColor=rlc.HexColor("#1e40af"))
+        s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
+                                   fontSize=5, leading=6,
+                                   textColor=rlc.HexColor("#94a3b8"),
+                                   alignment=TA_RIGHT)
+        s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
+                                   fontSize=6, leading=7,
+                                   textColor=rlc.HexColor("#854d0e"),
+                                   backColor=rlc.HexColor("#fef9c3"),
+                                   spaceAfter=2)
+        s_val     = ParagraphStyle("et_v", fontName="Helvetica-Bold",
+                                   fontSize=7.5, leading=9,
+                                   textColor=rlc.HexColor("#0f172a"))
+        s_phdr    = ParagraphStyle("et_h", fontName="Helvetica-Bold",
+                                   fontSize=8,
+                                   textColor=rlc.HexColor("#1e40af"),
+                                   spaceAfter=5)
+        s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
+                                   fontSize=10, leading=12,
+                                   textColor=rlc.HexColor("#ffffff"),
+                                   backColor=rlc.HexColor("#1e40af"),
+                                   spaceBefore=8, spaceAfter=6)
 
-        if "pm_selected_day" not in st.session_state:
-            st.session_state["pm_selected_day"] = None
+        # Détermine si on est en mode "semaine" (liste de tuples) ou "jour" (date + tasks)
+        if isinstance(date_obj_or_list, list):
+            # Mode semaine : [(date, [tasks]), ...]
+            days_data = date_obj_or_list
+            is_week   = True
+            total_n   = sum(len(t) for _, t in days_data)
+            doc_title = f"Étiquettes semaine — {days_data[0][0].strftime('%d/%m')} → {days_data[-1][0].strftime('%d/%m/%Y')}"
+        else:
+            days_data = [(date_obj_or_list, tasks)]
+            is_week   = False
+            day_lbl   = f"{JOURS_FR_LONG[date_obj_or_list.weekday()]} {date_obj_or_list.strftime('%d/%m/%Y')}"
+            total_n   = len(tasks)
+            doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
 
-        rcp_pm = {
-            "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-            "4": "#f97316", "5": "#ef4444",
-        }
+        doc = SimpleDocTemplate(
+            buf, pagesize=A4,
+            leftMargin=MARGIN, rightMargin=MARGIN,
+            topMargin=MARGIN,  bottomMargin=MARGIN,
+            title=doc_title)
 
-        def _generate_pdf_etiquettes(tasks, date_obj):
-            """Génère le PDF d'étiquettes et retourne les bytes."""
-            import io as _io
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.units     import cm as rl_cm
-            from reportlab.lib           import colors as rlc
-            from reportlab.platypus      import (
-                SimpleDocTemplate, Table, TableStyle,
-                Paragraph, HRFlowable)
-            from reportlab.lib.styles    import ParagraphStyle
-            from reportlab.lib.enums     import TA_RIGHT
+        def _build_cell(task, d_obj):
+            rv      = str(task.get("risk", ""))
+            rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+            lv      = task.get("label", "—")
+            dv      = d_obj.strftime("%d/%m/%Y")
+            W_INNER = W_ETQ - 0.55 * rl_cm
+            _pt_data = next(
+                (p for p in st.session_state.points
+                 if p.get("label") == lv), None)
 
-            _RISK_COLORS_ETQ = {
-                "1": "#22c55e", "2": "#84cc16",
-                "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
-            }
-            W_ETQ  = 4.5  * rl_cm
-            H_ETQ  = 3.2  * rl_cm
-            N_COLS = 4
-            GAP    = 0.25 * rl_cm
-            MARGIN = 0.7  * rl_cm
+            qr_flowable = ""
+            if _pt_data:
+                try:
+                    from reportlab.platypus import Image as RLImage
+                    _qr_bytes = _make_qr_bytes(_qr_payload(_pt_data))
+                    _qr_buf   = BytesIO(_qr_bytes)
+                    _qr_img   = RLImage(_qr_buf, width=1.1*rl_cm, height=1.1*rl_cm)
+                    qr_flowable = _qr_img
+                except Exception:
+                    qr_flowable = ""
 
-            buf      = _io.BytesIO()
-            day_lbl  = f"{JOURS_FR_LONG[date_obj.weekday()]} {date_obj.strftime('%d/%m/%Y')}"
-            doc      = SimpleDocTemplate(
-                buf, pagesize=A4,
-                leftMargin=MARGIN, rightMargin=MARGIN,
-                topMargin=MARGIN,  bottomMargin=MARGIN,
-                title=f"Étiquettes {date_obj.strftime('%d/%m/%Y')}")
+            classea_rows = []
+            if task.get("room_class") == "A" and _pt_data:
+                iso = _pt_data.get("num_isolateur", "—") or "—"
+                pst = _pt_data.get("poste", "—") or "—"
+                classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
 
-            RISK_RL   = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
-            s_titre   = ParagraphStyle("et_t", fontName="Helvetica-Bold",
-                                       fontSize=7.5, leading=9, spaceAfter=2,
-                                       textColor=rlc.HexColor("#0f172a"))
-            s_lbl     = ParagraphStyle("et_l", fontName="Helvetica",
-                                       fontSize=5.5, leading=7,
-                                       textColor=rlc.HexColor("#64748b"))
-            s_date    = ParagraphStyle("et_d", fontName="Helvetica-Bold",
-                                       fontSize=9, leading=10,
-                                       textColor=rlc.HexColor("#1e40af"))
-            s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
-                                       fontSize=5, leading=6,
-                                       textColor=rlc.HexColor("#94a3b8"),
-                                       alignment=TA_RIGHT)
-            s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
-                                       fontSize=6, leading=7,
-                                       textColor=rlc.HexColor("#854d0e"),
-                                       backColor=rlc.HexColor("#fef9c3"),
-                                       spaceAfter=2)
-            s_val     = ParagraphStyle("et_v", fontName="Helvetica-Bold",
-                                       fontSize=7.5, leading=9,
-                                       textColor=rlc.HexColor("#0f172a"))
-            s_phdr    = ParagraphStyle("et_h", fontName="Helvetica-Bold",
-                                       fontSize=8,
-                                       textColor=rlc.HexColor("#1e40af"),
-                                       spaceAfter=5)
+            W_TEXT = W_INNER - 1.2 * rl_cm
+            W_QR   = 1.2 * rl_cm
+            left_tbl = Table([
+                [Paragraph(lv, s_titre)],
+                [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
+                *classea_rows,
+                [Paragraph("📅 Date", s_lbl)],
+                [Paragraph(dv, s_date)],
+                [Paragraph("👤 Préleveur :", s_lbl)],
+                [Paragraph("", s_val)],
+                [Paragraph("URC — MicroSurveillance", s_logo)],
+            ], colWidths=[W_TEXT])
+            left_tbl.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING",    (0, -1), (0, -1), 4),
+            ]))
 
-            def _build_cell(task, d_obj):
-                rv       = str(task.get("risk", ""))
-                rc_etiq  = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
-                lv       = task.get("label", "—")
-                dv       = d_obj.strftime("%d/%m/%Y")
-                W_INNER  = W_ETQ - 0.55 * rl_cm
-                _pt_data = next(
-                    (p for p in st.session_state.points
-                     if p.get("label") == lv), None)
-                classea_rows = []
-                if task.get("room_class") == "A" and _pt_data:
-                    iso = _pt_data.get("num_isolateur", "—") or "—"
-                    pst = _pt_data.get("poste", "—") or "—"
-                    classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
-                inner = Table([
-                    [Paragraph(lv, s_titre)],
-                    [HRFlowable(width=W_INNER, thickness=0.6,
-                                color=rc_etiq, spaceAfter=2)],
-                    *classea_rows,
-                    [Paragraph("📅 Date", s_lbl)],
-                    [Paragraph(dv, s_date)],
-                    [Paragraph("👤 Préleveur :", s_lbl)],
-                    [Paragraph("", s_val)],
-                    [Paragraph("URC — MicroSurveillance", s_logo)],
-                ], colWidths=[W_INNER])
+            if qr_flowable:
+                inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
                 inner.setStyle(TableStyle([
-                    ("LEFTPADDING",   (0,0),(-1,-1), 0),
-                    ("RIGHTPADDING",  (0,0),(-1,-1), 0),
-                    ("TOPPADDING",    (0,0),(-1,-1), 0),
-                    ("BOTTOMPADDING", (0,0),(-1,-1), 1),
-                    ("TOPPADDING",    (0,-1),(0,-1), 4),
+                    ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
                 ]))
-                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-                outer.setStyle(TableStyle([
-                    ("BOX",            (0,0),(0,0), 1.2, rc_etiq),
-                    ("ROUNDEDCORNERS", (0,0),(0,0), [5]),
-                    ("LINEAFTER",      (0,0),(0,0), 5.5, rc_etiq),
-                    ("LEFTPADDING",    (0,0),(0,0), 5),
-                    ("RIGHTPADDING",   (0,0),(0,0), 10),
-                    ("TOPPADDING",     (0,0),(0,0), 5),
-                    ("BOTTOMPADDING",  (0,0),(0,0), 4),
-                    ("VALIGN",         (0,0),(0,0), "TOP"),
-                    ("BACKGROUND",     (0,0),(0,0), rlc.white),
-                ]))
-                return outer
+            else:
+                inner = left_tbl
 
+            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+            outer.setStyle(TableStyle([
+                ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
+                ("LEFTPADDING",    (0, 0), (0, 0), 5),
+                ("RIGHTPADDING",   (0, 0), (0, 0), 4),
+                ("TOPPADDING",     (0, 0), (0, 0), 5),
+                ("BOTTOMPADDING",  (0, 0), (0, 0), 4),
+                ("VALIGN",         (0, 0), (0, 0), "TOP"),
+                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
+            ]))
+            return outer
+
+        # ── Construction du document ──────────────────────────────────────
+        story = []
+
+        if is_week:
+            story.append(Paragraph(
+                f"Étiquettes semaine — "
+                f"{days_data[0][0].strftime('%d/%m')} → {days_data[-1][0].strftime('%d/%m/%Y')} — "
+                f"{total_n} étiquette{'s' if total_n > 1 else ''} — 45×32 mm · 4 col.",
+                s_phdr))
+        else:
+            story.append(Paragraph(
+                f"Étiquettes — {day_lbl} — "
+                f"{total_n} étiquette{'s' if total_n > 1 else ''} — 45×32 mm · 4 col.",
+                s_phdr))
+
+        for day_date, day_tasks in days_data:
+            if not day_tasks:
+                continue
+
+            if is_week:
+                # Séparateur jour en couleur
+                day_label_str = f"  {JOURS_FR_LONG[day_date.weekday()]} {day_date.strftime('%d/%m/%Y')}  — {len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}"
+                story.append(Paragraph(day_label_str, s_day_sep))
+
+            # Grille d'étiquettes pour ce jour
             rows_etiq, row_buf = [], []
-            for _task in tasks:
-                row_buf.append(_build_cell(_task, date_obj))
+            for _task in day_tasks:
+                row_buf.append(_build_cell(_task, day_date))
                 if len(row_buf) == N_COLS:
                     rows_etiq.append(row_buf)
                     row_buf = []
@@ -4071,41 +4514,47 @@ if active == "planning":
                     row_buf.append("")
                 rows_etiq.append(row_buf)
 
-            main_tbl = Table(
-                rows_etiq,
-                colWidths=[W_ETQ] * N_COLS,
-                rowHeights=[H_ETQ] * len(rows_etiq))
-            main_tbl.setStyle(TableStyle([
-                ("LEFTPADDING",   (0,0),(-1,-1), GAP/2),
-                ("RIGHTPADDING",  (0,0),(-1,-1), GAP/2),
-                ("TOPPADDING",    (0,0),(-1,-1), GAP/2),
-                ("BOTTOMPADDING", (0,0),(-1,-1), GAP/2),
-                ("VALIGN",        (0,0),(-1,-1), "TOP"),
-            ]))
-            n = len(tasks)
-            doc.build([
-                Paragraph(
-                    f"Étiquettes — {day_lbl} — "
-                    f"{n} étiquette{'s' if n > 1 else ''} — "
-                    f"45×32 mm · 4 col.", s_phdr),
-                main_tbl,
-            ])
-            buf.seek(0)
-            return buf.getvalue()
+            if rows_etiq:
+                main_tbl = Table(
+                    rows_etiq,
+                    colWidths=[W_ETQ] * N_COLS,
+                    rowHeights=[H_ETQ] * len(rows_etiq))
+                main_tbl.setStyle(TableStyle([
+                    ("LEFTPADDING",   (0, 0), (-1, -1), GAP / 2),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), GAP / 2),
+                    ("TOPPADDING",    (0, 0), (-1, -1), GAP / 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), GAP / 2),
+                    ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                ]))
+                story.append(main_tbl)
 
-        # ── Rendu du calendrier semaine par semaine ───────────────────────────
-        for week_idx, week_monday in enumerate(pm_mondays):
-            wd_week = [
-                week_monday + timedelta(days=i)
-                for i in range(5)
-                if (week_monday + timedelta(days=i)) not in _ch_holidays
-            ]
-            if not wd_week:
-                continue
+            # Saut de ligne entre les jours (sauf dernier)
+            if is_week:
+                story.append(Spacer(1, 0.4 * rl_cm))
 
-            _we_end    = week_monday + timedelta(days=6)
-            _total_sem = sum(len(monthly_plan.get(wd, [])) for wd in wd_week)
+        doc.build(story)
+        buf.seek(0)
+        return buf.getvalue()
 
+    # ── Rendu du calendrier semaine par semaine ───────────────────────────
+    for week_idx, week_monday in enumerate(pm_mondays):
+        wd_week = [
+            week_monday + timedelta(days=i)
+            for i in range(5)
+            if (week_monday + timedelta(days=i)) not in _ch_holidays
+        ]
+        if not wd_week:
+            continue
+
+        _we_end    = week_monday + timedelta(days=6)
+        _total_sem = sum(len(monthly_plan.get(wd, [])) for wd in wd_week)
+
+        # ── En-tête de semaine + bouton impression semaine ────────────────
+        _pdf_week_key   = f"pdf_week_{week_monday.isoformat()}"
+        _pdf_week_ready = st.session_state.get(_pdf_week_key)
+
+        hdr_c1, hdr_c2, hdr_c3 = st.columns([4, 2, 1])
+        with hdr_c1:
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
                 f"display:flex;justify-content:space-between;align-items:center;"
@@ -4118,388 +4567,402 @@ if active == "planning":
                 f"📋 {_total_sem} prélèv. planifiés</span>"
                 f"</div>",
                 unsafe_allow_html=True)
-
-            _day_cols = st.columns(len(wd_week))
-            for di, wd in enumerate(wd_week):
-                taches_j   = monthly_plan.get(wd, [])
-                prevu_j    = len(taches_j)
-                is_today_d = (wd == _today_dt)
-                is_past_d  = (wd < _today_dt)
-                is_other_m = (wd.month != _ch_month)
-                realise_j  = sum(
-                    1 for p in st.session_state.prelevements
-                    if p.get("date") and not p.get("archived", False)
-                    and datetime.fromisoformat(p["date"]).date() == wd)
-                j2_j = [
-                    s for s in st.session_state.schedules
-                    if s["when"] == "J2"
-                    and datetime.fromisoformat(s["due_date"]).date() == wd
-                ]
-                j7_j = [
-                    s for s in st.session_state.schedules
-                    if s["when"] == "J7"
-                    and datetime.fromisoformat(s["due_date"]).date() == wd
-                ]
-
-                bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
-                border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
-                jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
-                op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
-
-                if realise_j >= prevu_j and prevu_j > 0:
-                    stat_bg = "#f0fdf4"; stat_col = "#166534"; stat_lbl = "✅"
-                elif realise_j > 0:
-                    stat_bg = "#fffbeb"; stat_col = "#92400e"
-                    stat_lbl = f"⏳{realise_j}/{prevu_j}"
-                elif prevu_j > 0:
-                    stat_bg = "#fef2f2"; stat_col = "#991b1b"
-                    stat_lbl = f"🔴{prevu_j}"
-                else:
-                    stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
-
-                pts_html = ""
-                for t in taches_j[:5]:
-                    _c  = rcp_pm.get(str(t["risk"]), "#94a3b8")
-                    _ic = "💨" if t["type"] == "Air" else "🧴"
-                    _lb = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
-                    pts_html += (
-                        f"<div style='border-left:2px solid {_c};padding:1px 5px;"
-                        f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
-                if len(taches_j) > 5:
-                    pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
-
-                lect_html = ""
-                if j2_j:
-                    lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
-                if j7_j:
-                    lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
-
-                autre_mois_badge = (
-                    f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>"
-                    f"{wd.strftime('%b')}</div>"
-                    if is_other_m else "")
-
-                is_selected = (st.session_state.get("pm_selected_day") == wd)
-                card_html = (
-                    f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
-                    f"border:{'2.5px solid #7c3aed' if is_selected else border_d};"
-                    f"border-radius:10px;padding:8px 6px;opacity:{op_d};min-height:100px'>"
-                    f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
-                    f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
-                    f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
-                    f"{wd.strftime('%d/%m')}</div>"
-                    f"{autre_mois_badge}"
-                    f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
-                    f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
-                    f"margin-bottom:4px'>{stat_lbl}</div>"
-                    f"{pts_html}{lect_html}</div>")
-
-                _pdf_key  = f"pdf_quick_{wd.isoformat()}"
-                _pdf_ready = st.session_state.get(_pdf_key)
-
-                with _day_cols[di]:
-                    st.markdown(card_html, unsafe_allow_html=True)
-
-                    # ── Boutons Détail + Imprimer ─────────────────────────────
-                    _bcol1, _bcol2 = st.columns([3, 1])
-                    with _bcol1:
-                        btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
-                        if st.button(
-                            btn_lbl,
-                            key=f"pm_btn_{wd.isoformat()}",
-                            use_container_width=True
-                        ):
-                            st.session_state["pm_selected_day"] = (
-                                None if is_selected else wd)
+        with hdr_c2:
+            st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
+            # Bouton impression semaine entière
+            if _pdf_week_ready:
+                st.download_button(
+                    label="⬇️ Étiquettes semaine",
+                    data=_pdf_week_ready["data"],
+                    file_name=_pdf_week_ready["fname"],
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key=f"wk_dl_{week_monday.isoformat()}",
+                    help="Télécharger les étiquettes de toute la semaine")
+            else:
+                if st.button(
+                    "🖨️ Imprimer la semaine",
+                    key=f"wk_print_{week_monday.isoformat()}",
+                    use_container_width=True,
+                    disabled=(_total_sem == 0),
+                    help="Générer les étiquettes de toute la semaine (regroupées par jour)"
+                ):
+                    try:
+                        # Construire la liste [(date, [tasks])] pour chaque jour ouvré
+                        week_days_data = [
+                            (wd, monthly_plan.get(wd, []))
+                            for wd in wd_week
+                            if monthly_plan.get(wd)
+                        ]
+                        if week_days_data:
+                            _pdf_bytes = _generate_pdf_etiquettes(week_days_data, week_days_data)
+                            _fname_wk  = f"etiquettes_sem{week_monday.isocalendar()[1]}_{week_monday.strftime('%Y%m%d')}.pdf"
+                            st.session_state[_pdf_week_key] = {
+                                "data":  _pdf_bytes,
+                                "fname": _fname_wk,
+                            }
                             st.rerun()
-
-                    with _bcol2:
-                        # Si le PDF est déjà généré → bouton téléchargement direct
-                        if _pdf_ready:
-                            st.download_button(
-                                label="⬇️",
-                                data=_pdf_ready["data"],
-                                file_name=_pdf_ready["fname"],
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key=f"pm_dl_{wd.isoformat()}",
-                                help=f"Télécharger {_pdf_ready['fname']}")
                         else:
-                            # Bouton imprimer → génère le PDF au clic
-                            if st.button(
-                                "🖨️",
-                                key=f"pm_print_{wd.isoformat()}",
-                                use_container_width=True,
-                                disabled=not prevu_j,
-                                help="Générer et télécharger les étiquettes"
-                            ):
-                                try:
-                                    _pdf_bytes = _generate_pdf_etiquettes(taches_j, wd)
-                                    st.session_state[_pdf_key] = {
-                                        "data":  _pdf_bytes,
-                                        "fname": f"etiquettes_{wd.strftime('%Y%m%d')}.pdf",
-                                    }
-                                    st.rerun()
-                                except ImportError:
-                                    st.error("❌ **ReportLab** non installé. "
-                                             "Ajoutez `reportlab` dans requirements.txt.")
-                                except Exception as _e:
-                                    st.error(f"Erreur PDF : {_e}")
+                            st.warning("Aucun prélèvement planifié cette semaine.")
+                    except ImportError:
+                        st.error("❌ **ReportLab** non installé. Ajoutez `reportlab` dans requirements.txt.")
+                    except Exception as _e:
+                        st.error(f"Erreur PDF semaine : {_e}")
+        with hdr_c3:
+            # Bouton réinitialiser le PDF semaine
+            if _pdf_week_ready:
+                st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
+                if st.button("🔄", key=f"wk_reset_{week_monday.isoformat()}",
+                             use_container_width=True, help="Regénérer le PDF"):
+                    del st.session_state[_pdf_week_key]
+                    st.rerun()
 
-        # ── Panel fixe bas de page : détail du jour sélectionné ──────────────
-        _sel = st.session_state.get("pm_selected_day")
-        if _sel:
-            taches_sel = monthly_plan.get(_sel, [])
-            j0r_sel = [
-                p for p in st.session_state.prelevements
+        _day_cols = st.columns(len(wd_week))
+        for di, wd in enumerate(wd_week):
+            taches_j   = monthly_plan.get(wd, [])
+            prevu_j    = len(taches_j)
+            is_today_d = (wd == _today_dt)
+            is_past_d  = (wd < _today_dt)
+            is_other_m = (wd.month != _ch_month)
+            realise_j  = sum(
+                1 for p in st.session_state.prelevements
                 if p.get("date") and not p.get("archived", False)
-                and datetime.fromisoformat(p["date"]).date() == _sel
-            ]
-            j2r_sel = [
+                and datetime.fromisoformat(p["date"]).date() == wd)
+            j2_j = [
                 s for s in st.session_state.schedules
                 if s["when"] == "J2"
-                and datetime.fromisoformat(s["due_date"]).date() == _sel
+                and datetime.fromisoformat(s["due_date"]).date() == wd
             ]
-            j7r_sel = [
+            j7_j = [
                 s for s in st.session_state.schedules
                 if s["when"] == "J7"
-                and datetime.fromisoformat(s["due_date"]).date() == _sel
+                and datetime.fromisoformat(s["due_date"]).date() == wd
             ]
-            _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
-            rcp_fix  = {
-                "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-                "4": "#f97316", "5": "#ef4444",
-            }
 
-            _cards = ""
-            for t in taches_sel:
-                _c  = rcp_fix.get(str(t["risk"]), "#94a3b8")
-                _ic = "💨" if t["type"] == "Air" else "🧴"
-                _dn = any(p.get("label") == t["label"] for p in j0r_sel)
-                _bg = "#f0fdf4" if _dn else "#fff"
-                _bd = "#86efac" if _dn else _c + "44"
-                _cards += (
-                    f"<div style='background:{_bg};border:1px solid {_bd};"
-                    f"border-left:3px solid {_c};border-radius:7px;"
-                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                    f"{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
-                    f"<div style='font-size:.63rem;color:#64748b'>"
-                    f"Cl.{t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
-            for s in j2r_sel:
-                _dn = s["status"] == "done"
-                _lt = not _dn and _sel < _today_dt
-                _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
-                _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
-                _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-                _cards += (
-                    f"<div style='background:{_bg};border:1px solid {_c}44;"
-                    f"border-left:3px solid {_c};border-radius:7px;"
-                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                    f"📖 J2 — {s['label'][:22]}</div>"
-                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
-                    f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-            for s in j7r_sel:
-                _dn = s["status"] == "done"
-                _lt = not _dn and _sel < _today_dt
-                _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
-                _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
-                _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-                _cards += (
-                    f"<div style='background:{_bg};border:1px solid {_c}44;"
-                    f"border-left:3px solid {_c};border-radius:7px;"
-                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                    f"📗 J7 — {s['label'][:22]}</div>"
-                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
-                    f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-            for p in j0r_sel:
-                _cards += (
-                    f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
-                    f"border-left:3px solid #7c3aed;border-radius:7px;"
-                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                    f"🧪 {p['label'][:22]}</div>"
-                    f"<div style='font-size:.63rem;color:#64748b'>"
-                    f"{p.get('gelose', '—')} · {p.get('operateur', '—') or '—'}</div></div>")
-            if not _cards:
-                _cards = (
-                    "<div style='color:#94a3b8;font-size:.82rem;"
-                    "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>")
+            bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
+            border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
+            jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
+            op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
 
-            _nb_t  = len(taches_sel)
-            _nb_j0 = len(j0r_sel)
-            _nb_j2 = len(j2r_sel)
-            _nb_j7 = len(j7r_sel)
-            _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
-            st.markdown(
-                "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
-                "background:linear-gradient(135deg,#0f172a,#1e293b);"
-                "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
-                "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
-                "<div style='display:flex;align-items:center;justify-content:space-between;"
-                "margin-bottom:8px'>"
-                f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
-                f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>"
-                f"{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
-                "<span style='font-size:.7rem;color:#475569;font-style:italic'>"
-                "Cliquez à nouveau sur le jour pour fermer</span>"
-                "</div>"
-                f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>"
-                f"{_cards}</div>"
-                "</div>"
-                "<div style='height:170px'></div>",
-                unsafe_allow_html=True)
-
-            st.divider()
-            st.markdown(
-                f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
-                f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
-                f"<div style='color:#fff;font-weight:800;font-size:1rem'>📋 {_day_lbl}</div>"
-                f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
-                f"{_nb_t} prélèv. planifiés · {_nb_j2} J2 · {_nb_j7} J7"
-                f"{'  · 🧪 ' + str(_nb_j0) + ' réalisé(s)' if j0r_sel else ''}"
-                f"</div></div>",
-                unsafe_allow_html=True)
-
-            # ── Activités du jour ─────────────────────────────────────────────
-            if j2r_sel or j7r_sel or j0r_sel:
-                with st.expander("📖 Lectures & réalisés du jour", expanded=False):
-                    act_cols = st.columns(3)
-                    ci = 0
-                    for s in j2r_sel:
-                        _dn = s["status"] == "done"
-                        _lt = not _dn and _sel < _today_dt
-                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
-                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
-                        with act_cols[ci % 3]:
-                            st.markdown(
-                                f"<div style='background:#fffbeb;border:1px solid {_c}44;"
-                                f"border-left:3px solid {_c};border-radius:7px;"
-                                f"padding:7px 10px;margin-bottom:6px'>"
-                                f"<div style='font-size:.78rem;font-weight:700'>📖 J2 — {s['label'][:24]}</div>"
-                                f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
-                                unsafe_allow_html=True)
-                        ci += 1
-                    for s in j7r_sel:
-                        _dn = s["status"] == "done"
-                        _lt = not _dn and _sel < _today_dt
-                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
-                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
-                        with act_cols[ci % 3]:
-                            st.markdown(
-                                f"<div style='background:#eff6ff;border:1px solid {_c}44;"
-                                f"border-left:3px solid {_c};border-radius:7px;"
-                                f"padding:7px 10px;margin-bottom:6px'>"
-                                f"<div style='font-size:.78rem;font-weight:700'>📗 J7 — {s['label'][:24]}</div>"
-                                f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
-                                unsafe_allow_html=True)
-                        ci += 1
-                    for p in j0r_sel:
-                        with act_cols[ci % 3]:
-                            st.markdown(
-                                f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
-                                f"border-left:3px solid #7c3aed;border-radius:7px;"
-                                f"padding:7px 10px;margin-bottom:6px'>"
-                                f"<div style='font-size:.78rem;font-weight:700'>🧪 {p['label'][:24]}</div>"
-                                f"<div style='font-size:.65rem;color:#64748b'>"
-                                f"{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>",
-                                unsafe_allow_html=True)
-                        ci += 1
-
-            # ── Sélection & génération étiquettes ────────────────────────────
-            if taches_sel:
-                st.markdown(
-                    "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
-                    "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
-                    "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
-                    "🏷️ Générer les étiquettes pour ce jour</span></div>",
-                    unsafe_allow_html=True)
-
-                col_sa, col_sn, _ = st.columns([1, 1, 4])
-                with col_sa:
-                    if st.button("☑️ Tout sélectionner",
-                                 key=f"etiq_all_{_sel.isoformat()}",
-                                 use_container_width=True):
-                        for _t in taches_sel:
-                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
-                        st.rerun()
-                with col_sn:
-                    if st.button("⬜ Tout désélectionner",
-                                 key=f"etiq_none_{_sel.isoformat()}",
-                                 use_container_width=True):
-                        for _t in taches_sel:
-                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
-                        st.rerun()
-
-                _chk_cols = st.columns(3)
-                _selected_tasks = []
-                for _ti, _t in enumerate(taches_sel):
-                    _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
-                    if _chk_key not in st.session_state:
-                        st.session_state[_chk_key] = True
-                    _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
-                    _ic = "💨" if _t["type"] == "Air" else "🧴"
-                    _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
-                    with _chk_cols[_ti % 3]:
-                        st.markdown(
-                            f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
-                            f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
-                            f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
-                            f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
-                            f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
-                            f"<span style='font-size:.6rem;color:#64748b'>"
-                            f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
-                            unsafe_allow_html=True)
-                        if st.checkbox("Inclure", value=st.session_state[_chk_key],
-                                       key=_chk_key, label_visibility="collapsed"):
-                            _selected_tasks.append(_t)
-
-                _n_sel_etiq = len(_selected_tasks)
-                st.markdown(
-                    f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
-                    f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
-                    unsafe_allow_html=True)
-
-                if _n_sel_etiq > 0:
-                    if st.button(
-                        f"📄 Générer {_n_sel_etiq} "
-                        f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
-                        use_container_width=True,
-                        key=f"etiq_gen_{_sel.isoformat()}",
-                        type="primary"
-                    ):
-                        try:
-                            _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
-                            _pdf_key_sel = f"pdf_quick_{_sel.isoformat()}"
-                            st.session_state[_pdf_key_sel] = {
-                                "data":  _pdf_bytes,
-                                "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
-                            }
-                            fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
-                            st.download_button(
-                                label=f"⬇️ Télécharger {fname_etiq}",
-                                data=_pdf_bytes,
-                                file_name=fname_etiq,
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key=f"etiq_dl_{_sel.isoformat()}")
-                            st.success(
-                                f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
-                                f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
-                        except ImportError:
-                            st.error("❌ **ReportLab** non installé.\n\n"
-                                     "Ajoutez `reportlab` dans **requirements.txt**.")
-                        except Exception as _e:
-                            st.error(f"Erreur génération PDF : {_e}")
-                            import traceback
-                            st.code(traceback.format_exc())
+            if realise_j >= prevu_j and prevu_j > 0:
+                stat_bg = "#f0fdf4"; stat_col = "#166534"; stat_lbl = "✅"
+            elif realise_j > 0:
+                stat_bg = "#fffbeb"; stat_col = "#92400e"
+                stat_lbl = f"⏳{realise_j}/{prevu_j}"
+            elif prevu_j > 0:
+                stat_bg = "#fef2f2"; stat_col = "#991b1b"
+                stat_lbl = f"🔴{prevu_j}"
             else:
-                st.info("Aucun prélèvement planifié ce jour.")
+                stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
+
+            pts_html = ""
+            for t in taches_j[:5]:
+                _c  = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                _ic = "💨" if t["type"] == "Air" else "🧴"
+                _lb = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                pts_html += (
+                    f"<div style='border-left:2px solid {_c};padding:1px 5px;"
+                    f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
+            if len(taches_j) > 5:
+                pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
+
+            lect_html = ""
+            if j2_j:
+                lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
+            if j7_j:
+                lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
+
+            autre_mois_badge = (
+                f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>"
+                f"{wd.strftime('%b')}</div>"
+                if is_other_m else "")
+
+            is_selected = (st.session_state.get("pm_selected_day") == wd)
+            card_html = (
+                f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
+                f"border:{'2.5px solid #7c3aed' if is_selected else border_d};"
+                f"border-radius:10px;padding:8px 6px;opacity:{op_d};min-height:100px'>"
+                f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
+                f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
+                f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
+                f"{wd.strftime('%d/%m')}</div>"
+                f"{autre_mois_badge}"
+                f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
+                f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
+                f"margin-bottom:4px'>{stat_lbl}</div>"
+                f"{pts_html}{lect_html}</div>")
+
+            _pdf_key   = f"pdf_quick_{wd.isoformat()}"
+            _pdf_ready = st.session_state.get(_pdf_key)
+
+            with _day_cols[di]:
+                st.markdown(card_html, unsafe_allow_html=True)
+
+                # ── Bouton Détail uniquement (impression remontée au niveau semaine) ──
+                btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                if st.button(
+                    btn_lbl,
+                    key=f"pm_btn_{wd.isoformat()}",
+                    use_container_width=True
+                ):
+                    st.session_state["pm_selected_day"] = (
+                        None if is_selected else wd)
+                    st.rerun()
+
+    # ── Panel fixe bas de page : détail du jour sélectionné ──────────────
+    _sel = st.session_state.get("pm_selected_day")
+    if _sel:
+        taches_sel = monthly_plan.get(_sel, [])
+        j0r_sel = [
+            p for p in st.session_state.prelevements
+            if p.get("date") and not p.get("archived", False)
+            and datetime.fromisoformat(p["date"]).date() == _sel
+        ]
+        j2r_sel = [
+            s for s in st.session_state.schedules
+            if s["when"] == "J2"
+            and datetime.fromisoformat(s["due_date"]).date() == _sel
+        ]
+        j7r_sel = [
+            s for s in st.session_state.schedules
+            if s["when"] == "J7"
+            and datetime.fromisoformat(s["due_date"]).date() == _sel
+        ]
+        _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+        rcp_fix  = {
+            "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+            "4": "#f97316", "5": "#ef4444",
+        }
+
+        _cards = ""
+        for t in taches_sel:
+            _c  = rcp_fix.get(str(t["risk"]), "#94a3b8")
+            _ic = "💨" if t["type"] == "Air" else "🧴"
+            _dn = any(p.get("label") == t["label"] for p in j0r_sel)
+            _bg = "#f0fdf4" if _dn else "#fff"
+            _bd = "#86efac" if _dn else _c + "44"
+            _cards += (
+                f"<div style='background:{_bg};border:1px solid {_bd};"
+                f"border-left:3px solid {_c};border-radius:7px;"
+                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                f"{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
+                f"<div style='font-size:.63rem;color:#64748b'>"
+                f"Cl.{t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
+        for s in j2r_sel:
+            _dn = s["status"] == "done"
+            _lt = not _dn and _sel < _today_dt
+            _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+            _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
+            _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+            _cards += (
+                f"<div style='background:{_bg};border:1px solid {_c}44;"
+                f"border-left:3px solid {_c};border-radius:7px;"
+                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                f"📖 J2 — {s['label'][:22]}</div>"
+                f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
+                f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+        for s in j7r_sel:
+            _dn = s["status"] == "done"
+            _lt = not _dn and _sel < _today_dt
+            _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+            _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
+            _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+            _cards += (
+                f"<div style='background:{_bg};border:1px solid {_c}44;"
+                f"border-left:3px solid {_c};border-radius:7px;"
+                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                f"📗 J7 — {s['label'][:22]}</div>"
+                f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
+                f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
+        for p in j0r_sel:
+            _cards += (
+                f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                f"border-left:3px solid #7c3aed;border-radius:7px;"
+                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                f"🧪 {p['label'][:22]}</div>"
+                f"<div style='font-size:.63rem;color:#64748b'>"
+                f"{p.get('gelose', '—')} · {p.get('operateur', '—') or '—'}</div></div>")
+        if not _cards:
+            _cards = (
+                "<div style='color:#94a3b8;font-size:.82rem;"
+                "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>")
+
+        _nb_t  = len(taches_sel)
+        _nb_j0 = len(j0r_sel)
+        _nb_j2 = len(j2r_sel)
+        _nb_j7 = len(j7r_sel)
+        _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
+        st.markdown(
+            "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
+            "background:linear-gradient(135deg,#0f172a,#1e293b);"
+            "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
+            "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
+            "<div style='display:flex;align-items:center;justify-content:space-between;"
+            "margin-bottom:8px'>"
+            f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
+            f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>"
+            f"{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
+            "<span style='font-size:.7rem;color:#475569;font-style:italic'>"
+            "Cliquez à nouveau sur le jour pour fermer</span>"
+            "</div>"
+            f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>"
+            f"{_cards}</div>"
+            "</div>"
+            "<div style='height:170px'></div>",
+            unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown(
+            f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
+            f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
+            f"<div style='color:#fff;font-weight:800;font-size:1rem'>📋 {_day_lbl}</div>"
+            f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
+            f"{_nb_t} prélèv. planifiés · {_nb_j2} J2 · {_nb_j7} J7"
+            f"{'  · 🧪 ' + str(_nb_j0) + ' réalisé(s)' if j0r_sel else ''}"
+            f"</div></div>",
+            unsafe_allow_html=True)
+
+        # ── Activités du jour ─────────────────────────────────────────────
+        if j2r_sel or j7r_sel or j0r_sel:
+            with st.expander("📖 Lectures & réalisés du jour", expanded=False):
+                act_cols = st.columns(3)
+                ci = 0
+                for s in j2r_sel:
+                    _dn = s["status"] == "done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                    _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                    with act_cols[ci % 3]:
+                        st.markdown(
+                            f"<div style='background:#fffbeb;border:1px solid {_c}44;"
+                            f"border-left:3px solid {_c};border-radius:7px;"
+                            f"padding:7px 10px;margin-bottom:6px'>"
+                            f"<div style='font-size:.78rem;font-weight:700'>📖 J2 — {s['label'][:24]}</div>"
+                            f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
+                            unsafe_allow_html=True)
+                    ci += 1
+                for s in j7r_sel:
+                    _dn = s["status"] == "done"
+                    _lt = not _dn and _sel < _today_dt
+                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                    _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                    with act_cols[ci % 3]:
+                        st.markdown(
+                            f"<div style='background:#eff6ff;border:1px solid {_c}44;"
+                            f"border-left:3px solid {_c};border-radius:7px;"
+                            f"padding:7px 10px;margin-bottom:6px'>"
+                            f"<div style='font-size:.78rem;font-weight:700'>📗 J7 — {s['label'][:24]}</div>"
+                            f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
+                            unsafe_allow_html=True)
+                    ci += 1
+                for p in j0r_sel:
+                    with act_cols[ci % 3]:
+                        st.markdown(
+                            f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                            f"border-left:3px solid #7c3aed;border-radius:7px;"
+                            f"padding:7px 10px;margin-bottom:6px'>"
+                            f"<div style='font-size:.78rem;font-weight:700'>🧪 {p['label'][:24]}</div>"
+                            f"<div style='font-size:.65rem;color:#64748b'>"
+                            f"{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>",
+                            unsafe_allow_html=True)
+                    ci += 1
+
+        # ── Sélection & génération étiquettes (jour sélectionné) ────────────────
+        if taches_sel:
+            st.markdown(
+                "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
+                "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
+                "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
+                "🏷️ Générer les étiquettes pour ce jour</span></div>",
+                unsafe_allow_html=True)
+
+            col_sa, col_sn, _ = st.columns([1, 1, 4])
+            with col_sa:
+                if st.button("☑️ Tout sélectionner",
+                             key=f"etiq_all_{_sel.isoformat()}",
+                             use_container_width=True):
+                    for _t in taches_sel:
+                        st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
+                    st.rerun()
+            with col_sn:
+                if st.button("⬜ Tout désélectionner",
+                             key=f"etiq_none_{_sel.isoformat()}",
+                             use_container_width=True):
+                    for _t in taches_sel:
+                        st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
+                    st.rerun()
+
+            _chk_cols = st.columns(3)
+            _selected_tasks = []
+            for _ti, _t in enumerate(taches_sel):
+                _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
+                if _chk_key not in st.session_state:
+                    st.session_state[_chk_key] = True
+                _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
+                _ic = "💨" if _t["type"] == "Air" else "🧴"
+                _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
+                with _chk_cols[_ti % 3]:
+                    st.markdown(
+                        f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
+                        f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
+                        f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
+                        f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
+                        f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
+                        f"<span style='font-size:.6rem;color:#64748b'>"
+                        f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
+                        unsafe_allow_html=True)
+                    if st.checkbox("Inclure", value=st.session_state[_chk_key],
+                                   key=_chk_key, label_visibility="collapsed"):
+                        _selected_tasks.append(_t)
+
+            _n_sel_etiq = len(_selected_tasks)
+            st.markdown(
+                f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
+                f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
+                unsafe_allow_html=True)
+
+            if _n_sel_etiq > 0:
+                if st.button(
+                    f"📄 Générer {_n_sel_etiq} "
+                    f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
+                    use_container_width=True,
+                    key=f"etiq_gen_{_sel.isoformat()}",
+                    type="primary"
+                ):
+                    try:
+                        _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
+                        _pdf_key_sel = f"pdf_quick_{_sel.isoformat()}"
+                        st.session_state[_pdf_key_sel] = {
+                            "data":  _pdf_bytes,
+                            "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
+                        }
+                        fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
+                        st.download_button(
+                            label=f"⬇️ Télécharger {fname_etiq}",
+                            data=_pdf_bytes,
+                            file_name=fname_etiq,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key=f"etiq_dl_{_sel.isoformat()}")
+                        st.success(
+                            f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
+                            f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
+                    except ImportError:
+                        st.error("❌ **ReportLab** non installé.\n\n"
+                                 "Ajoutez `reportlab` dans **requirements.txt**.")
+                    except Exception as _e:
+                        st.error(f"Erreur génération PDF : {_e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+        else:
+            st.info("Aucun prélèvement planifié ce jour.")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FIN du with plan_tab_charge — le bloc ci-dessous est au même niveau que lui
+# FIN du with plan_tab_charge
 # ─────────────────────────────────────────────────────────────────────────────
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -4532,27 +4995,35 @@ if active == "planning":
             from openpyxl.utils import get_column_letter
 
             wb = openpyxl.Workbook()
-            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
-            C_PURPLE_L = "F5F3FF"; C_YELLOW_L = "FFFBEB"; C_TEAL_L = "EFF6FF"
-            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"
-            C_PURPLE   = "7C3AED"; C_YELLOW = "D97706"
-            C_TEAL     = "0369A1"; C_GREEN  = "16A34A"
 
-            thin   = Side(style="thin", color="E2E8F0")
-            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+            # ── Palette couleurs ──────────────────────────────────────────
+            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
+            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L   = "F1F5F9"
+            C_GREY_HDR = "334155"; C_GREEN  = "16A34A"; C_RED      = "DC2626"
+            C_AMBER    = "D97706"
+
+            thin   = Side(style="thin",   color="CBD5E1")
+            medium = Side(style="medium", color="94A3B8")
 
             def fill(h):
                 return PatternFill("solid", fgColor=h)
 
-            def font(size=10, bold=False, color=C_TEXT):
+            def font(size=9, bold=False, color=C_TEXT):
                 return Font(name="Arial", size=size, bold=bold, color=color)
 
-            def al_c():
-                return Alignment(horizontal="center", vertical="center", wrap_text=True)
+            def al_c(wrap=False):
+                return Alignment(horizontal="center", vertical="center", wrap_text=wrap)
 
-            def al_l():
-                return Alignment(horizontal="left", vertical="center", wrap_text=True)
+            def al_l(wrap=False):
+                return Alignment(horizontal="left", vertical="center", wrap_text=wrap)
 
+            def border_all():
+                return Border(left=thin, right=thin, top=thin, bottom=thin)
+
+            def border_medium():
+                return Border(left=medium, right=medium, top=medium, bottom=medium)
+
+            # ── Plage de dates ────────────────────────────────────────────
             exp_today = _today_dt
             if exp_scope == "Mois en cours":
                 import calendar as cal_module
@@ -4587,44 +5058,273 @@ if active == "planning":
             if only_working:
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
-            ws1 = wb.active
-            ws1.title = "Planning"
-            ws1.sheet_view.showGridLines = False
+            # ══════════════════════════════════════════════════════════════
+            # FEUILLE 1 — VUE MATRICIELLE : Points × Jours de semaine
+            # Lignes = points de prélèvement
+            # Colonnes = jours de la semaine (Lun→Ven) avec date
+            # Cellule = "X" si prévu ce jour-là, fond coloré si réalisé
+            # ══════════════════════════════════════════════════════════════
+            ws_matrix = wb.active
+            ws_matrix.title = "Planning Semaine"
+            ws_matrix.sheet_view.showGridLines = False
 
-            ws1.merge_cells("A1:I1")
-            ws1["A1"] = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
-            ws1["A1"].font      = Font(name="Arial", size=14, bold=True, color=C_WHITE)
-            ws1["A1"].fill      = fill(C_BLUE)
-            ws1["A1"].alignment = al_c()
-            ws1.row_dimensions[1].height = 30
+            # Regrouper les dates par semaine (lundi)
+            from collections import OrderedDict
+            weeks_map = OrderedDict()
+            for d in exp_dates:
+                ws_key = d - timedelta(days=d.weekday())  # lundi de la semaine
+                if ws_key not in weeks_map:
+                    weeks_map[ws_key] = []
+                weeks_map[ws_key].append(d)
 
-            ws1.merge_cells("A2:I2")
-            ws1["A2"] = (
-                f"Généré le {exp_today.strftime('%d/%m/%Y')} — Jours ouvrés uniquement"
-                if only_working
-                else f"Généré le {exp_today.strftime('%d/%m/%Y')}")
-            ws1["A2"].font      = Font(name="Arial", size=9, color="475569")
-            ws1["A2"].fill      = fill(C_BLUE_L)
-            ws1["A2"].alignment = al_c()
-            ws1.row_dimensions[2].height = 18
+            # Construire le planning pour chaque semaine
+            # On a besoin de class_max_dict (déjà calculé plus haut dans le scope)
+            # et de monthly_plan par mois → on recalcule si nécessaire
 
-            headers    = ["Date", "Jour", "Férié", "Type",
-                          "Point de prélèvement", "Classe", "Gélose",
-                          "Opérateur", "Statut"]
-            col_widths = [14, 12, 10, 22, 32, 10, 28, 25, 14]
-            for ci, (h, w) in enumerate(zip(headers, col_widths), start=1):
-                c = ws1.cell(row=4, column=ci, value=h)
-                c.font      = Font(name="Arial", size=10, bold=True, color=C_WHITE)
-                c.fill      = fill(C_BLUE2)
+            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+            pts_all = st.session_state.points
+
+            # Titre général
+            n_weeks = len(weeks_map)
+            # Largeur totale = 1 col label + 1 col classe + 1 col type + (5 jours × n_semaines)
+            FIXED_COLS = 3  # Label | Classe | Type
+            DAYS_PER_WEEK = 5
+            total_cols = FIXED_COLS + DAYS_PER_WEEK * n_weeks
+
+            ws_matrix.merge_cells(start_row=1, start_column=1,
+                                  end_row=1, end_column=total_cols)
+            ws_matrix.cell(1, 1).value     = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
+            ws_matrix.cell(1, 1).font      = Font(name="Arial", size=13, bold=True, color=C_WHITE)
+            ws_matrix.cell(1, 1).fill      = fill(C_BLUE)
+            ws_matrix.cell(1, 1).alignment = al_c()
+            ws_matrix.row_dimensions[1].height = 28
+
+            ws_matrix.merge_cells(start_row=2, start_column=1,
+                                  end_row=2, end_column=total_cols)
+            ws_matrix.cell(2, 1).value     = (
+                f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
+                f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'} — "
+                f"X = prélèvement prévu · 🟢 = réalisé")
+            ws_matrix.cell(2, 1).font      = Font(name="Arial", size=8, color="475569")
+            ws_matrix.cell(2, 1).fill      = fill(C_BLUE_L)
+            ws_matrix.cell(2, 1).alignment = al_c()
+            ws_matrix.row_dimensions[2].height = 16
+
+            # ── Ligne 3 : en-têtes semaines (fusionné sur 5 jours) ────────
+            ws_matrix.row_dimensions[3].height = 20
+            for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
+                col_start = FIXED_COLS + 1 + wi * DAYS_PER_WEEK
+                col_end   = col_start + DAYS_PER_WEEK - 1
+                ws_matrix.merge_cells(start_row=3, start_column=col_start,
+                                      end_row=3,   end_column=col_end)
+                we_key = ws_key + timedelta(days=4)
+                c = ws_matrix.cell(3, col_start)
+                c.value     = f"Sem. {ws_key.isocalendar()[1]}  {ws_key.strftime('%d/%m')} → {we_key.strftime('%d/%m/%Y')}"
+                c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
+                c.fill      = fill(C_GREY_HDR)
                 c.alignment = al_c()
-                c.border    = border
-                ws1.column_dimensions[get_column_letter(ci)].width = w
-            ws1.row_dimensions[4].height = 22
-            ws1.freeze_panes = "A5"
+                c.border    = border_medium()
 
-            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi",
-                        "Vendredi", "Samedi", "Dimanche"]
-            row = 5
+            # ── Ligne 4 : en-têtes colonnes fixes ─────────────────────────
+            ws_matrix.row_dimensions[4].height = 34
+            fixed_headers = ["Point de prélèvement", "Classe", "Type"]
+            fixed_widths  = [32, 9, 10]
+            for ci, (h, w) in enumerate(zip(fixed_headers, fixed_widths), start=1):
+                c = ws_matrix.cell(4, ci)
+                c.value     = h
+                c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
+                c.fill      = fill(C_BLUE2)
+                c.alignment = al_c(wrap=True)
+                c.border    = border_all()
+                ws_matrix.column_dimensions[get_column_letter(ci)].width = w
+
+            # ── Ligne 4 : en-têtes jours (Lun, Mar… + date) ──────────────
+            for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
+                # Construire un mapping jour→date pour cette semaine
+                day_date_map = {}
+                for d in ws_days:
+                    day_date_map[d.weekday()] = d  # weekday: 0=Lun … 4=Ven
+
+                for di in range(DAYS_PER_WEEK):
+                    col = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                    d_for_col = day_date_map.get(di)
+                    if d_for_col:
+                        label = f"{JOURS_XL[di][:3]}\n{d_for_col.strftime('%d/%m')}"
+                        is_today_col = (d_for_col == exp_today)
+                        bg_col = "DBEAFE" if is_today_col else "EFF6FF"
+                        fc_col = "1E40AF"
+                    else:
+                        label  = f"{JOURS_XL[di][:3]}\n—"
+                        bg_col = "F1F5F9"
+                        fc_col = "94A3B8"
+                    c = ws_matrix.cell(4, col)
+                    c.value     = label
+                    c.font      = Font(name="Arial", size=8, bold=True, color=fc_col)
+                    c.fill      = fill(bg_col)
+                    c.alignment = al_c(wrap=True)
+                    c.border    = border_all()
+                    ws_matrix.column_dimensions[get_column_letter(col)].width = 8
+
+            ws_matrix.freeze_panes = "D5"
+
+            # ── Lignes données : un point par ligne ───────────────────────
+            RISK_BG = {
+                "1": "DCFCE7", "2": "D9F99D",
+                "3": "FEF9C3", "4": "FFEDD5", "5": "FEE2E2",
+            }
+            RISK_FC = {
+                "1": "166534", "2": "365314",
+                "3": "713F12", "4": "7C2D12", "5": "7F1D1D",
+            }
+
+            data_row = 5
+            for pt_idx, pt in enumerate(pts_all):
+                rc       = (pt.get('room_class') or '').strip()
+                rv       = str(pt.get('risk_level', ''))
+                type_lbl = pt.get('type', '—')
+                row_bg   = "FFFFFF" if pt_idx % 2 == 0 else "F8FAFC"
+
+                ws_matrix.row_dimensions[data_row].height = 18
+
+                # Col 1 : label point
+                c = ws_matrix.cell(data_row, 1)
+                c.value     = ("💨 " if type_lbl == "Air" else "🧴 ") + pt['label']
+                c.font      = Font(name="Arial", size=9, bold=True, color=C_TEXT)
+                c.fill      = fill(RISK_BG.get(rv, row_bg))
+                c.alignment = al_l()
+                c.border    = border_all()
+
+                # Col 2 : classe
+                c = ws_matrix.cell(data_row, 2)
+                c.value     = rc or "—"
+                c.font      = Font(name="Arial", size=9, bold=True,
+                                   color=RISK_FC.get(rv, C_TEXT))
+                c.fill      = fill(RISK_BG.get(rv, row_bg))
+                c.alignment = al_c()
+                c.border    = border_all()
+
+                # Col 3 : type
+                c = ws_matrix.cell(data_row, 3)
+                c.value     = type_lbl
+                c.font      = font(9, color=C_TEXT)
+                c.fill      = fill(row_bg)
+                c.alignment = al_c()
+                c.border    = border_all()
+
+                # Colonnes jours : X si prévu, fond vert si réalisé
+                for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
+                    day_date_map = {d.weekday(): d for d in ws_days}
+                    # Calculer le planning de cette semaine pour ce point
+                    # On cherche dans monthly_plan (calculé par mois)
+                    # → on agrège sur tous les jours de la semaine
+                    for di in range(DAYS_PER_WEEK):
+                        col      = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                        d_for_col = day_date_map.get(di)
+                        c = ws_matrix.cell(data_row, col)
+
+                        if d_for_col is None:
+                            # Jour férié / hors plage
+                            c.value = ""
+                            c.fill  = fill("E2E8F0")
+                            c.border = border_all()
+                            continue
+
+                        # Vérifier si ce point est planifié ce jour
+                        tasks_day  = monthly_plan.get(d_for_col, [])
+                        is_planned = any(t.get("label") == pt["label"] for t in tasks_day)
+
+                        # Vérifier si réalisé
+                        is_done = any(
+                            p.get("label") == pt["label"] and not p.get("archived", False)
+                            and p.get("date")
+                            and datetime.fromisoformat(p["date"]).date() == d_for_col
+                            for p in st.session_state.prelevements)
+
+                        if is_done:
+                            c.value     = "✓"
+                            c.font      = Font(name="Arial", size=11, bold=True, color=C_GREEN)
+                            c.fill      = fill("DCFCE7")
+                        elif is_planned:
+                            c.value     = "X"
+                            c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
+                            c.fill      = fill("DBEAFE")
+                        else:
+                            c.value = ""
+                            c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
+
+                        c.alignment = al_c()
+                        c.border    = border_all()
+
+                data_row += 1
+
+            # ── Ligne totaux par jour ─────────────────────────────────────
+            ws_matrix.row_dimensions[data_row].height = 20
+            c = ws_matrix.cell(data_row, 1)
+            c.value     = "TOTAL prélèvements planifiés"
+            c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
+            c.fill      = fill(C_GREY_HDR)
+            c.alignment = al_c()
+            c.border    = border_all()
+            ws_matrix.merge_cells(start_row=data_row, start_column=1,
+                                  end_row=data_row, end_column=FIXED_COLS)
+            for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
+                day_date_map = {d.weekday(): d for d in ws_days}
+                for di in range(DAYS_PER_WEEK):
+                    col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                    d_for_col = day_date_map.get(di)
+                    c = ws_matrix.cell(data_row, col)
+                    if d_for_col:
+                        total_day = len(monthly_plan.get(d_for_col, []))
+                        c.value   = total_day if total_day > 0 else "—"
+                        c.font    = Font(name="Arial", size=9, bold=True,
+                                        color=C_WHITE if total_day > 0 else "94A3B8")
+                        c.fill    = fill(C_BLUE2 if total_day > 0 else C_GREY_HDR)
+                    else:
+                        c.value = ""
+                        c.fill  = fill("334155")
+                    c.alignment = al_c()
+                    c.border    = border_all()
+
+            # ══════════════════════════════════════════════════════════════
+            # FEUILLE 2 — VUE DÉTAILLÉE (liste chronologique enrichie)
+            # ══════════════════════════════════════════════════════════════
+            ws2 = wb.create_sheet("Détail")
+            ws2.sheet_view.showGridLines = False
+
+            ws2.merge_cells("A1:I1")
+            ws2["A1"] = "PLANNING MICROBIOLOGIQUE — Détail chronologique"
+            ws2["A1"].font      = Font(name="Arial", size=13, bold=True, color=C_WHITE)
+            ws2["A1"].fill      = fill(C_BLUE)
+            ws2["A1"].alignment = al_c()
+            ws2.row_dimensions[1].height = 28
+
+            ws2.merge_cells("A2:I2")
+            ws2["A2"] = (
+                f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
+                f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'}")
+            ws2["A2"].font      = Font(name="Arial", size=8, color="475569")
+            ws2["A2"].fill      = fill(C_BLUE_L)
+            ws2["A2"].alignment = al_c()
+            ws2.row_dimensions[2].height = 16
+
+            headers2    = ["Date", "Jour", "Férié", "Type",
+                           "Point de prélèvement", "Classe", "Gélose",
+                           "Opérateur", "Statut"]
+            col_widths2 = [14, 12, 10, 22, 32, 10, 28, 25, 14]
+            for ci2, (h, w) in enumerate(zip(headers2, col_widths2), start=1):
+                c = ws2.cell(4, ci2, value=h)
+                c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
+                c.fill      = fill(C_BLUE2)
+                c.alignment = al_c(wrap=True)
+                c.border    = border_all()
+                ws2.column_dimensions[get_column_letter(ci2)].width = w
+            ws2.row_dimensions[4].height = 22
+            ws2.freeze_panes = "A5"
+
+            C_PURPLE_L = "F5F3FF"; C_YELLOW_L = "FFFBEB"; C_TEAL_L = "EFF6FF"
+            C_PURPLE   = "7C3AED"; C_YELLOW   = "D97706"; C_TEAL   = "0369A1"
+
+            row2 = 5
             for d in exp_dates:
                 holidays_d  = get_holidays_cached(d.year)
                 is_h        = d in holidays_d
@@ -4655,14 +5355,14 @@ if active == "planning":
                           "Prélèvement J0", p['label'],
                           p.get('room_class', '—'), p.get('gelose', '—'),
                           p.get('operateur', '—'), "🧪 À réaliser"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
+                    for ci2, val in enumerate(rd, 1):
+                        c = ws2.cell(row2, ci2, value=val)
                         c.fill = fill(C_PURPLE_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_PURPLE)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
+                        c.border = border_all(); c.font = font(9)
+                    ws2.cell(row2, 4).font = Font(
+                        name="Arial", size=9, bold=True, color=C_PURPLE)
+                    ws2.row_dimensions[row2].height = 17
+                    row2 += 1
 
                 for sch in day_j2:
                     samp    = next(
@@ -4676,17 +5376,17 @@ if active == "planning":
                           samp.get('gelose', '—')     if samp else '—',
                           samp.get('operateur', '—')  if samp else '—',
                           "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
+                    for ci2, val in enumerate(rd, 1):
+                        c = ws2.cell(row2, ci2, value=val)
                         c.fill = fill(C_YELLOW_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_YELLOW)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
+                        c.border = border_all(); c.font = font(9)
+                    ws2.cell(row2, 4).font = Font(
+                        name="Arial", size=9, bold=True, color=C_YELLOW)
+                    ws2.cell(row2, 9).font = Font(
+                        name="Arial", size=9, bold=True,
                         color=C_GREEN if is_done else C_YELLOW)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
+                    ws2.row_dimensions[row2].height = 17
+                    row2 += 1
 
                 for sch in day_j7:
                     samp    = next(
@@ -4700,17 +5400,17 @@ if active == "planning":
                           samp.get('gelose', '—')     if samp else '—',
                           samp.get('operateur', '—')  if samp else '—',
                           "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci, val in enumerate(rd, 1):
-                        c = ws1.cell(row=row, column=ci, value=val)
+                    for ci2, val in enumerate(rd, 1):
+                        c = ws2.cell(row2, ci2, value=val)
                         c.fill = fill(C_TEAL_L); c.alignment = al_l()
-                        c.border = border; c.font = font()
-                    ws1.cell(row=row, column=4).font = Font(
-                        name="Arial", size=10, bold=True, color=C_TEAL)
-                    ws1.cell(row=row, column=9).font = Font(
-                        name="Arial", size=10, bold=True,
+                        c.border = border_all(); c.font = font(9)
+                    ws2.cell(row2, 4).font = Font(
+                        name="Arial", size=9, bold=True, color=C_TEAL)
+                    ws2.cell(row2, 9).font = Font(
+                        name="Arial", size=9, bold=True,
                         color=C_GREEN if is_done else C_TEAL)
-                    ws1.row_dimensions[row].height = 18
-                    row += 1
+                    ws2.row_dimensions[row2].height = 17
+                    row2 += 1
 
             buf = _io.BytesIO()
             wb.save(buf)
@@ -4721,29 +5421,38 @@ if active == "planning":
                 data=buf.getvalue(), file_name=fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
-            st.success(f"✅ Fichier **{fname}** généré avec succès.")
-
+            st.success(
+                f"✅ Fichier **{fname}** généré avec succès — "
+                f"2 onglets : **Planning Semaine** (matriciel) · **Détail** (liste).")
+            
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 : HISTORIQUE
+# TAB : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
-elif active == "historique":
+if active == "historique":
     st.markdown("### 📋 Historique de surveillance")
     surv  = st.session_state.surveillance
     total = len(surv)
 
-    # ── Helper : criticité d'un germe depuis st.session_state.germs ──────────
+    # ── Helpers ───────────────────────────────────────────────────────────────
     def _get_criticite(germ_name):
-        """Retourne la criticité (1-5) d'un germe, 0 si inconnu."""
         for g in st.session_state.get("germs", []):
             if g.get("name", "") == germ_name:
                 return int(g.get("criticite", 0) or 0)
         return 0
 
     def _crit_label(c):
-        return {5: "Critique", 4: "Majeur", 3: "Important", 2: "Modéré", 1: "Limité"}.get(c, "—")
+        return {5:"Critique",4:"Majeur",3:"Important",2:"Modéré",1:"Limité"}.get(c,"—")
 
     def _crit_color(c):
-        return {5: "#7c3aed", 4: "#ef4444", 3: "#f97316", 2: "#f59e0b", 1: "#22c55e"}.get(c, "#94a3b8")
+        return {5:"#7c3aed",4:"#ef4444",3:"#f97316",2:"#f59e0b",1:"#22c55e"}.get(c,"#94a3b8")
+
+    def _parse_date(d_str):
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(str(d_str), fmt).date()
+            except Exception:
+                pass
+        return None
 
     if surv:
         # ── Export / Vider ────────────────────────────────────────────────────
@@ -4765,10 +5474,9 @@ elif active == "historique":
                 try:
                     supa = get_supabase_client()
                     if supa:
-                        import json as _json
                         supa.table("app_data").upsert({
                             "key": "surveillance",
-                            "value": _json.dumps([], ensure_ascii=False)
+                            "value": json.dumps([], ensure_ascii=False)
                         }).execute()
                 except Exception:
                     pass
@@ -4777,19 +5485,20 @@ elif active == "historique":
                 st.rerun()
 
         # ── Filtre par période ────────────────────────────────────────────────
-        from datetime import datetime, date as dt_date
+        from datetime import date as dt_date
 
-        def _parse_date(d_str):
-            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
-                try:
-                    return datetime.strptime(str(d_str), fmt).date()
-                except Exception:
-                    pass
-            return None
-
-        all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
+        all_dates_ok = [d for d in (_parse_date(r.get("date","")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
+
+        if "hist_date_debut_val" not in st.session_state:
+            st.session_state["hist_date_debut_val"] = d_min
+        if "hist_date_fin_val" not in st.session_state:
+            st.session_state["hist_date_fin_val"] = d_max
+        if d_max > st.session_state["hist_date_fin_val"]:
+            st.session_state["hist_date_fin_val"] = d_max
+        if d_min < st.session_state["hist_date_debut_val"]:
+            st.session_state["hist_date_debut_val"] = d_min
 
         st.markdown(
             "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
@@ -4797,18 +5506,29 @@ elif active == "historique":
             "<div style='font-size:.8rem;font-weight:700;color:#0369a1;margin-bottom:8px'>"
             "🗓️ Filtrer par période</div>",
             unsafe_allow_html=True)
-        cf1, cf2 = st.columns(2)
+        cf1, cf2, cf3 = st.columns([2, 2, 1])
         with cf1:
-            date_debut = st.date_input("Du",  value=d_min, min_value=d_min, max_value=d_max, key="hist_date_debut")
+            date_debut = st.date_input(
+                "Du", value=st.session_state["hist_date_debut_val"],
+                min_value=d_min, max_value=d_max, key="hist_date_debut_input")
+            st.session_state["hist_date_debut_val"] = date_debut
         with cf2:
-            date_fin   = st.date_input("Au",  value=d_max, min_value=d_min, max_value=d_max, key="hist_date_fin")
+            date_fin = st.date_input(
+                "Au", value=st.session_state["hist_date_fin_val"],
+                min_value=d_min, max_value=d_max, key="hist_date_fin_input")
+            st.session_state["hist_date_fin_val"] = date_fin
+        with cf3:
+            st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+            if st.button("↺ Reset", use_container_width=True):
+                st.session_state["hist_date_debut_val"] = d_min
+                st.session_state["hist_date_fin_val"]   = d_max
+                st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        surv_f  = [r for r in surv
-                   if _parse_date(r.get("date","")) is not None
-                   and date_debut <= _parse_date(r.get("date","")) <= date_fin]
+        surv_f = [r for r in surv
+                  if _parse_date(r.get("date","")) is not None
+                  and date_debut <= _parse_date(r.get("date","")) <= date_fin]
         total_f = len(surv_f)
-
         if total_f < total:
             st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
                        f"{date_debut.strftime('%d/%m/%Y')} → {date_fin.strftime('%d/%m/%Y')}")
@@ -4832,49 +5552,528 @@ elif active == "historique":
         ])
 
         # ══════════════════════════════════════════════════════════════════════
+        # ONGLET 0 : PLAN INTERACTIF
+        # ══════════════════════════════════════════════════════════════════════
+        with hist_tab_plan:
+            import json as _json_plan
+
+            # ── Chargement map_points robuste ─────────────────────────────────
+            map_points_raw = list(st.session_state.get("map_points", []))
+            if not map_points_raw:
+                try:
+                    _raw_mp = _supa_get('map_points')
+                    if _raw_mp:
+                        _loaded = json.loads(_raw_mp) if isinstance(_raw_mp, str) else _raw_mp
+                        if isinstance(_loaded, list) and _loaded:
+                            st.session_state["map_points"] = _loaded
+                            map_points_raw = _loaded
+                except Exception:
+                    pass
+
+            # Coordonnées avec float garanti
+            pt_coords = {}
+            for mp in map_points_raw:
+                _lbl = mp.get("label", "")
+                if not _lbl:
+                    continue
+                try:
+                    pt_coords[_lbl] = {
+                        "x": float(mp.get("x", "")),
+                        "y": float(mp.get("y", "")),
+                    }
+                except (TypeError, ValueError):
+                    continue
+
+            STATUS_COL = {"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}
+            STATUS_IC  = {"action":"🚨","alert":"⚠️","ok":"✅","none":"⬜"}
+            STATUS_LBL = {"action":"ACTION","alert":"ALERTE","ok":"Conforme","none":"Aucune donnée"}
+
+            plans_dispo = st.session_state.get("plans", [])
+            if not plans_dispo:
+                st.markdown(
+                    "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
+                    "border-radius:12px;padding:40px;text-align:center'>"
+                    "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
+                    "<div style='font-weight:700;color:#475569;margin-bottom:4px'>"
+                    "Aucun plan disponible</div>"
+                    "<div style='font-size:.8rem;color:#94a3b8'>"
+                    "Créez des plans dans <strong>Paramètres → Plans</strong>.</div></div>",
+                    unsafe_allow_html=True)
+            else:
+                plan_sel_name = st.selectbox(
+                    "Plan à afficher",
+                    [p["name"] for p in plans_dispo],
+                    key="hist_tab_plan_sel")
+                plan_sel = next((p for p in plans_dispo if p["name"] == plan_sel_name), None)
+
+                # ── Filtres ───────────────────────────────────────────────────
+                st.markdown(
+                    "<div style='background:#f0f9ff;border:1px solid #bae6fd;"
+                    "border-radius:10px;padding:12px 16px;margin:8px 0 12px 0'>"
+                    "<div style='font-size:.8rem;font-weight:700;color:#0369a1;"
+                    "margin-bottom:8px'>🔍 Filtres</div>",
+                    unsafe_allow_html=True)
+                fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 2, 2])
+                all_dates_plan = [_parse_date(r.get("date","")) for r in surv_f
+                                  if _parse_date(r.get("date",""))]
+                d_min_plan = min(all_dates_plan) if all_dates_plan else dt_date.today()
+                d_max_plan = max(all_dates_plan) if all_dates_plan else dt_date.today()
+                with fc1:
+                    filt_date_debut = st.date_input("Du", value=d_min_plan,
+                        min_value=d_min_plan, max_value=d_max_plan,
+                        key="hist_tab_plan_date_debut")
+                with fc2:
+                    filt_date_fin = st.date_input("Au", value=d_max_plan,
+                        min_value=d_min_plan, max_value=d_max_plan,
+                        key="hist_tab_plan_date_fin")
+                with fc3:
+                    filt_points = st.multiselect("Points",
+                        sorted({r.get("prelevement","") for r in surv_f
+                                if r.get("prelevement")}),
+                        placeholder="Tous les points",
+                        key="hist_tab_plan_filt_pts")
+                with fc4:
+                    filt_germs = st.multiselect("Germes",
+                        sorted({r.get("germ_match","") for r in surv_f
+                                if r.get("germ_match") and
+                                r.get("germ_match") not in ("Négatif","—","")}),
+                        placeholder="Tous les germes",
+                        key="hist_tab_plan_filt_germs")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                _surv_plan_all = [
+                    r for r in surv_f
+                    if (_parse_date(r.get("date","")) is not None
+                        and filt_date_debut <= _parse_date(r.get("date","")) <= filt_date_fin)
+                    and (not filt_points or r.get("prelevement","") in filt_points)
+                    and (not filt_germs  or r.get("germ_match","")  in filt_germs)
+                ]
+                
+                # Dédupliquer par sample_id : garder le pire résultat (action > alert > ok)
+                # Si pas de sample_id (ancienne entrée), on garde toutes
+                _seen_sample_ids = {}
+                surv_plan = []
+                for r in _surv_plan_all:
+                    sid = r.get("sample_id", "")
+                    if not sid:
+                        # Pas de sample_id → on inclut directement (ancienne entrée)
+                        surv_plan.append(r)
+                        continue
+                    if sid not in _seen_sample_ids:
+                        _seen_sample_ids[sid] = r
+                    else:
+                        # Garder le pire statut entre les deux lectures (J2 vs J7)
+                        existing = _seen_sample_ids[sid]
+                        if prio.get(r.get("status","ok"),0) > prio.get(existing.get("status","ok"),0):
+                            _seen_sample_ids[sid] = r
+                
+                # Reconstruire surv_plan avec les entrées dédupliquées
+                surv_plan = [r for r in _surv_plan_all if not r.get("sample_id","")]
+                surv_plan += list(_seen_sample_ids.values())
+                # Retrier par date
+                surv_plan.sort(key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+
+                # ── Métriques ─────────────────────────────────────────────────
+                nb_action = sum(1 for r in surv_plan if r.get("status")=="action")
+                nb_alert  = sum(1 for r in surv_plan if r.get("status")=="alert")
+                nb_ok     = sum(1 for r in surv_plan if r.get("status")=="ok")
+                nb_pts_pos = len({r.get("prelevement") for r in surv_plan
+                                  if pt_coords.get(r.get("prelevement",""))})
+                m1,m2,m3,m4,m5 = st.columns(5)
+                m1.metric("📋 Prélèvements", len(surv_plan))
+                m2.metric("✅ Conformes", nb_ok)
+                m3.metric("⚠️ Alertes",   nb_alert)
+                m4.metric("🚨 Actions",    nb_action)
+                m5.metric("📍 Points",     nb_pts_pos)
+
+                pts_no_coords = {r.get("prelevement","") for r in surv_plan} - set(pt_coords.keys())
+                pts_no_coords.discard("")
+                if pts_no_coords:
+                    st.info(
+                        f"💡 **{len(pts_no_coords)} point(s)** sans position sur ce plan : "
+                        f"**{', '.join(sorted(pts_no_coords))}**. "
+                        f"Positionnez-les via **Surveillance → Nouveau prélèvement**.")
+
+                # ── Construction pts_on_plan ──────────────────────────────────
+                # Grouper par coordonnées exactes → une pastille par groupe
+                # Si N prélèvements au même endroit : pastille avec chiffre N
+                # Si 1 prélèvement : pastille avec UFC ou ✓
+                from collections import defaultdict as _dd
+                prio = {"action":2,"alert":1,"ok":0,"none":-1}
+                
+                # Grouper par LABEL (pas par coordonnées) → chaque point garde sa position unique
+                label_groups = _dd(list)
+                for r in surv_plan:
+                    pt_label = r.get("prelevement","")
+                    if not pt_label:
+                        continue
+                    coords = pt_coords.get(pt_label)
+                    if not coords:
+                        continue
+                    label_groups[pt_label].append({
+                        "label":  pt_label,
+                        "x":      coords["x"],
+                        "y":      coords["y"],
+                        "status": r.get("status","ok"),
+                        "ufc":    int(r.get("ufc",0) or 0),
+                        "germ":   r.get("germ_match","—") or "—",
+                        "date":   r.get("date","—"),
+                        "oper":   r.get("operateur","—") or "—",
+                    })
+                
+                pts_on_plan = []
+                for pt_label, items in label_groups.items():
+                    n      = len(items)
+                    worst  = max(items, key=lambda x: prio.get(x["status"],0))
+                    w_st   = worst["status"]
+                    w_col  = STATUS_COL.get(w_st,"#94a3b8")
+                    # Coordonnées exactes du point (toutes les entrées ont les mêmes coords pour ce label)
+                    cx = items[0]["x"]
+                    cy = items[0]["y"]
+                    # Trier les détails par date décroissante
+                    details = sorted(items, key=lambda x: x["date"], reverse=True)
+                
+                    if n == 1:
+                        it = items[0]
+                        txt = str(it["ufc"]) if it["ufc"] > 0 else "✓"
+                    else:
+                        txt = str(n)  # Chiffre = nombre de prélèvements pour ce point
+                
+                    pts_on_plan.append({
+                        "label":   pt_label,
+                        "x":       cx,
+                        "y":       cy,
+                        "status":  w_st,
+                        "color":   w_col,
+                        "text":    txt,
+                        "count":   n,
+                        "grouped": n > 1,
+                        "details": details,
+                    })
+
+                pts_json = _json_plan.dumps(pts_on_plan, ensure_ascii=False)
+
+                if plan_sel and plan_sel.get("image_b64"):
+                    img_b64 = plan_sel["image_b64"]
+                    if not img_b64.startswith("data:"):
+                        img_b64 = "data:image/png;base64," + img_b64
+
+                    plan_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0f172a;font-family:'Segoe UI',sans-serif;height:100vh;
+     display:flex;flex-direction:column;overflow:hidden;color:#f8fafc}}
+.header{{padding:8px 14px;background:#1e293b;border-bottom:1px solid #334155;
+         display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}}
+.title{{font-size:.82rem;font-weight:800;color:#e2e8f0}}
+.legend{{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}}
+.leg-item{{display:flex;align-items:center;gap:5px;font-size:.65rem;color:#94a3b8}}
+.leg-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
+.leg-dot.dashed{{border:2px dashed #94a3b8;background:transparent}}
+.main{{flex:1;overflow:auto;background:#1e293b;display:flex;
+       align-items:flex-start;justify-content:center;padding:10px}}
+.mi{{position:relative;display:inline-block;
+     box-shadow:0 6px 32px rgba(0,0,0,.6);border-radius:6px}}
+#img{{display:block;max-width:100%;border-radius:6px;user-select:none}}
+.pt{{position:absolute;min-width:32px;height:32px;border-radius:16px;
+     padding:0 7px;border:3px solid rgba(255,255,255,0.9);cursor:pointer;
+     transform:translate(-50%,-50%);
+     display:flex;align-items:center;justify-content:center;
+     font-size:12px;font-weight:900;color:#fff;
+     box-shadow:0 3px 14px rgba(0,0,0,.6);
+     z-index:20;transition:transform .15s,box-shadow .15s;white-space:nowrap}}
+.pt.grouped{{border-style:dashed;border-width:3px}}
+.pt:hover{{transform:translate(-50%,-50%) scale(1.28);
+           box-shadow:0 6px 20px rgba(0,0,0,.8)}}
+.pt.pulse{{animation:pulse 2s infinite}}
+@keyframes pulse{{
+  0%,100%{{box-shadow:0 3px 14px rgba(0,0,0,.6)}}
+  50%{{box-shadow:0 0 0 8px rgba(239,68,68,.25),0 3px 14px rgba(0,0,0,.6)}}
+}}
+.tooltip{{position:fixed;background:#0f172a;border:1.5px solid #334155;
+          border-radius:10px;padding:10px 14px;font-size:.72rem;
+          color:#e2e8f0;z-index:9999;pointer-events:none;
+          max-width:270px;box-shadow:0 8px 32px rgba(0,0,0,.7);
+          display:none;line-height:1.6}}
+.tooltip.show{{display:block}}
+.tt-name{{font-weight:800;font-size:.84rem;margin-bottom:4px}}
+.tt-badge{{display:inline-block;border-radius:4px;padding:1px 8px;
+           font-size:.62rem;font-weight:700;margin-bottom:6px}}
+.tt-sep{{border:none;border-top:1px solid #1e3a5f;margin:5px 0}}
+.tt-row{{color:#94a3b8;font-size:.65rem;padding:1px 0}}
+.tt-row b{{color:#e2e8f0}}
+.empty{{position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        color:#475569;font-size:.85rem;text-align:center;
+        padding:40px;width:80%}}
+</style></head><body>
+<div class="header">
+  <div class="title">🗺️ {plan_sel_name}</div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Conforme</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
+    <div class="leg-item">
+      <div class="leg-dot dashed"></div>
+      Groupé (N prélèvements)
+    </div>
+  </div>
+</div>
+<div class="main"><div class="mi" id="mi">
+  <img id="img" src="{img_b64}" draggable="false">
+</div></div>
+<div class="tooltip" id="tt"></div>
+<script>
+const PTS = {pts_json};
+const STATUS_LABELS = {{
+  action:"🚨 ACTION", alert:"⚠️ ALERTE",
+  ok:"✅ Conforme", none:"⬜ Sans données"
+}};
+const STATUS_BG = {{
+  action:"rgba(239,68,68,.2)", alert:"rgba(245,158,11,.2)",
+  ok:"rgba(34,197,94,.2)",     none:"rgba(148,163,184,.2)"
+}};
+const STATUS_COL = {{
+  action:"#ef4444", alert:"#f59e0b",
+  ok:"#22c55e",     none:"#94a3b8"
+}};
+const ST_IC = {{action:"🚨", alert:"⚠️", ok:"✅", none:"⬜"}};
+const tt = document.getElementById('tt');
+const mi = document.getElementById('mi');
+
+function render() {{
+  document.querySelectorAll('.pt,.empty').forEach(p => p.remove());
+  if (!PTS.length) {{
+    const em = document.createElement('div');
+    em.className = 'empty';
+    em.innerHTML =
+      '<div><div style="font-size:2rem;margin-bottom:8px">📍</div>'
+      + '<div>Aucun prélèvement positionné sur ce plan.</div>'
+      + '<div style="font-size:.72rem;color:#64748b;margin-top:4px">'
+      + 'Placez des points via Surveillance → Nouveau prélèvement</div></div>';
+    mi.appendChild(em);
+    return;
+  }}
+  PTS.forEach(pt => {{
+    const el = document.createElement('div');
+    el.className = 'pt'
+      + (pt.status === 'action' ? ' pulse' : '')
+      + (pt.grouped ? ' grouped' : '');
+    el.style.left    = pt.x + '%';
+    el.style.top     = pt.y + '%';
+    el.style.background = pt.color;
+    el.textContent   = pt.text;
+    el.addEventListener('mouseenter', e => showTT(e, pt));
+    el.addEventListener('mouseleave', hideTT);
+    el.addEventListener('mousemove',  moveTT);
+    mi.appendChild(el);
+  }});
+}}
+
+function showTT(e, pt) {{
+  const lbl = STATUS_LABELS[pt.status] || pt.status;
+  const bg  = STATUS_BG[pt.status]  || 'rgba(148,163,184,.2)';
+  const col = STATUS_COL[pt.status] || '#94a3b8';
+
+  let body = '';
+
+  if (pt.grouped) {{
+    // Pastille groupée → liste tous les prélèvements
+    body += `<div style="font-size:.62rem;color:#64748b;margin-bottom:3px">
+               ${{pt.count}} prélèvement(s) à cette position
+             </div>`;
+    pt.details.slice(0, 6).forEach(d => {{
+      const dc = STATUS_COL[d.status] || '#94a3b8';
+      const di = ST_IC[d.status] || '⬜';
+      body += `<hr class="tt-sep">
+        <div class="tt-row">${{di}} <b>${{d.date}}</b> — ${{d.label}}</div>
+        <div class="tt-row">🦠 ${{d.germ}}</div>
+        <div class="tt-row">🔬 <b>${{d.ufc}} UFC</b> &nbsp;·&nbsp; 👤 ${{d.oper}}</div>`;
+    }});
+    if (pt.details.length > 6) {{
+      body += `<div style="font-size:.6rem;color:#64748b;margin-top:4px">
+                 + ${{pt.details.length - 6}} autre(s) prélèvement(s)
+               </div>`;
+    }}
+  }} else {{
+    // Pastille simple → détail unique
+    const d = pt.details[0];
+    body = `
+      <div class="tt-row">📅 <b>${{d.date}}</b></div>
+      <div class="tt-row">🦠 ${{d.germ}}</div>
+      <div class="tt-row">🔬 <b>${{d.ufc}} UFC</b></div>
+      <div class="tt-row">👤 ${{d.oper}}</div>`;
+  }}
+
+  tt.innerHTML = `
+    <div class="tt-name">${{pt.label}}</div>
+    <div class="tt-badge"
+         style="background:${{bg}};color:${{col}};border:1px solid ${{col}}44">
+      ${{lbl}}
+    </div>
+    ${{body}}
+  `;
+  tt.classList.add('show');
+  moveTT(e);
+}}
+
+function moveTT(e) {{
+  let x = e.clientX + 14, y = e.clientY - 10;
+  if (x + 280 > window.innerWidth)  x = e.clientX - 280;
+  if (y + 220 > window.innerHeight) y = e.clientY - 220;
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+}}
+function hideTT() {{ tt.classList.remove('show'); }}
+
+const img = document.getElementById('img');
+if (img.complete && img.naturalWidth > 0) render();
+else img.addEventListener('load', render);
+img.addEventListener('error', render);
+</script></body></html>"""
+                    st.components.v1.html(plan_html, height=520, scrolling=False)
+
+                elif plan_sel and not plan_sel.get("image_b64"):
+                    st.markdown(
+                        "<div style='background:#fffbeb;border:1px solid #fde047;"
+                        "border-radius:10px;padding:20px;text-align:center;color:#92400e'>"
+                        "⚠️ Ce plan n'a pas d'image. "
+                        "Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
+                        unsafe_allow_html=True)
+
+                st.divider()
+
+                # ── Tableau récapitulatif par point ───────────────────────────
+                st.markdown(
+                    "<div style='font-size:.88rem;font-weight:700;color:#1e40af;margin-bottom:10px'>"
+                    "📋 Récapitulatif par point</div>",
+                    unsafe_allow_html=True)
+
+                pt_stats_plan = {}
+                for r in surv_plan:
+                    pt = r.get("prelevement","—")
+                    if pt not in pt_stats_plan:
+                        pt_stats_plan[pt] = {
+                            "total":0,"ok":0,"alert":0,"action":0,
+                            "germes":[],"last_status":"ok",
+                            "last_date":"","worst_status":"ok",
+                        }
+                    s    = pt_stats_plan[pt]
+                    s["total"] += 1
+                    st_r = r.get("status","ok")
+                    s[st_r] = s.get(st_r,0) + 1
+                    germ = r.get("germ_match","")
+                    if germ and germ not in ("Négatif","—",""):
+                        s["germes"].append(germ)
+                    d_r = r.get("date","")
+                    if d_r >= s["last_date"]:
+                        s["last_date"]   = d_r
+                        s["last_status"] = st_r
+                    if prio.get(st_r,0) > prio.get(s["worst_status"],0):
+                        s["worst_status"] = st_r
+
+                if not pt_stats_plan:
+                    st.info("Aucun résultat pour les filtres sélectionnés.")
+                else:
+                    st.markdown(
+                        "<div style='display:grid;"
+                        "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
+                        "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Pire</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes</div>"
+                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Dernier</div>"
+                        "</div>",
+                        unsafe_allow_html=True)
+                    for ri,(pt_label,s) in enumerate(sorted(
+                            pt_stats_plan.items(),
+                            key=lambda x:({"action":0,"alert":1,"ok":2}.get(x[1]["worst_status"],3),x[0]))):
+                        ws   = s["worst_status"]
+                        wsc  = STATUS_COL.get(ws,"#94a3b8")
+                        wsl  = STATUS_LBL.get(ws,"—")
+                        wsi  = STATUS_IC.get(ws,"⬜")
+                        has_pos   = pt_label in pt_coords
+                        pos_badge = (
+                            " <span style='background:#dbeafe;color:#1e40af;"
+                            "border-radius:3px;padding:0 4px;font-size:.55rem'>📍</span>"
+                            if has_pos else
+                            " <span style='background:#fef2f2;color:#991b1b;"
+                            "border-radius:3px;padding:0 4px;font-size:.55rem'>?</span>")
+                        germes_str = ", ".join(sorted(set(s["germes"]))[:3]) or "—"
+                        _ls  = s["last_status"]
+                        _lsc = STATUS_COL.get(_ls,"#94a3b8")
+                        _lsi = STATUS_IC.get(_ls,"⬜")
+                        _ld  = s["last_date"][:10] if s["last_date"] else "—"
+                        row_bg = "#f8fafc" if ri%2==0 else "#ffffff"
+                        st.markdown(
+                            "<div style='display:grid;"
+                            "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
+                            f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
+                            "padding:9px 14px;align-items:center'>"
+                            f"<div style='font-size:.85rem;font-weight:700;color:#0f172a'>📍 {pt_label}{pos_badge}</div>"
+                            f"<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>{s['total']}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#22c55e;text-align:center'>{s.get('ok',0)}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#f59e0b;text-align:center'>{s.get('alert',0)}</div>"
+                            f"<div style='font-size:.9rem;font-weight:700;color:#ef4444;text-align:center'>{s.get('action',0)}</div>"
+                            f"<div style='text-align:center'>"
+                            f"<span style='background:{wsc}22;color:{wsc};border:1px solid {wsc}55;"
+                            f"border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700'>"
+                            f"{wsi} {wsl}</span></div>"
+                            f"<div style='font-size:.72rem;color:#475569;font-style:italic'>{germes_str}</div>"
+                            f"<div style='font-size:.72rem;font-weight:600;color:#475569;text-align:center'>"
+                            f"{_ld}<br><span style='color:{_lsc};font-size:.62rem'>{_lsi}</span></div>"
+                            "</div>",
+                            unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
+                        f"<div style='font-size:.78rem;color:#94a3b8'>"
+                        f"{len(pt_stats_plan)} point(s) · {len(surv_plan)} prélèvement(s) "
+                        f"· <span style='color:#86efac'>📍 positionné</span> "
+                        f"· <span style='color:#fca5a5'>? non positionné</span>"
+                        f"</div></div>",
+                        unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_pts:
             from collections import defaultdict
             import json as _json_pts
 
-            # ── Calcul stats par point ────────────────────────────────────────
             pts_stats = defaultdict(lambda: {
-                "total": 0, "positives": 0, "negatives": 0,
-                "alertes": 0, "actions": 0,
-                "germes": defaultdict(int),
-                "ufc_j2_list": [], "ufc_j7_list": [],
+                "total":0,"positives":0,"negatives":0,
+                "alertes":0,"actions":0,
+                "germes":defaultdict(int),
+                "ufc_j2_list":[],"ufc_j7_list":[],
             })
             for r in surv_f:
-                pt   = r.get("prelevement", "—")
-                ufc  = int(r.get("ufc", 0) or 0)
-                germ = r.get("germ_match", "") or ""
-                st_r = r.get("status", "ok")
-                ufc_j2 = int(r.get("ufc_48h", r.get("ufc", 0)) or 0)
-                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc", 0)) or 0)
-
+                pt     = r.get("prelevement","—")
+                ufc    = int(r.get("ufc",0) or 0)
+                germ   = r.get("germ_match","") or ""
+                st_r   = r.get("status","ok")
+                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
                 pts_stats[pt]["total"] += 1
-                if ufc > 0 and germ not in ("Négatif", "—", ""):
+                if ufc > 0 and germ not in ("Négatif","—",""):
                     pts_stats[pt]["positives"] += 1
                     pts_stats[pt]["germes"][germ] += 1
                 else:
                     pts_stats[pt]["negatives"] += 1
-                if st_r == "alert":
-                    pts_stats[pt]["alertes"] += 1
-                elif st_r == "action":
-                    pts_stats[pt]["actions"] += 1
-                if ufc_j2 > 0:
-                    pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
-                if ufc_j7 > 0:
-                    pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
+                if st_r == "alert":    pts_stats[pt]["alertes"]  += 1
+                elif st_r == "action": pts_stats[pt]["actions"]  += 1
+                if ufc_j2 > 0: pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
+                if ufc_j7 > 0: pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
             sorted_pts   = sorted(pts_stats.items(), key=lambda x: -x[1]["positives"])
-            chart_labels = [p[:22] + "…" if len(p) > 22 else p for p, _ in sorted_pts]
-            chart_neg    = [d["negatives"] for _, d in sorted_pts]
-            chart_pos    = [d["positives"] for _, d in sorted_pts]
-            chart_data   = {"labels": chart_labels, "neg": chart_neg, "pos": chart_pos}
-
-            # ── Graphique barres empilées ─────────────────────────────────────
+            chart_labels = [p[:22]+"…" if len(p)>22 else p for p,_ in sorted_pts]
+            chart_data   = {
+                "labels": chart_labels,
+                "neg": [d["negatives"] for _,d in sorted_pts],
+                "pos": [d["positives"] for _,d in sorted_pts],
+            }
             chart_html = f"""
             <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
@@ -4888,32 +6087,27 @@ elif active == "historique":
             (function(){{
               const d = {_json_pts.dumps(chart_data)};
               new Chart(document.getElementById('ptChart'), {{
-                type: 'bar',
-                data: {{
-                  labels: d.labels,
-                  datasets: [
-                    {{ label: '✅ Négatifs', data: d.neg,
-                       backgroundColor: '#22c55e88', borderColor: '#22c55e', borderWidth: 1 }},
-                    {{ label: '🦠 Positifs', data: d.pos,
-                       backgroundColor: '#ef444488', borderColor: '#ef4444', borderWidth: 1 }}
+                type:'bar',
+                data:{{
+                  labels:d.labels,
+                  datasets:[
+                    {{label:'✅ Négatifs',data:d.neg,backgroundColor:'#22c55e88',borderColor:'#22c55e',borderWidth:1}},
+                    {{label:'🦠 Positifs',data:d.pos,backgroundColor:'#ef444488',borderColor:'#ef4444',borderWidth:1}}
                   ]
                 }},
-                options: {{
-                  responsive: true, maintainAspectRatio: false,
-                  plugins: {{ legend: {{ position: 'top', labels: {{ font: {{ size: 11 }} }} }} }},
-                  scales: {{
-                    x: {{ stacked: true, ticks: {{ font: {{ size: 10 }} }} }},
-                    y: {{ stacked: true, beginAtZero: true,
-                          ticks: {{ stepSize: 1, font: {{ size: 10 }} }} }}
+                options:{{
+                  responsive:true,maintainAspectRatio:false,
+                  plugins:{{legend:{{position:'top',labels:{{font:{{size:11}}}}}}}},
+                  scales:{{
+                    x:{{stacked:true,ticks:{{font:{{size:10}}}}}},
+                    y:{{stacked:true,beginAtZero:true,ticks:{{stepSize:1,font:{{size:10}}}}}}
                   }}
                 }}
               }});
             }})();
-            </script>
-            """
+            </script>"""
             st.components.v1.html(chart_html, height=240)
 
-            # ── Tableau avec Moy J2 / Moy J7 ─────────────────────────────────
             st.markdown(
                 "<div style='display:grid;"
                 "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
@@ -4928,94 +6122,74 @@ elif active == "historique":
                 "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
                 "</div>",
                 unsafe_allow_html=True)
-
-            for ri, (pt_name, pt_data) in enumerate(sorted_pts):
-                t    = pt_data["total"]
-                pos  = pt_data["positives"]
-                taux = pos / t * 100 if t > 0 else 0
-                tc   = "#ef4444" if taux >= 50 else "#f59e0b" if taux > 0 else "#22c55e"
+            for ri,(pt_name,pt_data) in enumerate(sorted_pts):
+                t     = pt_data["total"]
+                pos   = pt_data["positives"]
+                taux  = pos/t*100 if t>0 else 0
+                tc    = "#ef4444" if taux>=50 else "#f59e0b" if taux>0 else "#22c55e"
                 germes_str = ", ".join(
-                    g + "(" + str(n) + "x)"
-                    for g, n in sorted(pt_data["germes"].items(), key=lambda x: -x[1])[:3]
+                    g+"("+str(n)+"x)"
+                    for g,n in sorted(pt_data["germes"].items(),key=lambda x:-x[1])[:3]
                 ) or "—"
                 j2_list = pt_data["ufc_j2_list"]
                 j7_list = pt_data["ufc_j7_list"]
-                moy_j2  = str(round(sum(j2_list) / len(j2_list))) if j2_list else "—"
-                moy_j7  = str(round(sum(j7_list) / len(j7_list))) if j7_list else "—"
-                row_bg  = "#f8fafc" if ri % 2 == 0 else "#ffffff"
+                moy_j2  = str(round(sum(j2_list)/len(j2_list))) if j2_list else "—"
+                moy_j7  = str(round(sum(j7_list)/len(j7_list))) if j7_list else "—"
+                row_bg  = "#f8fafc" if ri%2==0 else "#ffffff"
                 st.markdown(
                     "<div style='display:grid;"
                     "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
-                    "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
+                    "gap:4px;background:"+row_bg+";border:1px solid #e2e8f0;border-top:none;"
                     "padding:9px 14px;align-items:center'>"
-                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>📍 " + pt_name + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(pt_data["negatives"]) + "</div>"
-                    "<div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";"
-                    "border:1px solid " + tc + "55;border-radius:6px;padding:2px 7px;"
-                    "font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div>"
-                    "<div style='font-size:.85rem;font-weight:700;color:" + tc + ";text-align:center'>" + str(round(taux)) + "%</div>"
-                    "<div style='font-size:.82rem;font-weight:700;color:#0369a1;text-align:center'>" + moy_j2 + "</div>"
-                    "<div style='font-size:.82rem;font-weight:700;color:#7c3aed;text-align:center'>" + moy_j7 + "</div>"
-                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + germes_str + "</div>"
+                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>📍 "+pt_name+"</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"+str(t)+"</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>"+str(pt_data["negatives"])+"</div>"
+                    "<div style='text-align:center'><span style='background:"+tc+"22;color:"+tc+";"
+                    "border:1px solid "+tc+"55;border-radius:6px;padding:2px 7px;"
+                    "font-size:.8rem;font-weight:700'>"+str(pos)+"</span></div>"
+                    "<div style='font-size:.85rem;font-weight:700;color:"+tc+";text-align:center'>"+str(round(taux))+"%</div>"
+                    "<div style='font-size:.82rem;font-weight:700;color:#0369a1;text-align:center'>"+moy_j2+"</div>"
+                    "<div style='font-size:.82rem;font-weight:700;color:#7c3aed;text-align:center'>"+moy_j7+"</div>"
+                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+germes_str+"</div>"
                     "</div>",
                     unsafe_allow_html=True)
-
             st.markdown(
                 "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                 "<div style='font-size:.78rem;color:#94a3b8'>"
-                + str(len(pts_stats)) + " point(s) — " + str(total_f) + " résultats"
-                + " &nbsp;|&nbsp; <span style='color:#7dd3fc'>J2 = 48h</span>"
-                + " &nbsp;|&nbsp; <span style='color:#c4b5fd'>J7 = 5 jours</span>"
+                +str(len(pts_stats))+" point(s) — "+str(total_f)+" résultats"
+                +" &nbsp;|&nbsp; <span style='color:#7dd3fc'>J2 = 48h</span>"
+                +" &nbsp;|&nbsp; <span style='color:#c4b5fd'>J7 = 5 jours</span>"
                 "</div></div>",
                 unsafe_allow_html=True)
 
             st.divider()
-
-            # ── Graphique d'évolution UFC dans le temps ───────────────────────
             st.markdown(
                 "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
                 "📈 Évolution UFC dans le temps</div>",
                 unsafe_allow_html=True)
-
-            pt_choices = [p for p, _ in sorted_pts]
+            pt_choices = [p for p,_ in sorted_pts]
             if pt_choices:
-                selected_pt = st.selectbox(
-                    "Point", options=pt_choices,
+                selected_pt = st.selectbox("Point", options=pt_choices,
                     key="hist_pt_evol", label_visibility="collapsed")
-
                 pt_records = sorted(
-                    [r for r in surv_f if r.get("prelevement") == selected_pt],
+                    [r for r in surv_f if r.get("prelevement")==selected_pt],
                     key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
-
-                evol_dates = []
-                evol_j2    = []
-                evol_j7    = []
-                seuil_alerte = None
-                seuil_action = None
-
+                evol_dates=[]; evol_j2=[]; evol_j7=[]
+                seuil_alerte=None; seuil_action=None
                 for r in pt_records:
                     d = _parse_date(r.get("date",""))
-                    if not d:
-                        continue
+                    if not d: continue
                     evol_dates.append(d.strftime("%d/%m/%y"))
-                    evol_j2.append(int(r.get("ufc_48h", r.get("ufc", 0)) or 0))
-                    evol_j7.append(int(r.get("ufc_5j",  r.get("ufc", 0)) or 0))
+                    evol_j2.append(int(r.get("ufc_48h",r.get("ufc",0)) or 0))
+                    evol_j7.append(int(r.get("ufc_5j", r.get("ufc",0)) or 0))
                     if seuil_alerte is None:
-                        try:
-                            seuil_alerte = int(float(r.get("alert_threshold",  50) or 50))
-                        except (ValueError, TypeError):
-                            seuil_alerte = 50
-                        try:
-                            seuil_action = int(float(r.get("action_threshold", 100) or 100))
-                        except (ValueError, TypeError):
-                            seuil_action = 100
-
+                        try: seuil_alerte=int(float(r.get("alert_threshold",50) or 50))
+                        except: seuil_alerte=50
+                        try: seuil_action=int(float(r.get("action_threshold",100) or 100))
+                        except: seuil_action=100
                 if evol_dates:
-                    evol_data = {
-                        "dates": evol_dates, "j2": evol_j2, "j7": evol_j7,
-                        "alerte": seuil_alerte, "action": seuil_action,
-                    }
+                    evol_data={"dates":evol_dates,"j2":evol_j2,"j7":evol_j7,
+                               "alerte":seuil_alerte,"action":seuil_action}
                     evol_html = f"""
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
                     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
@@ -5027,137 +6201,81 @@ elif active == "historique":
                     </div>
                     <script>
                     (function(){{
-                      const d = {_json_pts.dumps(evol_data)};
-                      const threshPlugin = {{
-                        id: 'thr',
-                        afterDraw(chart) {{
-                          const {{ ctx, chartArea: {{ left, right }}, scales: {{ y }} }} = chart;
-                          if (!y) return;
-                          function drawLine(val, color, lbl) {{
-                            const yp = y.getPixelForValue(val);
-                            ctx.save();
-                            ctx.beginPath(); ctx.setLineDash([6,4]);
-                            ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-                            ctx.moveTo(left, yp); ctx.lineTo(right, yp); ctx.stroke();
-                            ctx.setLineDash([]); ctx.fillStyle = color;
-                            ctx.font = 'bold 10px sans-serif';
-                            ctx.fillText(lbl, right - 56, yp - 4);
-                            ctx.restore();
-                          }}
-                          drawLine(d.alerte, '#f59e0b', '⚠ Alerte');
-                          drawLine(d.action, '#ef4444', '🚨 Action');
+                      const d={_json_pts.dumps(evol_data)};
+                      const thr={{id:'thr',afterDraw(chart){{
+                        const {{ctx,chartArea:{{left,right}},scales:{{y}}}}=chart;
+                        if(!y)return;
+                        function dl(val,color,lbl){{
+                          const yp=y.getPixelForValue(val);
+                          ctx.save();ctx.beginPath();ctx.setLineDash([6,4]);
+                          ctx.strokeStyle=color;ctx.lineWidth=1.5;
+                          ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();
+                          ctx.setLineDash([]);ctx.fillStyle=color;
+                          ctx.font='bold 10px sans-serif';
+                          ctx.fillText(lbl,right-56,yp-4);ctx.restore();
                         }}
-                      }};
-                      new Chart(document.getElementById('evolChart'), {{
-                        type: 'line', plugins: [threshPlugin],
-                        data: {{
-                          labels: d.dates,
-                          datasets: [
-                            {{ label: '🔵 J2 (48h)', data: d.j2,
-                               borderColor: '#0ea5e9', backgroundColor: '#0ea5e922',
-                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }},
-                            {{ label: '🟣 J7 (5j)', data: d.j7,
-                               borderColor: '#8b5cf6', backgroundColor: '#8b5cf622',
-                               borderWidth: 2, pointRadius: 4, tension: 0.3, fill: false }}
-                          ]
-                        }},
-                        options: {{
-                          responsive: true, maintainAspectRatio: false,
-                          interaction: {{ mode: 'index', intersect: false }},
-                          plugins: {{
-                            legend: {{ position: 'top', labels: {{ font: {{ size: 11 }}, boxWidth: 14 }} }},
-                            tooltip: {{
-                              callbacks: {{
-                                footer: items => {{
-                                  const v = items[0]?.parsed?.y ?? 0;
-                                  return v >= d.action ? '🚨 Seuil ACTION dépassé'
-                                       : v >= d.alerte ? '⚠️ Seuil ALERTE dépassé'
-                                       : '✅ Conforme';
-                                }}
-                              }}
-                            }}
-                          }},
-                          scales: {{
-                            x: {{ ticks: {{ font: {{ size: 10 }}, maxRotation: 45 }} }},
-                            y: {{ beginAtZero: true,
-                                  title: {{ display: true, text: 'UFC/m³', font: {{ size: 10 }} }},
-                                  ticks: {{ font: {{ size: 10 }} }} }}
+                        dl(d.alerte,'#f59e0b','⚠ Alerte');
+                        dl(d.action,'#ef4444','🚨 Action');
+                      }}}};
+                      new Chart(document.getElementById('evolChart'),{{
+                        type:'line',plugins:[thr],
+                        data:{{labels:d.dates,datasets:[
+                          {{label:'🔵 J2',data:d.j2,borderColor:'#0ea5e9',
+                            backgroundColor:'#0ea5e922',borderWidth:2,pointRadius:4,tension:0.3,fill:false}},
+                          {{label:'🟣 J7',data:d.j7,borderColor:'#8b5cf6',
+                            backgroundColor:'#8b5cf622',borderWidth:2,pointRadius:4,tension:0.3,fill:false}}
+                        ]}},
+                        options:{{responsive:true,maintainAspectRatio:false,
+                          interaction:{{mode:'index',intersect:false}},
+                          plugins:{{legend:{{position:'top',labels:{{font:{{size:11}},boxWidth:14}}}},
+                            tooltip:{{callbacks:{{footer:items=>{{
+                              const v=items[0]?.parsed?.y??0;
+                              return v>=d.action?'🚨 ACTION':v>=d.alerte?'⚠️ ALERTE':'✅ Conforme';
+                            }}}}}}}},
+                          scales:{{
+                            x:{{ticks:{{font:{{size:10}},maxRotation:45}}}},
+                            y:{{beginAtZero:true,
+                              title:{{display:true,text:'UFC/m³',font:{{size:10}}}},
+                              ticks:{{font:{{size:10}}}}}}
                           }}
                         }}
                       }});
                     }})();
-                    </script>
-                    """
+                    </script>"""
                     st.components.v1.html(evol_html, height=290)
-                    st.caption(
-                        f"Seuils calculés pour ce point : "
-                        f"⚠️ Alerte ≥ {seuil_alerte} UFC/m³ — "
-                        f"🚨 Action ≥ {seuil_action} UFC/m³ — "
-                        f"{len(evol_dates)} mesure(s)")
+                    st.caption(f"⚠️ Alerte ≥ {seuil_alerte} · 🚨 Action ≥ {seuil_action} · {len(evol_dates)} mesure(s)")
                 else:
                     st.info("Aucune donnée datée pour ce point.")
 
             st.divider()
-
-            # ── Alertes pondérées ─────────────────────────────────────────────
             st.markdown(
                 "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:4px'>"
                 "🚨 Alertes pondérées</div>"
                 "<div style='font-size:.72rem;color:#64748b;margin-bottom:10px'>"
-                "Score = criticité du germe (1→5) + dépassement (Alerte +1 / Action +3)</div>",
+                "Score = criticité germe (1→5) + dépassement (Alerte +1 / Action +3)</div>",
                 unsafe_allow_html=True)
-
-            alertes_list = []
+            alertes_list=[]
             for r in surv_f:
-                germ  = r.get("germ_match", "") or ""
-                st_r  = r.get("status", "ok")
-                ufc   = int(r.get("ufc", 0) or 0)
-                if germ in ("Négatif", "—", "") or ufc == 0:
-                    continue
-                crit  = _get_criticite(germ)
-                if st_r == "ok" and crit < 4:
-                    continue  # seuls les dépassements ou criticité haute sont listés
-                score = crit
-                if st_r == "action":
-                    score += 3
-                    niveau = "ACTION"
-                elif st_r == "alert":
-                    score += 1
-                    niveau = "ALERTE"
-                else:
-                    niveau = "—"
-                if score >= 7:
-                    gravite = "🔴 CRITIQUE"
-                    g_bg    = "#fef2f2"
-                    g_brd   = "#fca5a5"
-                elif score >= 5:
-                    gravite = "🟠 MAJEUR"
-                    g_bg    = "#fff7ed"
-                    g_brd   = "#fed7aa"
-                elif score >= 3:
-                    gravite = "🟡 MODÉRÉ"
-                    g_bg    = "#fefce8"
-                    g_brd   = "#fde68a"
-                else:
-                    gravite = "🟢 LIMITÉ"
-                    g_bg    = "#f0fdf4"
-                    g_brd   = "#bbf7d0"
+                germ=r.get("germ_match","") or ""
+                st_r=r.get("status","ok")
+                ufc=int(r.get("ufc",0) or 0)
+                if germ in ("Négatif","—","") or ufc==0: continue
+                crit=_get_criticite(germ)
+                if st_r=="ok" and crit<4: continue
+                score=crit
+                if st_r=="action":   score+=3; niveau="ACTION"
+                elif st_r=="alert":  score+=1; niveau="ALERTE"
+                else:                niveau="—"
+                if score>=7:   gravite,g_bg,g_brd="🔴 CRITIQUE","#fef2f2","#fca5a5"
+                elif score>=5: gravite,g_bg,g_brd="🟠 MAJEUR","#fff7ed","#fed7aa"
+                elif score>=3: gravite,g_bg,g_brd="🟡 MODÉRÉ","#fefce8","#fde68a"
+                else:          gravite,g_bg,g_brd="🟢 LIMITÉ","#f0fdf4","#bbf7d0"
                 alertes_list.append({
-                    "date":    r.get("date", "—"),
-                    "point":   r.get("prelevement", "—"),
-                    "germ":    germ,
-                    "ufc":     ufc,
-                    "crit":    crit,
-                    "crit_lbl": _crit_label(crit),
-                    "niveau":  niveau,
-                    "score":   score,
-                    "gravite": gravite,
-                    "g_bg":    g_bg,
-                    "g_brd":   g_brd,
+                    "date":r.get("date","—"),"point":r.get("prelevement","—"),
+                    "germ":germ,"ufc":ufc,"crit":crit,"crit_lbl":_crit_label(crit),
+                    "niveau":niveau,"score":score,"gravite":gravite,"g_bg":g_bg,"g_brd":g_brd,
                 })
-
-            alertes_list.sort(key=lambda x: -x["score"])
-
+            alertes_list.sort(key=lambda x:-x["score"])
             if not alertes_list:
                 st.success("✅ Aucune alerte pondérée sur la période.")
             else:
@@ -5175,36 +6293,33 @@ elif active == "historique":
                     "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Gravité</div>"
                     "</div>",
                     unsafe_allow_html=True)
-
-                for ai, a in enumerate(alertes_list[:30]):
-                    row_bg = a["g_bg"] if ai % 2 == 0 else "#ffffff"
+                for ai,a in enumerate(alertes_list[:30]):
+                    row_bg=a["g_bg"] if ai%2==0 else "#ffffff"
+                    niv_c="#ef4444" if a["niveau"]=="ACTION" else "#f59e0b" if a["niveau"]=="ALERTE" else "#94a3b8"
+                    cc=_crit_color(a["crit"])
                     st.markdown(
                         "<div style='display:grid;"
                         "grid-template-columns:0.8fr 1.5fr 1.8fr 0.6fr 0.7fr 0.6fr 0.5fr 1fr;"
-                        "gap:4px;background:" + row_bg + ";border:1px solid " + a["g_brd"] + ";border-top:none;"
+                        "gap:4px;background:"+row_bg+";border:1px solid "+a["g_brd"]+";border-top:none;"
                         "padding:8px 14px;align-items:center'>"
-                        "<div style='font-size:.75rem;color:#475569'>" + a["date"] + "</div>"
-                        "<div style='font-size:.8rem;font-weight:600;color:#0f172a'>" + a["point"][:20] + "</div>"
-                        "<div style='font-size:.8rem;font-weight:700;color:#1e293b'>🦠 " + a["germ"][:22] + "</div>"
-                        "<div style='font-size:.85rem;font-weight:800;color:#1e40af;text-align:center'>" + str(a["ufc"]) + "</div>"
-                        "<div style='text-align:center'><span style='background:" + _crit_color(a["crit"]) + "22;"
-                        "color:" + _crit_color(a["crit"]) + ";border:1px solid " + _crit_color(a["crit"]) + "55;"
-                        "border-radius:5px;padding:1px 6px;font-size:.72rem;font-weight:700'>"
-                        + a["crit_lbl"] + "</span></div>"
-                        "<div style='font-size:.78rem;font-weight:700;text-align:center;"
-                        "color:" + ("#ef4444" if a["niveau"]=="ACTION" else "#f59e0b" if a["niveau"]=="ALERTE" else "#94a3b8") + "'>"
-                        + a["niveau"] + "</div>"
-                        "<div style='font-size:1.1rem;font-weight:900;text-align:center;color:#1e40af'>" + str(a["score"]) + "</div>"
-                        "<div style='font-size:.85rem;font-weight:700;text-align:center'>" + a["gravite"] + "</div>"
+                        "<div style='font-size:.75rem;color:#475569'>"+a["date"]+"</div>"
+                        "<div style='font-size:.8rem;font-weight:600;color:#0f172a'>"+a["point"][:20]+"</div>"
+                        "<div style='font-size:.8rem;font-weight:700;color:#1e293b'>🦠 "+a["germ"][:22]+"</div>"
+                        "<div style='font-size:.85rem;font-weight:800;color:#1e40af;text-align:center'>"+str(a["ufc"])+"</div>"
+                        "<div style='text-align:center'><span style='background:"+cc+"22;color:"+cc+";"
+                        "border:1px solid "+cc+"55;border-radius:5px;padding:1px 6px;"
+                        "font-size:.72rem;font-weight:700'>"+a["crit_lbl"]+"</span></div>"
+                        "<div style='font-size:.78rem;font-weight:700;text-align:center;color:"+niv_c+"'>"+a["niveau"]+"</div>"
+                        "<div style='font-size:1.1rem;font-weight:900;text-align:center;color:#1e40af'>"+str(a["score"])+"</div>"
+                        "<div style='font-size:.85rem;font-weight:700;text-align:center'>"+a["gravite"]+"</div>"
                         "</div>",
                         unsafe_allow_html=True)
-
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                     "<div style='font-size:.78rem;color:#94a3b8'>"
-                    + str(len(alertes_list)) + " alerte(s)"
-                    + (" — affichage limité aux 30 premières" if len(alertes_list) > 30 else "")
-                    + "</div></div>",
+                    +str(len(alertes_list))+" alerte(s)"
+                    +(" — 30 premières affichées" if len(alertes_list)>30 else "")
+                    +"</div></div>",
                     unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
@@ -5214,32 +6329,27 @@ elif active == "historique":
             from collections import defaultdict
             import json as _json_germs
 
-            germs_stats = defaultdict(lambda: {
-                "count": 0, "ufc_sum": 0, "points": set(), "criticite": 0
-            })
-            total_pos = 0
+            germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
+            total_pos=0
             for r in surv_f:
-                germ = r.get("germ_match", "") or ""
-                if germ in ("Négatif", "—", "") or int(r.get("ufc", 0) or 0) == 0:
-                    continue
-                total_pos += 1
-                germs_stats[germ]["count"]    += 1
-                germs_stats[germ]["ufc_sum"]  += int(r.get("ufc", 0) or 0)
-                germs_stats[germ]["points"].add(r.get("prelevement", "—"))
-                if germs_stats[germ]["criticite"] == 0:
-                    germs_stats[germ]["criticite"] = _get_criticite(germ)
-
+                germ=r.get("germ_match","") or ""
+                if germ in ("Négatif","—","") or int(r.get("ufc",0) or 0)==0: continue
+                total_pos+=1
+                germs_stats[germ]["count"]+=1
+                germs_stats[germ]["ufc_sum"]+=int(r.get("ufc",0) or 0)
+                germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                if germs_stats[germ]["criticite"]==0:
+                    germs_stats[germ]["criticite"]=_get_criticite(germ)
             if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
             else:
-                sorted_germs = sorted(germs_stats.items(), key=lambda x: -x[1]["count"])
-                palette = ["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e",
-                           "#06b6d4","#6366f1","#a855f7","#ec4899","#14b8a6"]
-                g_labels = [g[:28] for g, _ in sorted_germs]
-                g_counts = [d["count"] for _, d in sorted_germs]
-                g_colors = [palette[i % len(palette)] for i in range(len(g_labels))]
-
-                gchart_html = f"""
+                sorted_germs=sorted(germs_stats.items(),key=lambda x:-x[1]["count"])
+                palette=["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e",
+                         "#06b6d4","#6366f1","#a855f7","#ec4899","#14b8a6"]
+                g_labels=[g[:28] for g,_ in sorted_germs]
+                g_counts=[d["count"] for _,d in sorted_germs]
+                g_colors=[palette[i%len(palette)] for i in range(len(g_labels))]
+                gchart_html=f"""
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
                             padding:16px;margin-bottom:18px">
@@ -5252,25 +6362,16 @@ elif active == "historique":
                 </div>
                 <script>
                 (function(){{
-                  const d = {_json_germs.dumps({"labels": g_labels, "counts": g_counts, "colors": g_colors})};
-                  new Chart(document.getElementById('germDoughnut'), {{
-                    type: 'doughnut',
-                    data: {{
-                      labels: d.labels,
-                      datasets: [{{ data: d.counts, backgroundColor: d.colors, borderWidth: 2 }}]
-                    }},
-                    options: {{
-                      responsive: true, maintainAspectRatio: false,
-                      plugins: {{ legend: {{ position: 'bottom',
-                        labels: {{ font: {{ size: 11 }}, boxWidth: 14, padding: 10 }} }} }}
-                    }}
+                  const d={_json_germs.dumps({"labels":g_labels,"counts":g_counts,"colors":g_colors})};
+                  new Chart(document.getElementById('germDoughnut'),{{
+                    type:'doughnut',
+                    data:{{labels:d.labels,datasets:[{{data:d.counts,backgroundColor:d.colors,borderWidth:2}}]}},
+                    options:{{responsive:true,maintainAspectRatio:false,
+                      plugins:{{legend:{{position:'bottom',labels:{{font:{{size:11}},boxWidth:14,padding:10}}}}}}}}
                   }});
                 }})();
-                </script>
-                """
+                </script>"""
                 st.components.v1.html(gchart_html, height=360)
-
-                # Tableau germes avec criticité
                 st.markdown(
                     "<div style='display:grid;"
                     "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
@@ -5283,466 +6384,39 @@ elif active == "historique":
                     "<div style='font-size:.72rem;font-weight:800;color:#fff'>Points touchés</div>"
                     "</div>",
                     unsafe_allow_html=True)
-
-                for gi, (gname, gdata) in enumerate(sorted_germs):
-                    pct     = gdata["count"] / total_pos * 100 if total_pos > 0 else 0
-                    avg_ufc = gdata["ufc_sum"] / gdata["count"] if gdata["count"] > 0 else 0
-                    pts_str = ", ".join(list(gdata["points"])[:3])
-                    bar_w   = int(pct)
-                    crit    = gdata["criticite"]
-                    cc      = _crit_color(crit)
-                    row_bg  = "#f8fafc" if gi % 2 == 0 else "#ffffff"
+                for gi,(gname,gdata) in enumerate(sorted_germs):
+                    pct=gdata["count"]/total_pos*100 if total_pos>0 else 0
+                    avg_ufc=gdata["ufc_sum"]/gdata["count"] if gdata["count"]>0 else 0
+                    pts_str=", ".join(list(gdata["points"])[:3])
+                    crit=gdata["criticite"]; cc=_crit_color(crit)
+                    row_bg="#f8fafc" if gi%2==0 else "#ffffff"
+                    crit_cell=(
+                        "<span style='background:"+cc+"22;color:"+cc+";border:1px solid "+cc+"55;"
+                        "border-radius:5px;padding:1px 7px;font-size:.72rem;font-weight:700'>"
+                        +str(crit)+" – "+_crit_label(crit)+"</span>"
+                        if crit>0 else "<span style='color:#94a3b8'>—</span>")
                     st.markdown(
                         "<div style='display:grid;"
                         "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
-                        "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
+                        "gap:4px;background:"+row_bg+";border:1px solid #e2e8f0;border-top:none;"
                         "padding:9px 14px;align-items:center'>"
-                        "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>🦠 " + gname + "</div>"
-                        "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(gdata["count"]) + "</div>"
+                        "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>🦠 "+gname+"</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"+str(gdata["count"])+"</div>"
                         "<div style='text-align:center'>"
                         "<div style='background:#e2e8f0;border-radius:4px;height:8px;margin-bottom:2px'>"
-                        "<div style='background:#ef4444;border-radius:4px;height:8px;width:" + str(bar_w) + "%'></div></div>"
-                        "<span style='font-size:.75rem;font-weight:700;color:#ef4444'>" + str(round(pct, 1)) + "%</span></div>"
-                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>" + str(round(avg_ufc)) + "</div>"
-                        "<div style='text-align:center'>"
-                        + ("<span style='background:" + cc + "22;color:" + cc + ";border:1px solid " + cc + "55;"
-                           "border-radius:5px;padding:1px 7px;font-size:.72rem;font-weight:700'>"
-                           + str(crit) + " – " + _crit_label(crit) + "</span>" if crit > 0 else "<span style='color:#94a3b8'>—</span>")
-                        + "</div>"
-                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + pts_str + "</div>"
+                        "<div style='background:#ef4444;border-radius:4px;height:8px;width:"+str(int(pct))+"%'></div></div>"
+                        "<span style='font-size:.75rem;font-weight:700;color:#ef4444'>"+str(round(pct,1))+"%</span></div>"
+                        "<div style='font-size:.85rem;font-weight:700;color:#475569;text-align:center'>"+str(round(avg_ufc))+"</div>"
+                        "<div style='text-align:center'>"+crit_cell+"</div>"
+                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+pts_str+"</div>"
                         "</div>",
                         unsafe_allow_html=True)
-
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                     "<div style='font-size:.78rem;color:#94a3b8'>"
-                    + str(len(germs_stats)) + " germe(s) distinct(s) — " + str(total_pos) + " positifs"
+                    +str(len(germs_stats))+" germe(s) — "+str(total_pos)+" positifs"
                     "</div></div>",
                     unsafe_allow_html=True)
-# ══════════════════════════════════════════════════════════════════════
-        # ONGLET 0 : PLAN INTERACTIF
-        # ══════════════════════════════════════════════════════════════════════
-        with hist_tab_plan:
-            import json as _json_plan
-
-            plans_dispo = st.session_state.get("plans", [])
-
-            if not plans_dispo:
-                st.markdown(
-                    "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-                    "border-radius:12px;padding:40px;text-align:center'>"
-                    "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
-                    "<div style='font-weight:700;color:#475569;margin-bottom:4px'>"
-                    "Aucun plan disponible</div>"
-                    "<div style='font-size:.8rem;color:#94a3b8'>"
-                    "Créez des plans dans <strong>Paramètres → Plans</strong>, "
-                    "puis associez-y des points via Nouveau prélèvement.</div></div>",
-                    unsafe_allow_html=True)
-            else:
-                # ── Sélecteur plan ────────────────────────────────────────────
-                plan_sel_name = st.selectbox(
-                    "Plan à afficher",
-                    [p["name"] for p in plans_dispo],
-                    key="hist_tab_plan_sel")
-                plan_sel = next((p for p in plans_dispo if p["name"] == plan_sel_name), None)
-
-                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-                # ── Filtres ───────────────────────────────────────────────────
-                st.markdown(
-                    "<div style='background:#f0f9ff;border:1px solid #bae6fd;"
-                    "border-radius:10px;padding:12px 16px;margin-bottom:12px'>"
-                    "<div style='font-size:.8rem;font-weight:700;color:#0369a1;"
-                    "margin-bottom:8px'>🔍 Filtres</div>",
-                    unsafe_allow_html=True)
-
-                fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 2, 2])
-
-                all_dates_plan = [
-                    _parse_date(r.get("date", ""))
-                    for r in surv_f if _parse_date(r.get("date", ""))
-                ]
-                d_min_plan = min(all_dates_plan) if all_dates_plan else dt_date.today()
-                d_max_plan = max(all_dates_plan) if all_dates_plan else dt_date.today()
-
-                with fc1:
-                    filt_date_debut = st.date_input(
-                        "Du", value=d_min_plan,
-                        min_value=d_min_plan, max_value=d_max_plan,
-                        key="hist_tab_plan_date_debut")
-                with fc2:
-                    filt_date_fin = st.date_input(
-                        "Au", value=d_max_plan,
-                        min_value=d_min_plan, max_value=d_max_plan,
-                        key="hist_tab_plan_date_fin")
-
-                all_pt_labels_plan = sorted({
-                    r.get("prelevement", "") for r in surv_f
-                    if r.get("prelevement")
-                })
-                all_germs_plan = sorted({
-                    r.get("germ_match", "") for r in surv_f
-                    if r.get("germ_match") and r.get("germ_match") not in ("Négatif", "—", "")
-                })
-
-                with fc3:
-                    filt_points = st.multiselect(
-                        "Points", all_pt_labels_plan,
-                        placeholder="Tous les points",
-                        key="hist_tab_plan_filt_pts")
-                with fc4:
-                    filt_germs = st.multiselect(
-                        "Germes", all_germs_plan,
-                        placeholder="Tous les germes",
-                        key="hist_tab_plan_filt_germs")
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                # ── Appliquer filtres ─────────────────────────────────────────
-                surv_plan = [
-                    r for r in surv_f
-                    if (_parse_date(r.get("date", "")) is not None
-                        and filt_date_debut <= _parse_date(r.get("date", "")) <= filt_date_fin)
-                    and (not filt_points or r.get("prelevement", "") in filt_points)
-                    and (not filt_germs  or r.get("germ_match", "")  in filt_germs)
-                ]
-
-                # ── Calcul statut par point ───────────────────────────────────
-                pt_stats_plan = {}
-                for r in surv_plan:
-                    pt = r.get("prelevement", "—")
-                    if pt not in pt_stats_plan:
-                        pt_stats_plan[pt] = {
-                            "total": 0, "ok": 0, "alert": 0, "action": 0,
-                            "germes": [], "last_status": "ok",
-                            "last_date": "", "last_ufc": 0,
-                            "worst_status": "ok",
-                        }
-                    s = pt_stats_plan[pt]
-                    s["total"] += 1
-                    st_r = r.get("status", "ok")
-                    s[st_r] = s.get(st_r, 0) + 1
-                    germ = r.get("germ_match", "")
-                    if germ and germ not in ("Négatif", "—", ""):
-                        s["germes"].append(germ)
-                    d_r = r.get("date", "")
-                    if d_r >= s["last_date"]:
-                        s["last_date"]   = d_r
-                        s["last_status"] = st_r
-                        s["last_ufc"]    = int(r.get("ufc", 0) or 0)
-                    prio = {"action": 2, "alert": 1, "ok": 0}
-                    if prio.get(st_r, 0) > prio.get(s["worst_status"], 0):
-                        s["worst_status"] = st_r
-
-                # ── Récupérer coordonnées map_points (session + Supabase) ─────
-                map_points_store = list(st.session_state.get("map_points", []))
-                _raw_mp = _supa_get('map_points')
-                if _raw_mp:
-                    try:
-                        _supa_mp = json.loads(_raw_mp)
-                        _labels_mem = {mp.get("label", "") for mp in map_points_store}
-                        for _mp in _supa_mp:
-                            if _mp.get("label", "") not in _labels_mem:
-                                map_points_store.append(_mp)
-                        st.session_state["map_points"] = map_points_store
-                    except Exception:
-                        pass
-                pt_coords = {mp.get("label", ""): mp for mp in map_points_store}
-
-                STATUS_COL = {"action": "#ef4444", "alert": "#f59e0b", "ok": "#22c55e", "none": "#94a3b8"}
-                STATUS_IC  = {"action": "🚨", "alert": "⚠️", "ok": "✅", "none": "⬜"}
-                STATUS_LBL = {"action": "ACTION", "alert": "ALERTE", "ok": "Conforme", "none": "Aucune donnée"}
-
-                # ── Métriques résumé ──────────────────────────────────────────
-                nb_action = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "action")
-                nb_alert  = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "alert")
-                nb_ok     = sum(1 for s in pt_stats_plan.values() if s["worst_status"] == "ok")
-                nb_total  = len(surv_plan)
-
-                m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("📋 Résultats filtrés", nb_total)
-                m2.metric("✅ Conformes", nb_ok)
-                m3.metric("⚠️ Alertes", nb_alert)
-                m4.metric("🚨 Actions", nb_action)
-                m5.metric("📍 Points actifs", len(pt_stats_plan))
-
-                # ── Info sur les points sans coordonnées ──────────────────────
-                all_pts_with_data = set(pt_stats_plan.keys())
-                pts_with_coords   = set(pt_coords.keys())
-                pts_no_coords     = all_pts_with_data - pts_with_coords
-
-                if pts_no_coords:
-                    st.info(
-                        f"💡 **{len(pts_no_coords)} point(s)** ont des résultats mais pas encore "
-                        f"de position sur ce plan : {', '.join(sorted(pts_no_coords))}. "
-                        f"Positionnez-les via **Surveillance → Nouveau prélèvement** en "
-                        f"sélectionnant ce plan, puis cliquez sur la carte.")
-
-                # ── Plan interactif HTML ──────────────────────────────────────
-                if plan_sel and plan_sel.get("image_b64"):
-                    pts_on_plan = []
-                    for pt_label, coords in pt_coords.items():
-                        if not isinstance(coords.get("x"), (int, float)):
-                            continue
-                        stats  = pt_stats_plan.get(pt_label)
-                        status = stats["worst_status"] if stats else "none"
-                        col    = STATUS_COL[status]
-                        total  = stats["total"] if stats else 0
-                        germes = ", ".join(sorted(set(stats["germes"]))[:2]) if stats else "—"
-                        pts_on_plan.append({
-                            "label":  pt_label,
-                            "x":      float(coords.get("x", 0)),
-                            "y":      float(coords.get("y", 0)),
-                            "status": status,
-                            "color":  col,
-                            "total":  total,
-                            "germes": germes,
-                        })
-
-                    pts_json = _json_plan.dumps(pts_on_plan, ensure_ascii=False)
-                    img_b64  = plan_sel["image_b64"]
-
-                    plan_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0f172a;font-family:'Segoe UI',sans-serif;height:100vh;
-     display:flex;flex-direction:column;overflow:hidden;color:#f8fafc}}
-.header{{padding:8px 14px;background:#1e293b;border-bottom:1px solid #334155;
-         display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}}
-.title{{font-size:.82rem;font-weight:800;color:#e2e8f0}}
-.legend{{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}}
-.leg-item{{display:flex;align-items:center;gap:5px;font-size:.65rem;color:#94a3b8}}
-.leg-dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0}}
-.main{{flex:1;overflow:auto;background:#1e293b;display:flex;
-       align-items:flex-start;justify-content:center;padding:10px}}
-.mi{{position:relative;display:inline-block;
-     box-shadow:0 6px 32px rgba(0,0,0,.6);border-radius:6px;overflow:visible}}
-#img{{display:block;max-width:100%;border-radius:6px;user-select:none}}
-.pt{{position:absolute;width:32px;height:32px;border-radius:50%;
-     border:3px solid #fff;cursor:pointer;
-     transform:translate(-50%,-50%);
-     display:flex;align-items:center;justify-content:center;
-     font-size:11px;font-weight:900;color:#fff;
-     box-shadow:0 3px 14px rgba(0,0,0,.6);
-     z-index:20;transition:transform .15s,box-shadow .15s}}
-.pt:hover{{transform:translate(-50%,-50%) scale(1.25);
-           box-shadow:0 6px 20px rgba(0,0,0,.8)}}
-.pt.pulse{{animation:pulse 2s infinite}}
-@keyframes pulse{{0%,100%{{box-shadow:0 3px 14px rgba(0,0,0,.6)}}
-                 50%{{box-shadow:0 0 0 8px rgba(239,68,68,.25),0 3px 14px rgba(0,0,0,.6)}}}}
-.tooltip{{position:fixed;background:#0f172a;border:1.5px solid #334155;
-          border-radius:10px;padding:10px 14px;font-size:.72rem;
-          color:#e2e8f0;z-index:9999;pointer-events:none;
-          max-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.7);
-          display:none;line-height:1.6}}
-.tooltip.show{{display:block}}
-.tt-name{{font-weight:800;font-size:.82rem;margin-bottom:4px}}
-.tt-badge{{display:inline-block;border-radius:4px;padding:1px 8px;
-           font-size:.62rem;font-weight:700;margin-bottom:6px}}
-.tt-row{{color:#94a3b8;font-size:.65rem}}
-.tt-row b{{color:#e2e8f0}}
-.empty{{flex:1;display:flex;align-items:center;justify-content:center;
-        color:#475569;font-size:.85rem;text-align:center;padding:40px}}
-</style></head><body>
-<div class="header">
-  <div class="title">🗺️ {plan_sel_name}</div>
-  <div class="legend">
-    <div class="leg-item"><div class="leg-dot" style="background:#22c55e"></div>Conforme</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Aucune donnée</div>
-  </div>
-</div>
-<div class="main">
-  <div class="mi" id="mi">
-    <img id="img" src="{img_b64}" draggable="false">
-  </div>
-</div>
-<div class="tooltip" id="tt"></div>
-<script>
-const PTS={pts_json};
-const STATUS_LABELS={{"action":"🚨 ACTION","alert":"⚠️ ALERTE","ok":"✅ Conforme","none":"⬜ Aucune donnée"}};
-const STATUS_BG={{"action":"rgba(239,68,68,.2)","alert":"rgba(245,158,11,.2)","ok":"rgba(34,197,94,.2)","none":"rgba(148,163,184,.2)"}};
-const STATUS_COL={{"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}};
-const tt=document.getElementById('tt');
-function render(){{
-  document.querySelectorAll('.pt').forEach(p=>p.remove());
-  if(!PTS.length){{
-    const em=document.createElement('div');
-    em.className='empty';
-    em.innerHTML='<div>📍 Aucun point positionné sur ce plan.<br><span style="font-size:.72rem;color:#64748b">Placez des points via Surveillance → Nouveau prélèvement</span></div>';
-    document.getElementById('mi').appendChild(em);
-    return;
-  }}
-  PTS.forEach(pt=>{{
-    const el=document.createElement('div');
-    el.className='pt'+(pt.status==='action'?' pulse':'');
-    el.style.left=pt.x+'%';
-    el.style.top=pt.y+'%';
-    el.style.background=pt.color;
-    el.textContent=pt.total||'?';
-    el.title=pt.label;
-    el.addEventListener('mouseenter',function(e){{showTT(e,pt)}});
-    el.addEventListener('mouseleave',hideTT);
-    el.addEventListener('mousemove',moveTT);
-    document.getElementById('mi').appendChild(el);
-  }});
-}}
-function showTT(e,pt){{
-  const lbl=STATUS_LABELS[pt.status]||pt.status;
-  const bg=STATUS_BG[pt.status]||'rgba(148,163,184,.2)';
-  const col=STATUS_COL[pt.status]||'#94a3b8';
-  tt.innerHTML=`
-    <div class="tt-name">${{pt.label}}</div>
-    <div class="tt-badge" style="background:${{bg}};color:${{col}};border:1px solid ${{col}}44">${{lbl}}</div>
-    <div class="tt-row">📋 Résultats : <b>${{pt.total}}</b></div>
-    ${{pt.germes&&pt.germes!='—'?'<div class="tt-row">🦠 Germes : <b>'+pt.germes+'</b></div>':''}}
-  `;
-  tt.classList.add('show');
-  moveTT(e);
-}}
-function moveTT(e){{
-  let x=e.clientX+14,y=e.clientY-10;
-  if(x+230>window.innerWidth) x=e.clientX-230;
-  if(y+120>window.innerHeight) y=e.clientY-120;
-  tt.style.left=x+'px'; tt.style.top=y+'px';
-}}
-function hideTT(){{tt.classList.remove('show');}}
-const img=document.getElementById('img');
-if(img.complete&&img.naturalWidth>0) render();
-else img.addEventListener('load',render);
-</script></body></html>"""
-
-                    st.components.v1.html(plan_html, height=520, scrolling=False)
-
-                else:
-                    st.markdown(
-                        "<div style='background:#fffbeb;border:1px solid #fde047;"
-                        "border-radius:10px;padding:20px;text-align:center;color:#92400e'>"
-                        "⚠️ Ce plan n'a pas d'image. "
-                        "Modifiez-le dans <strong>Paramètres → Plans</strong>.</div>",
-                        unsafe_allow_html=True)
-
-                st.divider()
-
-                # ── Tableau récapitulatif filtré ──────────────────────────────
-                st.markdown(
-                    "<div style='font-size:.88rem;font-weight:700;color:#1e40af;margin-bottom:10px'>"
-                    "📋 Récapitulatif par point — période filtrée</div>",
-                    unsafe_allow_html=True)
-
-                if not pt_stats_plan:
-                    st.info("Aucun résultat pour les filtres sélectionnés.")
-                else:
-                    st.markdown(
-                        "<div style='display:grid;"
-                        "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
-                        "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Point</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Pire statut</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
-                        "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Dernier résultat</div>"
-                        "</div>",
-                        unsafe_allow_html=True)
-
-                    sorted_pts_plan = sorted(
-                        pt_stats_plan.items(),
-                        key=lambda x: (
-                            {"action": 0, "alert": 1, "ok": 2, "none": 3}.get(x[1]["worst_status"], 3),
-                            x[0]))
-
-                    for ri, (pt_label, s) in enumerate(sorted_pts_plan):
-                        ws  = s["worst_status"]
-                        wsc = STATUS_COL.get(ws, "#94a3b8")
-                        wsl = STATUS_LBL.get(ws, "—")
-                        wsi = STATUS_IC.get(ws, "⬜")
-                        germes_str = ", ".join(sorted(set(s["germes"]))[:3]) or "—"
-                        has_pos = pt_label in pt_coords
-                        pos_badge = (
-                            " <span style='background:#dbeafe;color:#1e40af;"
-                            "border-radius:3px;padding:0 4px;font-size:.55rem'>📍</span>"
-                            if has_pos else
-                            " <span style='background:#fef2f2;color:#991b1b;"
-                            "border-radius:3px;padding:0 4px;font-size:.55rem'>?</span>")
-                        row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
-                        _ls  = s['last_status']
-                        _lsc = STATUS_COL.get(_ls, '#94a3b8')
-                        _lsi = STATUS_IC.get(_ls, '⬜')
-                        _lsl = STATUS_LBL.get(_ls, '—')
-                        _ld  = s['last_date'][:10] if s['last_date'] else '—'
-
-                        st.markdown(
-                            "<div style='display:grid;"
-                            "grid-template-columns:2.2fr 0.6fr 0.6fr 0.6fr 0.7fr 0.9fr 1.8fr 1.2fr;"
-                            f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
-                            "padding:9px 14px;align-items:center'>"
-                            f"<div style='font-size:.85rem;font-weight:700;color:#0f172a'>"
-                            f"📍 {pt_label}{pos_badge}</div>"
-                            f"<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"
-                            f"{s['total']}</div>"
-                            f"<div style='font-size:.9rem;font-weight:700;color:#22c55e;text-align:center'>"
-                            f"{s.get('ok', 0)}</div>"
-                            f"<div style='font-size:.9rem;font-weight:700;color:#f59e0b;text-align:center'>"
-                            f"{s.get('alert', 0)}</div>"
-                            f"<div style='font-size:.9rem;font-weight:700;color:#ef4444;text-align:center'>"
-                            f"{s.get('action', 0)}</div>"
-                            f"<div style='text-align:center'>"
-                            f"<span style='background:{wsc}22;color:{wsc};"
-                            f"border:1px solid {wsc}55;border-radius:6px;"
-                            f"padding:2px 8px;font-size:.68rem;font-weight:700'>"
-                            f"{wsi} {wsl}</span></div>"
-                            f"<div style='font-size:.72rem;color:#475569;font-style:italic'>"
-                            f"{germes_str}</div>"
-                            f"<div style='font-size:.72rem;font-weight:600;color:#475569;text-align:center'>"
-                            f"{_ld}<br>"
-                            f"<span style='color:{_lsc};font-size:.62rem'>{_lsi} {_lsl}</span></div>"
-                            "</div>",
-                            unsafe_allow_html=True)
-
-                    st.markdown(
-                        f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
-                        f"padding:8px 14px'>"
-                        f"<div style='font-size:.78rem;color:#94a3b8'>"
-                        f"{len(pt_stats_plan)} point(s) · {nb_total} résultat(s) "
-                        f"· <span style='color:#86efac'>📍 = positionné sur le plan</span> "
-                        f"· <span style='color:#fca5a5'>? = pas encore positionné</span>"
-                        f"</div></div>",
-                        unsafe_allow_html=True)
-
-                    # ── Liste détaillée filtrée ───────────────────────────────
-                    if surv_plan:
-                        with st.expander(
-                            f"📋 Voir les {len(surv_plan)} résultat(s) détaillés",
-                            expanded=False):
-                            for r in reversed(surv_plan[-50:]):
-                                sc  = "#ef4444" if r["status"] == "action" else \
-                                      "#f59e0b" if r["status"] == "alert"  else "#22c55e"
-                                ic  = "🚨" if r["status"] == "action" else \
-                                      "⚠️" if r["status"] == "alert"  else "✅"
-                                ufc = int(r.get("ufc", 0) or 0)
-                                ts  = r.get("total_score", "—")
-                                st.markdown(
-                                    f"<div style='background:#f8fafc;border-left:3px solid {sc};"
-                                    f"border-radius:8px;padding:8px 14px;margin-bottom:5px;"
-                                    f"display:flex;align-items:center;gap:12px'>"
-                                    f"<span style='font-size:1rem'>{ic}</span>"
-                                    f"<div style='flex:1'>"
-                                    f"<div style='font-size:.78rem;font-weight:600;color:#1e293b'>"
-                                    f"{r['prelevement']} — "
-                                    f"<span style='font-style:italic'>{r.get('germ_match', '—')}</span>"
-                                    f"</div>"
-                                    f"<div style='font-size:.65rem;color:#475569;margin-top:2px'>"
-                                    f"{r.get('date', '—')} · {ufc} UFC"
-                                    f"{'  · Score ' + str(ts) if ts != '—' else ''}"
-                                    f" · {r.get('operateur', '—')}</div>"
-                                    f"</div>"
-                                    f"<span style='font-size:.72rem;color:{sc};"
-                                    f"font-weight:700'>{ufc} UFC</span>"
-                                    f"</div>",
-                                    unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
@@ -5750,63 +6424,59 @@ else img.addEventListener('load',render);
         with hist_tab_prev:
             from collections import defaultdict
 
-            prev_stats = defaultdict(lambda: {
-                "total": 0, "positives": 0, "negatives": 0,
-                "alertes": 0, "actions": 0, "germes": defaultdict(int)
+            prev_stats=defaultdict(lambda:{
+                "total":0,"positives":0,"negatives":0,
+                "alertes":0,"actions":0,"germes":defaultdict(int)
             })
             for r in surv_f:
-                op   = (r.get("operateur", "") or "Non renseigné").strip() or "Non renseigné"
-                ufc  = int(r.get("ufc", 0) or 0)
-                germ = r.get("germ_match", "") or ""
-                st_r = r.get("status", "ok")
-                prev_stats[op]["total"] += 1
-                if ufc > 0 and germ not in ("Négatif", "—", ""):
-                    prev_stats[op]["positives"] += 1
-                    prev_stats[op]["germes"][germ] += 1
+                op=(r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
+                ufc=int(r.get("ufc",0) or 0)
+                germ=r.get("germ_match","") or ""
+                st_r=r.get("status","ok")
+                prev_stats[op]["total"]+=1
+                if ufc>0 and germ not in ("Négatif","—",""):
+                    prev_stats[op]["positives"]+=1
+                    prev_stats[op]["germes"][germ]+=1
                 else:
-                    prev_stats[op]["negatives"] += 1
-                if st_r == "alert":
-                    prev_stats[op]["alertes"] += 1
-                elif st_r == "action":
-                    prev_stats[op]["actions"] += 1
+                    prev_stats[op]["negatives"]+=1
+                if st_r=="alert":    prev_stats[op]["alertes"]+=1
+                elif st_r=="action": prev_stats[op]["actions"]+=1
 
-            op_list   = sorted(prev_stats.items(), key=lambda x: -x[1]["total"])
-            card_cols = st.columns(min(len(op_list), 4))
-            for ci, (op_name, op_data) in enumerate(op_list):
-                t        = op_data["total"]
-                pos      = op_data["positives"]
-                taux_pos = pos / t * 100 if t > 0 else 0
-                tc       = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
-                ini      = op_name[0].upper() if op_name != "Non renseigné" else "?"
-                with card_cols[ci % len(card_cols)]:
+            op_list=sorted(prev_stats.items(),key=lambda x:-x[1]["total"])
+            card_cols=st.columns(min(len(op_list),4))
+            for ci,(op_name,op_data) in enumerate(op_list):
+                t=op_data["total"]; pos=op_data["positives"]
+                taux_pos=pos/t*100 if t>0 else 0
+                tc="#ef4444" if taux_pos>=30 else "#f59e0b" if taux_pos>0 else "#22c55e"
+                ini=op_name[0].upper() if op_name!="Non renseigné" else "?"
+                with card_cols[ci%len(card_cols)]:
                     st.markdown(
                         "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;"
                         "padding:18px 14px;text-align:center;margin-bottom:12px'>"
                         "<div style='background:#2563eb;color:#fff;border-radius:50%;width:48px;height:48px;"
                         "display:flex;align-items:center;justify-content:center;font-weight:800;"
-                        "font-size:1.2rem;margin:0 auto 10px auto'>" + ini + "</div>"
-                        "<div style='font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px'>" + op_name + "</div>"
-                        "<div style='font-size:2rem;font-weight:900;color:#1e40af'>" + str(t) + "</div>"
+                        "font-size:1.2rem;margin:0 auto 10px auto'>"+ini+"</div>"
+                        "<div style='font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px'>"+op_name+"</div>"
+                        "<div style='font-size:2rem;font-weight:900;color:#1e40af'>"+str(t)+"</div>"
                         "<div style='font-size:.68rem;color:#64748b;margin-bottom:10px'>résultat(s)</div>"
                         "<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px'>"
                         "<div style='background:#f0fdf4;border-radius:8px;padding:6px'>"
-                        "<div style='font-size:1rem;font-weight:800;color:#22c55e'>" + str(op_data["negatives"]) + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#22c55e'>"+str(op_data["negatives"])+"</div>"
                         "<div style='font-size:.6rem;color:#166534'>✅ Nég.</div></div>"
                         "<div style='background:#fef2f2;border-radius:8px;padding:6px'>"
-                        "<div style='font-size:1rem;font-weight:800;color:#ef4444'>" + str(pos) + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#ef4444'>"+str(pos)+"</div>"
                         "<div style='font-size:.6rem;color:#991b1b'>🦠 Pos.</div></div>"
                         "<div style='background:#fffbeb;border-radius:8px;padding:6px'>"
-                        "<div style='font-size:1rem;font-weight:800;color:#f59e0b'>" + str(op_data["alertes"]) + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#f59e0b'>"+str(op_data["alertes"])+"</div>"
                         "<div style='font-size:.6rem;color:#92400e'>⚠️ Alerte</div></div>"
                         "<div style='background:#fef2f2;border-radius:8px;padding:6px'>"
-                        "<div style='font-size:1rem;font-weight:800;color:#dc2626'>" + str(op_data["actions"]) + "</div>"
+                        "<div style='font-size:1rem;font-weight:800;color:#dc2626'>"+str(op_data["actions"])+"</div>"
                         "<div style='font-size:.6rem;color:#991b1b'>🚨 Action</div></div></div>"
-                        "<div style='margin-top:10px;background:" + tc + "22;border:1px solid " + tc + "55;"
+                        "<div style='margin-top:10px;background:"+tc+"22;border:1px solid "+tc+"55;"
                         "border-radius:8px;padding:5px'>"
-                        "<div style='font-size:.8rem;font-weight:800;color:" + tc + "'>"
-                        + str(round(taux_pos)) + "% positifs</div></div></div>",
+                        "<div style='font-size:.8rem;font-weight:800;color:"+tc+"'>"
+                        +str(round(taux_pos))+"% positifs</div></div></div>",
                         unsafe_allow_html=True)
-
             st.divider()
             st.markdown(
                 "<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;"
@@ -5820,69 +6490,74 @@ else img.addEventListener('load',render);
                 "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes fréquents</div>"
                 "</div>",
                 unsafe_allow_html=True)
-
-            for ri, (op_name, op_data) in enumerate(op_list):
-                t        = op_data["total"]
-                pos      = op_data["positives"]
-                taux_pos = pos / t * 100 if t > 0 else 0
-                tc       = "#ef4444" if taux_pos >= 30 else "#f59e0b" if taux_pos > 0 else "#22c55e"
-                top_g    = ", ".join(
-                    g + "(" + str(n) + "x)"
-                    for g, n in sorted(op_data["germes"].items(), key=lambda x: -x[1])[:3]
+            for ri,(op_name,op_data) in enumerate(op_list):
+                t=op_data["total"]; pos=op_data["positives"]
+                taux_pos=pos/t*100 if t>0 else 0
+                tc="#ef4444" if taux_pos>=30 else "#f59e0b" if taux_pos>0 else "#22c55e"
+                top_g=", ".join(
+                    g+"("+str(n)+"x)"
+                    for g,n in sorted(op_data["germes"].items(),key=lambda x:-x[1])[:3]
                 ) or "—"
-                row_bg = "#f8fafc" if ri % 2 == 0 else "#ffffff"
+                row_bg="#f8fafc" if ri%2==0 else "#ffffff"
                 st.markdown(
                     "<div style='display:grid;grid-template-columns:2fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 2fr;"
-                    "gap:4px;background:" + row_bg + ";border:1px solid #e2e8f0;border-top:none;"
+                    "gap:4px;background:"+row_bg+";border:1px solid #e2e8f0;border-top:none;"
                     "padding:9px 14px;align-items:center'>"
-                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>👤 " + op_name + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>" + str(t) + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>" + str(op_data["negatives"]) + "</div>"
-                    "<div style='text-align:center'><span style='background:" + tc + "22;color:" + tc + ";"
-                    "border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700'>" + str(pos) + "</span></div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#f59e0b;text-align:center'>" + str(op_data["alertes"]) + "</div>"
-                    "<div style='font-size:1rem;font-weight:800;color:#ef4444;text-align:center'>" + str(op_data["actions"]) + "</div>"
-                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>" + top_g + "</div>"
+                    "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>👤 "+op_name+"</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"+str(t)+"</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>"+str(op_data["negatives"])+"</div>"
+                    "<div style='text-align:center'><span style='background:"+tc+"22;color:"+tc+";"
+                    "border-radius:6px;padding:2px 8px;font-size:.8rem;font-weight:700'>"+str(pos)+"</span></div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#f59e0b;text-align:center'>"+str(op_data["alertes"])+"</div>"
+                    "<div style='font-size:1rem;font-weight:800;color:#ef4444;text-align:center'>"+str(op_data["actions"])+"</div>"
+                    "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+top_g+"</div>"
                     "</div>",
                     unsafe_allow_html=True)
-
             st.markdown(
                 "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                 "<div style='font-size:.78rem;color:#94a3b8'>"
-                + str(len(op_list)) + " préleveur(s)"
-                "</div></div>",
+                +str(len(op_list))+" préleveur(s)</div></div>",
                 unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 4 : LISTE DES ENTRÉES
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_liste:
-            for r in reversed(surv_f):
-                real_i = surv.index(r)
-                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
+            surv_f_indexed = []
+            for r in surv_f:
+                try:
+                    real_i = surv.index(r)
+                    surv_f_indexed.append((real_i, r))
+                except ValueError:
+                    continue
+
+            for real_i, r in reversed(surv_f_indexed):
+                ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
                 with st.expander(
-                    ic + " " + r["date"] + " — " + r["prelevement"]
-                    + " — " + r["germ_match"] + " — " + str(r["ufc"]) + " UFC/m³"
-                ):
+                    ic+" "+r.get("date","—")+" — "+r.get("prelevement","—")
+                    +" — "+r.get("germ_match","—")+" — "+str(r.get("ufc","—"))+" UFC/m³"):
                     if st.session_state.get("edit_surv_idx") == real_i:
                         st.markdown("**✏️ Modifier cette entrée**")
-                        e1, e2 = st.columns(2)
+                        e1,e2 = st.columns(2)
                         with e1:
-                            new_germ      = st.text_input("Germe",      value=r.get("germ_match",""),  key=f"es_germ_{real_i}")
-                            new_ufc       = st.number_input("UFC",       value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
-                            new_operateur = st.text_input("Opérateur",   value=r.get("operateur",""),   key=f"es_oper_{real_i}")
+                            new_germ      = st.text_input("Germe",    value=r.get("germ_match",""), key=f"es_germ_{real_i}")
+                            new_ufc       = st.number_input("UFC",    value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
+                            new_operateur = st.text_input("Opérateur",value=r.get("operateur",""),  key=f"es_oper_{real_i}")
                         with e2:
-                            new_remarque    = st.text_area("Remarque",    value=r.get("remarque",""),    height=70, key=f"es_rem_{real_i}")
-                            new_commentaire = st.text_area("Commentaire", value=r.get("commentaire",""), height=70, key=f"es_com_{real_i}")
-                        sb1, sb2 = st.columns(2)
+                            new_remarque    = st.text_area("Remarque",   value=r.get("remarque",""),   height=70, key=f"es_rem_{real_i}")
+                            new_commentaire = st.text_area("Commentaire",value=r.get("commentaire",""),height=70, key=f"es_com_{real_i}")
+                        sb1,sb2 = st.columns(2)
                         with sb1:
-                            if st.button("💾 Sauvegarder", key=f"es_save_{real_i}", use_container_width=True, type="primary"):
-                                st.session_state.surveillance[real_i]["germ_match"]   = new_germ
-                                st.session_state.surveillance[real_i]["germ_saisi"]   = new_germ
-                                st.session_state.surveillance[real_i]["ufc"]          = new_ufc
-                                st.session_state.surveillance[real_i]["operateur"]    = new_operateur
-                                st.session_state.surveillance[real_i]["remarque"]     = new_remarque
-                                st.session_state.surveillance[real_i]["commentaire"]  = new_commentaire
+                            if st.button("💾 Sauvegarder", key=f"es_save_{real_i}",
+                                         use_container_width=True, type="primary"):
+                                st.session_state.surveillance[real_i].update({
+                                    "germ_match":  new_germ,
+                                    "germ_saisi":  new_germ,
+                                    "ufc":         new_ufc,
+                                    "operateur":   new_operateur,
+                                    "remarque":    new_remarque,
+                                    "commentaire": new_commentaire,
+                                })
                                 save_surveillance(st.session_state.surveillance)
                                 st.session_state["edit_surv_idx"] = None
                                 st.rerun()
@@ -5891,20 +6566,20 @@ else img.addEventListener('load',render);
                                 st.session_state["edit_surv_idx"] = None
                                 st.rerun()
                     else:
-                        c1, c2, c3, c4 = st.columns([3, 3, 3, 1])
-                        crit_r = _get_criticite(r["germ_match"])
+                        c1,c2,c3,c4 = st.columns([3,3,3,1])
+                        crit_r = _get_criticite(r.get("germ_match",""))
                         c1.markdown(
-                            "**Germe saisi :** " + r["germ_saisi"]
-                            + "\n\n**Correspondance :** " + r["germ_match"]
-                            + " (" + str(r["match_score"]) + ")"
-                            + ("\n\n**Criticité :** " + str(crit_r) + " – " + _crit_label(crit_r) if crit_r > 0 else ""))
+                            "**Germe saisi :** "+str(r.get("germ_saisi","—"))
+                            +"\n\n**Correspondance :** "+str(r.get("germ_match","—"))
+                            +" ("+str(r.get("match_score","—"))+")"
+                            +("\n\n**Criticité :** "+str(crit_r)+" – "+_crit_label(crit_r) if crit_r>0 else ""))
                         c2.markdown(
-                            "**UFC/m³ :** " + str(r["ufc"])
-                            + "\n\n**Seuil alerte :** ≥" + str(r["alert_threshold"])
-                            + " | **Seuil action :** ≥" + str(r["action_threshold"]))
+                            "**UFC/m³ :** "+str(r.get("ufc","—"))
+                            +"\n\n**Seuil alerte :** "+str(r.get("alert_threshold","—"))
+                            +" | **Seuil action :** "+str(r.get("action_threshold","—")))
                         c3.markdown(
-                            "**Opérateur :** " + str(r.get("operateur", "N/A"))
-                            + "\n\n**Remarque :** " + str(r.get("remarque", "—")))
+                            "**Opérateur :** "+str(r.get("operateur","N/A"))
+                            +"\n\n**Remarque :** "+str(r.get("remarque","—")))
                         if r.get("commentaire"):
                             c3.markdown(
                                 f"<div style='background:#f5f3ff;border:1px solid #c4b5fd;"

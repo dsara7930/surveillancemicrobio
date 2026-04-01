@@ -1,6 +1,8 @@
 streamlit
 supabase
-reportlab
 PyMuPDF
 openpyxl
 Pillow
+streamlit-image-coordinates
+qrcode[pil]
+reportlab
