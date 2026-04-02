@@ -5522,26 +5522,23 @@ if active == "historique":
                 
                 # Dédupliquer par sample_id : garder le pire résultat (action > alert > ok)
                 # Si pas de sample_id (ancienne entrée), on garde toutes
+                prio = {"ok": 0, "alert": 1, "action": 2}   # ← AJOUTER CETTE LIGNE
                 _seen_sample_ids = {}
                 surv_plan = []
                 for r in _surv_plan_all:
                     sid = r.get("sample_id", "")
                     if not sid:
-                        # Pas de sample_id → on inclut directement (ancienne entrée)
                         surv_plan.append(r)
                         continue
                     if sid not in _seen_sample_ids:
                         _seen_sample_ids[sid] = r
                     else:
-                        # Garder le pire statut entre les deux lectures (J2 vs J7)
                         existing = _seen_sample_ids[sid]
                         if prio.get(r.get("status","ok"),0) > prio.get(existing.get("status","ok"),0):
                             _seen_sample_ids[sid] = r
-                
-                # Reconstruire surv_plan avec les entrées dédupliquées
+
                 surv_plan = [r for r in _surv_plan_all if not r.get("sample_id","")]
                 surv_plan += list(_seen_sample_ids.values())
-                # Retrier par date
                 surv_plan.sort(key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
 
                 # ── Métriques ─────────────────────────────────────────────────
