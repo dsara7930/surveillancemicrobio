@@ -258,9 +258,10 @@ DEFAULT_FAQ = [
         "question": "Que signifie la criticité du lieu (1–3) ?",
         "answer": (
             "La criticité du lieu qualifie l'importance environnementale du point de prélèvement :\n\n"
-            "- **Niveau 1** 🟢 — Zone non critique (couloirs, locaux techniques...)\n"
-            "- **Niveau 2** 🟡 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)\n"
-            "- **Niveau 3** 🔴 — Zone critique (ZAC, salles blanches, isolateurs...)\n\n"
+            "- **Niveau 1** 🟢 — Limité\n"
+            "- **Niveau 2** 🔵 — Modéré\n"
+            "- **Niveau 3** 🟠 — Important\n"
+            "- **Niveau 4** 🔴 — Critique\n"
             "Ce niveau est défini dans **Paramètres → Points de prélèvement** et est "
             "automatiquement repris lors de l'identification microbiologique."
         ),
@@ -6455,12 +6456,13 @@ elif active == "parametres":
 
     # ── Constantes Points ──────────────────────────────────────────────────────
     LOC_CRIT_OPTS = [
-        "1 — Zone non critique (locaux techniques, couloirs...)",
-        "2 — Zone semi-critique (préparations non stériles, zones annexes ZAC...)",
-        "3 — Zone critique (ZAC, salles blanches, isolateurs...)",
+        "1 — Limité",
+        "2 — Modéré",
+        "3 — Important",
+        "4 — Critique",
     ]
-    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}
-    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique"}
+    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
+    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
     # ══════════════════════════════════════════════════════════════════════════
