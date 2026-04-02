@@ -2609,12 +2609,7 @@ function scan() {
         # ══════════════════════════════════════════════════════════════════
 
         def _fix_azerty(text: str) -> str:
-        """
-        Corrige le remapping AZERTY→QWERTY des douchettes configurées en layout FR.
-        Couvre tous les caractères JSON critiques : { } " : , ainsi que les chiffres
-        et lettres fréquemment remappés.
-        """
-        # Table de correspondance AZERTY (ce que la douchette envoie) → QWERTY (ce qu'on veut)
+                # Table de correspondance AZERTY (ce que la douchette envoie) → QWERTY (ce qu'on veut)
         azerty_to_qwerty = {
             # Chiffres / symboles ligne du haut
             '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
