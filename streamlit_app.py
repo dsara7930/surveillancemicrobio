@@ -4318,7 +4318,7 @@ if active == "planning":
         from reportlab.lib.enums     import TA_RIGHT
 
         # ── Dimensions étiquettes ───────────────────────────────────────────
-        W_ETQ  = 5.0  * rl_cm
+        W_ETQ  = 5.25  * rl_cm
         H_ETQ  = 3.0  * rl_cm
         N_COLS = 4
         GAP    = 0.0  * rl_cm   # ← 0 gap pour coller à la planche
