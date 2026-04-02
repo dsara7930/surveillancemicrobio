@@ -4372,11 +4372,27 @@ if active == "planning":
             is_week   = False
             doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
 
-        doc = SimpleDocTemplate(
-            buf, pagesize=A4,
+            # ─── APRÈS — à mettre à la place ─────────────────────────────────────
+        from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
+
+        A4_W, A4_H = A4
+
+        frame = Frame(
+            x1=0, y1=0,
+            width=A4_W,
+            height=A4_H,
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0)
+
+        doc = BaseDocTemplate(
+            buf,
+            pagesize=A4,
             leftMargin=0, rightMargin=0,
             topMargin=0,  bottomMargin=0,
             title=doc_title)
+        doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
 
         def _build_cell(task, d_obj):
             rv      = str(task.get("risk", ""))
