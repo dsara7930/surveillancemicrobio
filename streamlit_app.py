@@ -2609,17 +2609,51 @@ function scan() {
         # ══════════════════════════════════════════════════════════════════
 
         def _fix_azerty(text: str) -> str:
-            """Corrige le remapping AZERTY→QWERTY des douchettes en layout FR."""
-            pairs = [
-                ('&','1'),('é','2'),('"','3'),("'",'4'),('(','5'),
-                ('-','6'),('è','7'),('_','8'),('ç','9'),('à','0'),
-                (')','='),('a','q'),('z','w'),('q','a'),('m',';'),
-                ('w','z'),(',',','),(':','/'),
-                ('A','Q'),('Z','W'),('Q','A'),('M',':'),('W','Z'),
-            ]
-            src = ''.join(p[0] for p in pairs)
-            dst = ''.join(p[1] for p in pairs)
-            return text.translate(str.maketrans(src, dst))
+        """
+        Corrige le remapping AZERTY→QWERTY des douchettes configurées en layout FR.
+        Couvre tous les caractères JSON critiques : { } " : , ainsi que les chiffres
+        et lettres fréquemment remappés.
+        """
+        # Table de correspondance AZERTY (ce que la douchette envoie) → QWERTY (ce qu'on veut)
+        azerty_to_qwerty = {
+            # Chiffres / symboles ligne du haut
+            '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
+            '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
+            ')': '=',
+            # Symboles essentiels pour JSON
+            '%': '{',    # Shift+( sur AZERTY → { sur QWERTY  (Shift+[)
+            'µ': '}',    # selon clavier — fallback
+            '^': '[',
+            '$': ']',
+            'ù': '%',
+            '*': '\\',
+            '!': '/',
+            ':': '/',    # : non-shifté → / sur certains layouts
+            ';': ';',
+            ',': ',',
+            # Lettres remappées
+            'a': 'q', 'A': 'Q',
+            'z': 'w', 'Z': 'W',
+            'q': 'a', 'Q': 'A',
+            'w': 'z', 'W': 'Z',
+            'm': ';', 'M': ':',
+        }
+
+        # --- Approche robuste : essayer de détecter et corriger les séquences JSON ---
+        # Sur la plupart des douchettes AZERTY le problème principal est :
+        #   { → % (Shift+( sur AZERTY envoie % au lieu de {)
+        #   " → Shift+3 sur AZERTY envoie " mais certaines douchettes envoient é
+        # On tente d'abord une substitution globale du caractère { manquant
+        result = []
+        for ch in text:
+            result.append(azerty_to_qwerty.get(ch, ch))
+        fixed = ''.join(result)
+
+        # Si après correction on a toujours pas de { mais on a %, tenter remplacement direct
+        if '{' not in fixed and '%' in text:
+            fixed = text.replace('%', '{').replace('µ', '}')
+
+        return fixed
 
         # Correction AZERTY automatique
         qr_raw = qr_raw_input.strip() if qr_raw_input else ""
@@ -3791,15 +3825,23 @@ if active == "planning":
         return buf.getvalue()
 
     def _qr_payload(pt: dict) -> dict:
-        """Construit le payload JSON minimal d'un point pour le QR code."""
+        # Normalisation des valeurs : retirer les accents des chaînes courtes
+        import unicodedata
+
+        def _strip_accents(s: str) -> str:
+            return ''.join(
+                c for c in unicodedata.normalize('NFD', str(s))
+                if unicodedata.category(c) != 'Mn'
+            )
+
         return {
-            "app":   "URC",
-            "id":    pt.get("id", ""),
-            "label": pt.get("label", ""),
-            "type":  pt.get("type", ""),
-            "rc":    pt.get("room_class", ""),
-            "lc":    int(pt.get("location_criticality", 1)),
-            "gel":   pt.get("gelose", ""),
+            "a": "URC",                                          # app identifier
+            "i": pt.get("id", ""),                               # id
+            "l": pt.get("label", ""),                            # label (gardé avec accents — info)
+            "t": pt.get("type", ""),                             # type Air/Surface
+            "r": pt.get("room_class", ""),                       # room class A/B/C/D
+            "c": int(pt.get("location_criticality", 1)),         # criticite lieu
+            "g": pt.get("gelose", ""),                           # gelose
         }
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
         """"
@@ -4419,10 +4461,19 @@ if active == "planning":
                     qr_flowable = ""
 
             classea_rows = []
-            if task.get("room_class") == "A" and _pt_data:
-                iso = _pt_data.get("num_isolateur", "—") or "—"
-                pst = _pt_data.get("poste", "—") or "—"
-                classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
+            if task.get("room_class", "").strip().upper() == "A":
+                # Priorité : isolateur passé dans la task (mode 2-étiquettes)
+                # sinon fallback sur _pt_data
+                iso_display = task.get("_isolateur")
+                if not iso_display and _pt_data:
+                    iso_display = _pt_data.get("num_isolateur", "—") or "—"
+                if not iso_display:
+                    iso_display = "—"
+                pst = ""
+                if _pt_data:
+                    pst = _pt_data.get("poste", "") or ""
+                label_iso = iso_display + (f" · {pst}" if pst else "")
+                classea_rows = [[Paragraph(label_iso, s_classea)]]
 
             left_tbl = Table([
                 [Paragraph(lv, s_titre)],
@@ -4532,12 +4583,26 @@ if active == "planning":
 
             # Étiquettes du jour
             row_buf = []
+                        # APRÈS — classe A génère 2 étiquettes (une par isolateur)
+            ISOLATEURS_A = ["Iso 16/0724", "Iso 14/07169"]
+
             for task in day_tasks:
-                row_buf.append(_build_cell(task, day_date))
-                if len(row_buf) == N_COLS:
-                    all_rows.append(row_buf)
-                    all_row_heights.append(H_ETQ)
-                    row_buf = []
+                if task.get("room_class", "").strip().upper() == "A":
+                    # Générer une étiquette par isolateur
+                    for iso_name in ISOLATEURS_A:
+                        task_iso = dict(task)
+                        task_iso["_isolateur"] = iso_name   # marqueur pour _build_cell
+                        row_buf.append(_build_cell(task_iso, day_date))
+                        if len(row_buf) == N_COLS:
+                            all_rows.append(row_buf)
+                            all_row_heights.append(H_ETQ)
+                            row_buf = []
+                else:
+                    row_buf.append(_build_cell(task, day_date))
+                    if len(row_buf) == N_COLS:
+                        all_rows.append(row_buf)
+                        all_row_heights.append(H_ETQ)
+                        row_buf = []
             # Compléter la dernière rangée si incomplète
             if row_buf:
                 while len(row_buf) < N_COLS:
@@ -5322,15 +5387,29 @@ if active == "planning":
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
                             for p in st.session_state.prelevements)
 
-                        # ── Suffixe numéro de poste pour classe A spécifique ──
+                        # APRÈS — numérotation pour TOUS les points dont freq > 1/jour
+                        # Calcul de la fréquence journalière du point
+                        _freq_raw_xl  = pt.get('frequency')
+                        _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
+                        try:
+                            _freq_val_xl = float(_freq_raw_xl) if _freq_raw_xl else 0.0
+                        except (TypeError, ValueError):
+                            _freq_val_xl = 0.0
+                        _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
+
                         if (is_planned or is_done) and is_class_a and poste_type == "specifique":
-                            poste_num    = (poste_counter % 2) + 1   # alterne 1 / 2
+                            poste_num    = (poste_counter % 2) + 1
                             poste_suffix = f" {poste_num}"
+                            poste_counter += 1
+                        elif (is_planned or is_done) and _is_multi_day:
+                            # Numérotation des passages dans la journée : X 1, X 2, X 3…
+                            poste_suffix = f" {poste_counter + 1}"
                             poste_counter += 1
                         else:
                             poste_suffix = ""
                             if is_planned or is_done:
-                                poste_counter += 1  # on incrémente quand même pour cohérence
+                                poste_counter += 1
+                        
 
                         if is_done:
                             c.value     = f"✓{poste_suffix}"
