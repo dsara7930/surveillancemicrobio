@@ -4944,8 +4944,30 @@ if active == "planning":
 
         exp_scope = st.selectbox(
             "Période",
-            ["Mois en cours", "4 semaines à venir", "Tout le planning"],
+            ["Semaine en cours", "Semaine choisie", "Mois en cours", "4 semaines à venir", "Tout le planning"],
             key="exp_scope")
+
+        # ── Sélecteur de semaine si "Semaine choisie" ─────────────────────
+        if exp_scope == "Semaine choisie":
+            _today_ref     = _today_dt
+            _cur_monday    = _today_ref - timedelta(days=_today_ref.weekday())
+            _week_opts     = [_cur_monday + timedelta(weeks=i) for i in range(-4, 13)]
+            _week_labels   = []
+            for _wm in _week_opts:
+                _we = _wm + timedelta(days=4)
+                _marker = " ← semaine en cours" if _wm == _cur_monday else ""
+                _week_labels.append(
+                    f"Sem. {_wm.isocalendar()[1]} — {_wm.strftime('%d/%m/%Y')} → {_we.strftime('%d/%m/%Y')}{_marker}")
+            _sel_week_idx = st.selectbox(
+                "Choisir la semaine",
+                range(len(_week_labels)),
+                format_func=lambda i: _week_labels[i],
+                index=4,
+                key="exp_chosen_week")
+            _chosen_monday = _week_opts[_sel_week_idx]
+        else:
+            _chosen_monday = None
+
         exp_oper_filter = st.selectbox(
             "Filtrer par opérateur",
             ["Tous"] + [o['nom'] for o in st.session_state.operators],
@@ -4989,7 +5011,15 @@ if active == "planning":
 
             # ── Plage de dates ────────────────────────────────────────────
             exp_today = _today_dt
-            if exp_scope == "Mois en cours":
+
+            if exp_scope == "Semaine en cours":
+                _monday   = exp_today - timedelta(days=exp_today.weekday())
+                exp_dates = [_monday + timedelta(days=i) for i in range(7)]
+
+            elif exp_scope == "Semaine choisie":
+                exp_dates = [_chosen_monday + timedelta(days=i) for i in range(7)]
+
+            elif exp_scope == "Mois en cours":
                 import calendar as cal_module
                 first = exp_today.replace(day=1)
                 last  = exp_today.replace(
@@ -5041,16 +5071,10 @@ if active == "planning":
                     weeks_map[ws_key] = []
                 weeks_map[ws_key].append(d)
 
-            # Construire le planning pour chaque semaine
-            # On a besoin de class_max_dict (déjà calculé plus haut dans le scope)
-            # et de monthly_plan par mois → on recalcule si nécessaire
-
             JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
             pts_all = st.session_state.points
 
-            # Titre général
             n_weeks = len(weeks_map)
-            # Largeur totale = 1 col label + 1 col classe + 1 col type + (5 jours × n_semaines)
             FIXED_COLS = 3  # Label | Classe | Type
             DAYS_PER_WEEK = 5
             total_cols = FIXED_COLS + DAYS_PER_WEEK * n_weeks
@@ -5068,7 +5092,7 @@ if active == "planning":
             ws_matrix.cell(2, 1).value     = (
                 f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
                 f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'} — "
-                f"X = prélèvement prévu · 🟢 = réalisé")
+                f"X = prélèvement prévu · X 1/X 2 = poste spécifique · ✓ = réalisé")
             ws_matrix.cell(2, 1).font      = Font(name="Arial", size=8, color="475569")
             ws_matrix.cell(2, 1).fill      = fill(C_BLUE_L)
             ws_matrix.cell(2, 1).alignment = al_c()
@@ -5104,7 +5128,6 @@ if active == "planning":
 
             # ── Ligne 4 : en-têtes jours (Lun, Mar… + date) ──────────────
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
-                # Construire un mapping jour→date pour cette semaine
                 day_date_map = {}
                 for d in ws_days:
                     day_date_map[d.weekday()] = d  # weekday: 0=Lun … 4=Ven
@@ -5143,10 +5166,12 @@ if active == "planning":
 
             data_row = 5
             for pt_idx, pt in enumerate(pts_all):
-                rc       = (pt.get('room_class') or '').strip()
-                rv       = str(pt.get('risk_level', ''))
-                type_lbl = pt.get('type', '—')
-                row_bg   = "FFFFFF" if pt_idx % 2 == 0 else "F8FAFC"
+                rc         = (pt.get('room_class') or '').strip()
+                rv         = str(pt.get('risk_level', ''))
+                type_lbl   = pt.get('type', '—')
+                poste_type = pt.get('poste_type', 'non_applicable')
+                is_class_a = rc.strip().upper() == "A"
+                row_bg     = "FFFFFF" if pt_idx % 2 == 0 else "F8FAFC"
 
                 ws_matrix.row_dimensions[data_row].height = 18
 
@@ -5175,21 +5200,20 @@ if active == "planning":
                 c.alignment = al_c()
                 c.border    = border_all()
 
-                # Colonnes jours : X si prévu, fond vert si réalisé
+                # Compteur alternance poste spécifique : P1 un jour, P2 le suivant
+                poste_counter = 0
+
+                # Colonnes jours : X (+ numéro poste si classe A spécifique) ou ✓ si réalisé
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
-                    # Calculer le planning de cette semaine pour ce point
-                    # On cherche dans monthly_plan (calculé par mois)
-                    # → on agrège sur tous les jours de la semaine
                     for di in range(DAYS_PER_WEEK):
-                        col      = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                        col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                         d_for_col = day_date_map.get(di)
                         c = ws_matrix.cell(data_row, col)
 
                         if d_for_col is None:
-                            # Jour férié / hors plage
-                            c.value = ""
-                            c.fill  = fill("E2E8F0")
+                            c.value  = ""
+                            c.fill   = fill("E2E8F0")
                             c.border = border_all()
                             continue
 
@@ -5204,12 +5228,22 @@ if active == "planning":
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
                             for p in st.session_state.prelevements)
 
+                        # ── Suffixe numéro de poste pour classe A spécifique ──
+                        if (is_planned or is_done) and is_class_a and poste_type == "specifique":
+                            poste_num    = (poste_counter % 2) + 1   # alterne 1 / 2
+                            poste_suffix = f" {poste_num}"
+                            poste_counter += 1
+                        else:
+                            poste_suffix = ""
+                            if is_planned or is_done:
+                                poste_counter += 1  # on incrémente quand même pour cohérence
+
                         if is_done:
-                            c.value     = "✓"
+                            c.value     = f"✓{poste_suffix}"
                             c.font      = Font(name="Arial", size=11, bold=True, color=C_GREEN)
                             c.fill      = fill("DCFCE7")
                         elif is_planned:
-                            c.value     = "X"
+                            c.value     = f"X{poste_suffix}"
                             c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
                             c.fill      = fill("DBEAFE")
                         else:
@@ -5248,8 +5282,6 @@ if active == "planning":
                         c.fill  = fill("334155")
                     c.alignment = al_c()
                     c.border    = border_all()
-
-            
 
             buf = _io.BytesIO()
             wb.save(buf)
