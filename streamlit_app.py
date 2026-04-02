@@ -4307,12 +4307,6 @@ if active == "planning":
     }
 
     def _generate_pdf_etiquettes(tasks, date_obj_or_list):
-        """
-        Génère le PDF d'étiquettes.
-        - date_obj_or_list peut être une date unique (un jour)
-          ou une liste de tuples [(date, [tasks]), ...] pour l'impression semaine.
-        Retourne les bytes du PDF.
-        """
         import io as _io
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units     import cm as rl_cm
@@ -4323,63 +4317,59 @@ if active == "planning":
         from reportlab.lib.styles    import ParagraphStyle
         from reportlab.lib.enums     import TA_RIGHT
 
+        # ── Dimensions étiquettes ───────────────────────────────────────────
+        W_ETQ  = 5.0  * rl_cm
+        H_ETQ  = 3.0  * rl_cm
+        N_COLS = 4
+        GAP    = 0.0  * rl_cm   # ← 0 gap pour coller à la planche
+        MARGIN = 0.7  * rl_cm   # ← ajustez selon votre planche
+
+        buf  = _io.BytesIO()
+        A4_W, A4_H = A4
+
         _RISK_COLORS_ETQ = {
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
         }
-        # ─── APRÈS ───────────────────────────────────────────────────────────
-        W_ETQ  = 5.0  * rl_cm
-        H_ETQ  = 3.0  * rl_cm
-        N_COLS = 4
-        GAP    = 0.25 * rl_cm
-        MARGIN = 0.7  * rl_cm
-
-        buf     = _io.BytesIO()
         RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
 
         s_titre   = ParagraphStyle("et_t", fontName="Helvetica-Bold",
-                                   fontSize=7.5, leading=9, spaceAfter=2,
-                                   textColor=rlc.HexColor("#0f172a"))
+                                fontSize=7.5, leading=9, spaceAfter=2,
+                                textColor=rlc.HexColor("#0f172a"))
         s_lbl     = ParagraphStyle("et_l", fontName="Helvetica",
-                                   fontSize=5.5, leading=7,
-                                   textColor=rlc.HexColor("#64748b"))
+                                fontSize=5.5, leading=7,
+                                textColor=rlc.HexColor("#64748b"))
         s_date    = ParagraphStyle("et_d", fontName="Helvetica-Bold",
-                                   fontSize=9, leading=10,
-                                   textColor=rlc.HexColor("#1e40af"))
+                                fontSize=9, leading=10,
+                                textColor=rlc.HexColor("#1e40af"))
         s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
-                                   fontSize=5, leading=6,
-                                   textColor=rlc.HexColor("#94a3b8"),
-                                   alignment=TA_RIGHT)
+                                fontSize=5, leading=6,
+                                textColor=rlc.HexColor("#94a3b8"),
+                                alignment=TA_RIGHT)
         s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
-                                   fontSize=6, leading=7,
-                                   textColor=rlc.HexColor("#854d0e"),
-                                   backColor=rlc.HexColor("#fef9c3"),
-                                   spaceAfter=2)
+                                fontSize=6, leading=7,
+                                textColor=rlc.HexColor("#854d0e"),
+                                spaceAfter=2)
         s_val     = ParagraphStyle("et_v", fontName="Helvetica-Bold",
-                                   fontSize=7.5, leading=9,
-                                   textColor=rlc.HexColor("#0f172a"))
-        s_phdr    = ParagraphStyle("et_h", fontName="Helvetica-Bold",
-                                   fontSize=8,
-                                   textColor=rlc.HexColor("#1e40af"),
-                                   spaceAfter=5)
-        s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
-                                   fontSize=10, leading=12,
-                                   textColor=rlc.HexColor("#ffffff"),
-                                   backColor=rlc.HexColor("#1e40af"),
-                                   spaceBefore=8, spaceAfter=6)
+                                fontSize=7.5, leading=9,
+                                textColor=rlc.HexColor("#0f172a"))
 
-        # Détermine si on est en mode "semaine" (liste de tuples) ou "jour" (date + tasks)
+        # ── Style séparateur jour — hauteur = H_ETQ exactement ─────────────
+        # Le séparateur occupe une rangée entière de N_COLS colonnes
+        # avec la même hauteur qu'une étiquette → alignement parfait sur planche
+        s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
+                                fontSize=11, leading=14,
+                                textColor=rlc.HexColor("#ffffff"))
+
         if isinstance(date_obj_or_list, list):
-            # Mode semaine : [(date, [tasks]), ...]
             days_data = date_obj_or_list
             is_week   = True
-            total_n   = sum(len(t) for _, t in days_data)
-            doc_title = f"Étiquettes semaine — {days_data[0][0].strftime('%d/%m')} → {days_data[-1][0].strftime('%d/%m/%Y')}"
+            doc_title = (f"Étiquettes semaine — "
+                        f"{days_data[0][0].strftime('%d/%m')} → "
+                        f"{days_data[-1][0].strftime('%d/%m/%Y')}")
         else:
             days_data = [(date_obj_or_list, tasks)]
             is_week   = False
-            day_lbl   = f"{JOURS_FR_LONG[date_obj_or_list.weekday()]} {date_obj_or_list.strftime('%d/%m/%Y')}"
-            total_n   = len(tasks)
             doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
 
         doc = SimpleDocTemplate(
@@ -4393,13 +4383,13 @@ if active == "planning":
             rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
             lv      = task.get("label", "—")
             dv      = d_obj.strftime("%d/%m/%Y")
-            # ─── APRÈS ───────────────────────────────────────────────────────────
+            W_QR    = 2.0 * rl_cm
             W_INNER = W_ETQ - 0.55 * rl_cm
-            W_QR    = 2.0  * rl_cm          # ← déplacé ici pour cohérence
             W_TEXT  = W_INNER - W_QR
+
             _pt_data = next(
                 (p for p in st.session_state.points
-                 if p.get("label") == lv), None)
+                if p.get("label") == lv), None)
 
             qr_flowable = ""
             if _pt_data:
@@ -4407,7 +4397,6 @@ if active == "planning":
                     from reportlab.platypus import Image as RLImage
                     _qr_bytes = _make_qr_bytes(_qr_payload(_pt_data))
                     _qr_buf   = BytesIO(_qr_bytes)
-                    # ─── APRÈS ───────────────────────────────────────────────────────────
                     _qr_img   = RLImage(_qr_buf, width=2.0*rl_cm, height=2.0*rl_cm)
                     qr_flowable = _qr_img
                 except Exception:
@@ -4419,9 +4408,6 @@ if active == "planning":
                 pst = _pt_data.get("poste", "—") or "—"
                 classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
 
-            # ─── APRÈS ───────────────────────────────────────────────────────────
-            W_TEXT = W_INNER - 2.0 * rl_cm
-            W_QR   = 2.0 * rl_cm
             left_tbl = Table([
                 [Paragraph(lv, s_titre)],
                 [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
@@ -4440,13 +4426,10 @@ if active == "planning":
                 ("TOPPADDING",    (0, -1), (0, -1), 4),
             ]))
 
-            # ─── APRÈS ───────────────────────────────────────────────────────────
             if qr_flowable:
                 inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
                 inner.setStyle(TableStyle([
                     ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
-                    ("VALIGN",        (0, 1), (0, 1),   "TOP"),   # texte en haut
-                    ("VALIGN",        (1, 0), (1, 0),   "MIDDLE"),# QR centré verticalement
                     ("LEFTPADDING",   (0, 0), (-1, -1), 0),
                     ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
                     ("TOPPADDING",    (0, 0), (-1, -1), 0),
@@ -4470,61 +4453,129 @@ if active == "planning":
             ]))
             return outer
 
-        # ── Construction du document ──────────────────────────────────────
-        story = []
+        def _build_day_separator(day_date, n_tasks):
+            """
+            Séparateur de jour sur UNE rangée entière (N_COLS colonnes fusionnées)
+            avec hauteur = H_ETQ → reste aligné sur la planche.
+            Le contenu est centré verticalement dans cette hauteur.
+            """
+            JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+            label = (f"{JOURS[day_date.weekday()]}  "
+                    f"{day_date.strftime('%d/%m/%Y')}  —  "
+                    f"{n_tasks} prélèvement{'s' if n_tasks > 1 else ''}")
 
-        if is_week:
-            story.append(Paragraph(
-                f"Étiquettes semaine — "
-                f"{days_data[0][0].strftime('%d/%m')} → {days_data[-1][0].strftime('%d/%m/%Y')} — "
-                f"{total_n} étiquette{'s' if total_n > 1 else ''} — 45×32 mm · 4 col.",
-                s_phdr))
-        else:
-            story.append(Paragraph(
-                f"Étiquettes — {day_lbl} — "
-                f"{total_n} étiquette{'s' if total_n > 1 else ''} — 45×32 mm · 4 col.",
-                s_phdr))
+            cell = Table(
+                [[Paragraph(label, s_day_sep)]],
+                colWidths=[W_ETQ * N_COLS],
+                rowHeights=[H_ETQ])
+            cell.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (0, 0), rlc.HexColor("#1e40af")),
+                ("VALIGN",        (0, 0), (0, 0), "MIDDLE"),
+                ("ALIGN",         (0, 0), (0, 0), "CENTER"),
+                ("LEFTPADDING",   (0, 0), (0, 0), 12),
+                ("RIGHTPADDING",  (0, 0), (0, 0), 12),
+                ("TOPPADDING",    (0, 0), (0, 0), 0),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                ("ROUNDEDCORNERS",(0, 0), (0, 0), [4]),
+            ]))
+            # Encapsulé dans une rangée de la grille principale (1 ligne × N_COLS)
+            # avec SPAN pour qu'il occupe toute la largeur
+            wrapper = Table(
+                [[cell, "", "", ""]],
+                colWidths=[W_ETQ] * N_COLS,
+                rowHeights=[H_ETQ])
+            wrapper.setStyle(TableStyle([
+                ("SPAN",          (0, 0), (N_COLS-1, 0)),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            return wrapper
+
+        # ── Construction du document ────────────────────────────────────────
+        # Toutes les rangées sont collectées dans une seule grande Table
+        # → alignement pixel-perfect avec la planche
+        all_rows      = []   # chaque élément = une rangée [cell, cell, cell, cell]
+        all_row_heights = [] # hauteur de chaque rangée
 
         for day_date, day_tasks in days_data:
             if not day_tasks:
                 continue
 
+            # Séparateur jour (1 rangée = H_ETQ)
             if is_week:
-                # Séparateur jour en couleur
-                day_label_str = f"  {JOURS_FR_LONG[day_date.weekday()]} {day_date.strftime('%d/%m/%Y')}  — {len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}"
-                story.append(Paragraph(day_label_str, s_day_sep))
+                JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+                label = (f"  {JOURS[day_date.weekday()]}  "
+                        f"{day_date.strftime('%d/%m/%Y')}  —  "
+                        f"{len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}")
+                sep_para = Paragraph(label, s_day_sep)
+                sep_row  = [sep_para] + [""] * (N_COLS - 1)
+                all_rows.append(sep_row)
+                all_row_heights.append(H_ETQ)
 
-            # Grille d'étiquettes pour ce jour
-            rows_etiq, row_buf = [], []
-            for _task in day_tasks:
-                row_buf.append(_build_cell(_task, day_date))
+            # Étiquettes du jour
+            row_buf = []
+            for task in day_tasks:
+                row_buf.append(_build_cell(task, day_date))
                 if len(row_buf) == N_COLS:
-                    rows_etiq.append(row_buf)
+                    all_rows.append(row_buf)
+                    all_row_heights.append(H_ETQ)
                     row_buf = []
+            # Compléter la dernière rangée si incomplète
             if row_buf:
                 while len(row_buf) < N_COLS:
                     row_buf.append("")
-                rows_etiq.append(row_buf)
+                all_rows.append(row_buf)
+                all_row_heights.append(H_ETQ)
 
-            if rows_etiq:
-                main_tbl = Table(
-                    rows_etiq,
-                    colWidths=[W_ETQ] * N_COLS,
-                    rowHeights=[H_ETQ] * len(rows_etiq))
-                main_tbl.setStyle(TableStyle([
-                    ("LEFTPADDING",   (0, 0), (-1, -1), GAP / 2),
-                    ("RIGHTPADDING",  (0, 0), (-1, -1), GAP / 2),
-                    ("TOPPADDING",    (0, 0), (-1, -1), GAP / 2),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), GAP / 2),
-                    ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-                ]))
-                story.append(main_tbl)
+        if not all_rows:
+            # Sécurité : aucune donnée
+            all_rows = [[""] * N_COLS]
+            all_row_heights = [H_ETQ]
 
-            # Saut de ligne entre les jours (sauf dernier)
-            if is_week:
-                story.append(Spacer(1, 0.4 * rl_cm))
+        main_tbl = Table(
+            all_rows,
+            colWidths=[W_ETQ] * N_COLS,
+            rowHeights=all_row_heights)
 
-        doc.build(story)
+        # Style de base
+        tbl_style = [
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ]
+
+        # Appliquer le style "séparateur" sur les bonnes rangées
+        if is_week:
+            row_idx = 0
+            for day_date, day_tasks in days_data:
+                if not day_tasks:
+                    continue
+                # Rangée séparateur
+                tbl_style += [
+                    ("SPAN",       (0, row_idx), (N_COLS-1, row_idx)),
+                    ("BACKGROUND", (0, row_idx), (N_COLS-1, row_idx),
+                    rlc.HexColor("#1e40af")),
+                    ("ALIGN",      (0, row_idx), (N_COLS-1, row_idx), "LEFT"),
+                    ("VALIGN",     (0, row_idx), (N_COLS-1, row_idx), "MIDDLE"),
+                    ("LEFTPADDING",(0, row_idx), (N_COLS-1, row_idx), 14),
+                    ("TEXTCOLOR",  (0, row_idx), (N_COLS-1, row_idx),
+                    rlc.white),
+                    ("FONTNAME",   (0, row_idx), (N_COLS-1, row_idx),
+                    "Helvetica-Bold"),
+                    ("FONTSIZE",   (0, row_idx), (N_COLS-1, row_idx), 11),
+                ]
+                row_idx += 1  # séparateur
+                # Rangées étiquettes
+                n_etiq_rows = -(-len(day_tasks) // N_COLS)  # ceil division
+                row_idx += n_etiq_rows
+
+        main_tbl.setStyle(TableStyle(tbl_style))
+
+        doc.build([main_tbl])
         buf.seek(0)
         return buf.getvalue()
 
