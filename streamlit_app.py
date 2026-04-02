@@ -2487,7 +2487,7 @@ if active == "surveillance":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # ── Panneau scan douchette (input texte) + caméra ──────────────────
+        # ── Panneau scan douchette + caméra ───────────────────────────────
         scan_col1, scan_col2 = st.columns([1, 1])
 
         with scan_col1:
@@ -2500,16 +2500,24 @@ if active == "surveillance":
                 "Cliquez dans le champ ci-dessous, puis scannez l'étiquette.</div>"
                 "</div>", unsafe_allow_html=True)
 
-            qr_raw = st.text_input(
+            st.markdown("""
+            <style>
+            div[data-testid="stTextInput"] input {
+                font-family: 'DM Mono', monospace !important;
+                font-size: 1rem !important;
+                letter-spacing: .04em;
+            }
+            </style>""", unsafe_allow_html=True)
+
+            qr_raw_input = st.text_input(
                 "Zone de scan douchette",
-                key="qr_scan_input",
-                placeholder='{"app":"URC","label":"..."}  ← scanné automatiquement',
+                key=f"qr_scan_input_{st.session_state['qr_input_counter']}",
+                placeholder='{"app":"URC","label":"..."} ← scanné automatiquement',
                 label_visibility="collapsed",
-                help="Le curseur doit être ici quand vous scannez"
-            )
+                help="Si des caractères @ ou spéciaux apparaissent, "
+                     "configurez la douchette en layout EN-US.")
 
         with scan_col2:
-            # ── Scan caméra via jsQR ──────────────────────────────────────
             st.markdown(
                 "<div style='background:#fff;border:2px solid #7c3aed;border-radius:12px;"
                 "padding:16px;text-align:center;margin-bottom:8px'>"
@@ -2540,13 +2548,9 @@ if active == "surveillance":
 <div id="result-box" style="display:none;margin-top:8px;background:#f0fdf4;
      border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;
      font-size:.75rem;font-weight:700;color:#166534"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
-let stream = null;
-let scanning = false;
-let lastResult = null;
-
+let stream = null, scanning = false, lastResult = null;
 function startCam() {
   document.getElementById('start-btn').style.display = 'none';
   document.getElementById('cam-status').textContent = 'Démarrage…';
@@ -2563,7 +2567,6 @@ function startCam() {
       document.getElementById('start-btn').style.display = 'block';
     });
 }
-
 function scan() {
   if (!scanning) return;
   const v = document.getElementById('video');
@@ -2583,19 +2586,12 @@ function scan() {
           if (stream) stream.getTracks().forEach(t => t.stop());
           const box = document.getElementById('result-box');
           box.style.display = 'block';
-          box.innerHTML = '✅ Scanné : <b>' + (d.label || '?') + '</b> — ' + (d.rc || '?');
+          box.innerHTML = '✅ Scanné : <b>' + (d.label||'?') + '</b> — ' + (d.rc||'?');
           document.getElementById('cam-status').textContent = '✅ QR code détecté !';
-          // Envoyer vers Streamlit via l'input texte caché
-          const ev = new CustomEvent('qr-scanned', {detail: code.data});
-          window.parent.document.dispatchEvent(ev);
-          // Stratégie : copier dans le clipboard → l'utilisateur peut coller dans la douchette
-          if (navigator.clipboard) {
-            navigator.clipboard.writeText(code.data).catch(()=>{});
-          }
-          // Afficher un bouton pour copier manuellement
+          if (navigator.clipboard) navigator.clipboard.writeText(code.data).catch(()=>{});
           box.innerHTML += '<br><button onclick="navigator.clipboard.writeText(' +
-            JSON.stringify(JSON.stringify(code.data)) + ').then(()=>alert(' +
-            "'Copié ! Collez maintenant dans le champ Douchette.'" + '))" ' +
+            JSON.stringify(JSON.stringify(code.data)) +
+            ').then(()=>alert(\'Copié ! Collez dans le champ Douchette.\'))" ' +
             'style="margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;' +
             'border:none;border-radius:6px;cursor:pointer;font-size:.72rem">' +
             '📋 Copier &amp; coller dans Douchette</button>';
@@ -2608,30 +2604,71 @@ function scan() {
 </script>"""
             st.components.v1.html(camera_html, height=320, scrolling=False)
 
-        # ── Traitement du scan douchette ───────────────────────────────────
-        _scanned_data = None
-        if qr_raw and qr_raw.strip().startswith("{"):
-            try:
-                _scanned_data = json.loads(qr_raw.strip())
-            except Exception:
-                st.error("❌ QR code non reconnu — format JSON invalide.")
+        # ══════════════════════════════════════════════════════════════════
+        # TRAITEMENT DU SCAN
+        # ══════════════════════════════════════════════════════════════════
 
+        def _fix_azerty(text: str) -> str:
+            """Corrige le remapping AZERTY→QWERTY des douchettes en layout FR."""
+            pairs = [
+                ('&','1'),('é','2'),('"','3'),("'",'4'),('(','5'),
+                ('-','6'),('è','7'),('_','8'),('ç','9'),('à','0'),
+                (')','='),('a','q'),('z','w'),('q','a'),('m',';'),
+                ('w','z'),(',',','),(':','/'),
+                ('A','Q'),('Z','W'),('Q','A'),('M',':'),('W','Z'),
+            ]
+            src = ''.join(p[0] for p in pairs)
+            dst = ''.join(p[1] for p in pairs)
+            return text.translate(str.maketrans(src, dst))
+
+        # Correction AZERTY automatique
+        qr_raw = qr_raw_input.strip() if qr_raw_input else ""
+        if qr_raw and '{' not in qr_raw:
+            qr_raw_fixed = _fix_azerty(qr_raw)
+            if '{' in qr_raw_fixed:
+                st.caption("🔄 Layout AZERTY détecté — correction automatique appliquée.")
+                qr_raw = qr_raw_fixed
+
+        # ── Parsing JSON ───────────────────────────────────────────────
+        _scanned_data = None
+        if qr_raw and qr_raw.startswith("{"):
+            try:
+                _scanned_data = json.loads(qr_raw)
+            except json.JSONDecodeError:
+                st.markdown(
+                    "<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+                    "border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                    "<div style='font-weight:700;color:#991b1b'>❌ QR code non reconnu</div>"
+                    "<div style='font-size:.8rem;color:#b91c1c;margin-top:4px'>"
+                    "Format JSON invalide. Vérifiez le layout de la douchette "
+                    "ou rescannez.</div>"
+                    f"<div style='font-family:monospace;font-size:.72rem;color:#64748b;"
+                    f"margin-top:6px'>Reçu : {qr_raw[:80]}"
+                    f"{'…' if len(qr_raw)>80 else ''}</div>"
+                    "</div>", unsafe_allow_html=True)
+        elif qr_raw and not qr_raw.startswith("{"):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
+                "border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                "<div style='font-weight:700;color:#92400e'>⚠️ QR code non URC</div>"
+                "<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
+                "Ce QR code ne provient pas de MicroSurveillance URC.</div>"
+                "</div>", unsafe_allow_html=True)
+
+        # ── Point reconnu ─────────────────────────────────────────────
         if _scanned_data and _scanned_data.get("app") == "URC":
-            _lbl    = _scanned_data.get("label", "")
-            _type   = _scanned_data.get("type", "")
-            _rc     = _scanned_data.get("rc", "")
-            _lc     = int(_scanned_data.get("lc", 1))
-            _gel    = _scanned_data.get("gel", "")
-            _pt_ref = next(
-                (p for p in st.session_state.points if p.get("label") == _lbl),
-                None)
+            _lbl  = _scanned_data.get("label", "")
+            _type = _scanned_data.get("type", "")
+            _rc   = _scanned_data.get("rc", "")
+            _lc   = int(_scanned_data.get("lc", 1))
+            _gel  = _scanned_data.get("gel", "")
             lc_col_s = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_lc),"#94a3b8")
 
             st.markdown(
                 f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
                 f"border:2.5px solid #22c55e;border-radius:14px;padding:18px 22px;margin:12px 0'>"
                 f"<div style='font-size:1.1rem;font-weight:900;color:#166534;margin-bottom:10px'>"
-                f"✅ QR code reconnu — {_lbl}</div>"
+                f"✅ Point reconnu — {_lbl}</div>"
                 f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
                 f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
                 f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div>"
@@ -2648,10 +2685,10 @@ function scan() {
                 f"</div></div>",
                 unsafe_allow_html=True)
 
-            # ── Mini-formulaire de confirmation ────────────────────────────
+            # ── Formulaire de confirmation ─────────────────────────────
             st.markdown(
-                "<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;"
-                "padding:16px;margin-top:8px'>",
+                "<div style='background:#fff;border:1.5px solid #e2e8f0;"
+                "border-radius:12px;padding:18px;margin-top:8px'>",
                 unsafe_allow_html=True)
             st.markdown("#### ✏️ Confirmer et enregistrer le prélèvement")
 
@@ -2676,6 +2713,7 @@ function scan() {
                     "📅 Date de prélèvement",
                     value=datetime.today(),
                     key="scan_date")
+
             with sf2:
                 scan_comment = st.text_area(
                     "💬 Commentaire",
@@ -2685,148 +2723,124 @@ function scan() {
                 _scan_j2 = next_working_day_offset(scan_date, 2)
                 _scan_j7 = next_working_day_offset(scan_date, 5)
                 st.markdown(
-                    f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
-                    f"padding:8px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                    f"📅 J2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>"
-                    f"📅 J7 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>",
+                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                    f"border-radius:8px;padding:8px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                    f"📅 J+2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>"
+                    f"📅 J+5 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>",
                     unsafe_allow_html=True)
 
-            # ── Localisation sur plan (optionnel) ──────────────────────────
-            from streamlit_image_coordinates import streamlit_image_coordinates
-
+            # ── Localisation sur plan (optionnel) ──────────────────────
             plans_avail_scan = st.session_state.get("plans", [])
-            coords = None  # important
+            coords = None
 
             if plans_avail_scan:
                 st.markdown(
-                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:8px 0 4px'>"
-                    "🗺️ Localiser sur le plan <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
-                    unsafe_allow_html=True
-                )
+                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:12px 0 4px'>"
+                    "🗺️ Localiser sur le plan "
+                    "<span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                    unsafe_allow_html=True)
 
                 _scan_plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_avail_scan]
-                _scan_plan_sel = st.selectbox("Plan", _scan_plan_names, key="scan_plan_sel")
+                _scan_plan_sel   = st.selectbox("Plan", _scan_plan_names, key="scan_plan_sel")
 
                 if _scan_plan_sel != "— Aucun plan —":
-                    _scan_plan = next((p for p in plans_avail_scan if p["name"] == _scan_plan_sel), None)
-
+                    _scan_plan = next(
+                        (p for p in plans_avail_scan if p["name"] == _scan_plan_sel), None)
                     if _scan_plan and _scan_plan.get("image_b64"):
-
-                        # 📍 CLIC SUR IMAGE
+                        from streamlit_image_coordinates import streamlit_image_coordinates
                         coords = streamlit_image_coordinates(
-                            _scan_plan["image_b64"],
-                            key="scan_coords"
-                        )
-
-                        # 📌 Position existante
+                            _scan_plan["image_b64"], key="scan_coords")
                         _cur_pt_scan = next(
                             (mp for mp in st.session_state.get("map_points", [])
-                            if mp.get("label") == _lbl),
-                            None
-                        )
-
+                             if mp.get("label") == _lbl), None)
                         if _cur_pt_scan and isinstance(_cur_pt_scan.get("x"), (int, float)):
                             st.markdown(
                                 f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
                                 f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
-                                f"color:#166534;font-weight:700'>"
-                                f"📌 Position existante : {float(_cur_pt_scan['x']):.1f}% · "
+                                f"color:#166534;font-weight:700;margin-top:6px'>"
+                                f"📌 Position existante : "
+                                f"{float(_cur_pt_scan['x']):.1f}% · "
                                 f"{float(_cur_pt_scan['y']):.1f}%</div>",
-                                unsafe_allow_html=True
-                            )
-
-                        # 📍 Nouvelle position cliquée
+                                unsafe_allow_html=True)
                         if coords:
-                            x = coords["x"]
-                            y = coords["y"]
-                            st.success(f"📍 Nouvelle position : {x:.1f}% · {y:.1f}%")
-
-                    else:
-                        st.warning("⚠️ Plan sans image.")
-
-                # ── Bouton d'enregistrement ────────────────────────────────────
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-                scan_bc1, scan_bc2 = st.columns([3, 1])
-                with scan_bc1:
-                    if st.button(
-                        f"💾 Créer le prélèvement — {_lbl}",
-                        use_container_width=True,
-                        type="primary",
-                        key="scan_save_btn"
-                    ):
-                        if not scan_oper:
-                            st.error("⚠️ Veuillez sélectionner un opérateur.")
-                        else:
-                            _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                            _sample_scan = {
-                                "id":                   _pid,
-                                "label":                _lbl,
-                                "type":                 _type,
-                                "gelose":               _gel,
-                                "room_class":           _rc,
-                                "location_criticality": _lc,
-                                "operateur":            scan_oper,
-                                "date":                 str(scan_date),
-                                "archived":             False,
-                                "num_isolateur":        "",
-                                "poste":                "Poste 1",
-                                "commentaire":          scan_comment or "",
-                                "created_via":          "qr_scan",
-                            }
-                            # ── Sauvegarde position ─────────────────────────────
-                            if coords:
-                                new_point = {
-                                    "label": _lbl,
-                                    "x": coords["x"],
-                                    "y": coords["y"]
-                                }
-
-                                # remplace si déjà existant
-                                st.session_state["map_points"] = [
-                                    mp for mp in st.session_state.get("map_points", [])
-                                    if mp.get("label") != _lbl
-                                ] + [new_point]
-
-                                # sauvegarde persistante
-                                try:
-                                    _supa_upsert("map_points", json.dumps(st.session_state["map_points"], ensure_ascii=False))
-                                except Exception:
-                                    pass
-                            st.session_state.prelevements.append(_sample_scan)
-                            save_prelevements(st.session_state.prelevements)
-                            st.session_state.schedules.append({
-                                "id":        f"sch_{_pid}_J2",
-                                "sample_id": _pid,
-                                "label":     _lbl,
-                                "due_date":  _scan_j2.isoformat(),
-                                "when":      "J2",
-                                "status":    "pending"
-                            })
-                            st.session_state.schedules.append({
-                                "id":        f"sch_{_pid}_J7",
-                                "sample_id": _pid,
-                                "label":     _lbl,
-                                "due_date":  _scan_j7.isoformat(),
-                                "when":      "J7",
-                                "status":    "pending"
-                            })
-                            save_schedules(st.session_state.schedules)
-                            # Vider le champ de scan
-                            st.session_state["qr_scan_input"] = ""
                             st.success(
-                                f"✅ **{_lbl}** créé par scan QR !\n"
-                                f"J2 → {_scan_j2.strftime('%d/%m/%Y')} | "
-                                f"J7 → {_scan_j7.strftime('%d/%m/%Y')}")
-                            st.rerun()
-                with scan_bc2:
-                    if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
-                        st.session_state["qr_scan_input"] = ""
+                                f"📍 Nouvelle position : "
+                                f"{coords['x']:.1f}% · {coords['y']:.1f}%")
+                    else:
+                        st.warning("⚠️ Ce plan n'a pas d'image.")
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Boutons ────────────────────────────────────────────────
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            scan_bc1, scan_bc2 = st.columns([3, 1])
+
+            with scan_bc1:
+                if st.button(
+                    f"💾 Créer le prélèvement — {_lbl}",
+                    use_container_width=True,
+                    type="primary",
+                    key="scan_save_btn"):
+
+                    if not scan_oper:
+                        st.error("⚠️ Veuillez sélectionner un opérateur.")
+                    else:
+                        _pid = (f"s{len(st.session_state.prelevements)+1}"
+                                f"_{int(datetime.now().timestamp())}")
+                        _sample_scan = {
+                            "id":                   _pid,
+                            "label":                _lbl,
+                            "type":                 _type,
+                            "gelose":               _gel,
+                            "room_class":           _rc,
+                            "location_criticality": _lc,
+                            "operateur":            scan_oper,
+                            "date":                 str(scan_date),
+                            "archived":             False,
+                            "num_isolateur":        "",
+                            "poste":                "Poste 1",
+                            "commentaire":          scan_comment or "",
+                            "created_via":          "qr_scan",
+                        }
+                        if coords:
+                            new_mp = {"label": _lbl, "x": coords["x"], "y": coords["y"]}
+                            st.session_state["map_points"] = [
+                                mp for mp in st.session_state.get("map_points", [])
+                                if mp.get("label") != _lbl
+                            ] + [new_mp]
+                            try:
+                                _supa_upsert("map_points", json.dumps(
+                                    st.session_state["map_points"], ensure_ascii=False))
+                            except Exception:
+                                pass
+
+                        st.session_state.prelevements.append(_sample_scan)
+                        save_prelevements(st.session_state.prelevements)
+
+                        for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
+                            st.session_state.schedules.append({
+                                "id":        f"sch_{_pid}_{_when}",
+                                "sample_id": _pid,
+                                "label":     _lbl,
+                                "due_date":  _due.isoformat(),
+                                "when":      _when,
+                                "status":    "pending",
+                            })
+                        save_schedules(st.session_state.schedules)
+
+                        st.success(
+                            f"✅ **{_lbl}** enregistré par scan QR !  \n"
+                            f"J+2 → {_scan_j2.strftime('%d/%m/%Y')} · "
+                            f"J+5 → {_scan_j7.strftime('%d/%m/%Y')}")
+                        st.session_state["qr_input_counter"] += 1
                         st.rerun()
 
-            elif qr_raw and qr_raw.strip():
-                st.warning("⚠️ Ce QR code ne provient pas de MicroSurveillance URC.")
+            with scan_bc2:
+                if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
+                    st.session_state["qr_input_counter"] += 1
+                    st.rerun()
 
-        # ── Historique des derniers scans ──────────────────────────────────
+        # ── Historique des derniers scans ──────────────────────────────
         _scan_recent = [
             p for p in st.session_state.prelevements
             if p.get("created_via") == "qr_scan" and not p.get("archived")
@@ -2838,7 +2852,7 @@ function scan() {
                 f"🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>",
                 unsafe_allow_html=True)
             for _sp in reversed(_scan_recent[-5:]):
-                lc_s = int(_sp.get("location_criticality", 1))
+                lc_s    = int(_sp.get("location_criticality", 1))
                 lcs_col = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(lc_s),"#94a3b8")
                 st.markdown(
                     f"<div style='background:#f8fafc;border-left:3px solid #2563eb;"
@@ -5520,26 +5534,31 @@ if active == "historique":
                     and (not filt_germs  or r.get("germ_match","")  in filt_germs)
                 ]
                 
-                # Dédupliquer par sample_id : garder le pire résultat (action > alert > ok)
-                # Si pas de sample_id (ancienne entrée), on garde toutes
-                prio = {"ok": 0, "alert": 1, "action": 2}   # ← AJOUTER CETTE LIGNE
-                _seen_sample_ids = {}
-                surv_plan = []
+                # ─── APRÈS (corrigé) ─────────────────────────────────────────────────
+                # Déduplication par (sample_id, prelevement) → on conserve le pire
+                # résultat pour chaque combinaison point × session de prélèvement.
+                # Cela évite qu'un même sample_id pour des points différents se télescopent.
+                prio = {"ok": 0, "alert": 1, "action": 2}
+                _seen = {}
                 for r in _surv_plan_all:
                     sid = r.get("sample_id", "")
+                    pt_lbl = r.get("prelevement", "")
+                    # Clé = (sample_id, label du point) — sans sample_id on garde tout
                     if not sid:
-                        surv_plan.append(r)
+                        _seen[id(r)] = r   # clé unique → toujours conservé
                         continue
-                    if sid not in _seen_sample_ids:
-                        _seen_sample_ids[sid] = r
+                    key = (sid, pt_lbl)
+                    if key not in _seen:
+                        _seen[key] = r
                     else:
-                        existing = _seen_sample_ids[sid]
-                        if prio.get(r.get("status","ok"),0) > prio.get(existing.get("status","ok"),0):
-                            _seen_sample_ids[sid] = r
+                        existing = _seen[key]
+                        if prio.get(r.get("status","ok"), 0) > prio.get(existing.get("status","ok"), 0):
+                            _seen[key] = r
 
-                surv_plan = [r for r in _surv_plan_all if not r.get("sample_id","")]
-                surv_plan += list(_seen_sample_ids.values())
-                surv_plan.sort(key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+                surv_plan = sorted(
+                    _seen.values(),
+                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min
+                )
 
                 # ── Métriques ─────────────────────────────────────────────────
                 nb_action = sum(1 for r in surv_plan if r.get("status")=="action")
