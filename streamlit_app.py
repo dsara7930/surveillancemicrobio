@@ -2511,7 +2511,7 @@ if active == "surveillance":
 
             qr_raw_input = st.text_input(
                 "Zone de scan douchette",
-                key=f"qr_scan_input_{st.session_state['qr_input_counter']}",
+                key=f"qr_scan_input_{st.session_state.get('qr_input_counter', 0)}",
                 placeholder='{"app":"URC","label":"..."} ← scanné automatiquement',
                 label_visibility="collapsed",
                 help="Si des caractères @ ou spéciaux apparaissent, "
@@ -2628,6 +2628,9 @@ function scan() {
             if '{' in qr_raw_fixed:
                 st.caption("🔄 Layout AZERTY détecté — correction automatique appliquée.")
                 qr_raw = qr_raw_fixed
+
+        if "qr_input_counter" not in st.session_state:
+            st.session_state["qr_input_counter"] = 0
 
         # ── Parsing JSON ───────────────────────────────────────────────
         _scanned_data = None
