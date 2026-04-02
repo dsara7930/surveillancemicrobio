@@ -2639,20 +2639,20 @@ function scan() {
         #   { → % (Shift+( sur AZERTY envoie % au lieu de {)
         #   " → Shift+3 sur AZERTY envoie " mais certaines douchettes envoient é
         # On tente d'abord une substitution globale du caractère { manquant
-        result = []
-        for ch in text:
-            result.append(azerty_to_qwerty.get(ch, ch))
-        fixed = ''.join(result)
+            result = []
+            for ch in text:
+                result.append(azerty_to_qwerty.get(ch, ch))
+            fixed = ''.join(result)
 
-        # Si après correction on a toujours pas de { mais on a %, tenter remplacement direct
-        if '{' not in fixed and '%' in text:
-            fixed = text.replace('%', '{').replace('µ', '}')
+            # Si après correction on a toujours pas de { mais on a %, tenter remplacement direct
+            if '{' not in fixed and '%' in text:
+                fixed = text.replace('%', '{').replace('µ', '}')
 
-        return fixed
+            return fixed  # ← était désaligné par rapport au corps de la fonction
 
-        # Correction AZERTY automatique
+        # Correction AZERTY automatique  ← hors de la fonction (un niveau de moins)
         qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-        if qr_raw and '{' not in qr_raw:
+        if qr_raw and '{' not in qr_raw:  # ← idem, suppression des espaces en trop
             qr_raw_fixed = _fix_azerty(qr_raw)
             if '{' in qr_raw_fixed:
                 st.caption("🔄 Layout AZERTY détecté — correction automatique appliquée.")
