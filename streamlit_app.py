@@ -1081,6 +1081,27 @@ with st.sidebar:
 
     with col_btn:
         st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+
+        st.markdown("""
+        <style>
+        div[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]:last-child .stButton > button {
+            background: transparent !important;
+            border: 1px dashed rgba(148,163,184,0.35) !important;
+            color: #64748b !important;
+            font-size: .75rem !important;
+            font-weight: 500 !important;
+            box-shadow: none !important;
+            line-height: 1.5 !important;
+            padding: 7px 8px !important;
+        }
+        div[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]:last-child .stButton > button:hover {
+            background: rgba(100,116,139,.06) !important;
+            border-color: #94a3b8 !important;
+            color: #475569 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         if st.button(
             "Si tu as besoin\nd'aide, je suis là !",
             key="faq_open_btn",
@@ -5250,132 +5271,7 @@ if active == "planning":
                     c.alignment = al_c()
                     c.border    = border_all()
 
-            # ══════════════════════════════════════════════════════════════
-            # FEUILLE 2 — VUE DÉTAILLÉE (liste chronologique enrichie)
-            # ══════════════════════════════════════════════════════════════
-            ws2 = wb.create_sheet("Détail")
-            ws2.sheet_view.showGridLines = False
-
-            ws2.merge_cells("A1:I1")
-            ws2["A1"] = "PLANNING MICROBIOLOGIQUE — Détail chronologique"
-            ws2["A1"].font      = Font(name="Arial", size=13, bold=True, color=C_WHITE)
-            ws2["A1"].fill      = fill(C_BLUE)
-            ws2["A1"].alignment = al_c()
-            ws2.row_dimensions[1].height = 28
-
-            ws2.merge_cells("A2:I2")
-            ws2["A2"] = (
-                f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
-                f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'}")
-            ws2["A2"].font      = Font(name="Arial", size=8, color="475569")
-            ws2["A2"].fill      = fill(C_BLUE_L)
-            ws2["A2"].alignment = al_c()
-            ws2.row_dimensions[2].height = 16
-
-            headers2    = ["Date", "Jour", "Férié", "Type",
-                           "Point de prélèvement", "Classe", "Gélose",
-                           "Opérateur", "Statut"]
-            col_widths2 = [14, 12, 10, 22, 32, 10, 28, 25, 14]
-            for ci2, (h, w) in enumerate(zip(headers2, col_widths2), start=1):
-                c = ws2.cell(4, ci2, value=h)
-                c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
-                c.fill      = fill(C_BLUE2)
-                c.alignment = al_c(wrap=True)
-                c.border    = border_all()
-                ws2.column_dimensions[get_column_letter(ci2)].width = w
-            ws2.row_dimensions[4].height = 22
-            ws2.freeze_panes = "A5"
-
-            C_PURPLE_L = "F5F3FF"; C_YELLOW_L = "FFFBEB"; C_TEAL_L = "EFF6FF"
-            C_PURPLE   = "7C3AED"; C_YELLOW   = "D97706"; C_TEAL   = "0369A1"
-
-            row2 = 5
-            for d in exp_dates:
-                holidays_d  = get_holidays_cached(d.year)
-                is_h        = d in holidays_d
-                day_prelevs = [
-                    p for p in st.session_state.prelevements
-                    if p.get('date')
-                    and datetime.fromisoformat(p['date']).date() == d
-                    and not p.get('archived', False)
-                    and (exp_oper_filter == "Tous"
-                         or p.get('operateur', '').startswith(exp_oper_filter))
-                ]
-                day_j2 = [
-                    s for s in st.session_state.schedules
-                    if s['when'] == 'J2'
-                    and datetime.fromisoformat(s['due_date']).date() == d
-                ]
-                day_j7 = [
-                    s for s in st.session_state.schedules
-                    if s['when'] == 'J7'
-                    and datetime.fromisoformat(s['due_date']).date() == d
-                ]
-                if not day_prelevs and not day_j2 and not day_j7:
-                    continue
-
-                for p in day_prelevs:
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Prélèvement J0", p['label'],
-                          p.get('room_class', '—'), p.get('gelose', '—'),
-                          p.get('operateur', '—'), "🧪 À réaliser"]
-                    for ci2, val in enumerate(rd, 1):
-                        c = ws2.cell(row2, ci2, value=val)
-                        c.fill = fill(C_PURPLE_L); c.alignment = al_l()
-                        c.border = border_all(); c.font = font(9)
-                    ws2.cell(row2, 4).font = Font(
-                        name="Arial", size=9, bold=True, color=C_PURPLE)
-                    ws2.row_dimensions[row2].height = 17
-                    row2 += 1
-
-                for sch in day_j2:
-                    samp    = next(
-                        (p for p in st.session_state.prelevements
-                         if p['id'] == sch['sample_id']), None)
-                    is_done = sch['status'] == 'done'
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Lecture J2", sch['label'],
-                          samp.get('room_class', '—') if samp else '—',
-                          samp.get('gelose', '—')     if samp else '—',
-                          samp.get('operateur', '—')  if samp else '—',
-                          "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci2, val in enumerate(rd, 1):
-                        c = ws2.cell(row2, ci2, value=val)
-                        c.fill = fill(C_YELLOW_L); c.alignment = al_l()
-                        c.border = border_all(); c.font = font(9)
-                    ws2.cell(row2, 4).font = Font(
-                        name="Arial", size=9, bold=True, color=C_YELLOW)
-                    ws2.cell(row2, 9).font = Font(
-                        name="Arial", size=9, bold=True,
-                        color=C_GREEN if is_done else C_YELLOW)
-                    ws2.row_dimensions[row2].height = 17
-                    row2 += 1
-
-                for sch in day_j7:
-                    samp    = next(
-                        (p for p in st.session_state.prelevements
-                         if p['id'] == sch['sample_id']), None)
-                    is_done = sch['status'] == 'done'
-                    rd = [d.strftime('%d/%m/%Y'), JOURS_XL[d.weekday()],
-                          "Oui" if is_h else "",
-                          "Lecture J7", sch['label'],
-                          samp.get('room_class', '—') if samp else '—',
-                          samp.get('gelose', '—')     if samp else '—',
-                          samp.get('operateur', '—')  if samp else '—',
-                          "✅ Faite" if is_done else "⏳ À faire"]
-                    for ci2, val in enumerate(rd, 1):
-                        c = ws2.cell(row2, ci2, value=val)
-                        c.fill = fill(C_TEAL_L); c.alignment = al_l()
-                        c.border = border_all(); c.font = font(9)
-                    ws2.cell(row2, 4).font = Font(
-                        name="Arial", size=9, bold=True, color=C_TEAL)
-                    ws2.cell(row2, 9).font = Font(
-                        name="Arial", size=9, bold=True,
-                        color=C_GREEN if is_done else C_TEAL)
-                    ws2.row_dimensions[row2].height = 17
-                    row2 += 1
+            
 
             buf = _io.BytesIO()
             wb.save(buf)
@@ -5388,7 +5284,7 @@ if active == "planning":
                 use_container_width=True)
             st.success(
                 f"✅ Fichier **{fname}** généré avec succès — "
-                f"2 onglets : **Planning Semaine** (matriciel) · **Détail** (liste).")
+                f"2 onglets : **Planning Semaine** (matriciel) ·")
             
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : HISTORIQUE
@@ -6909,22 +6805,41 @@ elif active == "parametres":
                     key="pt_edit_type")
             with er_room:
                 new_room = st.text_input(
-                    "Classe ISO / GMP", value=pt.get('room_class', ''),
-                    placeholder="Ex: A, B, C, D…", key="pt_edit_room")
-            with er3:
-                cur_lc  = int(pt.get('location_criticality', 1))
-                lc_idx  = max(0, min(cur_lc - 1, 2))
-                new_lc_lbl = st.selectbox(
-                    "🏷️ Criticité du lieu *", LOC_CRIT_OPTS,
-                    index=lc_idx, key="pt_edit_lc")
-                new_lc = int(new_lc_lbl[0])
-                lc_c   = LOC_CRIT_COLORS[str(new_lc)]
+                    "Classe ISO / GMP",
+                    value=pt.get('room_class', ''),
+                    placeholder="Ex: A, B, C, D…",
+                    key="pt_edit_room"
+                )
+
+            # ── Poste type si Classe A (édition) ─────────────────
+            if new_room and new_room.strip().upper() == "A":
                 st.markdown(
-                    f"<div style='background:{lc_c}22;border:1px solid {lc_c}55;"
-                    f"border-radius:6px;padding:4px 8px;text-align:center;"
-                    f"font-size:.72rem;font-weight:700;color:{lc_c};margin-top:2px'>"
-                    f"Niveau {new_lc} — {LOC_CRIT_LABELS[str(new_lc)]}</div>",
-                    unsafe_allow_html=True)
+                    "<div style='background:#fef9c3;border:1px solid #fde047;"
+                    "border-radius:8px;padding:10px 14px;margin:6px 0'>"
+                    "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>"
+                    "🔬 Configuration poste — Classe A</div>",
+                    unsafe_allow_html=True
+                )
+
+                _cur_ptype = pt.get("poste_type", "commun")
+                _cur_index = 0 if _cur_ptype == "commun" else 1
+
+                new_poste_type = st.radio(
+                    "Type de poste *",
+                    ["commun", "specifique"],
+                    format_func=lambda x: (
+                        "🔵 Poste commun"
+                        if x == "commun"
+                        else "🔀 Poste spécifique (alternance Poste 1 / Poste 2)"
+                    ),
+                    index=_cur_index,
+                    key="pt_edit_poste_type",
+                )
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            else:
+                new_poste_type = "non_applicable"
 
             er4, er5, er6 = st.columns([2, 1, 2])
             with er4:
@@ -6979,6 +6894,12 @@ elif active == "parametres":
             eb1, eb2 = st.columns(2)
             with eb1:
                 if st.button("✅ Enregistrer", key="pt_save_edit"):
+                    _edit_pt_poste = (
+                        new_poste_type
+                        if new_room and new_room.strip().upper() == "A"
+                        else "non_applicable"
+                    )
+
                     st.session_state.points[idx] = {
                         "id":                   pt.get('id', f"p{idx+1}"),
                         "label":                new_label,
@@ -6988,6 +6909,7 @@ elif active == "parametres":
                         "frequency":            new_freq,
                         "frequency_unit":       new_fu,
                         "room_class":           new_room.strip(),
+                        "poste_type":           _edit_pt_poste,
                     }
                     save_points(st.session_state.points, supa=True)
                     st.session_state._edit_point = None
@@ -7011,16 +6933,32 @@ elif active == "parametres":
             with np_room_col:
                 np_room = st.text_input(
                     "Classe ISO / GMP", placeholder="Ex: A, B, C, D…", key="np_room")
-            with np3:
-                np_lc_lbl = st.selectbox("🏷️ Criticité du lieu *", LOC_CRIT_OPTS, key="np_lc")
-                np_lc = int(np_lc_lbl[0])
-                lc_c  = LOC_CRIT_COLORS[str(np_lc)]
+
+            # ── Poste type si Classe A ────────────────────────────
+            if np_room and np_room.strip().upper() == "A":
                 st.markdown(
-                    f"<div style='background:{lc_c}22;border:1px solid {lc_c}55;"
-                    f"border-radius:6px;padding:4px 8px;text-align:center;"
-                    f"font-size:.72rem;font-weight:700;color:{lc_c};margin-top:2px'>"
-                    f"Niveau {np_lc} — {LOC_CRIT_LABELS[str(np_lc)]}</div>",
-                    unsafe_allow_html=True)
+                    "<div style='background:#fef9c3;border:1px solid #fde047;"
+                    "border-radius:8px;padding:10px 14px;margin:6px 0'>"
+                    "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>"
+                    "🔬 Configuration poste — Classe A</div>",
+                    unsafe_allow_html=True
+                )
+
+                np_poste_type = st.radio(
+                    "Type de poste *",
+                    ["commun", "specifique"],
+                    format_func=lambda x: (
+                        "🔵 Poste commun (un seul poste, identique chaque jour)"
+                        if x == "commun"
+                        else "🔀 Poste spécifique (alternance Poste 1 / Poste 2 chaque jour)"
+                    ),
+                    key="np_poste_type",
+                )
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            else:
+                np_poste_type = "non_applicable"
 
             np4, np5, np6 = st.columns([2, 1, 2])
             with np4:
@@ -7066,6 +7004,12 @@ elif active == "parametres":
                     st.error("Le nom est requis")
                 else:
                     nid = f"p{len(st.session_state.points)+1}_{int(datetime.now().timestamp())}"
+                    _save_pt = (
+                        np_poste_type
+                        if np_room and np_room.strip().upper() == "A"
+                        else "non_applicable"
+                    )
+
                     st.session_state.points.append({
                         "id":                   nid,
                         "label":                np_label.strip(),
@@ -7075,6 +7019,7 @@ elif active == "parametres":
                         "frequency":            np_freq,
                         "frequency_unit":       np_fu,
                         "room_class":           np_room.strip(),
+                        "poste_type":           _save_pt,
                     })
                     save_points(st.session_state.points, supa=True)
                     st.success(f"✅ Point **{np_label}** ajouté")

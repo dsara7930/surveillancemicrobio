@@ -1,7 +1,0 @@
-date,prelevement,sample_id,germ_saisi,germ_match,match_score,ufc,germ_score,location_criticality,total_score,risk,room_class,alert_threshold,action_threshold,triggered_by,status,operateur,remarque
-2026-04-01,Sol,s5_1775034779,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J2 négative
-2026-04-01,Sol,s6_1775034784,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J2 négative
-2026-04-01,Sol,s5_1775034779,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J7 négative
-2026-04-01,Sol,s6_1775034784,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J7 négative
-2026-04-01,Sol,s7_1775034854,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J2 négative
-2026-04-01,Sol,s7_1775034854,,Négatif,—,0,0,1,0,0,D,Score ≥ 24,Score > 36,,ok,Non renseigné,Lecture J7 négative
