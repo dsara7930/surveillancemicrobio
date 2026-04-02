@@ -4327,8 +4327,9 @@ if active == "planning":
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
         }
-        W_ETQ  = 4.5  * rl_cm
-        H_ETQ  = 3.2  * rl_cm
+        # ─── APRÈS ───────────────────────────────────────────────────────────
+        W_ETQ  = 5.0  * rl_cm
+        H_ETQ  = 3.0  * rl_cm
         N_COLS = 4
         GAP    = 0.25 * rl_cm
         MARGIN = 0.7  * rl_cm
@@ -4392,7 +4393,10 @@ if active == "planning":
             rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
             lv      = task.get("label", "—")
             dv      = d_obj.strftime("%d/%m/%Y")
+            # ─── APRÈS ───────────────────────────────────────────────────────────
             W_INNER = W_ETQ - 0.55 * rl_cm
+            W_QR    = 2.0  * rl_cm          # ← déplacé ici pour cohérence
+            W_TEXT  = W_INNER - W_QR
             _pt_data = next(
                 (p for p in st.session_state.points
                  if p.get("label") == lv), None)
@@ -4403,7 +4407,8 @@ if active == "planning":
                     from reportlab.platypus import Image as RLImage
                     _qr_bytes = _make_qr_bytes(_qr_payload(_pt_data))
                     _qr_buf   = BytesIO(_qr_bytes)
-                    _qr_img   = RLImage(_qr_buf, width=1.1*rl_cm, height=1.1*rl_cm)
+                    # ─── APRÈS ───────────────────────────────────────────────────────────
+                    _qr_img   = RLImage(_qr_buf, width=2.0*rl_cm, height=2.0*rl_cm)
                     qr_flowable = _qr_img
                 except Exception:
                     qr_flowable = ""
@@ -4414,8 +4419,9 @@ if active == "planning":
                 pst = _pt_data.get("poste", "—") or "—"
                 classea_rows = [[Paragraph(f"ISO {iso} · {pst}", s_classea)]]
 
-            W_TEXT = W_INNER - 1.2 * rl_cm
-            W_QR   = 1.2 * rl_cm
+            # ─── APRÈS ───────────────────────────────────────────────────────────
+            W_TEXT = W_INNER - 2.0 * rl_cm
+            W_QR   = 2.0 * rl_cm
             left_tbl = Table([
                 [Paragraph(lv, s_titre)],
                 [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
@@ -4434,10 +4440,13 @@ if active == "planning":
                 ("TOPPADDING",    (0, -1), (0, -1), 4),
             ]))
 
+            # ─── APRÈS ───────────────────────────────────────────────────────────
             if qr_flowable:
                 inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
                 inner.setStyle(TableStyle([
                     ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                    ("VALIGN",        (0, 1), (0, 1),   "TOP"),   # texte en haut
+                    ("VALIGN",        (1, 0), (1, 0),   "MIDDLE"),# QR centré verticalement
                     ("LEFTPADDING",   (0, 0), (-1, -1), 0),
                     ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
                     ("TOPPADDING",    (0, 0), (-1, -1), 0),
