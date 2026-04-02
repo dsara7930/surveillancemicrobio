@@ -4322,7 +4322,7 @@ if active == "planning":
         H_ETQ  = 3.0  * rl_cm
         N_COLS = 4
         GAP    = 0.0  * rl_cm   # ← 0 gap pour coller à la planche
-        MARGIN = 0.7  * rl_cm   # ← ajustez selon votre planche
+        MARGIN = 0.0  * rl_cm   # ← ajustez selon votre planche
 
         buf  = _io.BytesIO()
         A4_W, A4_H = A4
@@ -4358,8 +4358,8 @@ if active == "planning":
         # Le séparateur occupe une rangée entière de N_COLS colonnes
         # avec la même hauteur qu'une étiquette → alignement parfait sur planche
         s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
-                                fontSize=11, leading=14,
-                                textColor=rlc.HexColor("#ffffff"))
+                               fontSize=11, leading=14,
+                               textColor=rlc.HexColor("#1a4e66"))  # ← plus de blanc
 
         if isinstance(date_obj_or_list, list):
             days_data = date_obj_or_list
@@ -4374,8 +4374,8 @@ if active == "planning":
 
         doc = SimpleDocTemplate(
             buf, pagesize=A4,
-            leftMargin=MARGIN, rightMargin=MARGIN,
-            topMargin=MARGIN,  bottomMargin=MARGIN,
+            leftMargin=0, rightMargin=0,
+            topMargin=0,  bottomMargin=0,
             title=doc_title)
 
         def _build_cell(task, d_obj):
@@ -4555,15 +4555,16 @@ if active == "planning":
                 if not day_tasks:
                     continue
                 # Rangée séparateur
+                # Rangée séparateur — fond moins bleu
                 tbl_style += [
                     ("SPAN",       (0, row_idx), (N_COLS-1, row_idx)),
                     ("BACKGROUND", (0, row_idx), (N_COLS-1, row_idx),
-                    rlc.HexColor("#1e40af")),
+                    rlc.HexColor("#bfdbfe")),          # ← bleu très clair
                     ("ALIGN",      (0, row_idx), (N_COLS-1, row_idx), "LEFT"),
                     ("VALIGN",     (0, row_idx), (N_COLS-1, row_idx), "MIDDLE"),
                     ("LEFTPADDING",(0, row_idx), (N_COLS-1, row_idx), 14),
                     ("TEXTCOLOR",  (0, row_idx), (N_COLS-1, row_idx),
-                    rlc.white),
+                    rlc.HexColor("#1e40af")),           # ← texte bleu foncé
                     ("FONTNAME",   (0, row_idx), (N_COLS-1, row_idx),
                     "Helvetica-Bold"),
                     ("FONTSIZE",   (0, row_idx), (N_COLS-1, row_idx), 11),
