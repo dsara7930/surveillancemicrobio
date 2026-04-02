@@ -2610,29 +2610,29 @@ function scan() {
 
         def _fix_azerty(text: str) -> str:
                 # Table de correspondance AZERTY (ce que la douchette envoie) → QWERTY (ce qu'on veut)
-        azerty_to_qwerty = {
-            # Chiffres / symboles ligne du haut
-            '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
-            '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
-            ')': '=',
-            # Symboles essentiels pour JSON
-            '%': '{',    # Shift+( sur AZERTY → { sur QWERTY  (Shift+[)
-            'µ': '}',    # selon clavier — fallback
-            '^': '[',
-            '$': ']',
-            'ù': '%',
-            '*': '\\',
-            '!': '/',
-            ':': '/',    # : non-shifté → / sur certains layouts
-            ';': ';',
-            ',': ',',
-            # Lettres remappées
-            'a': 'q', 'A': 'Q',
-            'z': 'w', 'Z': 'W',
-            'q': 'a', 'Q': 'A',
-            'w': 'z', 'W': 'Z',
-            'm': ';', 'M': ':',
-        }
+            azerty_to_qwerty = {
+                # Chiffres / symboles ligne du haut
+                '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
+                '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
+                ')': '=',
+                # Symboles essentiels pour JSON
+                '%': '{',    # Shift+( sur AZERTY → { sur QWERTY  (Shift+[)
+                'µ': '}',    # selon clavier — fallback
+                '^': '[',
+                '$': ']',
+                'ù': '%',
+                '*': '\\',
+                '!': '/',
+                ':': '/',    # : non-shifté → / sur certains layouts
+                ';': ';',
+                ',': ',',
+                # Lettres remappées
+                'a': 'q', 'A': 'Q',
+                'z': 'w', 'Z': 'W',
+                'q': 'a', 'Q': 'A',
+                'w': 'z', 'W': 'Z',
+                'm': ';', 'M': ':',
+            }
 
         # --- Approche robuste : essayer de détecter et corriger les séquences JSON ---
         # Sur la plupart des douchettes AZERTY le problème principal est :
