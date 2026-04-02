@@ -4625,29 +4625,39 @@ if active == "planning":
         ]
 
         # Appliquer le style "séparateur" sur les bonnes rangées
+        # ──────────────────────────────────────────────────────────────────
+# APRÈS  (corrigé)
+# ──────────────────────────────────────────────────────────────────
         if is_week:
             row_idx = 0
             for day_date, day_tasks in days_data:
                 if not day_tasks:
                     continue
                 # Rangée séparateur
-                # Rangée séparateur — fond moins bleu
                 tbl_style += [
                     ("SPAN",       (0, row_idx), (N_COLS-1, row_idx)),
                     ("BACKGROUND", (0, row_idx), (N_COLS-1, row_idx),
-                    rlc.HexColor("#bfdbfe")),          # ← bleu très clair
+                     rlc.HexColor("#bfdbfe")),
                     ("ALIGN",      (0, row_idx), (N_COLS-1, row_idx), "LEFT"),
                     ("VALIGN",     (0, row_idx), (N_COLS-1, row_idx), "MIDDLE"),
                     ("LEFTPADDING",(0, row_idx), (N_COLS-1, row_idx), 14),
                     ("TEXTCOLOR",  (0, row_idx), (N_COLS-1, row_idx),
-                    rlc.HexColor("#1e40af")),           # ← texte bleu foncé
+                     rlc.HexColor("#1e40af")),
                     ("FONTNAME",   (0, row_idx), (N_COLS-1, row_idx),
-                    "Helvetica-Bold"),
+                     "Helvetica-Bold"),
                     ("FONTSIZE",   (0, row_idx), (N_COLS-1, row_idx), 11),
                 ]
                 row_idx += 1  # séparateur
-                # Rangées étiquettes
-                n_etiq_rows = -(-len(day_tasks) // N_COLS)  # ceil division
+
+                # ── Compter le nombre RÉEL de cellules générées ──────────
+                # Les tâches classe A génèrent 2 étiquettes (une par isolateur)
+                n_cells = sum(
+                    len(ISOLATEURS_A)
+                    if t.get("room_class", "").strip().upper() == "A"
+                    else 1
+                    for t in day_tasks
+                )
+                n_etiq_rows = -(-n_cells // N_COLS)  # ceil division correcte
                 row_idx += n_etiq_rows
 
         main_tbl.setStyle(TableStyle(tbl_style))
