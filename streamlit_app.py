@@ -4927,13 +4927,313 @@ if active == "planning":
         else:
             st.info("Aucun prélèvement planifié ce jour.")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FIN du with plan_tab_charge
-# ─────────────────────────────────────────────────────────────────────────────
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET : EXPORT EXCEL
-    # ═════════════════════════════════════════════════════════════════════════
+
+   # ═════════════════════════════════════════════════════════════════════════
+# HELPERS — Overrides planning
+# À placer avec les autres fonctions utilitaires (load/save)
+# ═════════════════════════════════════════════════════════════════════════
+
+def load_planning_overrides():
+    """Charge les surcharges manuelles du planning depuis Supabase ou session."""
+    raw = _supa_get("planning_overrides")
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    return {}
+
+def save_planning_overrides(overrides, supa=True):
+    """Sauvegarde les surcharges manuelles."""
+    if supa:
+        _supa_upsert("planning_overrides",
+                     json.dumps(overrides, ensure_ascii=False))
+    st.session_state.planning_overrides = overrides
+
+def get_effective_plan(date_obj, pt_label, monthly_plan, overrides):
+    """
+    Retourne (is_planned, poste_override) pour un point/date,
+    en tenant compte des overrides manuels.
+    - is_planned : bool
+    - poste_override : "commun" | "P1" | "P2" | None  (None = auto)
+    """
+    date_key = date_obj.isoformat()
+    if date_key in overrides and pt_label in overrides[date_key]:
+        ov = overrides[date_key][pt_label]
+        return ov.get("planned", False), ov.get("poste", None)
+    # Fallback sur le planning automatique
+    tasks_day = monthly_plan.get(date_obj, [])
+    is_planned = any(t.get("label") == pt_label for t in tasks_day)
+    return is_planned, None
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# INITIALISATION session_state overrides (à mettre dans le bloc init)
+# ═════════════════════════════════════════════════════════════════════════
+if "planning_overrides" not in st.session_state:
+    st.session_state.planning_overrides = load_planning_overrides()
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ONGLET : ÉDITION SEMAINE PAR SEMAINE
+# ═════════════════════════════════════════════════════════════════════════
+with plan_tab_edit:
+    st.markdown("#### ✏️ Édition manuelle du planning — semaine par semaine")
+
+    overrides = st.session_state.get("planning_overrides", {})
+    pts_all   = st.session_state.points
+
+    if not pts_all:
+        st.info("Aucun point de prélèvement défini.")
+    else:
+        # ── Sélecteur de semaine ──────────────────────────────────────────
+        JOURS_FR   = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+        today_edit = _today_dt
+
+        # Calculer la liste des semaines disponibles (±8 semaines autour d'aujourd'hui)
+        current_monday = today_edit - timedelta(days=today_edit.weekday())
+        week_options   = [current_monday + timedelta(weeks=i) for i in range(-2, 10)]
+        week_labels    = []
+        for wm in week_options:
+            we = wm + timedelta(days=4)
+            marker = " ← semaine en cours" if wm == current_monday else ""
+            week_labels.append(
+                f"Sem. {wm.isocalendar()[1]}  —  {wm.strftime('%d/%m/%Y')} → {we.strftime('%d/%m/%Y')}{marker}")
+
+        sel_idx = st.selectbox(
+            "Semaine à éditer", range(len(week_labels)),
+            format_func=lambda i: week_labels[i],
+            index=2,   # semaine en cours par défaut
+            key="edit_week_select")
+
+        selected_monday = week_options[sel_idx]
+        week_dates      = [selected_monday + timedelta(days=i) for i in range(5)]  # Lun→Ven
+
+        # ── Bandeau info ──────────────────────────────────────────────────
+        nb_overrides_week = sum(
+            1 for d in week_dates
+            for pt in pts_all
+            if d.isoformat() in overrides and pt["label"] in overrides[d.isoformat()]
+        )
+        if nb_overrides_week:
+            st.markdown(
+                f"<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
+                f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
+                f"font-size:.78rem;color:#92400e'>"
+                f"⚠️ <strong>{nb_overrides_week} modification(s) manuelle(s)</strong> "
+                f"active(s) sur cette semaine — les cellules modifiées sont indiquées par 🔵."
+                f"</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                "<div style='background:#f0fdf4;border:1px solid #86efac;"
+                "border-radius:8px;padding:8px 14px;margin-bottom:10px;"
+                "font-size:.78rem;color:#166534'>"
+                "✅ Planning automatique — aucune modification manuelle sur cette semaine."
+                "</div>", unsafe_allow_html=True)
+
+        # ── En-tête du tableau ────────────────────────────────────────────
+        hdr_cols = st.columns([3.5] + [2] * 5)
+        with hdr_cols[0]:
+            st.markdown(
+                "<div style='background:#1e40af;color:#fff;font-size:.72rem;"
+                "font-weight:800;padding:8px 10px;border-radius:6px 6px 0 0;"
+                "text-align:center'>Point de prélèvement</div>",
+                unsafe_allow_html=True)
+        for di, (jour, d) in enumerate(zip(JOURS_FR, week_dates)):
+            is_today = (d == today_edit)
+            bg = "#2563eb" if is_today else "#334155"
+            with hdr_cols[di + 1]:
+                st.markdown(
+                    f"<div style='background:{bg};color:#fff;font-size:.72rem;"
+                    f"font-weight:800;padding:8px 4px;border-radius:6px 6px 0 0;"
+                    f"text-align:center'>{jour}<br>"
+                    f"<span style='font-weight:400;font-size:.68rem'>"
+                    f"{d.strftime('%d/%m')}</span></div>",
+                    unsafe_allow_html=True)
+
+        # ── Corps du tableau — un point par ligne ─────────────────────────
+        POSTE_OPTS_COMMUN    = ["commun"]
+        POSTE_OPTS_SPECIFIQUE = ["P1", "P2"]
+
+        # Buffer des modifications en cours (avant sauvegarde)
+        if "edit_buffer" not in st.session_state:
+            st.session_state.edit_buffer = {}
+
+        buffer = st.session_state.edit_buffer
+
+        for pt_idx, pt in enumerate(pts_all):
+            rc         = (pt.get('room_class') or '').strip()
+            is_class_a = rc.upper() == "A"
+            poste_type = pt.get('poste_type', 'non_applicable')
+            type_icon  = "💨" if pt.get('type') == "Air" else "🧴"
+            row_bg     = "#f8fafc" if pt_idx % 2 == 0 else "#ffffff"
+
+            row_cols = st.columns([3.5] + [2] * 5)
+            with row_cols[0]:
+                class_badge = (
+                    f"<span style='background:#dbeafe;color:#1e40af;"
+                    f"border:1px solid #93c5fd;border-radius:4px;"
+                    f"padding:1px 6px;font-size:.62rem;font-weight:800;"
+                    f"margin-left:4px'>{rc}</span>" if rc else "")
+                st.markdown(
+                    f"<div style='background:{row_bg};border:1px solid #e2e8f0;"
+                    f"border-radius:4px;padding:7px 10px;font-size:.78rem;"
+                    f"font-weight:700;color:#0f172a;min-height:52px;"
+                    f"display:flex;align-items:center'>"
+                    f"{type_icon} {pt['label']}{class_badge}</div>",
+                    unsafe_allow_html=True)
+
+            for di, d in enumerate(week_dates):
+                date_key   = d.isoformat()
+                buf_key    = f"{date_key}__{pt['label']}"
+
+                # Valeur effective actuelle
+                is_planned_auto, poste_auto = get_effective_plan(
+                    d, pt["label"], monthly_plan, overrides)
+                is_overridden = (date_key in overrides
+                                 and pt["label"] in overrides.get(date_key, {}))
+
+                with row_cols[di + 1]:
+                    cell_bg = "#eff6ff" if is_overridden else row_bg
+
+                    # ── Checkbox planifié ─────────────────────────────────
+                    chk_key    = f"chk_{pt_idx}_{di}_{sel_idx}"
+                    cur_planned = buffer.get(buf_key, {}).get("planned", is_planned_auto)
+
+                    new_planned = st.checkbox(
+                        "Planifié" if cur_planned else "Non planifié",
+                        value=cur_planned,
+                        key=chk_key,
+                        label_visibility="collapsed")
+
+                    # ── Badge override ────────────────────────────────────
+                    if is_overridden:
+                        st.markdown(
+                            "<div style='font-size:.6rem;color:#2563eb;"
+                            "text-align:center;margin-top:-4px'>🔵 modifié</div>",
+                            unsafe_allow_html=True)
+
+                    # ── Sélecteur poste si Classe A et planifié ───────────
+                    new_poste = None
+                    if is_class_a and new_planned:
+                        if poste_type == "commun":
+                            new_poste = "commun"
+                            st.markdown(
+                                "<div style='font-size:.62rem;color:#0369a1;"
+                                "text-align:center'>poste commun</div>",
+                                unsafe_allow_html=True)
+                        elif poste_type == "specifique":
+                            cur_poste = buffer.get(buf_key, {}).get(
+                                "poste",
+                                poste_auto if poste_auto else "P1")
+                            poste_sel_key = f"poste_{pt_idx}_{di}_{sel_idx}"
+                            new_poste = st.selectbox(
+                                "Poste",
+                                POSTE_OPTS_SPECIFIQUE,
+                                index=POSTE_OPTS_SPECIFIQUE.index(cur_poste)
+                                      if cur_poste in POSTE_OPTS_SPECIFIQUE else 0,
+                                key=poste_sel_key,
+                                label_visibility="collapsed")
+
+                    # ── Mise à jour du buffer ─────────────────────────────
+                    # Détecter si cette valeur diffère du planning auto
+                    differs = (new_planned != is_planned_auto) or (
+                        is_class_a and new_planned
+                        and new_poste is not None
+                        and new_poste != poste_auto)
+
+                    if differs:
+                        if buf_key not in buffer:
+                            buffer[buf_key] = {}
+                        buffer[buf_key]["planned"] = new_planned
+                        if new_poste is not None:
+                            buffer[buf_key]["poste"] = new_poste
+                    else:
+                        buffer.pop(buf_key, None)
+
+                    st.session_state.edit_buffer = buffer
+
+        # ── Boutons d'action ──────────────────────────────────────────────
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+        act1, act2, act3, act4 = st.columns([2, 2, 2, 2])
+
+        with act1:
+            if st.button("💾 Sauvegarder la semaine",
+                         use_container_width=True, type="primary",
+                         key="save_week_overrides"):
+                # Appliquer le buffer dans les overrides
+                for buf_key, val in buffer.items():
+                    parts     = buf_key.split("__", 1)
+                    date_key  = parts[0]
+                    pt_label  = parts[1]
+                    if date_key not in overrides:
+                        overrides[date_key] = {}
+                    overrides[date_key][pt_label] = val
+
+                # Nettoyer les overrides identiques au planning auto
+                # (évite de stocker des données inutiles)
+                for d in week_dates:
+                    date_key = d.isoformat()
+                    if date_key in overrides:
+                        to_del = []
+                        for pt_label, ov_val in overrides[date_key].items():
+                            auto_planned, _ = get_effective_plan(
+                                d, pt_label, monthly_plan, {})
+                            if ov_val.get("planned") == auto_planned:
+                                to_del.append(pt_label)
+                        for k in to_del:
+                            del overrides[date_key][k]
+                        if not overrides[date_key]:
+                            del overrides[date_key]
+
+                save_planning_overrides(overrides, supa=True)
+                st.session_state.edit_buffer = {}
+                st.success("✅ Planning de la semaine sauvegardé !")
+                st.rerun()
+
+        with act2:
+            if st.button("↩️ Annuler les modifications",
+                         use_container_width=True,
+                         key="cancel_week_edit"):
+                st.session_state.edit_buffer = {}
+                st.rerun()
+
+        with act3:
+            if st.button("🗑️ Réinitialiser la semaine",
+                         use_container_width=True,
+                         key="reset_week_overrides"):
+                for d in week_dates:
+                    overrides.pop(d.isoformat(), None)
+                save_planning_overrides(overrides, supa=True)
+                st.session_state.edit_buffer = {}
+                st.success("✅ Semaine réinitialisée — planning automatique restauré.")
+                st.rerun()
+
+        with act4:
+            if st.button("🗑️ Tout réinitialiser",
+                         use_container_width=True,
+                         key="reset_all_overrides"):
+                save_planning_overrides({}, supa=True)
+                st.session_state.edit_buffer = {}
+                st.success("✅ Toutes les modifications manuelles supprimées.")
+                st.rerun()
+
+        # ── Légende ───────────────────────────────────────────────────────
+        st.markdown("""
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+        padding:10px 14px;margin-top:8px;font-size:.72rem;color:#475569">
+          <strong>Légende :</strong>
+          ✅ Coché = planifié pour ce jour ·
+          🔵 modifié = surcharge manuelle active ·
+          P1 / P2 = poste spécifique pour classe A ·
+          Les modifications ne s'appliquent qu'à l'export Excel.
+        </div>""", unsafe_allow_html=True)
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ONGLET : EXPORT EXCEL  (version mise à jour avec overrides)
+# ═════════════════════════════════════════════════════════════════════════
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
 
@@ -4943,6 +5243,20 @@ if active == "planning":
                 "Ajoutez `openpyxl` dans votre fichier **requirements.txt** "
                 "puis redémarrez l'application.")
             st.stop()
+
+        overrides = st.session_state.get("planning_overrides", {})
+
+        # Afficher le nombre de modifications manuelles actives
+        nb_ov_total = sum(len(v) for v in overrides.values())
+        if nb_ov_total:
+            st.markdown(
+                f"<div style='background:#eff6ff;border:1px solid #bfdbfe;"
+                f"border-radius:8px;padding:8px 14px;margin-bottom:12px;"
+                f"font-size:.78rem;color:#1e40af'>"
+                f"ℹ️ <strong>{nb_ov_total} modification(s) manuelle(s)</strong> "
+                f"seront prises en compte dans l'export "
+                f"(éditées dans l'onglet ✏️ Édition)."
+                f"</div>", unsafe_allow_html=True)
 
         exp_scope = st.selectbox(
             "Période",
@@ -4966,7 +5280,7 @@ if active == "planning":
             C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
             C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L   = "F1F5F9"
             C_GREY_HDR = "334155"; C_GREEN  = "16A34A"; C_RED      = "DC2626"
-            C_AMBER    = "D97706"
+            C_AMBER    = "D97706"; C_ORANGE = "EA580C"
 
             thin   = Side(style="thin",   color="CBD5E1")
             medium = Side(style="medium", color="94A3B8")
@@ -5001,7 +5315,7 @@ if active == "planning":
                     for i in range((last - first).days + 1)
                 ]
             elif exp_scope == "4 semaines à venir":
-                ws_e = exp_today - timedelta(days=exp_today.weekday())
+                ws_e      = exp_today - timedelta(days=exp_today.weekday())
                 exp_dates = [ws_e + timedelta(days=i) for i in range(28)]
             else:
                 all_d = []
@@ -5025,38 +5339,29 @@ if active == "planning":
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
             # ══════════════════════════════════════════════════════════════
-            # FEUILLE 1 — VUE MATRICIELLE : Points × Jours de semaine
-            # Lignes = points de prélèvement
-            # Colonnes = jours de la semaine (Lun→Ven) avec date
-            # Cellule = "X" si prévu ce jour-là, fond coloré si réalisé
+            # FEUILLE 1 — VUE MATRICIELLE
             # ══════════════════════════════════════════════════════════════
             ws_matrix = wb.active
             ws_matrix.title = "Planning Semaine"
             ws_matrix.sheet_view.showGridLines = False
 
-            # Regrouper les dates par semaine (lundi)
             from collections import OrderedDict
             weeks_map = OrderedDict()
             for d in exp_dates:
-                ws_key = d - timedelta(days=d.weekday())  # lundi de la semaine
+                ws_key = d - timedelta(days=d.weekday())
                 if ws_key not in weeks_map:
                     weeks_map[ws_key] = []
                 weeks_map[ws_key].append(d)
 
-            # Construire le planning pour chaque semaine
-            # On a besoin de class_max_dict (déjà calculé plus haut dans le scope)
-            # et de monthly_plan par mois → on recalcule si nécessaire
-
-            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-            pts_all = st.session_state.points
-
-            # Titre général
-            n_weeks = len(weeks_map)
-            # Largeur totale = 1 col label + 1 col classe + 1 col type + (5 jours × n_semaines)
-            FIXED_COLS = 3  # Label | Classe | Type
+            JOURS_XL   = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi",
+                           "Samedi", "Dimanche"]
+            pts_all    = st.session_state.points
+            FIXED_COLS = 3
             DAYS_PER_WEEK = 5
+            n_weeks    = len(weeks_map)
             total_cols = FIXED_COLS + DAYS_PER_WEEK * n_weeks
 
+            # Ligne 1 : titre
             ws_matrix.merge_cells(start_row=1, start_column=1,
                                   end_row=1, end_column=total_cols)
             ws_matrix.cell(1, 1).value     = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
@@ -5065,18 +5370,21 @@ if active == "planning":
             ws_matrix.cell(1, 1).alignment = al_c()
             ws_matrix.row_dimensions[1].height = 28
 
+            # Ligne 2 : sous-titre avec note overrides
+            nb_ov_export = sum(len(v) for v in overrides.values())
+            ov_note = f" · {nb_ov_export} modification(s) manuelle(s) appliquée(s)" if nb_ov_export else ""
             ws_matrix.merge_cells(start_row=2, start_column=1,
                                   end_row=2, end_column=total_cols)
-            ws_matrix.cell(2, 1).value     = (
+            ws_matrix.cell(2, 1).value = (
                 f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
                 f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'} — "
-                f"X = prélèvement prévu · 🟢 = réalisé")
+                f"X = prévu · ✓ = réalisé · 🔵 = modifié manuellement{ov_note}")
             ws_matrix.cell(2, 1).font      = Font(name="Arial", size=8, color="475569")
             ws_matrix.cell(2, 1).fill      = fill(C_BLUE_L)
             ws_matrix.cell(2, 1).alignment = al_c()
             ws_matrix.row_dimensions[2].height = 16
 
-            # ── Ligne 3 : en-têtes semaines (fusionné sur 5 jours) ────────
+            # Ligne 3 : en-têtes semaines
             ws_matrix.row_dimensions[3].height = 20
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 col_start = FIXED_COLS + 1 + wi * DAYS_PER_WEEK
@@ -5084,14 +5392,21 @@ if active == "planning":
                 ws_matrix.merge_cells(start_row=3, start_column=col_start,
                                       end_row=3,   end_column=col_end)
                 we_key = ws_key + timedelta(days=4)
+                # Vérifier si cette semaine a des overrides
+                has_ov = any(
+                    (ws_key + timedelta(days=di)).isoformat() in overrides
+                    for di in range(5))
                 c = ws_matrix.cell(3, col_start)
-                c.value     = f"Sem. {ws_key.isocalendar()[1]}  {ws_key.strftime('%d/%m')} → {we_key.strftime('%d/%m/%Y')}"
+                c.value     = (
+                    f"{'🔵 ' if has_ov else ''}"
+                    f"Sem. {ws_key.isocalendar()[1]}  "
+                    f"{ws_key.strftime('%d/%m')} → {we_key.strftime('%d/%m/%Y')}")
                 c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
-                c.fill      = fill(C_GREY_HDR)
+                c.fill      = fill("1E3A5F" if has_ov else C_GREY_HDR)
                 c.alignment = al_c()
                 c.border    = border_medium()
 
-            # ── Ligne 4 : en-têtes colonnes fixes ─────────────────────────
+            # Ligne 4 : en-têtes colonnes fixes
             ws_matrix.row_dimensions[4].height = 34
             fixed_headers = ["Point de prélèvement", "Classe", "Type"]
             fixed_widths  = [32, 9, 10]
@@ -5104,20 +5419,20 @@ if active == "planning":
                 c.border    = border_all()
                 ws_matrix.column_dimensions[get_column_letter(ci)].width = w
 
-            # ── Ligne 4 : en-têtes jours (Lun, Mar… + date) ──────────────
+            # Ligne 4 : en-têtes jours
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
-                # Construire un mapping jour→date pour cette semaine
-                day_date_map = {}
-                for d in ws_days:
-                    day_date_map[d.weekday()] = d  # weekday: 0=Lun … 4=Ven
-
+                day_date_map = {d.weekday(): d for d in ws_days}
                 for di in range(DAYS_PER_WEEK):
-                    col = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                    col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                     d_for_col = day_date_map.get(di)
                     if d_for_col:
-                        label = f"{JOURS_XL[di][:3]}\n{d_for_col.strftime('%d/%m')}"
+                        # Vérifier s'il y a des overrides ce jour
+                        has_day_ov   = d_for_col.isoformat() in overrides
                         is_today_col = (d_for_col == exp_today)
-                        bg_col = "DBEAFE" if is_today_col else "EFF6FF"
+                        label  = f"{JOURS_XL[di][:3]}\n{d_for_col.strftime('%d/%m')}"
+                        bg_col = ("DBEAFE" if is_today_col
+                                  else "C7D9FF" if has_day_ov
+                                  else "EFF6FF")
                         fc_col = "1E40AF"
                     else:
                         label  = f"{JOURS_XL[di][:3]}\n—"
@@ -5129,11 +5444,11 @@ if active == "planning":
                     c.fill      = fill(bg_col)
                     c.alignment = al_c(wrap=True)
                     c.border    = border_all()
-                    ws_matrix.column_dimensions[get_column_letter(col)].width = 8
+                    ws_matrix.column_dimensions[get_column_letter(col)].width = 10
 
             ws_matrix.freeze_panes = "D5"
 
-            # ── Lignes données : un point par ligne ───────────────────────
+            # ── Lignes données ────────────────────────────────────────────
             RISK_BG = {
                 "1": "DCFCE7", "2": "D9F99D",
                 "3": "FEF9C3", "4": "FFEDD5", "5": "FEE2E2",
@@ -5145,14 +5460,16 @@ if active == "planning":
 
             data_row = 5
             for pt_idx, pt in enumerate(pts_all):
-                rc       = (pt.get('room_class') or '').strip()
-                rv       = str(pt.get('risk_level', ''))
-                type_lbl = pt.get('type', '—')
-                row_bg   = "FFFFFF" if pt_idx % 2 == 0 else "F8FAFC"
+                rc         = (pt.get('room_class') or '').strip()
+                rv         = str(pt.get('risk_level', ''))
+                type_lbl   = pt.get('type', '—')
+                poste_type = pt.get('poste_type', 'non_applicable')
+                is_class_a = rc.strip().upper() == "A"
+                row_bg     = "FFFFFF" if pt_idx % 2 == 0 else "F8FAFC"
 
-                ws_matrix.row_dimensions[data_row].height = 18
+                ws_matrix.row_dimensions[data_row].height = 20
 
-                # Col 1 : label point
+                # Col 1 : label
                 c = ws_matrix.cell(data_row, 1)
                 c.value     = ("💨 " if type_lbl == "Air" else "🧴 ") + pt['label']
                 c.font      = Font(name="Arial", size=9, bold=True, color=C_TEXT)
@@ -5177,62 +5494,104 @@ if active == "planning":
                 c.alignment = al_c()
                 c.border    = border_all()
 
-                # Colonnes jours : X si prévu, fond vert si réalisé
+                # Compteur alternance poste spécifique (pour jours sans override)
+                poste_counter = 0
+
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
-                    # Calculer le planning de cette semaine pour ce point
-                    # On cherche dans monthly_plan (calculé par mois)
-                    # → on agrège sur tous les jours de la semaine
+
                     for di in range(DAYS_PER_WEEK):
-                        col      = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                        col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                         d_for_col = day_date_map.get(di)
                         c = ws_matrix.cell(data_row, col)
 
                         if d_for_col is None:
-                            # Jour férié / hors plage
-                            c.value = ""
-                            c.fill  = fill("E2E8F0")
+                            c.value  = ""
+                            c.fill   = fill("E2E8F0")
                             c.border = border_all()
                             continue
 
-                        # Vérifier si ce point est planifié ce jour
-                        tasks_day  = monthly_plan.get(d_for_col, [])
-                        is_planned = any(t.get("label") == pt["label"] for t in tasks_day)
+                        # ── Valeur effective (override ou auto) ───────────
+                        is_planned, poste_ov = get_effective_plan(
+                            d_for_col, pt["label"], monthly_plan, overrides)
+
+                        date_key      = d_for_col.isoformat()
+                        is_overridden = (date_key in overrides
+                                         and pt["label"] in overrides.get(date_key, {}))
 
                         # Vérifier si réalisé
                         is_done = any(
-                            p.get("label") == pt["label"] and not p.get("archived", False)
+                            p.get("label") == pt["label"]
+                            and not p.get("archived", False)
                             and p.get("date")
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
                             for p in st.session_state.prelevements)
 
-                        if is_done:
-                            c.value     = "✓"
-                            c.font      = Font(name="Arial", size=11, bold=True, color=C_GREEN)
-                            c.fill      = fill("DCFCE7")
-                        elif is_planned:
-                            c.value     = "X"
-                            c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
-                            c.fill      = fill("DBEAFE")
+                        # ── Suffixe poste ─────────────────────────────────
+                        if is_planned or is_done:
+                            if is_class_a and poste_type == "commun":
+                                poste_suffix = " ; commun"
+                            elif is_class_a and poste_type == "specifique":
+                                if poste_ov:
+                                    # Override manuel explicite
+                                    poste_suffix = f" ; {poste_ov}"
+                                else:
+                                    # Alternance automatique
+                                    poste_num    = (poste_counter % 2) + 1
+                                    poste_suffix = f" ; P{poste_num}"
+                            else:
+                                poste_suffix = ""
+                            poste_counter += 1
                         else:
-                            c.value = ""
-                            c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
+                            poste_suffix = ""
 
-                        c.alignment = al_c()
+                        # ── Couleurs selon statut ─────────────────────────
+                        if is_done:
+                            cell_val  = f"✓{poste_suffix}"
+                            cell_font = Font(name="Arial", size=10, bold=True, color=C_GREEN)
+                            cell_fill = fill("DCFCE7")
+                        elif is_planned:
+                            if is_overridden:
+                                # Override manuel → fond orange clair
+                                cell_val  = f"X{poste_suffix}"
+                                cell_font = Font(name="Arial", size=10, bold=True,
+                                                color=C_ORANGE)
+                                cell_fill = fill("FFEDD5")
+                            else:
+                                cell_val  = f"X{poste_suffix}"
+                                cell_font = Font(name="Arial", size=10, bold=True,
+                                                color=C_BLUE2)
+                                cell_fill = fill("DBEAFE")
+                        else:
+                            if is_overridden:
+                                # Manuellement supprimé
+                                cell_val  = "—"
+                                cell_font = Font(name="Arial", size=9, color="CBD5E1")
+                                cell_fill = fill("F8FAFC")
+                            else:
+                                cell_val  = ""
+                                cell_font = font(9)
+                                cell_fill = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
+
+                        c.value     = cell_val
+                        c.font      = cell_font
+                        c.fill      = cell_fill
+                        c.alignment = al_c(wrap=True)
                         c.border    = border_all()
 
                 data_row += 1
 
-            # ── Ligne totaux par jour ─────────────────────────────────────
+            # ── Ligne totaux ──────────────────────────────────────────────
             ws_matrix.row_dimensions[data_row].height = 20
+            ws_matrix.merge_cells(start_row=data_row, start_column=1,
+                                  end_row=data_row, end_column=FIXED_COLS)
             c = ws_matrix.cell(data_row, 1)
             c.value     = "TOTAL prélèvements planifiés"
             c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
             c.fill      = fill(C_GREY_HDR)
             c.alignment = al_c()
             c.border    = border_all()
-            ws_matrix.merge_cells(start_row=data_row, start_column=1,
-                                  end_row=data_row, end_column=FIXED_COLS)
+
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 day_date_map = {d.weekday(): d for d in ws_days}
                 for di in range(DAYS_PER_WEEK):
@@ -5240,7 +5599,11 @@ if active == "planning":
                     d_for_col = day_date_map.get(di)
                     c = ws_matrix.cell(data_row, col)
                     if d_for_col:
-                        total_day = len(monthly_plan.get(d_for_col, []))
+                        # Total effectif (avec overrides)
+                        total_day = sum(
+                            1 for pt in pts_all
+                            if get_effective_plan(d_for_col, pt["label"],
+                                                  monthly_plan, overrides)[0])
                         c.value   = total_day if total_day > 0 else "—"
                         c.font    = Font(name="Arial", size=9, bold=True,
                                         color=C_WHITE if total_day > 0 else "94A3B8")
@@ -5251,7 +5614,17 @@ if active == "planning":
                     c.alignment = al_c()
                     c.border    = border_all()
 
-            
+            # ── Légende en bas ────────────────────────────────────────────
+            legend_row = data_row + 2
+            ws_matrix.merge_cells(start_row=legend_row, start_column=1,
+                                  end_row=legend_row, end_column=total_cols)
+            c = ws_matrix.cell(legend_row, 1)
+            c.value = ("Légende : X (bleu) = prévu automatique · "
+                       "X (orange) = modifié manuellement · "
+                       "— (gris) = supprimé manuellement · "
+                       "✓ (vert) = réalisé")
+            c.font      = Font(name="Arial", size=7, italic=True, color="64748B")
+            c.alignment = al_l()
 
             buf = _io.BytesIO()
             wb.save(buf)
@@ -5263,8 +5636,8 @@ if active == "planning":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.success(
-                f"✅ Fichier **{fname}** généré avec succès — "
-                f"2 onglets : **Planning Semaine** (matriciel) ·")
+                f"✅ Fichier **{fname}** généré — "
+                f"{nb_ov_export} modification(s) manuelle(s) appliquée(s).")
             
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : HISTORIQUE
