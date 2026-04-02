@@ -1081,27 +1081,6 @@ with st.sidebar:
 
     with col_btn:
         st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
-
-        st.markdown("""
-        <style>
-        div[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]:last-child .stButton > button {
-            background: transparent !important;
-            border: 1px dashed rgba(148,163,184,0.35) !important;
-            color: #64748b !important;
-            font-size: .75rem !important;
-            font-weight: 500 !important;
-            box-shadow: none !important;
-            line-height: 1.5 !important;
-            padding: 7px 8px !important;
-        }
-        div[data-testid="stSidebar"] div[data-testid="stVerticalBlockBorderWrapper"]:last-child .stButton > button:hover {
-            background: rgba(100,116,139,.06) !important;
-            border-color: #94a3b8 !important;
-            color: #475569 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
         if st.button(
             "Si tu as besoin\nd'aide, je suis là !",
             key="faq_open_btn",
@@ -6458,10 +6437,8 @@ img.addEventListener('error', render);
                                 st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
-        # ═══════════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PARAMÈTRES — COMPLET
-# Suppression des onglets "Seuils par germe" et "Seuils par classe"
-# Criticité du lieu (1–3) dans les Points de prélèvement
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif active == "parametres":
@@ -6470,9 +6447,9 @@ elif active == "parametres":
         st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
     st.markdown("### ⚙️ Paramètres")
 
-    (subtab_mesures, subtab_points, subtab_plans, subtab_seuils, 
+    (subtab_mesures, subtab_points, subtab_plans, subtab_seuils,
      subtab_operateurs, subtab_backup, subtab_supabase, subtab_faq) = st.tabs([
-        "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans", 
+        "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans",
         "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
     ])
 
@@ -6498,9 +6475,9 @@ elif active == "parametres":
             "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
             "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
         }
-        type_labels = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
-        type_colors = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
-        scope_r_map = {v: k for k, v in scope_labels.items()}
+        type_labels  = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
+        type_colors  = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
+        scope_r_map  = {v: k for k, v in scope_labels.items()}
         risk_opts_map = {
             "all": "🌐 Toutes", "1": "🟢 1", "2": "🟢 2", "3": "🟡 3",
             "4": "🟠 4", "5": "🔴 5", "[3,4,5]": "3-4-5",
@@ -6610,17 +6587,17 @@ elif active == "parametres":
                     st.markdown("**✏️ Modifier la mesure**")
                     ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
                     with ec1:
-                        new_text = st.text_input("Texte *", value=m.get("text",""), key=f"em_text_{real_idx}")
+                        new_text = st.text_input("Texte *", value=m.get("text", ""), key=f"em_text_{real_idx}")
                     with ec2:
-                        cur_scope_lbl = scope_labels.get(m.get("scope","all"), "🌐 Toutes")
+                        cur_scope_lbl = scope_labels.get(m.get("scope", "all"), "🌐 Toutes")
                         scope_opts    = list(scope_labels.values())
                         scope_idx     = scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0
                         new_scope_lbl = st.selectbox("Origine", scope_opts, index=scope_idx, key=f"em_scope_{real_idx}")
                         new_scope = scope_r_map.get(new_scope_lbl, "all")
                     with ec3:
-                        cur_risk     = m.get("risk","all")
+                        cur_risk     = m.get("risk", "all")
                         cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
-                                        else json.dumps(cur_risk).replace(" ",""))
+                                        else json.dumps(cur_risk).replace(" ", ""))
                         cur_risk_lbl = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
                         risk_opts_list = list(risk_opts_map.values())
                         risk_idx = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
@@ -6630,7 +6607,7 @@ elif active == "parametres":
                                     else json.loads(new_risk_key) if new_risk_key.startswith("[")
                                     else int(new_risk_key))
                     with ec4:
-                        cur_type_lbl = type_labels.get(m.get("type","alert"), "⚠️ Alerte")
+                        cur_type_lbl = type_labels.get(m.get("type", "alert"), "⚠️ Alerte")
                         type_opts    = list(type_labels.values())
                         type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
                         new_type_lbl = st.selectbox("Type", type_opts, index=type_idx, key=f"em_type_{real_idx}")
@@ -6644,9 +6621,9 @@ elif active == "parametres":
                                 om[real_idx]["risk"]  = new_risk
                                 om[real_idx]["type"]  = new_type
                                 save_origin_measures(om, supa=False)
-                                st.session_state.origin_measures     = om
-                                st.session_state["_edit_mesure_idx"] = None
-                                st.session_state["_mesures_modifiees"] = True
+                                st.session_state.origin_measures        = om
+                                st.session_state["_edit_mesure_idx"]    = None
+                                st.session_state["_mesures_modifiees"]  = True
                                 st.rerun()
                             else:
                                 st.error("Le texte est obligatoire.")
@@ -6725,14 +6702,14 @@ elif active == "parametres":
             </div>""", unsafe_allow_html=True)
 
             for i, pt in enumerate(list(st.session_state.points)):
-                pt_type   = pt.get('type', '—')
-                type_icon = "💨" if pt_type == "Air" else "🧴"
-                loc_crit  = str(pt.get('location_criticality', 1))
-                lc_color  = LOC_CRIT_COLORS.get(loc_crit, "#94a3b8")
-                lc_label  = LOC_CRIT_LABELS.get(loc_crit, "—")
-                room_cl   = pt.get('room_class', '—') or '—'
-                freq      = pt.get('frequency', 1)
-                freq_unit = pt.get('frequency_unit', '/ semaine')
+                pt_type    = pt.get('type', '—')
+                type_icon  = "💨" if pt_type == "Air" else "🧴"
+                loc_crit   = str(pt.get('location_criticality', 1))
+                lc_color   = LOC_CRIT_COLORS.get(loc_crit, "#94a3b8")
+                lc_label   = LOC_CRIT_LABELS.get(loc_crit, "—")
+                room_cl    = pt.get('room_class', '—') or '—'
+                freq       = pt.get('frequency', 1)
+                freq_unit  = pt.get('frequency_unit', '/ semaine')
                 freq_short = (str(freq) + "x/" +
                               ("j" if "jour" in freq_unit else
                                "sem" if "sem" in freq_unit else "mois"))
@@ -6758,7 +6735,7 @@ elif active == "parametres":
                         f"padding:3px 8px;font-size:.68rem;font-weight:700'>"
                         f"Nv.{loc_crit} — {lc_label}</span></div>"
                         f"<div style='font-size:.72rem;color:#1d4ed8;text-align:center'>"
-                        f"🧫 {pt.get('gelose','—')[:12]}</div>"
+                        f"🧫 {pt.get('gelose', '—')[:12]}</div>"
                         f"<div style='text-align:center'>"
                         f"<span style='background:#eff6ff;color:#1e40af;"
                         f"border:1px solid #bfdbfe;border-radius:6px;"
@@ -6788,42 +6765,49 @@ elif active == "parametres":
 
         st.divider()
 
-        # ── Formulaire édition ─────────────────────────────────────────────────
+        # ── Formulaire édition ────────────────────────────────────────────────
         if st.session_state.get('_edit_point') is not None:
             idx = st.session_state._edit_point
             pt  = st.session_state.points[idx]
             st.markdown(f"### ✏️ Modifier — {pt['label']}")
 
-            er1, er2, er3, er_room = st.columns([3, 1.5, 1, 1.5])
+            er1, er2, er3, er_room = st.columns([3, 1.5, 1.5, 1.5])
             with er1:
                 new_label = st.text_input("Nom", value=pt['label'], key="pt_edit_label")
             with er2:
                 new_type = st.selectbox(
                     "Type", ["Air", "Surface"],
-                    index=["Air","Surface"].index(pt.get('type','Air'))
-                    if pt.get('type','Air') in ["Air","Surface"] else 0,
+                    index=["Air", "Surface"].index(pt.get('type', 'Air'))
+                          if pt.get('type', 'Air') in ["Air", "Surface"] else 0,
                     key="pt_edit_type")
+            with er3:
+                # ── CORRECTION : selectbox criticité lieu (édition) ──
+                cur_lc_val = str(pt.get('location_criticality', 1))
+                lc_edit_idx = next(
+                    (i for i, o in enumerate(LOC_CRIT_OPTS) if o.startswith(cur_lc_val)), 0)
+                new_lc_label = st.selectbox(
+                    "Criticité lieu",
+                    LOC_CRIT_OPTS,
+                    index=lc_edit_idx,
+                    key="pt_edit_loc_crit")
+                new_lc = int(new_lc_label[0])          # extrait "1", "2" ou "3"
             with er_room:
                 new_room = st.text_input(
                     "Classe ISO / GMP",
                     value=pt.get('room_class', ''),
                     placeholder="Ex: A, B, C, D…",
-                    key="pt_edit_room"
-                )
+                    key="pt_edit_room")
 
-            # ── Poste type si Classe A (édition) ─────────────────
+            # ── Poste type si Classe A (édition) ─────────────────────────────
             if new_room and new_room.strip().upper() == "A":
                 st.markdown(
                     "<div style='background:#fef9c3;border:1px solid #fde047;"
                     "border-radius:8px;padding:10px 14px;margin:6px 0'>"
                     "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>"
                     "🔬 Configuration poste — Classe A</div>",
-                    unsafe_allow_html=True
-                )
-
+                    unsafe_allow_html=True)
                 _cur_ptype = pt.get("poste_type", "commun")
                 _cur_index = 0 if _cur_ptype == "commun" else 1
-
                 new_poste_type = st.radio(
                     "Type de poste *",
                     ["commun", "specifique"],
@@ -6833,21 +6817,18 @@ elif active == "parametres":
                         else "🔀 Poste spécifique (alternance Poste 1 / Poste 2)"
                     ),
                     index=_cur_index,
-                    key="pt_edit_poste_type",
-                )
-
+                    key="pt_edit_poste_type")
                 st.markdown("</div>", unsafe_allow_html=True)
-
             else:
                 new_poste_type = "non_applicable"
 
             er4, er5, er6 = st.columns([2, 1, 2])
             with er4:
-                g_opts = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                g_opts = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                           if new_type == "Air"
-                          else ["Gélose contact TSA","Ecouvillonnage","Autre"])
-                cur_g = pt.get('gelose', g_opts[0])
-                g_idx = g_opts.index(cur_g) if cur_g in g_opts else 0
+                          else ["Gélose contact TSA", "Ecouvillonnage", "Autre"])
+                cur_g  = pt.get('gelose', g_opts[0])
+                g_idx  = g_opts.index(cur_g) if cur_g in g_opts else 0
                 new_gel = st.selectbox("Gélose", g_opts, index=g_idx, key="pt_edit_gelose")
             with er5:
                 new_freq = st.number_input(
@@ -6858,7 +6839,7 @@ elif active == "parametres":
                 unit_idx = PT_FREQ_UNIT_OPTS.index(cur_unit) if cur_unit in PT_FREQ_UNIT_OPTS else 1
                 new_fu   = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=unit_idx, key="pt_edit_freq_unit")
 
-            # Aperçu grille seuils
+            # Aperçu grille seuils (utilise new_lc défini ci-dessus)
             st.markdown(f"""
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
             padding:10px 14px;margin-top:6px">
@@ -6899,7 +6880,6 @@ elif active == "parametres":
                         if new_room and new_room.strip().upper() == "A"
                         else "non_applicable"
                     )
-
                     st.session_state.points[idx] = {
                         "id":                   pt.get('id', f"p{idx+1}"),
                         "label":                new_label,
@@ -6920,7 +6900,7 @@ elif active == "parametres":
                     st.session_state._edit_point = None
                     st.rerun()
 
-        # ── Formulaire ajout ───────────────────────────────────────────────────
+        # ── Formulaire ajout ──────────────────────────────────────────────────
         elif can_edit:
             st.markdown("### ➕ Ajouter un point de prélèvement")
 
@@ -6930,20 +6910,26 @@ elif active == "parametres":
                     "Nom *", placeholder="Ex: Salle 3 — Poste A", key="np_label")
             with np2:
                 np_type = st.selectbox("Type", ["Air", "Surface"], key="np_type")
+            with np3:
+                # ── CORRECTION : selectbox criticité lieu (ajout) ──
+                np_lc_label = st.selectbox(
+                    "Criticité lieu",
+                    LOC_CRIT_OPTS,
+                    index=0,
+                    key="np_loc_crit")
+                np_lc = int(np_lc_label[0])             # extrait "1", "2" ou "3"
             with np_room_col:
                 np_room = st.text_input(
                     "Classe ISO / GMP", placeholder="Ex: A, B, C, D…", key="np_room")
 
-            # ── Poste type si Classe A ────────────────────────────
+            # ── Poste type si Classe A ────────────────────────────────────────
             if np_room and np_room.strip().upper() == "A":
                 st.markdown(
                     "<div style='background:#fef9c3;border:1px solid #fde047;"
                     "border-radius:8px;padding:10px 14px;margin:6px 0'>"
                     "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>"
                     "🔬 Configuration poste — Classe A</div>",
-                    unsafe_allow_html=True
-                )
-
+                    unsafe_allow_html=True)
                 np_poste_type = st.radio(
                     "Type de poste *",
                     ["commun", "specifique"],
@@ -6952,19 +6938,16 @@ elif active == "parametres":
                         if x == "commun"
                         else "🔀 Poste spécifique (alternance Poste 1 / Poste 2 chaque jour)"
                     ),
-                    key="np_poste_type",
-                )
-
+                    key="np_poste_type")
                 st.markdown("</div>", unsafe_allow_html=True)
-
             else:
                 np_poste_type = "non_applicable"
 
             np4, np5, np6 = st.columns([2, 1, 2])
             with np4:
-                g_opts_new = (["Gélose de sédimentation","Gélose TSA","Gélose Columbia","Autre"]
+                g_opts_new = (["Gélose de sédimentation", "Gélose TSA", "Gélose Columbia", "Autre"]
                               if np_type == "Air"
-                              else ["Gélose contact TSA","Ecouvillonnage","Autre"])
+                              else ["Gélose contact TSA", "Ecouvillonnage", "Autre"])
                 np_gel = st.selectbox("Gélose", g_opts_new, key="np_gelose")
             with np5:
                 np_freq = st.number_input(
@@ -6972,7 +6955,7 @@ elif active == "parametres":
             with np6:
                 np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
 
-            # Aperçu grille
+            # Aperçu grille (utilise np_lc défini ci-dessus)
             st.markdown(f"""
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
             padding:10px 14px;margin-top:4px;margin-bottom:10px">
@@ -7009,7 +6992,6 @@ elif active == "parametres":
                         if np_room and np_room.strip().upper() == "A"
                         else "non_applicable"
                     )
-
                     st.session_state.points.append({
                         "id":                   nid,
                         "label":                np_label.strip(),
@@ -7025,7 +7007,7 @@ elif active == "parametres":
                     st.success(f"✅ Point **{np_label}** ajouté")
                     st.rerun()
 
-# ══════════════════════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════════════════
     # PLANS DE LOCALISATION
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_plans:
@@ -7094,18 +7076,18 @@ elif active == "parametres":
             st.markdown(f"### ✏️ Modifier — {plan_e['name']}")
             ep1, ep2 = st.columns([3, 2])
             with ep1:
-                ep_name = st.text_input("Nom du plan *", value=plan_e.get("name",""), key="ep_name")
+                ep_name = st.text_input("Nom du plan *", value=plan_e.get("name", ""), key="ep_name")
             with ep2:
                 ep_upload = st.file_uploader(
                     "Remplacer l'image (PNG/JPG/PDF)",
-                    type=["png","jpg","jpeg","pdf"], key="ep_upload")
+                    type=["png", "jpg", "jpeg", "pdf"], key="ep_upload")
             if ep_upload:
                 import base64 as _b64ep
                 if ep_upload.type == "application/pdf":
                     try:
                         import fitz
                         doc = fitz.open(stream=ep_upload.read(), filetype="pdf")
-                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
                         st.session_state["_ep_image_b64"] = (
                             f"data:image/png;base64,{_b64ep.b64encode(pix.tobytes('png')).decode()}")
                         st.success("PDF converti.")
@@ -7115,7 +7097,7 @@ elif active == "parametres":
                     raw_ep = ep_upload.read()
                     st.session_state["_ep_image_b64"] = (
                         f"data:{ep_upload.type};base64,{_b64ep.b64encode(raw_ep).decode()}")
-            cur_img = st.session_state.get("_ep_image_b64", plan_e.get("image_b64",""))
+            cur_img = st.session_state.get("_ep_image_b64", plan_e.get("image_b64", ""))
             if cur_img:
                 st.image(cur_img, caption="Aperçu du plan", use_column_width=True)
             eb1, eb2 = st.columns(2)
@@ -7148,7 +7130,7 @@ elif active == "parametres":
             with np2:
                 np_plan_upload = st.file_uploader(
                     "Image du plan (PNG / JPG / PDF)",
-                    type=["png","jpg","jpeg","pdf"], key="np_plan_upload")
+                    type=["png", "jpg", "jpeg", "pdf"], key="np_plan_upload")
             np_plan_b64 = ""
             if np_plan_upload:
                 import base64 as _b64np2
@@ -7156,7 +7138,7 @@ elif active == "parametres":
                     try:
                         import fitz
                         doc = fitz.open(stream=np_plan_upload.read(), filetype="pdf")
-                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2))
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
                         np_plan_b64 = (
                             f"data:image/png;base64,{_b64np2.b64encode(pix.tobytes('png')).decode()}")
                         st.success("✅ PDF converti — première page utilisée comme plan")
@@ -7185,20 +7167,19 @@ elif active == "parametres":
                     save_plans(st.session_state.plans)
                     st.success(f"✅ Plan **{np_plan_name}** ajouté avec succès !")
                     st.rerun()
-# ══════════════════════════════════════════════════════════════════════════
+
+    # ══════════════════════════════════════════════════════════════════════════
     # SEUILS D'ALERTE ET D'ACTION
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_seuils:
         st.markdown("### ⚖️ Seuils d'alerte et d'action")
 
-        # ── Explication du calcul ─────────────────────────────────────────────
         st.markdown("""
         <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
         border-radius:14px;padding:20px 24px;margin-bottom:20px">
           <div style="font-size:1rem;font-weight:800;color:#1e40af;margin-bottom:14px">
             🧮 Comment est calculé le score de criticité ?
           </div>
-
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
             <div style="background:#fff;border-radius:10px;padding:14px;border:1px solid #bfdbfe;text-align:center">
               <div style="font-size:1.4rem;margin-bottom:4px">🧬</div>
@@ -7228,7 +7209,6 @@ elif active == "parametres":
               </div>
             </div>
           </div>
-
           <div style="background:#1e293b;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px">
             <div style="font-size:.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">
               Formule du score total
@@ -7245,7 +7225,6 @@ elif active == "parametres":
               Score maximum : 3×3×3×3 = <b style="color:#f87171">81</b>
             </div>
           </div>
-
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
             <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px;text-align:center">
               <div style="font-size:1.1rem">✅</div>
@@ -7265,12 +7244,10 @@ elif active == "parametres":
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # ── Seuils actuels ────────────────────────────────────────────────────
-        _seuil_alerte  = st.session_state.get("_seuil_alerte", 24)
-        _seuil_action  = st.session_state.get("_seuil_action", 36)
+        _seuil_alerte = st.session_state.get("_seuil_alerte", 24)
+        _seuil_action = st.session_state.get("_seuil_action", 36)
 
         st.markdown("#### ⚙️ Modifier les seuils")
-
         if not can_edit:
             st.info("👁️ Mode lecture seule — connectez-vous pour modifier les seuils.")
 
@@ -7307,7 +7284,6 @@ elif active == "parametres":
                             f"✅ Seuils sauvegardés — Alerte : {new_seuil_alerte} · Action : {new_seuil_action}")
                         st.rerun()
 
-        # Validation visuelle
         if new_seuil_alerte >= new_seuil_action:
             st.error("❌ Le seuil d'alerte doit être strictement inférieur au seuil d'action.")
         else:
@@ -7341,13 +7317,12 @@ elif active == "parametres":
 
         st.divider()
 
-        # ── Tableau des scores limites par criticité de lieu ──────────────────
         st.markdown("#### 📊 Tableau de référence — scores limites par criticité de lieu")
         st.caption(
             "Montre à quel score germe (pathogénicité × résistance × dissémination) "
             "les seuils sont déclenchés selon la criticité du lieu.")
 
-        _sa = new_seuil_alerte
+        _sa     = new_seuil_alerte
         _sc_val = new_seuil_action
 
         st.markdown(
@@ -7357,7 +7332,7 @@ elif active == "parametres":
             "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Score lieu</div>"
             "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → ⚠️ Alerte</div>"
             "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Germe → 🚨 Action</div>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Exemples de germes concernés</div>"
+            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Exemples de lieux</div>"
             "</div>",
             unsafe_allow_html=True)
 
@@ -7366,18 +7341,13 @@ elif active == "parametres":
             2: "Préparations non stériles, zones annexes ZAC, vestiaires",
             3: "ZAC, salles blanches ISO A/B, isolateurs",
         }
-        lc_labels = {1: "Non critique", 2: "Semi-critique", 3: "Critique"}
-        lc_colors = {1: "#22c55e", 2: "#f59e0b", 3: "#ef4444"}
+        lc_colors_ref = {1: "#22c55e", 2: "#f59e0b", 3: "#ef4444"}
 
-        for lci, (loc_crit_val, lc_lbl) in enumerate([
-            (1, "Nv.1 — Non critique"),
-            (2, "Nv.2 — Semi-critique"),
-            (3, "Nv.3 — Critique"),
-        ]):
-            # Score germe minimum pour déclencher alerte / action
+        for lci, loc_crit_val in enumerate([1, 2, 3]):
+            lc_lbl       = f"Nv.{loc_crit_val} — {LOC_CRIT_LABELS[str(loc_crit_val)]}"
             germe_alerte = _sa / loc_crit_val
             germe_action = _sc_val / loc_crit_val
-            lc_col = lc_colors[loc_crit_val]
+            lc_col = lc_colors_ref[loc_crit_val]
             row_bg = "#f8fafc" if lci % 2 == 0 else "#ffffff"
             st.markdown(
                 "<div style='display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 2fr;"
@@ -7402,14 +7372,13 @@ elif active == "parametres":
             "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
             f"<div style='font-size:.75rem;color:#94a3b8'>"
             f"Score germe = Pathogénicité × Résistance × Dissémination (min 1 · max 27) "
-            f"· Seuil alerte actuel : <b style='color:#fbbf24'>{_sa}</b> "
-            f"· Seuil action actuel : <b style='color:#f87171'>{_sc_val}</b>"
+            f"· Seuil alerte : <b style='color:#fbbf24'>{_sa}</b> "
+            f"· Seuil action : <b style='color:#f87171'>{_sc_val}</b>"
             f"</div></div>",
             unsafe_allow_html=True)
 
         st.divider()
 
-        # ── Réinitialiser aux valeurs par défaut ──────────────────────────────
         st.markdown("#### ↩️ Réinitialiser aux valeurs par défaut")
         st.markdown(
             "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"
@@ -7428,7 +7397,6 @@ elif active == "parametres":
                 st.success("✅ Seuils réinitialisés — Alerte : 24 · Action : 36")
                 st.rerun()
 
-    
     # ══════════════════════════════════════════════════════════════════════════
     # OPÉRATEURS
     # ══════════════════════════════════════════════════════════════════════════
@@ -7480,12 +7448,12 @@ elif active == "parametres":
         if st.session_state.get('_edit_operator') is not None:
             idx = st.session_state._edit_operator
             op  = st.session_state.operators[idx]
-            st.markdown(f"### ✏️ Modifier — {op.get('nom','')}")
+            st.markdown(f"### ✏️ Modifier — {op.get('nom', '')}")
             ec1, ec2 = st.columns(2)
             with ec1:
-                edit_nom = st.text_input("Nom *", value=op.get('nom',''), key="op_edit_nom")
+                edit_nom = st.text_input("Nom *", value=op.get('nom', ''), key="op_edit_nom")
             with ec2:
-                cur_p    = op.get('profession','')
+                cur_p    = op.get('profession', '')
                 p_idx    = p_opts.index(cur_p) if cur_p in p_opts else 0
                 edit_pro = st.selectbox("Profession *", p_opts, index=p_idx, key="op_edit_prof")
             eb1, eb2 = st.columns(2)
@@ -7549,7 +7517,7 @@ elif active == "parametres":
 
         st.divider()
         st.markdown("#### ⬇️ Exporter toutes les données")
-        backup_data = export_all_data()
+        backup_data     = export_all_data()
         backup_json     = json.dumps(backup_data, ensure_ascii=False, indent=2)
         backup_filename = f"backup_URC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         b1, b2, b3, b4 = st.columns(4)
@@ -7625,7 +7593,7 @@ elif active == "parametres":
             except Exception as e:
                 st.error(f"❌ Erreur : {e}")
 
-# ══════════════════════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════════════════════
     # SUPABASE
     # ══════════════════════════════════════════════════════════════════════════
     with subtab_supabase:
@@ -7704,13 +7672,12 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                         st.success("✅ Données rechargées depuis Supabase !")
                         st.rerun()
 
-    #---------------------------------------------------------------------------------------------------------------
+    # ══════════════════════════════════════════════════════════════════════════
     # FAQ
-    #---------------------------------------------------------------------------------------------------------------
+    # ══════════════════════════════════════════════════════════════════════════
     with subtab_faq:
         faq_items = st.session_state.get("faq_items", [])
 
-        # ── Stats ─────────────────────────────────────────────────────────
         cats_count = {}
         for f in faq_items:
             c = f.get("category", "Général")
@@ -7725,7 +7692,6 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
 
         st.divider()
 
-        # ── Formulaire ajout / édition ────────────────────────────────────
         edit_idx = st.session_state.get("_faq_edit_idx")
 
         if can_edit and st.session_state.get("_faq_show_form", False):
@@ -7738,8 +7704,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             st.markdown(
                 f"<div style='background:{form_bg};border:1.5px solid {form_bdr};"
                 f"border-radius:12px;padding:18px;margin-bottom:16px'>",
-                unsafe_allow_html=True,
-            )
+                unsafe_allow_html=True)
             st.markdown(f"#### {form_ttl}")
 
             fc1, fc2 = st.columns([3, 1])
@@ -7747,22 +7712,19 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 faq_q = st.text_input(
                     "Question *", value=existing.get("question", ""),
                     placeholder="Ex: Comment ajouter un point de prélèvement ?",
-                    key="faq_form_question",
-                )
+                    key="faq_form_question")
             with fc2:
                 cur_cat = existing.get("category", "Général")
                 faq_c = st.selectbox(
                     "Catégorie", FAQ_CATEGORIES,
                     index=FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0,
-                    key="faq_form_category",
-                )
+                    key="faq_form_category")
 
             faq_a = st.text_area(
                 "Réponse * (Markdown supporté)", value=existing.get("answer", ""),
                 height=150,
                 placeholder="Décrivez la réponse. **Gras**, *italique*, listes…",
-                key="faq_form_answer",
-            )
+                key="faq_form_answer")
             if faq_a.strip():
                 with st.expander("👁️ Aperçu", expanded=False):
                     st.markdown(faq_a)
@@ -7771,8 +7733,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
             with fb1:
                 if st.button(
                     "✔️ Mettre à jour" if is_edit else "✅ Ajouter",
-                    use_container_width=True, type="primary", key="faq_form_submit",
-                ):
+                    use_container_width=True, type="primary", key="faq_form_submit"):
                     if not faq_q.strip():
                         st.error("La question est obligatoire.")
                     elif not faq_a.strip():
@@ -7780,8 +7741,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                     else:
                         if is_edit:
                             faq_items[edit_idx].update(
-                                question=faq_q.strip(), answer=faq_a.strip(), category=faq_c
-                            )
+                                question=faq_q.strip(), answer=faq_a.strip(), category=faq_c)
                         else:
                             faq_items.append({
                                 "id":       f"faq_{int(datetime.now().timestamp())}",
@@ -7809,7 +7769,6 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 st.session_state["_faq_edit_idx"]  = None
                 st.rerun()
 
-        # ── Liste ─────────────────────────────────────────────────────────
         if not faq_items:
             st.markdown(
                 "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
@@ -7818,13 +7777,11 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 "<div style='font-weight:700;color:#475569'>Aucune question définie</div>"
                 "<div style='font-size:.8rem;color:#94a3b8;margin-top:4px'>"
                 "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
-                unsafe_allow_html=True,
-            )
+                unsafe_allow_html=True)
         else:
             all_cats_tab = ["Toutes"] + sorted(set(f.get("category", "Général") for f in faq_items))
             faq_filter_cat = st.selectbox(
-                "Filtrer", all_cats_tab, key="faq_tab_cat_filter", label_visibility="collapsed"
-            )
+                "Filtrer", all_cats_tab, key="faq_tab_cat_filter", label_visibility="collapsed")
 
             st.markdown(
                 "<div style='display:grid;grid-template-columns:2fr 1fr;"
@@ -7833,16 +7790,15 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                 "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
                 "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
                 "</div>",
-                unsafe_allow_html=True,
-            )
+                unsafe_allow_html=True)
 
             CAT_COL = {
-                "Général":            "#2563eb",
-                "Score & Seuils":     "#7c3aed",
-                "Prélèvements":       "#0891b2",
-                "Paramètres":         "#059669",
-                "Données":            "#d97706",
-                "Mesures correctives":"#dc2626",
+                "Général":             "#2563eb",
+                "Score & Seuils":      "#7c3aed",
+                "Prélèvements":        "#0891b2",
+                "Paramètres":          "#059669",
+                "Données":             "#d97706",
+                "Mesures correctives": "#dc2626",
             }
 
             displayed = [
@@ -7855,8 +7811,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                     "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;"
                     "border-radius:0 0 10px 10px;padding:20px;text-align:center;"
                     "color:#94a3b8;font-size:.82rem'>Aucune question dans cette catégorie</div>",
-                    unsafe_allow_html=True,
-                )
+                    unsafe_allow_html=True)
             else:
                 for dp, (ri, item) in enumerate(displayed):
                     cc     = CAT_COL.get(item.get("category", "Général"), "#475569")
@@ -7875,8 +7830,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                             f"border:1px solid {cc}44;border-radius:12px;"
                             f"padding:2px 10px;font-size:.65rem;font-weight:700'>"
                             f"{item.get('category','Général')}</span></div></div>",
-                            unsafe_allow_html=True,
-                        )
+                            unsafe_allow_html=True)
                     with rc2:
                         a1, a2, a3, a4 = st.columns(4)
                         with a1:
@@ -7888,7 +7842,7 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                                     st.session_state["faq_items"] = faq_items
                                     st.rerun()
                         with a2:
-                            if can_edit and ri < len(faq_items)-1:
+                            if can_edit and ri < len(faq_items) - 1:
                                 if st.button("↓", key=f"faq_dn_{ri}", help="Descendre"):
                                     faq_items[ri], faq_items[ri+1] = faq_items[ri+1], faq_items[ri]
                                     for k, f in enumerate(faq_items): f["order"] = k
@@ -7915,12 +7869,10 @@ SUPABASE_KEY = "eyJhbGci..."  # votre clé anon""", language="toml")
                     f"padding:8px 14px'><div style='font-size:.75rem;color:#94a3b8'>"
                     f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
                     f"</div></div>",
-                    unsafe_allow_html=True,
-                )
+                    unsafe_allow_html=True)
 
         st.divider()
 
-        # ── Réinitialiser ─────────────────────────────────────────────────
         if can_edit:
             st.markdown("#### ↩️ Réinitialiser la FAQ")
             st.caption("Recharge les questions prédéfinies (efface les modifications personnalisées).")
