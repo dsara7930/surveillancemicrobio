@@ -4480,6 +4480,8 @@ if active == "planning":
                 ("TOPPADDING",    (0, -1), (0, -1), 4),
             ]))
 
+            # Construire inner de façon défensive
+        try:
             if qr_flowable:
                 inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
                 inner.setStyle(TableStyle([
@@ -4492,20 +4494,22 @@ if active == "planning":
                 ]))
             else:
                 inner = left_tbl
-                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-                outer.setStyle(TableStyle([
-                    ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
-                    ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
-                    ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
-                    ("LEFTPADDING",    (0, 0), (0, 0), 11),   # ← était 5  (0.4 cm ≈ 11.3 pt)
-                    ("RIGHTPADDING",   (0, 0), (0, 0), 11),   # ← était 4
-                    ("TOPPADDING",     (0, 0), (0, 0), 11),   # ← était 5
-                    ("BOTTOMPADDING",  (0, 0), (0, 0), 11),   # ← était 4
-                    ("VALIGN",         (0, 0), (0, 0), "TOP"),
-                    ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
-                ]))
-            
-            return outer
+        except Exception:
+            inner = left_tbl
+
+        outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+        outer.setStyle(TableStyle([
+            ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+            ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+            ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
+            ("LEFTPADDING",    (0, 0), (0, 0), 11),
+            ("RIGHTPADDING",   (0, 0), (0, 0), 11),
+            ("TOPPADDING",     (0, 0), (0, 0), 11),
+            ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
+            ("VALIGN",         (0, 0), (0, 0), "TOP"),
+            ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
+        ]))
+        return outer
 
         def _build_day_separator(day_date, n_tasks):
             """
