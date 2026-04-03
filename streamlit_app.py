@@ -4897,17 +4897,6 @@ if active == "planning":
                         None if is_selected else wd)
                     st.rerun()
 
-                # ── Bouton Détail uniquement (impression remontée au niveau semaine) ──
-                btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
-                if st.button(
-                    btn_lbl,
-                    key=f"pm_btn_{wd.isoformat()}",
-                    use_container_width=True
-                ):
-                    st.session_state["pm_selected_day"] = (
-                        None if is_selected else wd)
-                    st.rerun()
-
     # ── Panel fixe bas de page : détail du jour sélectionné ──────────────
     _sel = st.session_state.get("pm_selected_day")
     if _sel:
