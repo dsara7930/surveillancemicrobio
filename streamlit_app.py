@@ -5103,12 +5103,12 @@ if active == "planning":
                         f"🔄 {len(_labels)} prélèvement(s) reporté(s) sur les "
                         f"{len(_week_remaining)} jours restants de la semaine.")
                     st.rerun()
-        elif taches_sel and not _week_remaining:
-            st.markdown(
-                "<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;"
-                "padding:8px 12px;font-size:.75rem;color:#991b1b;margin-bottom:8px'>"
-                "⚠️ Dernier jour ouvré de la semaine — aucun report possible.</div>",
-                unsafe_allow_html=True)
+            elif taches_sel and not _week_remaining:
+                st.markdown(
+                    "<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;"
+                    "padding:8px 12px;font-size:.75rem;color:#991b1b;margin-bottom:8px'>"
+                    "⚠️ Dernier jour ouvré de la semaine — aucun report possible.</div>",
+                    unsafe_allow_html=True)
 
         # ── Bouton reset skips du jour ─────────────────────────────────────
         _dk_sel = _sel.isoformat()
