@@ -2467,427 +2467,427 @@ if active == "surveillance":
                                 st.session_state["edit_prelev_id"] = None
                                 st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
-        # ══════════════════════════════════════════════════════════════════════════
-            # ONGLET SCAN QR
-            # ══════════════════════════════════════════════════════════════════════════
-            with tab_scan:
-                st.markdown("### 📷 Création rapide par QR code")
+# ══════════════════════════════════════════════════════════════════════════
+# ONGLET SCAN QR
+# ══════════════════════════════════════════════════════════════════════════
+    with tab_scan:
+        st.markdown("### 📷 Création rapide par QR code")
 
-                st.markdown("""
-                <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
-                border-radius:14px;padding:16px 20px;margin-bottom:16px">
-                <div style="font-weight:800;color:#1e40af;font-size:.95rem;margin-bottom:8px">
-                    🔳 Comment utiliser le scan QR
-                </div>
-                <div style="font-size:.82rem;color:#1e293b;line-height:1.9">
-                    <strong>1.</strong> Générez les étiquettes PDF depuis <em>Planning → Planning mensuel</em> 🖨️<br>
-                    <strong>2.</strong> Imprimez-les et collez-les sur vos boîtes de gélose<br>
-                    <strong>3.</strong> Scannez le QR code avec votre douchette ou utilisez la caméra ci-dessous<br>
-                    <strong>4.</strong> Le formulaire se pré-remplit — confirmez l'opérateur et enregistrez !
-                </div>
-                </div>""", unsafe_allow_html=True)
-
-                # ── Correction layout AZERTY ───────────────────────────────────────
-                def _fix_azerty(text: str) -> str:
-                    azerty_to_qwerty = {
-                        '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
-                        '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
-                        ')': '=',
-                        '%': '{', 'µ': '}',
-                        '^': '[', '$': ']',
-                        'ù': '%', '*': '\\', '!': '/',
-                        'a': 'q', 'A': 'Q',
-                        'z': 'w', 'Z': 'W',
-                        'q': 'a', 'Q': 'A',
-                        'w': 'z', 'W': 'Z',
-                        'm': ';', 'M': ':',
-                    }
-                    fixed = ''.join(azerty_to_qwerty.get(ch, ch) for ch in text)
-                    if '{' not in fixed and '%' in text:
-                        fixed = text.replace('%', '{').replace('µ', '}')
-                    return fixed
-
-                if "qr_input_counter" not in st.session_state:
-                    st.session_state["qr_input_counter"] = 0
-
-                # ── Panneau scan douchette + caméra ───────────────────────────────
-                scan_col1, scan_col2 = st.columns([1, 1])
-
-                with scan_col1:
-                    st.markdown(
-                        "<div style='background:#fff;border:2px solid #2563eb;border-radius:12px;"
-                        "padding:16px;text-align:center;margin-bottom:8px'>"
-                        "<div style='font-size:2rem;margin-bottom:6px'>🔫</div>"
-                        "<div style='font-weight:800;color:#1e40af;margin-bottom:6px'>Douchette USB</div>"
-                        "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
-                        "Cliquez dans le champ ci-dessous, puis scannez l'étiquette.</div>"
-                        "</div>", unsafe_allow_html=True)
-
-                    st.markdown("""
-                    <style>
-                    div[data-testid="stTextInput"] input {
-                        font-family: 'DM Mono', monospace !important;
-                        font-size: 1rem !important;
-                        letter-spacing: .04em;
-                    }
-                    </style>""", unsafe_allow_html=True)
-
-                    qr_raw_input = st.text_input(
-                        "Zone de scan douchette",
-                        key=f"qr_scan_input_{st.session_state['qr_input_counter']}",
-                        placeholder='{"a":"URC","l":"..."} ← scanné automatiquement',
-                        label_visibility="collapsed",
-                        help="Si des caractères @ ou spéciaux apparaissent, "
-                            "configurez la douchette en layout EN-US.")
-
-                with scan_col2:
-                    st.markdown(
-                        "<div style='background:#fff;border:2px solid #7c3aed;border-radius:12px;"
-                        "padding:16px;text-align:center;margin-bottom:8px'>"
-                        "<div style='font-size:2rem;margin-bottom:6px'>📷</div>"
-                        "<div style='font-weight:800;color:#7c3aed;margin-bottom:6px'>Caméra</div>"
-                        "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
-                        "Activez la caméra et présentez le QR code.</div>"
-                        "</div>", unsafe_allow_html=True)
-
-                    camera_html = """
-        <div id="cam-wrap" style="position:relative;background:#0f172a;border-radius:10px;overflow:hidden">
-        <video id="video" autoplay muted playsinline
-                style="width:100%;max-height:180px;object-fit:cover;display:block"></video>
-        <canvas id="canvas" style="display:none"></canvas>
-        <div id="overlay" style="position:absolute;inset:0;display:flex;align-items:center;
-            justify-content:center;pointer-events:none">
-            <div style="width:120px;height:120px;border:3px solid #7c3aed;border-radius:10px;
-                box-shadow:0 0 0 2000px rgba(15,23,42,.4)"></div>
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+        border-radius:14px;padding:16px 20px;margin-bottom:16px">
+        <div style="font-weight:800;color:#1e40af;font-size:.95rem;margin-bottom:8px">
+            🔳 Comment utiliser le scan QR
         </div>
-        <div id="cam-status" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
-            font-size:.65rem;color:#e2e8f0;font-weight:600">En attente d'autorisation…</div>
+        <div style="font-size:.82rem;color:#1e293b;line-height:1.9">
+            <strong>1.</strong> Générez les étiquettes PDF depuis <em>Planning → Planning mensuel</em> 🖨️<br>
+            <strong>2.</strong> Imprimez-les et collez-les sur vos boîtes de gélose<br>
+            <strong>3.</strong> Scannez le QR code avec votre douchette ou utilisez la caméra ci-dessous<br>
+            <strong>4.</strong> Le formulaire se pré-remplit — confirmez l'opérateur et enregistrez !
         </div>
-        <button id="start-btn" onclick="startCam()"
-        style="margin-top:8px;width:100%;padding:8px;background:#7c3aed;color:#fff;
-                border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem">
-        📷 Activer la caméra
-        </button>
-        <div id="result-box" style="display:none;margin-top:8px;background:#f0fdf4;
-            border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;
-            font-size:.75rem;font-weight:700;color:#166534"></div>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
-        <script>
-        let stream = null, scanning = false, lastResult = null;
-        function startCam() {
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('cam-status').textContent = 'Démarrage…';
-        navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-            .then(s => {
-            stream = s;
-            const v = document.getElementById('video');
-            v.srcObject = s;
-            v.onloadedmetadata = () => { scanning = true; scan(); };
-            document.getElementById('cam-status').textContent = '🟢 Scan actif — présentez le QR code';
-            })
-            .catch(e => {
-            document.getElementById('cam-status').textContent = '❌ ' + e.message;
-            document.getElementById('start-btn').style.display = 'block';
-            });
-        }
-        function scan() {
-        if (!scanning) return;
-        const v = document.getElementById('video');
-        const c = document.getElementById('canvas');
-        if (v.readyState === v.HAVE_ENOUGH_DATA) {
-            c.width = v.videoWidth; c.height = v.videoHeight;
-            const ctx = c.getContext('2d');
-            ctx.drawImage(v, 0, 0, c.width, c.height);
-            const img = ctx.getImageData(0, 0, c.width, c.height);
-            const code = jsQR(img.data, img.width, img.height, {inversionAttempts:'dontInvert'});
-            if (code && code.data !== lastResult) {
-            lastResult = code.data;
-            try {
-                const d = JSON.parse(code.data);
-                if (d.a === 'URC') {
-                scanning = false;
-                if (stream) stream.getTracks().forEach(t => t.stop());
-                const box = document.getElementById('result-box');
-                box.style.display = 'block';
-                box.innerHTML = '✅ Scanné : <b>' + (d.l||'?') + '</b> — Classe ' + (d.r||'?');
-                document.getElementById('cam-status').textContent = '✅ QR code détecté !';
-                if (navigator.clipboard) navigator.clipboard.writeText(code.data).catch(()=>{});
-                box.innerHTML += '<br><button onclick="navigator.clipboard.writeText(' +
-                    JSON.stringify(JSON.stringify(code.data)) +
-                    ').then(()=>alert(\'Copié ! Collez dans le champ Douchette.\'))" ' +
-                    'style="margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;' +
-                    'border:none;border-radius:6px;cursor:pointer;font-size:.72rem">' +
-                    '📋 Copier &amp; coller dans Douchette</button>';
-                }
-            } catch(e) {}
+        </div>""", unsafe_allow_html=True)
+
+        # ── Correction layout AZERTY ───────────────────────────────────────
+        def _fix_azerty(text: str) -> str:
+            azerty_to_qwerty = {
+                '&': '1', 'é': '2', '"': '3', "'": '4', '(': '5',
+                '-': '6', 'è': '7', '_': '8', 'ç': '9', 'à': '0',
+                ')': '=',
+                '%': '{', 'µ': '}',
+                '^': '[', '$': ']',
+                'ù': '%', '*': '\\', '!': '/',
+                'a': 'q', 'A': 'Q',
+                'z': 'w', 'Z': 'W',
+                'q': 'a', 'Q': 'A',
+                'w': 'z', 'W': 'Z',
+                'm': ';', 'M': ':',
             }
+            fixed = ''.join(azerty_to_qwerty.get(ch, ch) for ch in text)
+            if '{' not in fixed and '%' in text:
+                fixed = text.replace('%', '{').replace('µ', '}')
+            return fixed
+
+        if "qr_input_counter" not in st.session_state:
+            st.session_state["qr_input_counter"] = 0
+
+        # ── Panneau scan douchette + caméra ───────────────────────────────
+        scan_col1, scan_col2 = st.columns([1, 1])
+
+        with scan_col1:
+            st.markdown(
+                "<div style='background:#fff;border:2px solid #2563eb;border-radius:12px;"
+                "padding:16px;text-align:center;margin-bottom:8px'>"
+                "<div style='font-size:2rem;margin-bottom:6px'>🔫</div>"
+                "<div style='font-weight:800;color:#1e40af;margin-bottom:6px'>Douchette USB</div>"
+                "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
+                "Cliquez dans le champ ci-dessous, puis scannez l'étiquette.</div>"
+                "</div>", unsafe_allow_html=True)
+
+            st.markdown("""
+            <style>
+            div[data-testid="stTextInput"] input {
+                font-family: 'DM Mono', monospace !important;
+                font-size: 1rem !important;
+                letter-spacing: .04em;
+            }
+            </style>""", unsafe_allow_html=True)
+
+            qr_raw_input = st.text_input(
+                "Zone de scan douchette",
+                key=f"qr_scan_input_{st.session_state['qr_input_counter']}",
+                placeholder='{"a":"URC","l":"..."} ← scanné automatiquement',
+                label_visibility="collapsed",
+                help="Si des caractères @ ou spéciaux apparaissent, "
+                    "configurez la douchette en layout EN-US.")
+
+        with scan_col2:
+            st.markdown(
+                "<div style='background:#fff;border:2px solid #7c3aed;border-radius:12px;"
+                "padding:16px;text-align:center;margin-bottom:8px'>"
+                "<div style='font-size:2rem;margin-bottom:6px'>📷</div>"
+                "<div style='font-weight:800;color:#7c3aed;margin-bottom:6px'>Caméra</div>"
+                "<div style='font-size:.78rem;color:#475569;margin-bottom:10px'>"
+                "Activez la caméra et présentez le QR code.</div>"
+                "</div>", unsafe_allow_html=True)
+
+            camera_html = """
+<div id="cam-wrap" style="position:relative;background:#0f172a;border-radius:10px;overflow:hidden">
+<video id="video" autoplay muted playsinline
+        style="width:100%;max-height:180px;object-fit:cover;display:block"></video>
+<canvas id="canvas" style="display:none"></canvas>
+<div id="overlay" style="position:absolute;inset:0;display:flex;align-items:center;
+    justify-content:center;pointer-events:none">
+    <div style="width:120px;height:120px;border:3px solid #7c3aed;border-radius:10px;
+        box-shadow:0 0 0 2000px rgba(15,23,42,.4)"></div>
+</div>
+<div id="cam-status" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
+    font-size:.65rem;color:#e2e8f0;font-weight:600">En attente d'autorisation…</div>
+</div>
+<button id="start-btn" onclick="startCam()"
+style="margin-top:8px;width:100%;padding:8px;background:#7c3aed;color:#fff;
+        border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem">
+📷 Activer la caméra
+</button>
+<div id="result-box" style="display:none;margin-top:8px;background:#f0fdf4;
+    border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;
+    font-size:.75rem;font-weight:700;color:#166534"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+let stream = null, scanning = false, lastResult = null;
+function startCam() {
+document.getElementById('start-btn').style.display = 'none';
+document.getElementById('cam-status').textContent = 'Démarrage…';
+navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+    .then(s => {
+    stream = s;
+    const v = document.getElementById('video');
+    v.srcObject = s;
+    v.onloadedmetadata = () => { scanning = true; scan(); };
+    document.getElementById('cam-status').textContent = '🟢 Scan actif — présentez le QR code';
+    })
+    .catch(e => {
+    document.getElementById('cam-status').textContent = '❌ ' + e.message;
+    document.getElementById('start-btn').style.display = 'block';
+    });
+}
+function scan() {
+if (!scanning) return;
+const v = document.getElementById('video');
+const c = document.getElementById('canvas');
+if (v.readyState === v.HAVE_ENOUGH_DATA) {
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    const img = ctx.getImageData(0, 0, c.width, c.height);
+    const code = jsQR(img.data, img.width, img.height, {inversionAttempts:'dontInvert'});
+    if (code && code.data !== lastResult) {
+    lastResult = code.data;
+    try {
+        const d = JSON.parse(code.data);
+        if (d.a === 'URC') {
+        scanning = false;
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        const box = document.getElementById('result-box');
+        box.style.display = 'block';
+        box.innerHTML = '✅ Scanné : <b>' + (d.l||'?') + '</b> — Classe ' + (d.r||'?');
+        document.getElementById('cam-status').textContent = '✅ QR code détecté !';
+        if (navigator.clipboard) navigator.clipboard.writeText(code.data).catch(()=>{});
+        box.innerHTML += '<br><button onclick="navigator.clipboard.writeText(' +
+            JSON.stringify(JSON.stringify(code.data)) +
+            ').then(()=>alert(\'Copié ! Collez dans le champ Douchette.\'))" ' +
+            'style="margin-top:6px;padding:4px 10px;background:#2563eb;color:#fff;' +
+            'border:none;border-radius:6px;cursor:pointer;font-size:.72rem">' +
+            '📋 Copier &amp; coller dans Douchette</button>';
         }
-        requestAnimationFrame(scan);
-        }
-        </script>"""
-                    st.components.v1.html(camera_html, height=320, scrolling=False)
+    } catch(e) {}
+    }
+}
+requestAnimationFrame(scan);
+}
+</script>"""
+            st.components.v1.html(camera_html, height=320, scrolling=False)
 
-                # ══════════════════════════════════════════════════════════════════
-                # TRAITEMENT DU SCAN
-                # ══════════════════════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════════════════════
+        # TRAITEMENT DU SCAN
+        # ══════════════════════════════════════════════════════════════════
 
-                # ── Correction AZERTY automatique ─────────────────────────────────
-                qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-                if qr_raw and '{' not in qr_raw:
-                    qr_raw_fixed = _fix_azerty(qr_raw)
-                    if '{' in qr_raw_fixed:
-                        st.caption("🔄 Layout AZERTY détecté — correction automatique appliquée.")
-                        qr_raw = qr_raw_fixed
+        # ── Correction AZERTY automatique ─────────────────────────────────
+        qr_raw = qr_raw_input.strip() if qr_raw_input else ""
+        if qr_raw and '{' not in qr_raw:
+            qr_raw_fixed = _fix_azerty(qr_raw)
+            if '{' in qr_raw_fixed:
+                st.caption("🔄 Layout AZERTY détecté — correction automatique appliquée.")
+                qr_raw = qr_raw_fixed
 
-                # ── Parsing JSON ───────────────────────────────────────────────────
-                _scanned_data = None
-                if qr_raw and qr_raw.startswith("{"):
-                    try:
-                        _scanned_data = json.loads(qr_raw)
-                    except json.JSONDecodeError:
-                        st.markdown(
-                            "<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
-                            "border-radius:10px;padding:12px 16px;margin-top:8px'>"
-                            "<div style='font-weight:700;color:#991b1b'>❌ QR code non reconnu</div>"
-                            "<div style='font-size:.8rem;color:#b91c1c;margin-top:4px'>"
-                            "Format JSON invalide. Vérifiez le layout de la douchette ou rescannez.</div>"
-                            f"<div style='font-family:monospace;font-size:.72rem;color:#64748b;"
-                            f"margin-top:6px'>Reçu : {qr_raw[:80]}{'…' if len(qr_raw)>80 else ''}</div>"
-                            "</div>", unsafe_allow_html=True)
-                elif qr_raw and not qr_raw.startswith("{"):
-                    st.markdown(
-                        "<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
-                        "border-radius:10px;padding:12px 16px;margin-top:8px'>"
-                        "<div style='font-weight:700;color:#92400e'>⚠️ QR code non URC</div>"
-                        "<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
-                        "Ce QR code ne provient pas de MicroSurveillance URC.</div>"
-                        "</div>", unsafe_allow_html=True)
+        # ── Parsing JSON ───────────────────────────────────────────────────
+        _scanned_data = None
+        if qr_raw and qr_raw.startswith("{"):
+            try:
+                _scanned_data = json.loads(qr_raw)
+            except json.JSONDecodeError:
+                st.markdown(
+                    "<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+                    "border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                    "<div style='font-weight:700;color:#991b1b'>❌ QR code non reconnu</div>"
+                    "<div style='font-size:.8rem;color:#b91c1c;margin-top:4px'>"
+                    "Format JSON invalide. Vérifiez le layout de la douchette ou rescannez.</div>"
+                    f"<div style='font-family:monospace;font-size:.72rem;color:#64748b;"
+                    f"margin-top:6px'>Reçu : {qr_raw[:80]}{'…' if len(qr_raw)>80 else ''}</div>"
+                    "</div>", unsafe_allow_html=True)
+        elif qr_raw and not qr_raw.startswith("{"):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
+                "border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                "<div style='font-weight:700;color:#92400e'>⚠️ QR code non URC</div>"
+                "<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
+                "Ce QR code ne provient pas de MicroSurveillance URC.</div>"
+                "</div>", unsafe_allow_html=True)
 
-                # ── Point reconnu ─────────────────────────────────────────────────
-                # Les clés courtes correspondent à _qr_payload() :
-                #   a=app  i=id  l=label  t=type  r=room_class  c=criticality  g=gelose
-                if _scanned_data and _scanned_data.get("a") == "URC":
-                    _lbl  = _scanned_data.get("l", "")
-                    _type = _scanned_data.get("t", "")
-                    _rc   = _scanned_data.get("r", "")
-                    _lc   = int(_scanned_data.get("c", 1))
-                    _gel  = _scanned_data.get("g", "")
-                    _is_classe_a = _rc.strip().upper() == "A"
-                    lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
+        # ── Point reconnu ─────────────────────────────────────────────────
+        # Les clés courtes correspondent à _qr_payload() :
+        #   a=app  i=id  l=label  t=type  r=room_class  c=criticality  g=gelose
+        if _scanned_data and _scanned_data.get("a") == "URC":
+            _lbl  = _scanned_data.get("l", "")
+            _type = _scanned_data.get("t", "")
+            _rc   = _scanned_data.get("r", "")
+            _lc   = int(_scanned_data.get("c", 1))
+            _gel  = _scanned_data.get("g", "")
+            _is_classe_a = _rc.strip().upper() == "A"
+            lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
 
-                    st.markdown(
-                        f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
-                        f"border:2.5px solid #22c55e;border-radius:14px;padding:18px 22px;margin:12px 0'>"
-                        f"<div style='font-size:1.1rem;font-weight:900;color:#166534;margin-bottom:10px'>"
-                        f"✅ Point reconnu — {_lbl}</div>"
-                        f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
-                        f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
-                        f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div>"
-                        f"<div style='font-size:.85rem;font-weight:700'>{'💨' if _type=='Air' else '🧴'} {_type}</div></div>"
-                        f"<div style='background:#dbeafe;border-radius:8px;padding:8px;text-align:center;border:1px solid #93c5fd'>"
-                        f"<div style='font-size:.58rem;color:#1e40af;text-transform:uppercase'>Classe</div>"
-                        f"<div style='font-size:.85rem;font-weight:800;color:#1e40af'>{_rc or '—'}</div></div>"
-                        f"<div style='background:{lc_col_s}11;border-radius:8px;padding:8px;text-align:center;border:1px solid {lc_col_s}44'>"
-                        f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Criticité</div>"
-                        f"<div style='font-size:.85rem;font-weight:700;color:{lc_col_s}'>Nv.{_lc}</div></div>"
-                        f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
-                        f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Gélose</div>"
-                        f"<div style='font-size:.85rem;font-weight:700;color:#1d4ed8'>🧫 {_gel[:12]}</div></div>"
-                        f"</div></div>",
-                        unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
+                f"border:2.5px solid #22c55e;border-radius:14px;padding:18px 22px;margin:12px 0'>"
+                f"<div style='font-size:1.1rem;font-weight:900;color:#166534;margin-bottom:10px'>"
+                f"✅ Point reconnu — {_lbl}</div>"
+                f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
+                f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div>"
+                f"<div style='font-size:.85rem;font-weight:700'>{'💨' if _type=='Air' else '🧴'} {_type}</div></div>"
+                f"<div style='background:#dbeafe;border-radius:8px;padding:8px;text-align:center;border:1px solid #93c5fd'>"
+                f"<div style='font-size:.58rem;color:#1e40af;text-transform:uppercase'>Classe</div>"
+                f"<div style='font-size:.85rem;font-weight:800;color:#1e40af'>{_rc or '—'}</div></div>"
+                f"<div style='background:{lc_col_s}11;border-radius:8px;padding:8px;text-align:center;border:1px solid {lc_col_s}44'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Criticité</div>"
+                f"<div style='font-size:.85rem;font-weight:700;color:{lc_col_s}'>Nv.{_lc}</div></div>"
+                f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'>"
+                f"<div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Gélose</div>"
+                f"<div style='font-size:.85rem;font-weight:700;color:#1d4ed8'>🧫 {_gel[:12]}</div></div>"
+                f"</div></div>",
+                unsafe_allow_html=True)
 
-                    # ── Formulaire de confirmation ─────────────────────────────────
-                    st.markdown("#### ✏️ Confirmer et enregistrer le prélèvement")
+            # ── Formulaire de confirmation ─────────────────────────────────
+            st.markdown("#### ✏️ Confirmer et enregistrer le prélèvement")
 
-                    sf1, sf2 = st.columns(2)
-                    with sf1:
-                        # Opérateur
-                        oper_list_s = [
-                            o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '')
-                            for o in st.session_state.operators
-                        ]
-                        if oper_list_s:
-                            scan_oper = st.selectbox(
-                                "👤 Opérateur / Préleveur *",
-                                ["— Sélectionner —"] + oper_list_s,
-                                key="scan_oper_sel")
-                            scan_oper = scan_oper if scan_oper != "— Sélectionner —" else ""
-                        else:
-                            scan_oper = st.text_input(
-                                "👤 Opérateur *",
-                                placeholder="Nom du préleveur",
-                                key="scan_oper_manual")
-
-                        # Date
-                        scan_date = st.date_input(
-                            "📅 Date de prélèvement",
-                            value=datetime.today(),
-                            key="scan_date")
-
-                        # Poste isolateur — affiché uniquement pour classe A
-                        if _is_classe_a:
-                            scan_poste = st.radio(
-                                "🔬 Poste isolateur",
-                                ["Poste 1", "Poste 2"],
-                                horizontal=True,
-                                key="scan_poste_sel",
-                                help="Indiquez sur quel poste de l'isolateur le prélèvement a été effectué")
-                        else:
-                            scan_poste = "Poste 1"   # valeur neutre pour les autres classes
-
-                    with sf2:
-                        scan_comment = st.text_area(
-                            "💬 Commentaire",
-                            placeholder="Remarques, contexte…",
-                            height=80,
-                            key="scan_comment")
-                        _scan_j2 = next_working_day_offset(scan_date, 2)
-                        _scan_j7 = next_working_day_offset(scan_date, 5)
-                        st.markdown(
-                            f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                            f"border-radius:8px;padding:8px;font-size:.72rem;color:#166534;margin-top:4px'>"
-                            f"📅 J+2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>"
-                            f"📅 J+5 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>",
-                            unsafe_allow_html=True)
-
-                    # ── Localisation sur plan (optionnel) ──────────────────────────
-                    plans_avail_scan = st.session_state.get("plans", [])
-                    coords = None
-
-                    if plans_avail_scan:
-                        st.markdown(
-                            "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:12px 0 4px'>"
-                            "🗺️ Localiser sur le plan "
-                            "<span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
-                            unsafe_allow_html=True)
-                        _scan_plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_avail_scan]
-                        _scan_plan_sel   = st.selectbox("Plan", _scan_plan_names, key="scan_plan_sel")
-
-                        if _scan_plan_sel != "— Aucun plan —":
-                            _scan_plan = next(
-                                (p for p in plans_avail_scan if p["name"] == _scan_plan_sel), None)
-                            if _scan_plan and _scan_plan.get("image_b64"):
-                                from streamlit_image_coordinates import streamlit_image_coordinates
-                                coords = streamlit_image_coordinates(
-                                    _scan_plan["image_b64"], key="scan_coords")
-                                _cur_pt_scan = next(
-                                    (mp for mp in st.session_state.get("map_points", [])
-                                    if mp.get("label") == _lbl), None)
-                                if _cur_pt_scan and isinstance(_cur_pt_scan.get("x"), (int, float)):
-                                    st.markdown(
-                                        f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
-                                        f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
-                                        f"color:#166534;font-weight:700;margin-top:6px'>"
-                                        f"📌 Position existante : "
-                                        f"{float(_cur_pt_scan['x']):.1f}% · "
-                                        f"{float(_cur_pt_scan['y']):.1f}%</div>",
-                                        unsafe_allow_html=True)
-                                if coords:
-                                    st.success(
-                                        f"📍 Nouvelle position : "
-                                        f"{coords['x']:.1f}% · {coords['y']:.1f}%")
-                            else:
-                                st.warning("⚠️ Ce plan n'a pas d'image.")
-
-                    # ── Boutons ────────────────────────────────────────────────────
-                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-                    scan_bc1, scan_bc2 = st.columns([3, 1])
-
-                    with scan_bc1:
-                        if st.button(
-                            f"💾 Créer le prélèvement — {_lbl}",
-                            use_container_width=True,
-                            type="primary",
-                            key="scan_save_btn"):
-
-                            if not scan_oper:
-                                st.error("⚠️ Veuillez sélectionner un opérateur.")
-                            else:
-                                _pid = (f"s{len(st.session_state.prelevements)+1}"
-                                        f"_{int(datetime.now().timestamp())}")
-                                _sample_scan = {
-                                    "id":                   _pid,
-                                    "label":                _lbl,
-                                    "type":                 _type,
-                                    "gelose":               _gel,
-                                    "room_class":           _rc,
-                                    "location_criticality": _lc,
-                                    "operateur":            scan_oper,
-                                    "date":                 str(scan_date),
-                                    "archived":             False,
-                                    "num_isolateur":        "",
-                                    "poste":                scan_poste,
-                                    "commentaire":          scan_comment or "",
-                                    "created_via":          "qr_scan",
-                                }
-                                if coords:
-                                    new_mp = {"label": _lbl, "x": coords["x"], "y": coords["y"]}
-                                    st.session_state["map_points"] = [
-                                        mp for mp in st.session_state.get("map_points", [])
-                                        if mp.get("label") != _lbl
-                                    ] + [new_mp]
-                                    try:
-                                        _supa_upsert("map_points", json.dumps(
-                                            st.session_state["map_points"], ensure_ascii=False))
-                                    except Exception:
-                                        pass
-
-                                st.session_state.prelevements.append(_sample_scan)
-                                save_prelevements(st.session_state.prelevements)
-
-                                for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
-                                    st.session_state.schedules.append({
-                                        "id":        f"sch_{_pid}_{_when}",
-                                        "sample_id": _pid,
-                                        "label":     _lbl,
-                                        "due_date":  _due.isoformat(),
-                                        "when":      _when,
-                                        "status":    "pending",
-                                    })
-                                save_schedules(st.session_state.schedules)
-
-                                st.success(
-                                    f"✅ **{_lbl}** enregistré — {scan_poste if _is_classe_a else ''}"
-                                    f"  \nJ+2 → {_scan_j2.strftime('%d/%m/%Y')} · "
-                                    f"J+5 → {_scan_j7.strftime('%d/%m/%Y')}")
-                                st.session_state["qr_input_counter"] += 1
-                                st.rerun()
-
-                    with scan_bc2:
-                        if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
-                            st.session_state["qr_input_counter"] += 1
-                            st.rerun()
-
-                # ── Historique des derniers scans ──────────────────────────────────
-                _scan_recent = [
-                    p for p in st.session_state.prelevements
-                    if p.get("created_via") == "qr_scan" and not p.get("archived")
+            sf1, sf2 = st.columns(2)
+            with sf1:
+                # Opérateur
+                oper_list_s = [
+                    o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '')
+                    for o in st.session_state.operators
                 ]
-                if _scan_recent:
-                    st.divider()
-                    st.markdown(
-                        f"<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
-                        f"🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>",
-                        unsafe_allow_html=True)
-                    for _sp in reversed(_scan_recent[-5:]):
-                        lc_s    = int(_sp.get("location_criticality", 1))
-                        lcs_col = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(lc_s), "#94a3b8")
-                        _poste_badge = (
-                            f" · <span style='background:#ede9fe;color:#5b21b6;"
-                            f"border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>"
-                            f"🔬 {_sp.get('poste','Poste 1')}</span>"
-                            if (_sp.get('room_class', '').strip().upper() == 'A') else "")
-                        st.markdown(
-                            f"<div style='background:#f8fafc;border-left:3px solid #2563eb;"
-                            f"border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'>"
-                            f"<span style='font-weight:700'>🔳 {_sp['label']}</span>"
-                            f" · Classe {_sp.get('room_class', '—')}"
-                            f"{_poste_badge}"
-                            f" · <span style='color:{lcs_col}'>Nv.{lc_s}</span>"
-                            f" · {_sp.get('date', '—')}"
-                            f" · {_sp.get('operateur', '—')}"
-                            f"</div>",
-                            unsafe_allow_html=True)
+                if oper_list_s:
+                    scan_oper = st.selectbox(
+                        "👤 Opérateur / Préleveur *",
+                        ["— Sélectionner —"] + oper_list_s,
+                        key="scan_oper_sel")
+                    scan_oper = scan_oper if scan_oper != "— Sélectionner —" else ""
+                else:
+                    scan_oper = st.text_input(
+                        "👤 Opérateur *",
+                        placeholder="Nom du préleveur",
+                        key="scan_oper_manual")
+
+                # Date
+                scan_date = st.date_input(
+                    "📅 Date de prélèvement",
+                    value=datetime.today(),
+                    key="scan_date")
+
+                # Poste isolateur — affiché uniquement pour classe A
+                if _is_classe_a:
+                    scan_poste = st.radio(
+                        "🔬 Poste isolateur",
+                        ["Poste 1", "Poste 2"],
+                        horizontal=True,
+                        key="scan_poste_sel",
+                        help="Indiquez sur quel poste de l'isolateur le prélèvement a été effectué")
+                else:
+                    scan_poste = "Poste 1"   # valeur neutre pour les autres classes
+
+            with sf2:
+                scan_comment = st.text_area(
+                    "💬 Commentaire",
+                    placeholder="Remarques, contexte…",
+                    height=80,
+                    key="scan_comment")
+                _scan_j2 = next_working_day_offset(scan_date, 2)
+                _scan_j7 = next_working_day_offset(scan_date, 5)
+                st.markdown(
+                    f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                    f"border-radius:8px;padding:8px;font-size:.72rem;color:#166534;margin-top:4px'>"
+                    f"📅 J+2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>"
+                    f"📅 J+5 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>",
+                    unsafe_allow_html=True)
+
+            # ── Localisation sur plan (optionnel) ──────────────────────────
+            plans_avail_scan = st.session_state.get("plans", [])
+            coords = None
+
+            if plans_avail_scan:
+                st.markdown(
+                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:12px 0 4px'>"
+                    "🗺️ Localiser sur le plan "
+                    "<span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
+                    unsafe_allow_html=True)
+                _scan_plan_names = ["— Aucun plan —"] + [p["name"] for p in plans_avail_scan]
+                _scan_plan_sel   = st.selectbox("Plan", _scan_plan_names, key="scan_plan_sel")
+
+                if _scan_plan_sel != "— Aucun plan —":
+                    _scan_plan = next(
+                        (p for p in plans_avail_scan if p["name"] == _scan_plan_sel), None)
+                    if _scan_plan and _scan_plan.get("image_b64"):
+                        from streamlit_image_coordinates import streamlit_image_coordinates
+                        coords = streamlit_image_coordinates(
+                            _scan_plan["image_b64"], key="scan_coords")
+                        _cur_pt_scan = next(
+                            (mp for mp in st.session_state.get("map_points", [])
+                            if mp.get("label") == _lbl), None)
+                        if _cur_pt_scan and isinstance(_cur_pt_scan.get("x"), (int, float)):
+                            st.markdown(
+                                f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
+                                f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
+                                f"color:#166534;font-weight:700;margin-top:6px'>"
+                                f"📌 Position existante : "
+                                f"{float(_cur_pt_scan['x']):.1f}% · "
+                                f"{float(_cur_pt_scan['y']):.1f}%</div>",
+                                unsafe_allow_html=True)
+                        if coords:
+                            st.success(
+                                f"📍 Nouvelle position : "
+                                f"{coords['x']:.1f}% · {coords['y']:.1f}%")
+                    else:
+                        st.warning("⚠️ Ce plan n'a pas d'image.")
+
+            # ── Boutons ────────────────────────────────────────────────────
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            scan_bc1, scan_bc2 = st.columns([3, 1])
+
+            with scan_bc1:
+                if st.button(
+                    f"💾 Créer le prélèvement — {_lbl}",
+                    use_container_width=True,
+                    type="primary",
+                    key="scan_save_btn"):
+
+                    if not scan_oper:
+                        st.error("⚠️ Veuillez sélectionner un opérateur.")
+                    else:
+                        _pid = (f"s{len(st.session_state.prelevements)+1}"
+                                f"_{int(datetime.now().timestamp())}")
+                        _sample_scan = {
+                            "id":                   _pid,
+                            "label":                _lbl,
+                            "type":                 _type,
+                            "gelose":               _gel,
+                            "room_class":           _rc,
+                            "location_criticality": _lc,
+                            "operateur":            scan_oper,
+                            "date":                 str(scan_date),
+                            "archived":             False,
+                            "num_isolateur":        "",
+                            "poste":                scan_poste,
+                            "commentaire":          scan_comment or "",
+                            "created_via":          "qr_scan",
+                        }
+                        if coords:
+                            new_mp = {"label": _lbl, "x": coords["x"], "y": coords["y"]}
+                            st.session_state["map_points"] = [
+                                mp for mp in st.session_state.get("map_points", [])
+                                if mp.get("label") != _lbl
+                            ] + [new_mp]
+                            try:
+                                _supa_upsert("map_points", json.dumps(
+                                    st.session_state["map_points"], ensure_ascii=False))
+                            except Exception:
+                                pass
+
+                        st.session_state.prelevements.append(_sample_scan)
+                        save_prelevements(st.session_state.prelevements)
+
+                        for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
+                            st.session_state.schedules.append({
+                                "id":        f"sch_{_pid}_{_when}",
+                                "sample_id": _pid,
+                                "label":     _lbl,
+                                "due_date":  _due.isoformat(),
+                                "when":      _when,
+                                "status":    "pending",
+                            })
+                        save_schedules(st.session_state.schedules)
+
+                        st.success(
+                            f"✅ **{_lbl}** enregistré — {scan_poste if _is_classe_a else ''}"
+                            f"  \nJ+2 → {_scan_j2.strftime('%d/%m/%Y')} · "
+                            f"J+5 → {_scan_j7.strftime('%d/%m/%Y')}")
+                        st.session_state["qr_input_counter"] += 1
+                        st.rerun()
+
+            with scan_bc2:
+                if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
+                    st.session_state["qr_input_counter"] += 1
+                    st.rerun()
+
+        # ── Historique des derniers scans ──────────────────────────────────
+        _scan_recent = [
+            p for p in st.session_state.prelevements
+            if p.get("created_via") == "qr_scan" and not p.get("archived")
+        ]
+        if _scan_recent:
+            st.divider()
+            st.markdown(
+                f"<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
+                f"🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>",
+                unsafe_allow_html=True)
+            for _sp in reversed(_scan_recent[-5:]):
+                lc_s    = int(_sp.get("location_criticality", 1))
+                lcs_col = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(lc_s), "#94a3b8")
+                _poste_badge = (
+                    f" · <span style='background:#ede9fe;color:#5b21b6;"
+                    f"border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>"
+                    f"🔬 {_sp.get('poste','Poste 1')}</span>"
+                    if (_sp.get('room_class', '').strip().upper() == 'A') else "")
+                st.markdown(
+                    f"<div style='background:#f8fafc;border-left:3px solid #2563eb;"
+                    f"border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'>"
+                    f"<span style='font-weight:700'>🔳 {_sp['label']}</span>"
+                    f" · Classe {_sp.get('room_class', '—')}"
+                    f"{_poste_badge}"
+                    f" · <span style='color:{lcs_col}'>Nv.{lc_s}</span>"
+                    f" · {_sp.get('date', '—')}"
+                    f" · {_sp.get('operateur', '—')}"
+                    f"</div>",
+                    unsafe_allow_html=True)
     # ══════════════════════════════════════════════════════════════════════════
     # HELPERS PARTAGÉS
     # ══════════════════════════════════════════════════════════════════════════
@@ -3710,6 +3710,10 @@ if active == "planning":
         _load_planning_overrides()
         st.session_state["planning_overrides_loaded"] = True
 
+    if "planning_skips" not in st.session_state:
+        _raw_skips = _supa_get('planning_skips')
+        st.session_state["planning_skips"] = json.loads(_raw_skips) if _raw_skips else {}
+
     # ── Helpers fréquence ─────────────────────────────────────────────────────
     def _frc_default(rc):
         rc = (rc or '').strip().upper()
@@ -3830,6 +3834,63 @@ if active == "planning":
             "c": int(pt.get("location_criticality", 1)),         # criticite lieu
             "g": pt.get("gelose", ""),                           # gelose
         }
+
+    def _redistribute_skips(monthly_plan, planning_skips, week_monday, holidays_set):
+    
+        import copy
+        plan = copy.deepcopy(monthly_plan)
+
+        wd_week = [
+            week_monday + timedelta(days=i)
+            for i in range(5)
+            if (week_monday + timedelta(days=i)) not in holidays_set
+        ]
+
+        for day in wd_week:
+            skipped_labels = planning_skips.get(day.isoformat(), [])
+            if not skipped_labels:
+                continue
+
+            original_tasks = monthly_plan.get(day, [])
+            tasks_to_move  = [t for t in original_tasks if t["label"] in skipped_labels]
+
+            # Retirer du jour sauté
+            plan[day] = [t for t in plan.get(day, []) if t["label"] not in skipped_labels]
+
+            # Jours restants après ce jour dans la semaine
+            remaining = [d for d in wd_week if d > day]
+            if not remaining:
+                continue
+
+            for task in tasks_to_move:
+                # On cherche un jour où le point n'est pas déjà planifié
+                candidates = [
+                    d for d in remaining
+                    if not any(t["label"] == task["label"] for t in plan.get(d, []))
+                ]
+                if not candidates:
+                    candidates = remaining  # Forcer si aucun candidat libre
+
+                best = min(candidates, key=lambda d: len(plan.get(d, [])))
+                plan.setdefault(best, []).append(task)
+
+        return plan
+
+    # ✅ À ajouter avant _compute_monthly_planning(...)
+    _ch_year  = st.session_state.cal_year
+    _ch_month = st.session_state.cal_month
+    _ch_holidays = get_holidays_cached(_ch_year)
+
+    import calendar as _cal_pm
+    _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
+    _pm_start = date_type(_ch_year, _ch_month, 1)
+    _pm_end   = date_type(_ch_year, _ch_month, _pm_ndays)
+    cur_pm    = _pm_start - timedelta(days=_pm_start.weekday())
+    pm_mondays = []
+    while cur_pm <= _pm_end:
+        pm_mondays.append(cur_pm)
+        cur_pm += timedelta(weeks=1)
+
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
         """"
         Planning mensuel  fréquences intrinsèques respectées :
@@ -3990,52 +4051,39 @@ if active == "planning":
 # ONGLET : CHARGE HEBDO & PLANNING MENSUEL
 # ═════════════════════════════════════════════════════════════════════════
     with plan_tab_charge:
-        st.markdown("### 📊 Charge hebdomadaire")
+        with plan_tab_charge:
+        # ✅ À ajouter en début de bloc
+            col_y, col_m = st.columns(2)
+            with col_y:
+                _ch_year = st.number_input("Année", min_value=2020, max_value=2030,
+                                        value=st.session_state.cal_year, step=1,
+                                        key="cal_year_sel")
+                st.session_state.cal_year = _ch_year
+            with col_m:
+                MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin",
+                        "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+                _ch_month = st.selectbox("Mois", range(1,13),
+                                        format_func=lambda m: MOIS[m-1],
+                                        index=st.session_state.cal_month - 1,
+                                        key="cal_month_sel")
+                st.session_state.cal_month = _ch_month
+            _ch_holidays = get_holidays_cached(_ch_year)
 
-    # Navigation mois
-    nav_c1, nav_c2, nav_c3, nav_c4, nav_c5 = st.columns([1, 1, 3, 1, 1])
-    with nav_c1:
-        if st.button("◀◀", use_container_width=True, key="ch_prev_year"):
-            st.session_state.cal_year -= 1
-            st.rerun()
-    with nav_c2:
-        if st.button("◀", use_container_width=True, key="ch_prev_month"):
-            if st.session_state.cal_month == 1:
-                st.session_state.cal_month = 12
-                st.session_state.cal_year -= 1
-            else:
-                st.session_state.cal_month -= 1
-            st.rerun()
-    with nav_c3:
-        _ch_year  = st.session_state.get("cal_year",  _today_dt.year)
-        _ch_month = st.session_state.get("cal_month", _today_dt.month)
         st.markdown(
-            f"<div style='text-align:center;background:linear-gradient(135deg,#1e40af,#2563eb);"
-            f"border-radius:10px;padding:10px;color:#fff;font-weight:800;font-size:1.1rem'>"
-            f"📅 {MOIS_FR[_ch_month]} {_ch_year}</div>",
-            unsafe_allow_html=True)
-    with nav_c4:
-        if st.button("▶", use_container_width=True, key="ch_next_month"):
-            if st.session_state.cal_month == 12:
-                st.session_state.cal_month = 1
-                st.session_state.cal_year += 1
-            else:
-                st.session_state.cal_month += 1
-            st.rerun()
-    with nav_c5:
-        if st.button("▶▶", use_container_width=True, key="ch_next_year"):
-            st.session_state.cal_year += 1
-            st.rerun()
-    if st.button("📍 Mois courant", key="ch_today_btn"):
-        st.session_state.cal_year  = _today_dt.year
-        st.session_state.cal_month = _today_dt.month
-        st.rerun()
+        "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
+        "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#1e40af'>"
+        "💡 Les contraintes max/classe/semaine sont configurables dans "
+        "<strong>Paramètres → 🏷️ Contraintes classes</strong>.</div>",
+        unsafe_allow_html=True)
 
-    _ch_year     = st.session_state.get("cal_year",  _today_dt.year)
-    _ch_month    = st.session_state.get("cal_month", _today_dt.month)
-    _ch_holidays = get_holidays_cached(_ch_year)
-
-    st.divider()
+    class_max_dict = {
+        cls: int(st.session_state.get(f"class_max_{cls}", 0))
+        for cls in sorted({
+            (pt.get('room_class') or '').strip()
+            for pt in st.session_state.points
+            if (pt.get('room_class') or '').strip()
+        })
+    }
 
     # ── Contraintes max / classe / semaine ────────────────────────────────
     st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
@@ -4349,6 +4397,18 @@ if active == "planning":
         _ch_year, _ch_month,
         class_max_dict,
         _ch_holidays)
+
+    # ── Appliquer les redistributions de skips ──────────────────────────────
+    for _wm in pm_mondays:
+        _has_skip = any(
+            d.isoformat() in st.session_state["planning_skips"]
+            for i in range(5)
+            for d in [_wm + timedelta(days=i)]
+        )
+        if _has_skip:
+            monthly_plan = _redistribute_skips(
+                monthly_plan, st.session_state["planning_skips"],
+                _wm, _ch_holidays)
 
     import calendar as _cal_pm
     _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
@@ -4837,13 +4897,18 @@ if active == "planning":
                 stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
 
             pts_html = ""
+            
             for t in taches_j[:5]:
-                _c  = rcp_pm.get(str(t["risk"]), "#94a3b8")
-                _ic = "💨" if t["type"] == "Air" else "🧴"
-                _lb = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                _c   = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                _ic  = "💨" if t["type"] == "Air" else "🧴"
+                _lb  = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                _skipped = t["label"] in st.session_state["planning_skips"].get(wd.isoformat(), [])
+                _style   = ("text-decoration:line-through;color:#94a3b8;" if _skipped
+                            else f"color:#0f172a;")
                 pts_html += (
                     f"<div style='border-left:2px solid {_c};padding:1px 5px;"
-                    f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
+                    f"font-size:.58rem;{_style}margin-bottom:1px'>"
+                    f"{_ic} {_lb}</div>")
             if len(taches_j) > 5:
                 pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
 
@@ -4877,6 +4942,33 @@ if active == "planning":
                 st.markdown(card_html, unsafe_allow_html=True)
                 is_selected = (st.session_state.get("pm_selected_day") == wd)
                 btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+
+                # ── Boutons skip par tâche ────────────────────────────
+                if taches_j and not is_other_m:
+                    for _t in taches_j:
+                        _skip_key = f"skip_{wd.isoformat()}_{_t['label']}"
+                        _already  = _t["label"] in st.session_state["planning_skips"].get(
+                            wd.isoformat(), [])
+                        _btn_lbl  = "↩️" if _already else "✗"
+                        _btn_help = ("Annuler le report" if _already
+                                     else f"Sauter et reporter : {_t['label'][:20]}")
+                        if st.button(_btn_lbl, key=_skip_key,
+                                     help=_btn_help, use_container_width=True):
+                            _skips = st.session_state["planning_skips"]
+                            _dk    = wd.isoformat()
+                            if _already:
+                                _skips[_dk] = [l for l in _skips.get(_dk, [])
+                                               if l != _t["label"]]
+                                if not _skips[_dk]:
+                                    _skips.pop(_dk, None)
+                            else:
+                                _skips.setdefault(_dk, [])
+                                if _t["label"] not in _skips[_dk]:
+                                    _skips[_dk].append(_t["label"])
+                            st.session_state["planning_skips"] = _skips
+                            _supa_upsert('planning_skips',
+                                         json.dumps(_skips, ensure_ascii=False))
+                            st.rerun()
                 if st.button(
                     btn_lbl,
                     key=f"pm_btn_{wd.isoformat()}",
@@ -4973,6 +5065,64 @@ if active == "planning":
         _nb_j2 = len(j2r_sel)
         _nb_j7 = len(j7r_sel)
         _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
+        # ── Bouton "Aucun prélèvement ce jour" ───────────────────────────
+        if taches_sel and not any(
+            _sel.isoformat() == d for d in [
+                ((_sel - timedelta(days=_sel.weekday())) + timedelta(days=i)).isoformat()
+                for i in range(5)
+                if (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i)) > _sel
+            ]
+        ):
+            pass  # pas de jours restants dans la semaine
+
+        _week_remaining = [
+            _sel - timedelta(days=_sel.weekday()) + timedelta(days=i)
+            for i in range(5)
+            if (
+                (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i)) > _sel
+                and (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i))
+                    not in _ch_holidays
+            )
+        ]
+        if taches_sel and _week_remaining:
+            if st.button(
+                "🚫 Aucun prélèvement fait ce jour — tout reporter",
+                key=f"skip_all_{_sel.isoformat()}",
+                use_container_width=True,
+                type="primary",
+            ):
+                _skips  = st.session_state["planning_skips"]
+                _dk     = _sel.isoformat()
+                _labels = [t["label"] for t in taches_sel]
+                _skips[_dk] = list(set(_skips.get(_dk, []) + _labels))
+                st.session_state["planning_skips"] = _skips
+                _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
+                st.session_state["pm_selected_day"] = None
+                st.success(
+                    f"🔄 {len(_labels)} prélèvement(s) reporté(s) sur les "
+                    f"{len(_week_remaining)} jours restants de la semaine.")
+                st.rerun()
+        elif taches_sel and not _week_remaining:
+            st.markdown(
+                "<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;"
+                "padding:8px 12px;font-size:.75rem;color:#991b1b;margin-bottom:8px'>"
+                "⚠️ Dernier jour ouvré de la semaine — aucun report possible.</div>",
+                unsafe_allow_html=True)
+
+        # ── Bouton reset skips du jour ─────────────────────────────────────
+        _dk_sel = _sel.isoformat()
+        if st.session_state["planning_skips"].get(_dk_sel):
+            _n_skip = len(st.session_state["planning_skips"][_dk_sel])
+            if st.button(
+                f"↩️ Annuler tous les reports de ce jour ({_n_skip})",
+                key=f"unskip_all_{_dk_sel}",
+                use_container_width=True,
+            ):
+                _skips = st.session_state["planning_skips"]
+                _skips.pop(_dk_sel, None)
+                st.session_state["planning_skips"] = _skips
+                _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
+                st.rerun()
         st.markdown(
             "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
             "background:linear-gradient(135deg,#0f172a,#1e293b);"
@@ -6721,10 +6871,11 @@ elif active == "parametres":
         st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
     st.markdown("### ⚙️ Paramètres")
 
-    (subtab_mesures, subtab_points, subtab_plans, subtab_seuils,
-     subtab_operateurs, subtab_backup, subtab_supabase, subtab_faq) = st.tabs([
-        "📋 Mesures correctives", "📍 Points de prélèvement", "🗺️ Plans",
-        "⚖️ Seuils d'alerte", "👤 Opérateurs", "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
+    (subtab_mesures, subtab_points, subtab_contraintes, subtab_plans, subtab_seuils,
+    subtab_operateurs, subtab_backup, subtab_supabase, subtab_faq) = st.tabs([
+        "📋 Mesures correctives", "📍 Points de prélèvement", "🏷️ Contraintes classes",
+        "🗺️ Plans", "⚖️ Seuils d'alerte", "👤 Opérateurs",
+        "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
     ])
 
     # ── Constantes Points ──────────────────────────────────────────────────────
@@ -6738,6 +6889,100 @@ elif active == "parametres":
     LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
+# ══════════════════════════════════════════════════════════════════════════
+    # CONTRAINTES MAX / CLASSE / SEMAINE
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_contraintes:
+        st.markdown("### 🏷️ Contraintes max prélèvements / classe / semaine")
+        st.caption(
+            "**0 = aucun prélèvement** pour cette classe. "
+            "**> 0** = total hebdomadaire plafonné et réparti proportionnellement "
+            "selon les fréquences individuelles.")
+
+        all_classes_p = sorted({
+            (pt.get('room_class') or '').strip()
+            for pt in st.session_state.points
+            if (pt.get('room_class') or '').strip()
+        })
+
+        if not all_classes_p:
+            st.info("Aucune classe définie sur les points de prélèvement.")
+        else:
+            rc_colors_p = {
+                "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
+                "D": "#f97316", "E": "#ef4444",
+            }
+            cls_cols_p = st.columns(min(len(all_classes_p), 6))
+            for ci, cls in enumerate(all_classes_p):
+                rc_col_p  = rc_colors_p.get(cls[:1].upper(), "#6366f1")
+                pts_cls_p = [pt for pt in st.session_state.points
+                             if (pt.get('room_class') or '').strip() == cls]
+                with cls_cols_p[ci % len(cls_cols_p)]:
+                    st.markdown(
+                        f"<div style='background:{rc_col_p}15;border:1.5px solid {rc_col_p}55;"
+                        f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
+                        f"<div style='font-size:.9rem;font-weight:900;color:{rc_col_p}'>Classe {cls}</div>"
+                        f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls_p)} point(s)</div>"
+                        f"</div>",
+                        unsafe_allow_html=True)
+                    _key_p = f"class_max_{cls}"
+                    if _key_p not in st.session_state:
+                        _raw_cc_p = st.session_state.get("_class_constraints_raw", {})
+                        st.session_state[_key_p] = int(_raw_cc_p.get(cls, 0))
+                    st.number_input(
+                        f"Max/sem Cl.{cls}", min_value=0, max_value=500,
+                        step=1, key=_key_p,
+                        label_visibility="collapsed")
+                    _new_max_p = int(st.session_state.get(_key_p, 0))
+
+                    if _new_max_p > 0:
+                        pts_surf_p = [pt for pt in pts_cls_p
+                                      if (pt.get('type') or '').strip().lower()
+                                      not in ('air', 'air ambiant')]
+                        pts_air_p  = [pt for pt in pts_cls_p
+                                      if (pt.get('type') or '').strip().lower()
+                                      in ('air', 'air ambiant')]
+                        freqs_p2   = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_surf_p]
+                        tot_p2     = sum(freqs_p2) or 1
+                        assigned_p = 0
+                        preview_p  = ""
+                        for ii, (pt, f) in enumerate(zip(pts_surf_p, freqs_p2)):
+                            a = round(f / tot_p2 * _new_max_p) if ii < len(pts_surf_p)-1 \
+                                else max(0, _new_max_p - assigned_p)
+                            assigned_p += a
+                            preview_p += (f"<div style='font-size:.6rem;color:#1e40af'>"
+                                          f"{pt['label'][:20]}: <b>{a}×/sem</b></div>")
+                        for pt_air in pts_air_p:
+                            f_air = _freq_en_semaine(pt_air, 5)
+                            preview_p += (f"<div style='font-size:.6rem;color:#0369a1'>"
+                                          f"💨 {pt_air['label'][:20]}: <b>{f_air:.0f}×/sem</b></div>")
+                        st.markdown(
+                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
+                            f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview_p}</div>",
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            "<div style='background:#fef2f2;border:1px solid #fca5a5;"
+                            "border-radius:6px;padding:6px 8px;margin-top:2px;text-align:center'>"
+                            "<div style='font-size:.62rem;font-weight:700;color:#991b1b'>🚫 Désactivé</div>"
+                            "</div>",
+                            unsafe_allow_html=True)
+
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            sv_col_p, _ = st.columns([1, 3])
+            with sv_col_p:
+                if st.button("💾 Sauvegarder les contraintes",
+                             key="save_class_constraints_param",
+                             use_container_width=True, type="primary"):
+                    payload_p = {
+                        cls: int(st.session_state.get(f"class_max_{cls}", 0))
+                        for cls in all_classes_p
+                    }
+                    if _supa_upsert('class_constraints',
+                                    json.dumps(payload_p, ensure_ascii=False)):
+                        st.success("✅ Contraintes sauvegardées dans Supabase !")
+                    else:
+                        st.warning("⚠️ Supabase non connecté.")
     # ══════════════════════════════════════════════════════════════════════════
     # MESURES CORRECTIVES
     # ══════════════════════════════════════════════════════════════════════════
