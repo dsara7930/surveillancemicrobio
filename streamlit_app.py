@@ -5001,7 +5001,10 @@ if active == "planning":
             ]
 
             _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
-            rcp_fix  = {"1": "#22c55e", "2": "#84cc16", "3": "#f59e0b", "4": "#f97316", "5": "#ef4444"}
+            rcp_fix  = {
+                "1": "#22c55e", "2": "#84cc16",
+                "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+            }
 
             _cards = ""
 
@@ -5065,15 +5068,15 @@ if active == "planning":
                 )
 
             if not _cards:
-                    _cards = (
-                        "<div style='color:#94a3b8;font-size:.82rem;"
-                        "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
-                    )
+                _cards = (
+                    "<div style='color:#94a3b8;font-size:.82rem;"
+                    "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
+                )
 
-            _nb_t  = len(taches_sel)
-            _nb_j0 = len(j0r_sel)
-            _nb_j2 = len(j2r_sel)
-            _nb_j7 = len(j7r_sel)
+            _nb_t   = len(taches_sel)
+            _nb_j0  = len(j0r_sel)
+            _nb_j2  = len(j2r_sel)
+            _nb_j7  = len(j7r_sel)
             _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
 
             _week_remaining = [
@@ -5085,6 +5088,7 @@ if active == "planning":
                         not in _ch_holidays
                 )
             ]
+
             if taches_sel and _week_remaining:
                 if st.button(
                     "🚫 Aucun prélèvement fait ce jour — tout reporter",
@@ -5105,99 +5109,114 @@ if active == "planning":
                     st.rerun()
             elif taches_sel and not _week_remaining:
                 st.markdown(
-                    "<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;"
-                    "padding:8px 12px;font-size:.75rem;color:#991b1b;margin-bottom:8px'>"
+                    "<div style='background:#fef2f2;border:1px solid #fca5a5;"
+                    "border-radius:8px;padding:8px 12px;font-size:.75rem;"
+                    "color:#991b1b;margin-bottom:8px'>"
                     "⚠️ Dernier jour ouvré de la semaine — aucun report possible.</div>",
                     unsafe_allow_html=True)
 
-        # ── Bouton reset skips du jour ─────────────────────────────────────
-        _dk_sel = _sel.isoformat()
-        if st.session_state["planning_skips"].get(_dk_sel):
-            _n_skip = len(st.session_state["planning_skips"][_dk_sel])
-            if st.button(
-                f"↩️ Annuler tous les reports de ce jour ({_n_skip})",
-                key=f"unskip_all_{_dk_sel}",
-                use_container_width=True,
-            ):
-                _skips = st.session_state["planning_skips"]
-                _skips.pop(_dk_sel, None)
-                st.session_state["planning_skips"] = _skips
-                _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
-                st.rerun()
-        st.markdown(
-            "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
-            "background:linear-gradient(135deg,#0f172a,#1e293b);"
-            "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
-            "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
-            "<div style='display:flex;align-items:center;justify-content:space-between;"
-            "margin-bottom:8px'>"
-            f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
-            f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;color:#93c5fd'>"
-            f"{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
-            "<span style='font-size:.7rem;color:#475569;font-style:italic'>"
-            "Cliquez à nouveau sur le jour pour fermer</span>"
-            "</div>"
-            f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>"
-            f"{_cards}</div>"
-            "</div>"
-            "<div style='height:170px'></div>",
-            unsafe_allow_html=True)
+            # ── Bouton reset skips du jour ────────────────────────────────
+            _dk_sel = _sel.isoformat()
+            if st.session_state["planning_skips"].get(_dk_sel):
+                _n_skip = len(st.session_state["planning_skips"][_dk_sel])
+                if st.button(
+                    f"↩️ Annuler tous les reports de ce jour ({_n_skip})",
+                    key=f"unskip_all_{_dk_sel}",
+                    use_container_width=True,
+                ):
+                    _skips = st.session_state["planning_skips"]
+                    _skips.pop(_dk_sel, None)
+                    st.session_state["planning_skips"] = _skips
+                    _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
+                    st.rerun()
+
+            # ── Panel fixe bas de page ────────────────────────────────────
+            st.markdown(
+                "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
+                "background:linear-gradient(135deg,#0f172a,#1e293b);"
+                "border-top:3px solid #2563eb;padding:10px 20px 14px 20px;"
+                "box-shadow:0 -6px 32px rgba(0,0,0,.4)'>"
+                "<div style='display:flex;align-items:center;"
+                "justify-content:space-between;margin-bottom:8px'>"
+                f"<div style='color:#fff;font-weight:800;font-size:.95rem'>📋 {_day_lbl}"
+                f"<span style='margin-left:10px;font-size:.75rem;font-weight:400;"
+                f"color:#93c5fd'>"
+                f"{_nb_t} prélèv. · {_nb_j2} J2 · {_nb_j7} J7{_rbadge}</span></div>"
+                "<span style='font-size:.7rem;color:#475569;font-style:italic'>"
+                "Cliquez à nouveau sur le jour pour fermer</span>"
+                "</div>"
+                f"<div style='display:flex;gap:8px;overflow-x:auto;padding-bottom:2px'>"
+                f"{_cards}</div>"
+                "</div>"
+                "<div style='height:170px'></div>",
+                unsafe_allow_html=True)
+
+            st.divider()
+
+            # ── Récap jour ────────────────────────────────────────────────
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
+                f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
+                f"<div style='color:#fff;font-weight:800;font-size:1rem'>"
+                f"📋 {_day_lbl}</div>"
+                f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
+                f"{_nb_t} prélèv. planifiés · {_nb_j2} J2 · {_nb_j7} J7"
+                f"{'  · 🧪 ' + str(_nb_j0) + ' réalisé(s)' if j0r_sel else ''}"
+                f"</div></div>",
+                unsafe_allow_html=True)
+
+            # ── Activités du jour ─────────────────────────────────────────
+            if j2r_sel or j7r_sel or j0r_sel:
+                with st.expander("📖 Lectures & réalisés du jour", expanded=False):
+                    act_cols = st.columns(3)
+                    ci = 0
+                    for s in j2r_sel:
+                        _dn = s["status"] == "done"
+                        _lt = not _dn and _sel < _today_dt
+                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#fffbeb;border:1px solid {_c}44;"
+                                f"border-left:3px solid {_c};border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>"
+                                f"📖 J2 — {s['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:{_c};"
+                                f"font-weight:700'>{_st}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
+                    for s in j7r_sel:
+                        _dn = s["status"] == "done"
+                        _lt = not _dn and _sel < _today_dt
+                        _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                        _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#eff6ff;border:1px solid {_c}44;"
+                                f"border-left:3px solid {_c};border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>"
+                                f"📗 J7 — {s['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:{_c};"
+                                f"font-weight:700'>{_st}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
+                    for p in j0r_sel:
+                        with act_cols[ci % 3]:
+                            st.markdown(
+                                f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                                f"border-left:3px solid #7c3aed;border-radius:7px;"
+                                f"padding:7px 10px;margin-bottom:6px'>"
+                                f"<div style='font-size:.78rem;font-weight:700'>"
+                                f"🧪 {p['label'][:24]}</div>"
+                                f"<div style='font-size:.65rem;color:#64748b'>"
+                                f"{p.get('gelose', '—')} · "
+                                f"{p.get('operateur', '—') or '—'}</div></div>",
+                                unsafe_allow_html=True)
+                        ci += 1
 
         st.divider()
-        st.markdown(
-            f"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
-            f"border-radius:12px;padding:12px 20px;margin-bottom:12px'>"
-            f"<div style='color:#fff;font-weight:800;font-size:1rem'>📋 {_day_lbl}</div>"
-            f"<div style='color:#93c5fd;font-size:.78rem;margin-top:2px'>"
-            f"{_nb_t} prélèv. planifiés · {_nb_j2} J2 · {_nb_j7} J7"
-            f"{'  · 🧪 ' + str(_nb_j0) + ' réalisé(s)' if j0r_sel else ''}"
-            f"</div></div>",
-            unsafe_allow_html=True)
-
-        # ── Activités du jour ─────────────────────────────────────────────
-        if j2r_sel or j7r_sel or j0r_sel:
-            with st.expander("📖 Lectures & réalisés du jour", expanded=False):
-                act_cols = st.columns(3)
-                ci = 0
-                for s in j2r_sel:
-                    _dn = s["status"] == "done"
-                    _lt = not _dn and _sel < _today_dt
-                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
-                    _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
-                    with act_cols[ci % 3]:
-                        st.markdown(
-                            f"<div style='background:#fffbeb;border:1px solid {_c}44;"
-                            f"border-left:3px solid {_c};border-radius:7px;"
-                            f"padding:7px 10px;margin-bottom:6px'>"
-                            f"<div style='font-size:.78rem;font-weight:700'>📖 J2 — {s['label'][:24]}</div>"
-                            f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
-                            unsafe_allow_html=True)
-                    ci += 1
-                for s in j7r_sel:
-                    _dn = s["status"] == "done"
-                    _lt = not _dn and _sel < _today_dt
-                    _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
-                    _st = "✅ Fait" if _dn else ("⚠️ Retard" if _lt else "⏳ À faire")
-                    with act_cols[ci % 3]:
-                        st.markdown(
-                            f"<div style='background:#eff6ff;border:1px solid {_c}44;"
-                            f"border-left:3px solid {_c};border-radius:7px;"
-                            f"padding:7px 10px;margin-bottom:6px'>"
-                            f"<div style='font-size:.78rem;font-weight:700'>📗 J7 — {s['label'][:24]}</div>"
-                            f"<div style='font-size:.65rem;color:{_c};font-weight:700'>{_st}</div></div>",
-                            unsafe_allow_html=True)
-                    ci += 1
-                for p in j0r_sel:
-                    with act_cols[ci % 3]:
-                        st.markdown(
-                            f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
-                            f"border-left:3px solid #7c3aed;border-radius:7px;"
-                            f"padding:7px 10px;margin-bottom:6px'>"
-                            f"<div style='font-size:.78rem;font-weight:700'>🧪 {p['label'][:24]}</div>"
-                            f"<div style='font-size:.65rem;color:#64748b'>"
-                            f"{p.get('gelose','—')} · {p.get('operateur','—') or '—'}</div></div>",
-                            unsafe_allow_html=True)
-                    ci += 1
 
         # ── Sélection & génération étiquettes (jour sélectionné) ────────────────
         if taches_sel:
