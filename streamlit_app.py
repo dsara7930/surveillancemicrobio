@@ -5065,53 +5065,44 @@ if active == "planning":
                 )
 
             if not _cards:
-                _cards = (
-                    "<div style='color:#94a3b8;font-size:.82rem;"
-                    "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
-                )
+                    _cards = (
+                        "<div style='color:#94a3b8;font-size:.82rem;"
+                        "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
+                    )
 
-        _nb_t  = len(taches_sel)
-        _nb_j0 = len(j0r_sel)
-        _nb_j2 = len(j2r_sel)
-        _nb_j7 = len(j7r_sel)
-        _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
-        # ── Bouton "Aucun prélèvement ce jour" ───────────────────────────
-        if taches_sel and not any(
-            _sel.isoformat() == d for d in [
-                ((_sel - timedelta(days=_sel.weekday())) + timedelta(days=i)).isoformat()
+            _nb_t  = len(taches_sel)
+            _nb_j0 = len(j0r_sel)
+            _nb_j2 = len(j2r_sel)
+            _nb_j7 = len(j7r_sel)
+            _rbadge = f" · 🧪 {_nb_j0} réalisé" if _nb_j0 else ""
+
+            _week_remaining = [
+                _sel - timedelta(days=_sel.weekday()) + timedelta(days=i)
                 for i in range(5)
-                if (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i)) > _sel
+                if (
+                    (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i)) > _sel
+                    and (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i))
+                        not in _ch_holidays
+                )
             ]
-        ):
-            pass  # pas de jours restants dans la semaine
-
-        _week_remaining = [
-            _sel - timedelta(days=_sel.weekday()) + timedelta(days=i)
-            for i in range(5)
-            if (
-                (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i)) > _sel
-                and (_sel - timedelta(days=_sel.weekday()) + timedelta(days=i))
-                    not in _ch_holidays
-            )
-        ]
-        if taches_sel and _week_remaining:
-            if st.button(
-                "🚫 Aucun prélèvement fait ce jour — tout reporter",
-                key=f"skip_all_{_sel.isoformat()}",
-                use_container_width=True,
-                type="primary",
-            ):
-                _skips  = st.session_state["planning_skips"]
-                _dk     = _sel.isoformat()
-                _labels = [t["label"] for t in taches_sel]
-                _skips[_dk] = list(set(_skips.get(_dk, []) + _labels))
-                st.session_state["planning_skips"] = _skips
-                _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
-                st.session_state["pm_selected_day"] = None
-                st.success(
-                    f"🔄 {len(_labels)} prélèvement(s) reporté(s) sur les "
-                    f"{len(_week_remaining)} jours restants de la semaine.")
-                st.rerun()
+            if taches_sel and _week_remaining:
+                if st.button(
+                    "🚫 Aucun prélèvement fait ce jour — tout reporter",
+                    key=f"skip_all_{_sel.isoformat()}",
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    _skips  = st.session_state["planning_skips"]
+                    _dk     = _sel.isoformat()
+                    _labels = [t["label"] for t in taches_sel]
+                    _skips[_dk] = list(set(_skips.get(_dk, []) + _labels))
+                    st.session_state["planning_skips"] = _skips
+                    _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
+                    st.session_state["pm_selected_day"] = None
+                    st.success(
+                        f"🔄 {len(_labels)} prélèvement(s) reporté(s) sur les "
+                        f"{len(_week_remaining)} jours restants de la semaine.")
+                    st.rerun()
         elif taches_sel and not _week_remaining:
             st.markdown(
                 "<div style='background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;"
