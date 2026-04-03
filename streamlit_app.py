@@ -4358,10 +4358,12 @@ if active == "planning":
         from reportlab.lib.enums     import TA_RIGHT
 
         # ── Dimensions étiquettes ───────────────────────────────────────────
-        A4_W, A4_H = A4   # 595.28, 841.89 pt
+        A4_W, A4_H = A4
         N_COLS = 4
-        W_ETQ  = A4_W / N_COLS        # largeur exacte = A4 / 4 colonnes
+        W_ETQ  = 5.2 * rl_cm
         H_ETQ  = 2.95 * rl_cm
+        _grid_w     = W_ETQ * N_COLS
+        _margin_left = (A4_W - _grid_w) / 2   # centrage horizontal
         GAP    = 0.0   * rl_cm
         MARGIN = 0.0   * rl_cm
 
@@ -4419,8 +4421,8 @@ if active == "planning":
         A4_W, A4_H = A4
 
         frame = Frame(
-            x1=0, y1=0,
-            width=A4_W,
+            x1=_margin_left, y1=0,
+            width=_grid_w,
             height=A4_H,
             leftPadding=0,
             rightPadding=0,
@@ -4575,14 +4577,25 @@ if active == "planning":
             if not day_tasks:
                 continue
 
-            # Séparateur jour (1 rangée = H_ETQ)
             if is_week:
                 JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
                 label = (f"  {JOURS[day_date.weekday()]}  "
                         f"{day_date.strftime('%d/%m/%Y')}  —  "
                         f"{len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}")
-                sep_para = Paragraph(label, s_day_sep)
-                sep_row  = [sep_para] + [""] * (N_COLS - 1)
+                sep_cell = Table(
+                    [[Paragraph(label, s_day_sep)]],
+                    colWidths=[_grid_w],
+                    rowHeights=[H_ETQ])
+                sep_cell.setStyle(TableStyle([
+                    ("BACKGROUND",    (0, 0), (0, 0), rlc.HexColor("#bfdbfe")),
+                    ("VALIGN",        (0, 0), (0, 0), "MIDDLE"),
+                    ("ALIGN",         (0, 0), (0, 0), "LEFT"),
+                    ("LEFTPADDING",   (0, 0), (0, 0), 14),
+                    ("RIGHTPADDING",  (0, 0), (0, 0), 14),
+                    ("TOPPADDING",    (0, 0), (0, 0), 0),
+                    ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                ]))
+                sep_row = [sep_cell] + [""] * (N_COLS - 1)
                 all_rows.append(sep_row)
                 all_row_heights.append(H_ETQ)
 
@@ -4627,37 +4640,6 @@ if active == "planning":
             ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
             ("VALIGN",        (0, 0), (-1, -1), "TOP"),
         ]
-
-        # Appliquer le style "séparateur" sur les bonnes rangées
-        # ──────────────────────────────────────────────────────────────────
-# APRÈS  (corrigé)
-# ──────────────────────────────────────────────────────────────────
-        if is_week:
-            row_idx = 0
-            for day_date, day_tasks in days_data:
-                if not day_tasks:
-                    continue
-                # Rangée séparateur
-                tbl_style += [
-                    ("SPAN",       (0, row_idx), (N_COLS-1, row_idx)),
-                    ("BACKGROUND", (0, row_idx), (N_COLS-1, row_idx),
-                     rlc.HexColor("#bfdbfe")),
-                    ("ALIGN",      (0, row_idx), (N_COLS-1, row_idx), "LEFT"),
-                    ("VALIGN",     (0, row_idx), (N_COLS-1, row_idx), "MIDDLE"),
-                    ("LEFTPADDING",(0, row_idx), (N_COLS-1, row_idx), 14),
-                    ("TEXTCOLOR",  (0, row_idx), (N_COLS-1, row_idx),
-                     rlc.HexColor("#1e40af")),
-                    ("FONTNAME",   (0, row_idx), (N_COLS-1, row_idx),
-                     "Helvetica-Bold"),
-                    ("FONTSIZE",   (0, row_idx), (N_COLS-1, row_idx), 11),
-                ]
-                row_idx += 1  # séparateur
-
-                # ── Compter le nombre RÉEL de cellules générées ──────────
-                # Les tâches classe A génèrent 2 étiquettes (une par isolateur)
-                n_cells = len(day_tasks)
-                n_etiq_rows = -(-n_cells // N_COLS)  # ceil division correcte
-                row_idx += n_etiq_rows
 
         main_tbl.setStyle(TableStyle(tbl_style))
 
