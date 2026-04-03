@@ -4585,22 +4585,16 @@ if active == "planning":
                 all_rows.append(sep_row)
                 all_row_heights.append(H_ETQ)
 
-            # Étiquettes du jour
+            # Étiquettes du jour — pas de dédoublage, les tâches sont déjà filtrées
             row_buf = []
-                        # APRÈS — classe A génère 2 étiquettes (une par isolateur)
-            ISOLATEURS_A = ["Iso 16/0724", "Iso 14/07169"]
 
             for task in day_tasks:
-                if task.get("room_class", "").strip().upper() == "A":
-                    # Générer une étiquette par isolateur
-                    for iso_name in ISOLATEURS_A:
-                        task_iso = dict(task)
-                        task_iso["_isolateur"] = iso_name   # marqueur pour _build_cell
-                        row_buf.append(_build_cell(task_iso, day_date))
-                        if len(row_buf) == N_COLS:
-                            all_rows.append(row_buf)
-                            all_row_heights.append(H_ETQ)
-                            row_buf = []
+                row_buf.append(_build_cell(task, day_date))
+                if len(row_buf) == N_COLS:
+                    all_rows.append(row_buf)
+                    all_row_heights.append(H_ETQ)
+                    row_buf = []
+                    
                 else:
                     row_buf.append(_build_cell(task, day_date))
                     if len(row_buf) == N_COLS:
@@ -4660,12 +4654,7 @@ if active == "planning":
 
                 # ── Compter le nombre RÉEL de cellules générées ──────────
                 # Les tâches classe A génèrent 2 étiquettes (une par isolateur)
-                n_cells = sum(
-                    len(ISOLATEURS_A)
-                    if t.get("room_class", "").strip().upper() == "A"
-                    else 1
-                    for t in day_tasks
-                )
+                n_cells = len(day_tasks)
                 n_etiq_rows = -(-n_cells // N_COLS)  # ceil division correcte
                 row_idx += n_etiq_rows
 
