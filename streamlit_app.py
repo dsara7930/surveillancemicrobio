@@ -4609,12 +4609,7 @@ if active == "planning":
                     all_row_heights.append(H_ETQ)
                     row_buf = []
                     
-                else:
-                    row_buf.append(_build_cell(task, day_date))
-                    if len(row_buf) == N_COLS:
-                        all_rows.append(row_buf)
-                        all_row_heights.append(H_ETQ)
-                        row_buf = []
+                
             # Compléter la dernière rangée si incomplète
             if row_buf:
                 while len(row_buf) < N_COLS:
