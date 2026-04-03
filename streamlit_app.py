@@ -4347,11 +4347,11 @@ if active == "planning":
         from reportlab.lib.enums     import TA_RIGHT
 
         # ── Dimensions étiquettes ───────────────────────────────────────────
-        W_ETQ  = 5.25  * rl_cm
-        H_ETQ  = 3.0  * rl_cm
+        W_ETQ  = 5.2   * rl_cm   # ← était 5.25
+        H_ETQ  = 2.95  * rl_cm   # ← était 3.0
         N_COLS = 4
-        GAP    = 0.0  * rl_cm   # ← 0 gap pour coller à la planche
-        MARGIN = 0.0  * rl_cm   # ← ajustez selon votre planche
+        GAP    = 0.0   * rl_cm
+        MARGIN = 0.0   * rl_cm
 
         buf  = _io.BytesIO()
         A4_W, A4_H = A4
@@ -4492,19 +4492,19 @@ if active == "planning":
                 ]))
             else:
                 inner = left_tbl
-
-            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-            outer.setStyle(TableStyle([
-                ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
-                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
-                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
-                ("LEFTPADDING",    (0, 0), (0, 0), 5),
-                ("RIGHTPADDING",   (0, 0), (0, 0), 4),
-                ("TOPPADDING",     (0, 0), (0, 0), 5),
-                ("BOTTOMPADDING",  (0, 0), (0, 0), 4),
-                ("VALIGN",         (0, 0), (0, 0), "TOP"),
-                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
-            ]))
+                outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+                outer.setStyle(TableStyle([
+                    ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+                    ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                    ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
+                    ("LEFTPADDING",    (0, 0), (0, 0), 11),   # ← était 5  (0.4 cm ≈ 11.3 pt)
+                    ("RIGHTPADDING",   (0, 0), (0, 0), 11),   # ← était 4
+                    ("TOPPADDING",     (0, 0), (0, 0), 11),   # ← était 5
+                    ("BOTTOMPADDING",  (0, 0), (0, 0), 11),   # ← était 4
+                    ("VALIGN",         (0, 0), (0, 0), "TOP"),
+                    ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
+                ]))
+            
             return outer
 
         def _build_day_separator(day_date, n_tasks):
