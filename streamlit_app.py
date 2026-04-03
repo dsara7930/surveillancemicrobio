@@ -4692,7 +4692,7 @@ if active == "planning":
         _pdf_week_key   = f"pdf_week_{week_monday.isoformat()}"
         _pdf_week_ready = st.session_state.get(_pdf_week_key)
 
-        hdr_c1, hdr_c2 = st.columns([4, 2, 1])
+        hdr_c1, hdr_c2 = st.columns([4, 2])
         with hdr_c1:
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
