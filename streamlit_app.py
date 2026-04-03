@@ -5033,29 +5033,23 @@ if active == "planning":
                                 st.divider()
 
                                 # Checkboxes individuelles
-                                for _nf in _non_faits:
+                                for i, _nf in enumerate(_non_faits):
                                     _ic = "💨" if _nf["type"] == "Air" else "🧴"
                                     _rc = rcp_pm.get(str(_nf["risk"]), "#94a3b8")
-                                    import hashlib
-                                    _pop_key = f"pop_skip_{di}_{wd.isoformat()}_{hashlib.md5(_nf['label'].encode()).hexdigest()[:8]}"
-                                    st.markdown(
-                                        f"<div style='border-left:3px solid {_rc};"
-                                        f"padding:2px 6px;margin-bottom:2px;"
-                                        f"font-size:.72rem;color:#0f172a'>"
-                                        f"{_ic} {_nf['label'][:26]}</div>",
-                                        unsafe_allow_html=True)
-                                    if st.checkbox(
-                                        f"{_ic} {_nf['label'][:26]}",
-                                        key=_pop_key,
-                                        value=False
-                                    ):
+
+                                    _pop_key = f"pop_skip_{di}_{wd.isoformat()}_{i}"
+
+                                    if st.checkbox(f"{_ic} {_nf['label'][:26]}", key=_pop_key):
                                         _skips = st.session_state["planning_skips"]
                                         _dk = wd.isoformat()
+
                                         if _nf["label"] not in _skips.get(_dk, []):
                                             _skips.setdefault(_dk, [])
                                             _skips[_dk].append(_nf["label"])
+
                                             st.session_state["planning_skips"] = _skips
                                             _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
+
                                             st.rerun()
 
         # ── Panel bas de page : détail du jour sélectionné ───────────────
