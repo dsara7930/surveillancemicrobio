@@ -4705,11 +4705,11 @@ if active == "planning":
                 f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
                 f"📋 {_total_sem} prélèv. planifiés</span>"
                 f"</div>",
-                    unsafe_allow_html=True)
-            
+                unsafe_allow_html=True)
+
         with hdr_c2:
             st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
-            
+
             _pdf_D_ready   = st.session_state.get(f"pdf_week_D_{week_monday.isoformat()}")
             _pdf_14_ready  = st.session_state.get(f"pdf_week_iso14_{week_monday.isoformat()}")
             _pdf_16_ready  = st.session_state.get(f"pdf_week_iso16_{week_monday.isoformat()}")
@@ -4740,154 +4740,162 @@ if active == "planning":
                         mime="application/pdf",
                         use_container_width=True,
                         key=f"wk_dl_iso16_{week_monday.isoformat()}")
-                else:
-                    if st.button(
-                        "🖨️ Imprimer la semaine",
-                        key=f"wk_print_{week_monday.isoformat()}",
-                        use_container_width=True,
-                        disabled=(_total_sem == 0),
-                        help="Générer les étiquettes de toute la semaine (3 PDF : Classe D, Iso 14, Iso 16)"
-                    ):
-                        try:
-                            week_days_data = [
-                                (wd, monthly_plan.get(wd, []))
-                                for wd in wd_week
-                                if monthly_plan.get(wd)
+            else:
+                if st.button(
+                    "🖨️ Imprimer la semaine",
+                    key=f"wk_print_{week_monday.isoformat()}",
+                    use_container_width=True,
+                    disabled=(_total_sem == 0),
+                    help="Générer les étiquettes de toute la semaine (3 PDF : Classe D, Iso 14, Iso 16)"
+                ):
+                    try:
+                        week_days_data = [
+                            (wd, monthly_plan.get(wd, []))
+                            for wd in wd_week
+                            if monthly_plan.get(wd)
+                        ]
+                        if week_days_data:
+                            days_D = [
+                                (wd, [t for t in tasks if (t.get("room_class") or "").strip().upper() == "D"])
+                                for wd, tasks in week_days_data
                             ]
-                            if week_days_data:
-                                days_D = [
-                                    (wd, [t for t in tasks if (t.get("room_class") or "").strip().upper() == "D"])
-                                    for wd, tasks in week_days_data
-                                ]
-                                days_D = [(wd, t) for wd, t in days_D if t]
+                            days_D = [(wd, t) for wd, t in days_D if t]
 
-                                days_iso14 = [
-                                    (wd, [dict(t, _isolateur="Iso 14/07169")
-                                        for t in tasks
-                                        if (t.get("room_class") or "").strip().upper() == "A"])
-                                    for wd, tasks in week_days_data
-                                ]
-                                days_iso14 = [(wd, t) for wd, t in days_iso14 if t]
+                            days_iso14 = [
+                                (wd, [dict(t, _isolateur="Iso 14/07169")
+                                      for t in tasks
+                                      if (t.get("room_class") or "").strip().upper() == "A"])
+                                for wd, tasks in week_days_data
+                            ]
+                            days_iso14 = [(wd, t) for wd, t in days_iso14 if t]
 
-                                days_iso16 = [
-                                    (wd, [dict(t, _isolateur="Iso 16/0724")
-                                        for t in tasks
-                                        if (t.get("room_class") or "").strip().upper() == "A"])
-                                    for wd, tasks in week_days_data
-                                ]
-                                days_iso16 = [(wd, t) for wd, t in days_iso16 if t]
+                            days_iso16 = [
+                                (wd, [dict(t, _isolateur="Iso 16/0724")
+                                      for t in tasks
+                                      if (t.get("room_class") or "").strip().upper() == "A"])
+                                for wd, tasks in week_days_data
+                            ]
+                            days_iso16 = [(wd, t) for wd, t in days_iso16 if t]
 
-                                _sem_id = f"sem{week_monday.isocalendar()[1]}_{week_monday.strftime('%Y%m%d')}"
+                            _sem_id = f"sem{week_monday.isocalendar()[1]}_{week_monday.strftime('%Y%m%d')}"
 
-                                if days_D:
-                                    _pdf_D = _generate_pdf_etiquettes(days_D, days_D)
-                                    st.session_state[f"pdf_week_D_{week_monday.isoformat()}"] = {
-                                        "data":  _pdf_D,
-                                        "fname": f"etiquettes_{_sem_id}_classeD.pdf",
-                                        "label": "⬇️ Classe D",
-                                    }
-                                if days_iso14:
-                                    _pdf_14 = _generate_pdf_etiquettes(days_iso14, days_iso14)
-                                    st.session_state[f"pdf_week_iso14_{week_monday.isoformat()}"] = {
-                                        "data":  _pdf_14,
-                                        "fname": f"etiquettes_{_sem_id}_iso14.pdf",
-                                        "label": "⬇️ Iso 14/07169",
-                                    }
-                                if days_iso16:
-                                    _pdf_16 = _generate_pdf_etiquettes(days_iso16, days_iso16)
-                                    st.session_state[f"pdf_week_iso16_{week_monday.isoformat()}"] = {
-                                        "data":  _pdf_16,
-                                        "fname": f"etiquettes_{_sem_id}_iso16.pdf",
-                                        "label": "⬇️ Iso 16/0724",
-                                    }
-                                st.rerun()
-                            else:
-                                st.warning("Aucun prélèvement planifié cette semaine.")
-                        except ImportError:
-                            st.error("❌ **ReportLab** non installé.")
-                        except Exception as _e:
-                            st.error(f"Erreur PDF semaine : {_e}")
+                            if days_D:
+                                _pdf_D = _generate_pdf_etiquettes(days_D, days_D)
+                                st.session_state[f"pdf_week_D_{week_monday.isoformat()}"] = {
+                                    "data":  _pdf_D,
+                                    "fname": f"etiquettes_{_sem_id}_classeD.pdf",
+                                    "label": "⬇️ Classe D",
+                                }
+                            if days_iso14:
+                                _pdf_14 = _generate_pdf_etiquettes(days_iso14, days_iso14)
+                                st.session_state[f"pdf_week_iso14_{week_monday.isoformat()}"] = {
+                                    "data":  _pdf_14,
+                                    "fname": f"etiquettes_{_sem_id}_iso14.pdf",
+                                    "label": "⬇️ Iso 14/07169",
+                                }
+                            if days_iso16:
+                                _pdf_16 = _generate_pdf_etiquettes(days_iso16, days_iso16)
+                                st.session_state[f"pdf_week_iso16_{week_monday.isoformat()}"] = {
+                                    "data":  _pdf_16,
+                                    "fname": f"etiquettes_{_sem_id}_iso16.pdf",
+                                    "label": "⬇️ Iso 16/0724",
+                                }
+                            st.rerun()
+                        else:
+                            st.warning("Aucun prélèvement planifié cette semaine.")
+                    except ImportError:
+                        st.error("❌ **ReportLab** non installé.")
+                    except Exception as _e:
+                        st.error(f"Erreur PDF semaine : {_e}")
 
-                _day_cols = st.columns(len(wd_week))
-                for di, wd in enumerate(wd_week):
-                    taches_j   = monthly_plan.get(wd, [])
-                    prevu_j    = len(taches_j)
-                    is_today_d = (wd == _today_dt)
-                    is_past_d  = (wd < _today_dt)
-                    is_other_m = (wd.month != _ch_month)
-                    realise_j  = sum(
-                        1 for p in st.session_state.prelevements
-                        if p.get("date") and not p.get("archived", False)
-                        and datetime.fromisoformat(p["date"]).date() == wd)
-                    j2_j = [
-                        s for s in st.session_state.schedules
-                        if s["when"] == "J2"
-                        and datetime.fromisoformat(s["due_date"]).date() == wd
-                    ]
-                    j7_j = [
-                        s for s in st.session_state.schedules
-                        if s["when"] == "J7"
-                        and datetime.fromisoformat(s["due_date"]).date() == wd
-                    ]
+        # ── Grille des jours ─────────────────────────────────────────────
+        _day_cols = st.columns(len(wd_week))
+        for di, wd in enumerate(wd_week):
+            taches_j   = monthly_plan.get(wd, [])
+            prevu_j    = len(taches_j)
+            is_today_d = (wd == _today_dt)
+            is_past_d  = (wd < _today_dt)
+            is_other_m = (wd.month != _ch_month)
+            realise_j  = sum(
+                1 for p in st.session_state.prelevements
+                if p.get("date") and not p.get("archived", False)
+                and datetime.fromisoformat(p["date"]).date() == wd)
+            j2_j = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J2"
+                and datetime.fromisoformat(s["due_date"]).date() == wd
+            ]
+            j7_j = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J7"
+                and datetime.fromisoformat(s["due_date"]).date() == wd
+            ]
 
-                    bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
-                    border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
-                    jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
-                    op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
+            bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
+            border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
+            jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
+            op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
 
-                    if realise_j >= prevu_j and prevu_j > 0:
-                        stat_bg = "#f0fdf4"; stat_col = "#166534"; stat_lbl = "✅"
-                    elif realise_j > 0:
-                        stat_bg = "#fffbeb"; stat_col = "#92400e"
-                        stat_lbl = f"⏳{realise_j}/{prevu_j}"
-                    elif prevu_j > 0:
-                        stat_bg = "#fef2f2"; stat_col = "#991b1b"
-                        stat_lbl = f"🔴{prevu_j}"
-                    else:
-                        stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
+            if realise_j >= prevu_j and prevu_j > 0:
+                stat_bg = "#f0fdf4"; stat_col = "#166534"; stat_lbl = "✅"
+            elif realise_j > 0:
+                stat_bg = "#fffbeb"; stat_col = "#92400e"
+                stat_lbl = f"⏳{realise_j}/{prevu_j}"
+            elif prevu_j > 0:
+                stat_bg = "#fef2f2"; stat_col = "#991b1b"
+                stat_lbl = f"🔴{prevu_j}"
+            else:
+                stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
 
-                    pts_html = ""
-                    for t in taches_j[:5]:
-                        _c  = rcp_pm.get(str(t["risk"]), "#94a3b8")
-                        _ic = "💨" if t["type"] == "Air" else "🧴"
-                        _lb = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
-                        pts_html += (
-                            f"<div style='border-left:2px solid {_c};padding:1px 5px;"
-                            f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
-                    if len(taches_j) > 5:
-                        pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
+            pts_html = ""
+            for t in taches_j[:5]:
+                _c  = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                _ic = "💨" if t["type"] == "Air" else "🧴"
+                _lb = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                pts_html += (
+                    f"<div style='border-left:2px solid {_c};padding:1px 5px;"
+                    f"font-size:.58rem;color:#0f172a;margin-bottom:1px'>{_ic} {_lb}</div>")
+            if len(taches_j) > 5:
+                pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
 
-                    lect_html = ""
-                    if j2_j:
-                        lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
-                    if j7_j:
-                        lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
+            lect_html = ""
+            if j2_j:
+                lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
+            if j7_j:
+                lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
 
-                    autre_mois_badge = (
-                        f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>"
-                        f"{wd.strftime('%b')}</div>"
-                        if is_other_m else "")
+            autre_mois_badge = (
+                f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>"
+                f"{wd.strftime('%b')}</div>"
+                if is_other_m else "")
 
-                    is_selected = (st.session_state.get("pm_selected_day") == wd)
-                    card_html = (
-                        f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
-                        f"border:{'2.5px solid #7c3aed' if is_selected else border_d};"
-                        f"border-radius:10px;padding:8px 6px;opacity:{op_d};min-height:100px'>"
-                        f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
-                        f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
-                        f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
-                        f"{wd.strftime('%d/%m')}</div>"
-                        f"{autre_mois_badge}"
-                        f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
-                        f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
-                        f"margin-bottom:4px'>{stat_lbl}</div>"
-                        f"{pts_html}{lect_html}</div>")
+            is_selected = (st.session_state.get("pm_selected_day") == wd)
+            card_html = (
+                f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
+                f"border:{'2.5px solid #7c3aed' if is_selected else border_d};"
+                f"border-radius:10px;padding:8px 6px;opacity:{op_d};min-height:100px'>"
+                f"<div style='font-size:.75rem;font-weight:800;color:{jour_col};text-align:center'>"
+                f"{JOURS_FR_LONG[wd.weekday()][:3]}</div>"
+                f"<div style='font-size:.7rem;color:#94a3b8;text-align:center;margin-bottom:2px'>"
+                f"{wd.strftime('%d/%m')}</div>"
+                f"{autre_mois_badge}"
+                f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
+                f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
+                f"margin-bottom:4px'>{stat_lbl}</div>"
+                f"{pts_html}{lect_html}</div>")
 
-                    _pdf_key   = f"pdf_quick_{wd.isoformat()}"
-                    _pdf_ready = st.session_state.get(_pdf_key)
-
-                    with _day_cols[di]:
-                        st.markdown(card_html, unsafe_allow_html=True)
+            with _day_cols[di]:
+                st.markdown(card_html, unsafe_allow_html=True)
+                is_selected = (st.session_state.get("pm_selected_day") == wd)
+                btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
+                if st.button(
+                    btn_lbl,
+                    key=f"pm_btn_{wd.isoformat()}",
+                    use_container_width=True
+                ):
+                    st.session_state["pm_selected_day"] = (
+                        None if is_selected else wd)
+                    st.rerun()
 
                 # ── Bouton Détail uniquement (impression remontée au niveau semaine) ──
                 btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
