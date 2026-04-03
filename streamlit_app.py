@@ -4436,80 +4436,82 @@ if active == "planning":
                 (p for p in st.session_state.points
                 if p.get("label") == lv), None)
 
-            qr_flowable = ""
+            # ── QR Code ────────────────────────────────────────────────────────
+            qr_flowable = None
             if _pt_data:
                 try:
                     from reportlab.platypus import Image as RLImage
                     _qr_bytes = _make_qr_bytes(_qr_payload(_pt_data))
                     _qr_buf   = BytesIO(_qr_bytes)
-                    _qr_img   = RLImage(_qr_buf, width=2.0*rl_cm, height=2.0*rl_cm)
-                    qr_flowable = _qr_img
+                    qr_flowable = RLImage(_qr_buf, width=2.0*rl_cm, height=2.0*rl_cm)
                 except Exception:
-                    qr_flowable = ""
+                    qr_flowable = None
 
+            # ── Bloc classe A (isolateur) ───────────────────────────────────────
             classea_rows = []
             if task.get("room_class", "").strip().upper() == "A":
-                # Priorité : isolateur passé dans la task (mode 2-étiquettes)
-                # sinon fallback sur _pt_data
                 iso_display = task.get("_isolateur")
                 if not iso_display and _pt_data:
                     iso_display = _pt_data.get("num_isolateur", "—") or "—"
                 if not iso_display:
                     iso_display = "—"
-                pst = ""
-                if _pt_data:
-                    pst = _pt_data.get("poste", "") or ""
+                pst = (_pt_data.get("poste", "") or "") if _pt_data else ""
                 label_iso = iso_display + (f" · {pst}" if pst else "")
                 classea_rows = [[Paragraph(label_iso, s_classea)]]
 
-            left_tbl = Table([
-                [Paragraph(lv, s_titre)],
-                [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
-                *classea_rows,
-                [Paragraph("📅 Date", s_lbl)],
-                [Paragraph(dv, s_date)],
-                [Paragraph("👤 Préleveur :", s_lbl)],
-                [Paragraph("", s_val)],
-                [Paragraph("URC — MicroSurveillance", s_logo)],
-            ], colWidths=[W_TEXT])
-            left_tbl.setStyle(TableStyle([
-                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
-                ("TOPPADDING",    (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                ("TOPPADDING",    (0, -1), (0, -1), 4),
-            ]))
-
-            # Construire inner de façon défensive
-        try:
-            if qr_flowable:
-                inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
-                inner.setStyle(TableStyle([
-                    ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            # ── Tableau texte gauche ────────────────────────────────────────────
+            try:
+                left_tbl = Table([
+                    [Paragraph(lv, s_titre)],
+                    [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
+                    *classea_rows,
+                    [Paragraph("📅 Date", s_lbl)],
+                    [Paragraph(dv, s_date)],
+                    [Paragraph("👤 Préleveur :", s_lbl)],
+                    [Paragraph("", s_val)],
+                    [Paragraph("URC — MicroSurveillance", s_logo)],
+                ], colWidths=[W_TEXT])
+                left_tbl.setStyle(TableStyle([
                     ("LEFTPADDING",   (0, 0), (-1, -1), 0),
                     ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
                     ("TOPPADDING",    (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                    ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                    ("TOPPADDING",    (0, -1), (0, -1), 4),
                 ]))
-            else:
-                inner = left_tbl
-        except Exception:
-            inner = left_tbl
+            except Exception:
+                left_tbl = Table([[Paragraph(lv, s_titre)]], colWidths=[W_TEXT])
 
-        outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
-        outer.setStyle(TableStyle([
-            ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
-            ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
-            ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
-            ("LEFTPADDING",    (0, 0), (0, 0), 11),
-            ("RIGHTPADDING",   (0, 0), (0, 0), 11),
-            ("TOPPADDING",     (0, 0), (0, 0), 11),
-            ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
-            ("VALIGN",         (0, 0), (0, 0), "TOP"),
-            ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
-        ]))
-        return outer
+            # ── Assemblage inner ────────────────────────────────────────────────
+            try:
+                if qr_flowable:
+                    inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
+                    inner.setStyle(TableStyle([
+                        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                        ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
+                    ]))
+                else:
+                    inner = left_tbl
+            except Exception:
+                inner = left_tbl
+
+            # ── Cellule externe (boîte étiquette) ──────────────────────────────
+            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+            outer.setStyle(TableStyle([
+                ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
+                ("LEFTPADDING",    (0, 0), (0, 0), 11),
+                ("RIGHTPADDING",   (0, 0), (0, 0), 11),
+                ("TOPPADDING",     (0, 0), (0, 0), 11),
+                ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
+                ("VALIGN",         (0, 0), (0, 0), "TOP"),
+                ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
+            ]))
+            return outer
 
         def _build_day_separator(day_date, n_tasks):
             """
