@@ -4358,9 +4358,10 @@ if active == "planning":
         from reportlab.lib.enums     import TA_RIGHT
 
         # ── Dimensions étiquettes ───────────────────────────────────────────
-        W_ETQ  = 5.2   * rl_cm   # ← était 5.25
-        H_ETQ  = 2.95  * rl_cm   # ← était 3.0
+        A4_W, A4_H = A4   # 595.28, 841.89 pt
         N_COLS = 4
+        W_ETQ  = A4_W / N_COLS        # largeur exacte = A4 / 4 colonnes
+        H_ETQ  = 2.95 * rl_cm
         GAP    = 0.0   * rl_cm
         MARGIN = 0.0   * rl_cm
 
