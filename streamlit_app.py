@@ -5165,7 +5165,7 @@ if active == "planning":
                 f"</div></div>",
                 unsafe_allow_html=True)
 
-            # ── Activités du jour ─────────────────────────────────────────
+         # ── Activités du jour ─────────────────────────────────────────
             if j2r_sel or j7r_sel or j0r_sel:
                 with st.expander("📖 Lectures & réalisés du jour", expanded=False):
                     act_cols = st.columns(3)
@@ -5216,97 +5216,96 @@ if active == "planning":
                                 unsafe_allow_html=True)
                         ci += 1
 
-        st.divider()
+            st.divider()
 
-        # ── Sélection & génération étiquettes (jour sélectionné) ────────────────
-        if taches_sel:
-            st.markdown(
-                "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
-                "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
-                "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
-                "🏷️ Générer les étiquettes pour ce jour</span></div>",
-                unsafe_allow_html=True)
+            # ── Sélection & génération étiquettes (jour sélectionné) ──────
+            if taches_sel:
+                st.markdown(
+                    "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
+                    "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
+                    "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
+                    "🏷️ Générer les étiquettes pour ce jour</span></div>",
+                    unsafe_allow_html=True)
 
-            col_sa, col_sn, _ = st.columns([1, 1, 4])
-            with col_sa:
-                if st.button("☑️ Tout sélectionner",
-                             key=f"etiq_all_{_sel.isoformat()}",
-                             use_container_width=True):
-                    for _t in taches_sel:
-                        st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
-                    st.rerun()
-            with col_sn:
-                if st.button("⬜ Tout désélectionner",
-                             key=f"etiq_none_{_sel.isoformat()}",
-                             use_container_width=True):
-                    for _t in taches_sel:
-                        st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
-                    st.rerun()
+                col_sa, col_sn, _ = st.columns([1, 1, 4])
+                with col_sa:
+                    if st.button("☑️ Tout sélectionner",
+                                 key=f"etiq_all_{_sel.isoformat()}",
+                                 use_container_width=True):
+                        for _t in taches_sel:
+                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
+                        st.rerun()
+                with col_sn:
+                    if st.button("⬜ Tout désélectionner",
+                                 key=f"etiq_none_{_sel.isoformat()}",
+                                 use_container_width=True):
+                        for _t in taches_sel:
+                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
+                        st.rerun()
 
-            _chk_cols = st.columns(3)
-            _selected_tasks = []
-            for _ti, _t in enumerate(taches_sel):
-                _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
-                if _chk_key not in st.session_state:
-                    st.session_state[_chk_key] = True
-                _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
-                _ic = "💨" if _t["type"] == "Air" else "🧴"
-                _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
-                with _chk_cols[_ti % 3]:
-                    st.markdown(
-                        f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
-                        f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
-                        f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
-                        f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
-                        f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
-                        f"<span style='font-size:.6rem;color:#64748b'>"
-                        f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
-                        unsafe_allow_html=True)
-                    if st.checkbox("Inclure", value=st.session_state[_chk_key],
-                                   key=_chk_key, label_visibility="collapsed"):
-                        _selected_tasks.append(_t)
+                _chk_cols = st.columns(3)
+                _selected_tasks = []
+                for _ti, _t in enumerate(taches_sel):
+                    _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
+                    if _chk_key not in st.session_state:
+                        st.session_state[_chk_key] = True
+                    _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
+                    _ic = "💨" if _t["type"] == "Air" else "🧴"
+                    _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
+                    with _chk_cols[_ti % 3]:
+                        st.markdown(
+                            f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
+                            f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
+                            f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
+                            f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
+                            f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
+                            f"<span style='font-size:.6rem;color:#64748b'>"
+                            f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
+                            unsafe_allow_html=True)
+                        if st.checkbox("Inclure", value=st.session_state[_chk_key],
+                                       key=_chk_key, label_visibility="collapsed"):
+                            _selected_tasks.append(_t)
 
-            _n_sel_etiq = len(_selected_tasks)
-            st.markdown(
-                f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
-                f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
-                unsafe_allow_html=True)
+                _n_sel_etiq = len(_selected_tasks)
+                st.markdown(
+                    f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
+                    f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
+                    unsafe_allow_html=True)
 
-            if _n_sel_etiq > 0:
-                if st.button(
-                    f"📄 Générer {_n_sel_etiq} "
-                    f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
-                    use_container_width=True,
-                    key=f"etiq_gen_{_sel.isoformat()}",
-                    type="primary"
-                ):
-                    try:
-                        _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
-                        _pdf_key_sel = f"pdf_quick_{_sel.isoformat()}"
-                        st.session_state[_pdf_key_sel] = {
-                            "data":  _pdf_bytes,
-                            "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
-                        }
-                        fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
-                        st.download_button(
-                            label=f"⬇️ Télécharger {fname_etiq}",
-                            data=_pdf_bytes,
-                            file_name=fname_etiq,
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key=f"etiq_dl_{_sel.isoformat()}")
-                        st.success(
-                            f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
-                            f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
-                    except ImportError:
-                        st.error("❌ **ReportLab** non installé.\n\n"
-                                 "Ajoutez `reportlab` dans **requirements.txt**.")
-                    except Exception as _e:
-                        st.error(f"Erreur génération PDF : {_e}")
-                        import traceback
-                        st.code(traceback.format_exc())
-        else:
-            st.info("Aucun prélèvement planifié ce jour.")
+                if _n_sel_etiq > 0:
+                    if st.button(
+                        f"📄 Générer {_n_sel_etiq} "
+                        f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
+                        use_container_width=True,
+                        key=f"etiq_gen_{_sel.isoformat()}",
+                        type="primary"
+                    ):
+                        try:
+                            _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
+                            st.session_state[f"pdf_quick_{_sel.isoformat()}"] = {
+                                "data":  _pdf_bytes,
+                                "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
+                            }
+                            fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
+                            st.download_button(
+                                label=f"⬇️ Télécharger {fname_etiq}",
+                                data=_pdf_bytes,
+                                file_name=fname_etiq,
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key=f"etiq_dl_{_sel.isoformat()}")
+                            st.success(
+                                f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
+                                f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
+                        except ImportError:
+                            st.error("❌ **ReportLab** non installé.\n\n"
+                                     "Ajoutez `reportlab` dans **requirements.txt**.")
+                        except Exception as _e:
+                            st.error(f"Erreur génération PDF : {_e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+            else:
+                st.info("Aucun prélèvement planifié ce jour.")
 
 
 
