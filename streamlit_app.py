@@ -3917,16 +3917,20 @@ if active == "planning":
                     alloc       = int(freq_val)
                     max_per_day = 1
     
-                # ── Plafond classe (si activé) ────────────────────────────────
-                if max_cls > 0:
+                
+                # ── Plafond classe (si activé) — Surface uniquement ───────────
+                is_air = (pt.get('type') or '').strip().lower() in ('air', 'air ambiant')
+                if max_cls > 0 and not is_air:
                     pts_cls   = [p for p in st.session_state.points
-                                if (p.get('room_class') or '').strip() == rc]
+                                if (p.get('room_class') or '').strip() == rc
+                                and (p.get('type') or '').strip().lower()
+                                    not in ('air', 'air ambiant')]
                     freqs_cls = [max(0.01, _freq_en_semaine(p, nb_wd)) for p in pts_cls]
                     tot_cls   = sum(freqs_cls) or 1
                     my_f      = max(0.01, _freq_en_semaine(pt, nb_wd))
                     alloc_cls = round(my_f / tot_cls * max_cls)
                     alloc     = min(alloc, alloc_cls)
-                # class_max = 0 → pas de plafond, fréquence intrinsèque conservée
+                # Air → fréquence intrinsèque conservée, pas de plafond classe
     
                 tasks.append({
                     'label':       pt['label'],
@@ -4051,16 +4055,22 @@ if active == "planning":
         _raw_cc = _supa_get('class_constraints')
         if _raw_cc:
             try:
-                for _cls_k, _cls_v in json.loads(_raw_cc).items():
+                _parsed_cc = json.loads(_raw_cc)
+                st.session_state["_class_constraints_raw"] = _parsed_cc
+                for _cls_k, _cls_v in _parsed_cc.items():
                     st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
             except Exception:
-                pass
+                st.session_state["_class_constraints_raw"] = {}
+        else:
+            st.session_state["_class_constraints_raw"] = {}
         st.session_state["class_constraints_loaded"] = True
 
     for _cls in all_classes:
         _key = f"class_max_{_cls}"
         if _key not in st.session_state:
-            st.session_state[_key] = 0
+            # Chercher dans les contraintes chargées depuis Supabase
+            _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
+            st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
     class_max_dict = {}
 
     if all_classes:
@@ -4090,12 +4100,18 @@ if active == "planning":
                 class_max_dict[cls] = new_max
 
                 if new_max > 0:
-                    freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls]
+                    pts_cls_surf = [pt for pt in pts_cls
+                                    if (pt.get('type') or '').strip().lower()
+                                    not in ('air', 'air ambiant')]
+                    pts_cls_air  = [pt for pt in pts_cls
+                                    if (pt.get('type') or '').strip().lower()
+                                    in ('air', 'air ambiant')]
+                    freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls_surf]
                     tot_p    = sum(freqs_p) or 1
                     allocs   = []
                     assigned = 0
-                    for ii, (pt, f) in enumerate(zip(pts_cls, freqs_p)):
-                        if ii < len(pts_cls) - 1:
+                    for ii, (pt, f) in enumerate(zip(pts_cls_surf, freqs_p)):
+                        if ii < len(pts_cls_surf) - 1:
                             a = round(f / tot_p * new_max)
                         else:
                             a = max(0, new_max - assigned)
@@ -4104,7 +4120,13 @@ if active == "planning":
                     preview = "".join(
                         f"<div style='font-size:.6rem;color:#1e40af'>"
                         f"{pt['label'][:20]}: <b>{a}×/sem</b></div>"
-                        for pt, a in zip(pts_cls, allocs))
+                        for pt, a in zip(pts_cls_surf, allocs))
+                    # Points Air affichés séparément avec leur fréquence propre
+                    for pt_air in pts_cls_air:
+                        f_air = _freq_en_semaine(pt_air, 5)
+                        preview += (
+                            f"<div style='font-size:.6rem;color:#0369a1'>"
+                            f"💨 {pt_air['label'][:20]}: <b>{f_air:.0f}×/sem (Air)</b></div>")
                     st.markdown(
                         f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
                         f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
@@ -4231,7 +4253,7 @@ if active == "planning":
 
     st.divider()
 
-    st.divider()
+    
  
     # ── Avancement au cours de la semaine (expander) ──────────────────
     _av_prevu_total   = 0
