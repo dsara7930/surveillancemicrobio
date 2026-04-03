@@ -4949,29 +4949,7 @@ if active == "planning":
             with _day_cols[di]:
                 st.markdown(card_html, unsafe_allow_html=True)
 
-                # ── Boutons skip par tâche ────────────────────────────────
-                # La clé inclut di (index colonne) pour garantir l'unicité
-                if taches_j and not is_other_m:
-                    for ti, _t in enumerate(taches_j):
-                        _skip_key = f"skip_{di}_{wd.isoformat()}_{ti}_{_t['label'][:20]}"
-                        _already  = _t["label"] in st.session_state["planning_skips"].get(wd.isoformat(), [])
-                        _btn_lbl  = "↩️" if _already else "✗"
-                        _btn_help = ("Annuler le report" if _already else f"Sauter et reporter : {_t['label'][:20]}")
-
-                        if st.button(_btn_lbl, key=_skip_key, help=_btn_help, use_container_width=True):
-                            _skips = st.session_state["planning_skips"]
-                            _dk    = wd.isoformat()
-                            if _already:
-                                _skips[_dk] = [l for l in _skips.get(_dk, []) if l != _t["label"]]
-                                if not _skips[_dk]:
-                                    _skips.pop(_dk, None)
-                            else:
-                                _skips.setdefault(_dk, [])
-                                if _t["label"] not in _skips[_dk]:
-                                    _skips[_dk].append(_t["label"])
-                            st.session_state["planning_skips"] = _skips
-                            _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
-                            st.rerun()
+               
 
                # ── Bouton détail + popover non faits ────────────────────
                 btn_lbl = "✖ Fermer" if is_selected else "🔍 Détail"
