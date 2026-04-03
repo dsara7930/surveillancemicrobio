@@ -5158,12 +5158,11 @@ if active == "planning":
             ["Semaine en cours", "Semaine choisie", "Mois en cours", "4 semaines à venir", "Tout le planning"],
             key="exp_scope")
 
-        # ── Sélecteur de semaine si "Semaine choisie" ─────────────────────
         if exp_scope == "Semaine choisie":
-            _today_ref     = _today_dt
-            _cur_monday    = _today_ref - timedelta(days=_today_ref.weekday())
-            _week_opts     = [_cur_monday + timedelta(weeks=i) for i in range(-4, 13)]
-            _week_labels   = []
+            _today_ref   = _today_dt
+            _cur_monday  = _today_ref - timedelta(days=_today_ref.weekday())
+            _week_opts   = [_cur_monday + timedelta(weeks=i) for i in range(-4, 13)]
+            _week_labels = []
             for _wm in _week_opts:
                 _we = _wm + timedelta(days=4)
                 _marker = " ← semaine en cours" if _wm == _cur_monday else ""
@@ -5194,10 +5193,9 @@ if active == "planning":
             wb = openpyxl.Workbook()
 
             # ── Palette couleurs ──────────────────────────────────────────
-            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L   = "DBEAFE"
-            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L   = "F1F5F9"
-            C_GREY_HDR = "334155"; C_GREEN  = "16A34A"; C_RED      = "DC2626"
-            C_AMBER    = "D97706"
+            C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L = "DBEAFE"
+            C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L  = "F1F5F9"
+            C_GREY_HDR = "334155"; C_GREEN  = "16A34A"
 
             thin   = Side(style="thin",   color="CBD5E1")
             medium = Side(style="medium", color="94A3B8")
@@ -5237,11 +5235,12 @@ if active == "planning":
                     day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
                 exp_dates = [
                     first + timedelta(days=i)
-                    for i in range((last - first).days + 1)
-                ]
+                    for i in range((last - first).days + 1)]
+
             elif exp_scope == "4 semaines à venir":
-                ws_e = exp_today - timedelta(days=exp_today.weekday())
+                ws_e      = exp_today - timedelta(days=exp_today.weekday())
                 exp_dates = [ws_e + timedelta(days=i) for i in range(28)]
+
             else:
                 all_d = []
                 for p in st.session_state.prelevements:
@@ -5264,32 +5263,28 @@ if active == "planning":
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
             # ══════════════════════════════════════════════════════════════
-            # FEUILLE 1 — VUE MATRICIELLE : Points × Jours de semaine
-            # Lignes = points de prélèvement
-            # Colonnes = jours de la semaine (Lun→Ven) avec date
-            # Cellule = "X" si prévu ce jour-là, fond coloré si réalisé
+            # FEUILLE 1 — VUE MATRICIELLE
             # ══════════════════════════════════════════════════════════════
             ws_matrix = wb.active
             ws_matrix.title = "Planning Semaine"
             ws_matrix.sheet_view.showGridLines = False
 
-            # Regrouper les dates par semaine (lundi)
             from collections import OrderedDict
             weeks_map = OrderedDict()
             for d in exp_dates:
-                ws_key = d - timedelta(days=d.weekday())  # lundi de la semaine
+                ws_key = d - timedelta(days=d.weekday())
                 if ws_key not in weeks_map:
                     weeks_map[ws_key] = []
                 weeks_map[ws_key].append(d)
 
-            JOURS_XL = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-            pts_all = st.session_state.points
-
-            n_weeks = len(weeks_map)
-            FIXED_COLS = 3  # Label | Classe | Type
+            JOURS_XL     = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+            pts_all      = st.session_state.points
+            n_weeks      = len(weeks_map)
+            FIXED_COLS   = 3
             DAYS_PER_WEEK = 5
-            total_cols = FIXED_COLS + DAYS_PER_WEEK * n_weeks
+            total_cols   = FIXED_COLS + DAYS_PER_WEEK * n_weeks
 
+            # ── Ligne 1 : titre ───────────────────────────────────────────
             ws_matrix.merge_cells(start_row=1, start_column=1,
                                   end_row=1, end_column=total_cols)
             ws_matrix.cell(1, 1).value     = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
@@ -5298,9 +5293,10 @@ if active == "planning":
             ws_matrix.cell(1, 1).alignment = al_c()
             ws_matrix.row_dimensions[1].height = 28
 
+            # ── Ligne 2 : légende ─────────────────────────────────────────
             ws_matrix.merge_cells(start_row=2, start_column=1,
                                   end_row=2, end_column=total_cols)
-            ws_matrix.cell(2, 1).value     = (
+            ws_matrix.cell(2, 1).value = (
                 f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
                 f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'} — "
                 f"X = prélèvement prévu · X 1/X 2 = poste spécifique · ✓ = réalisé")
@@ -5309,7 +5305,7 @@ if active == "planning":
             ws_matrix.cell(2, 1).alignment = al_c()
             ws_matrix.row_dimensions[2].height = 16
 
-            # ── Ligne 3 : en-têtes semaines (fusionné sur 5 jours) ────────
+            # ── Ligne 3 : en-têtes semaines ───────────────────────────────
             ws_matrix.row_dimensions[3].height = 20
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 col_start = FIXED_COLS + 1 + wi * DAYS_PER_WEEK
@@ -5337,18 +5333,15 @@ if active == "planning":
                 c.border    = border_all()
                 ws_matrix.column_dimensions[get_column_letter(ci)].width = w
 
-            # ── Ligne 4 : en-têtes jours (Lun, Mar… + date) ──────────────
+            # ── Ligne 4 : en-têtes jours ──────────────────────────────────
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
-                day_date_map = {}
-                for d in ws_days:
-                    day_date_map[d.weekday()] = d  # weekday: 0=Lun … 4=Ven
-
+                day_date_map = {d.weekday(): d for d in ws_days}
                 for di in range(DAYS_PER_WEEK):
-                    col = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                    col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                     d_for_col = day_date_map.get(di)
                     if d_for_col:
-                        label = f"{JOURS_XL[di][:3]}\n{d_for_col.strftime('%d/%m')}"
                         is_today_col = (d_for_col == exp_today)
+                        label  = f"{JOURS_XL[di][:3]}\n{d_for_col.strftime('%d/%m')}"
                         bg_col = "DBEAFE" if is_today_col else "EFF6FF"
                         fc_col = "1E40AF"
                     else:
@@ -5365,7 +5358,7 @@ if active == "planning":
 
             ws_matrix.freeze_panes = "D5"
 
-            # ── Lignes données : un point par ligne ───────────────────────
+            # ── Couleurs par niveau de risque ─────────────────────────────
             RISK_BG = {
                 "1": "DCFCE7", "2": "D9F99D",
                 "3": "FEF9C3", "4": "FFEDD5", "5": "FEE2E2",
@@ -5375,6 +5368,7 @@ if active == "planning":
                 "3": "713F12", "4": "7C2D12", "5": "7F1D1D",
             }
 
+            # ── Lignes données ────────────────────────────────────────────
             data_row = 5
             for pt_idx, pt in enumerate(pts_all):
                 rc         = (pt.get('room_class') or '').strip()
@@ -5411,97 +5405,88 @@ if active == "planning":
                 c.alignment = al_c()
                 c.border    = border_all()
 
-                # Colonnes jours : X (+ numéro poste si classe A spécifique) ou ✓ si réalisé
+                # ── Fréquence journalière du point (calculée une seule fois) ──
+                _freq_raw_xl  = pt.get('frequency')
+                _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
+                try:
+                    _freq_val_xl = float(_freq_raw_xl) if _freq_raw_xl else 0.0
+                except (TypeError, ValueError):
+                    _freq_val_xl = 0.0
+                _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
+
+                # compteur de poste — réinitialisé par point
+                poste_counter = 0
+
+                # ── Colonnes jours ────────────────────────────────────────
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
+
                     for di in range(DAYS_PER_WEEK):
-                        # ── Valeur cellule ────────────────────────────────
-                        _freq_raw_xl  = pt.get('frequency')
-                        _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
-                        try:
-                            _freq_val_xl = float(_freq_raw_xl) if _freq_raw_xl else 0.0
-                        except (TypeError, ValueError):
-                            _freq_val_xl = 0.0
-                        _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
+                        col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
+                        d_for_col = day_date_map.get(di)
+                        c         = ws_matrix.cell(data_row, col)
 
-                        if is_done:
-                            if _is_multi_day:
-                                n_passages = max(
-                                    sum(1 for t in monthly_plan.get(d_for_col, [])
-                                        if t.get('label') == pt['label']),
-                                    int(_freq_val_xl))
-                                cell_val = "  ".join(f"✓ {i+1}" for i in range(n_passages))
-                            else:
-                                cell_val = "✓"
-                            c.value     = cell_val
-                            c.font      = Font(name="Arial", size=10, bold=True, color=C_GREEN)
-                            c.fill      = fill("DCFCE7")
+                        # Colonne sans date (week-end absent dans la sélection)
+                        if not d_for_col:
+                            c.value     = ""
+                            c.fill      = fill("F1F5F9")
+                            c.alignment = al_c()
+                            c.border    = border_all()
+                            continue
 
-                        elif is_planned:
-                            if _is_multi_day:
-                                n_passages = max(
-                                    sum(1 for t in monthly_plan.get(d_for_col, [])
-                                        if t.get('label') == pt['label']),
-                                    int(_freq_val_xl))
-                                cell_val = "  ".join(f"X {i+1}" for i in range(n_passages))
-                            else:
-                                cell_val = "X"
-                            c.value     = cell_val
-                            c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
-                            c.fill      = fill("DBEAFE")
-
-                        else:
-                            c.value = ""
-                            c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
-
-                        c.alignment = al_c()
-                        c.border    = border_all()
-                        continue
-
-                        # Vérifier si ce point est planifié ce jour
+                        # ── 1. Calculer is_planned et is_done ─────────────
                         tasks_day  = monthly_plan.get(d_for_col, [])
                         is_planned = any(t.get("label") == pt["label"] for t in tasks_day)
-
-                        # Vérifier si réalisé
-                        is_done = any(
-                            p.get("label") == pt["label"] and not p.get("archived", False)
+                        is_done    = any(
+                            p.get("label") == pt["label"]
+                            and not p.get("archived", False)
                             and p.get("date")
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
                             for p in st.session_state.prelevements)
 
-                        # APRÈS — numérotation pour TOUS les points dont freq > 1/jour
-                        # Calcul de la fréquence journalière du point
-                        _freq_raw_xl  = pt.get('frequency')
-                        _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
-                        try:
-                            _freq_val_xl = float(_freq_raw_xl) if _freq_raw_xl else 0.0
-                        except (TypeError, ValueError):
-                            _freq_val_xl = 0.0
-                        _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
+                        # ── 2. Remplir la cellule ──────────────────────────
+                        if is_done or is_planned:
 
-                        if (is_planned or is_done) and is_class_a and poste_type == "specifique":
-                            poste_num    = (poste_counter % 2) + 1
-                            poste_suffix = f" {poste_num}"
-                            poste_counter += 1
-                        elif (is_planned or is_done) and _is_multi_day:
-                            # Numérotation des passages dans la journée : X 1, X 2, X 3…
-                            poste_suffix = f" {poste_counter + 1}"
-                            poste_counter += 1
-                        else:
-                            poste_suffix = ""
-                            if is_planned or is_done:
+                            if _is_multi_day:
+                                # Passages multiples : X 1  X 2 … ou ✓ 1  ✓ 2 …
+                                n_passages = max(
+                                    sum(1 for t in tasks_day if t.get('label') == pt['label']),
+                                    int(_freq_val_xl))
+                                if is_done:
+                                    c.value = "  ".join(f"✓ {i+1}" for i in range(n_passages))
+                                    c.font  = Font(name="Arial", size=10, bold=True, color=C_GREEN)
+                                    c.fill  = fill("DCFCE7")
+                                else:
+                                    c.value = "  ".join(f"X {i+1}" for i in range(n_passages))
+                                    c.font  = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
+                                    c.fill  = fill("DBEAFE")
+
+                            elif is_class_a and poste_type == "specifique":
+                                # Classe A poste spécifique → numéroté 1 / 2
+                                poste_num     = (poste_counter % 2) + 1
                                 poste_counter += 1
-                        
+                                if is_done:
+                                    c.value = f"✓ {poste_num}"
+                                    c.font  = Font(name="Arial", size=10, bold=True, color=C_GREEN)
+                                    c.fill  = fill("DCFCE7")
+                                else:
+                                    c.value = f"X {poste_num}"
+                                    c.font  = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
+                                    c.fill  = fill("DBEAFE")
 
-                        if is_done:
-                            c.value     = f"✓{poste_suffix}"
-                            c.font      = Font(name="Arial", size=11, bold=True, color=C_GREEN)
-                            c.fill      = fill("DCFCE7")
-                        elif is_planned:
-                            c.value     = f"X{poste_suffix}"
-                            c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
-                            c.fill      = fill("DBEAFE")
+                            else:
+                                # Cas standard : simple X ou ✓
+                                if is_done:
+                                    c.value = "✓"
+                                    c.font  = Font(name="Arial", size=11, bold=True, color=C_GREEN)
+                                    c.fill  = fill("DCFCE7")
+                                else:
+                                    c.value = "X"
+                                    c.font  = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
+                                    c.fill  = fill("DBEAFE")
+
                         else:
+                            # Rien de planifié ce jour pour ce point
                             c.value = ""
                             c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
 
@@ -5512,20 +5497,21 @@ if active == "planning":
 
             # ── Ligne totaux par jour ─────────────────────────────────────
             ws_matrix.row_dimensions[data_row].height = 20
+            ws_matrix.merge_cells(start_row=data_row, start_column=1,
+                                  end_row=data_row, end_column=FIXED_COLS)
             c = ws_matrix.cell(data_row, 1)
             c.value     = "TOTAL prélèvements planifiés"
             c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
             c.fill      = fill(C_GREY_HDR)
             c.alignment = al_c()
             c.border    = border_all()
-            ws_matrix.merge_cells(start_row=data_row, start_column=1,
-                                  end_row=data_row, end_column=FIXED_COLS)
+
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 day_date_map = {d.weekday(): d for d in ws_days}
                 for di in range(DAYS_PER_WEEK):
                     col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                     d_for_col = day_date_map.get(di)
-                    c = ws_matrix.cell(data_row, col)
+                    c         = ws_matrix.cell(data_row, col)
                     if d_for_col:
                         total_day = len(monthly_plan.get(d_for_col, []))
                         c.value   = total_day if total_day > 0 else "—"
@@ -5538,6 +5524,7 @@ if active == "planning":
                     c.alignment = al_c()
                     c.border    = border_all()
 
+            # ── Export ────────────────────────────────────────────────────
             buf = _io.BytesIO()
             wb.save(buf)
             buf.seek(0)
@@ -5549,8 +5536,7 @@ if active == "planning":
                 use_container_width=True)
             st.success(
                 f"✅ Fichier **{fname}** généré avec succès — "
-                f"2 onglets : **Planning Semaine** (matriciel) ·")
-            
+                f"Onglet : **Planning Semaine** (matriciel)")
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
