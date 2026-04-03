@@ -4973,11 +4973,89 @@ if active == "planning":
                             _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
                             st.rerun()
 
-                # ── Bouton détail du jour ─────────────────────────────────
+               # ── Bouton détail + popover non faits ────────────────────
                 btn_lbl = "✖ Fermer" if is_selected else "🔍 Détail"
-                if st.button(btn_lbl, key=f"pm_btn_{di}_{wd.isoformat()}", use_container_width=True):
-                    st.session_state["pm_selected_day"] = None if is_selected else wd
-                    st.rerun()
+
+                # Tâches non faites ce jour (ni réalisées, ni déjà skippées)
+                _labels_realises = [
+                    p.get("label") for p in st.session_state.prelevements
+                    if p.get("date")
+                    and not p.get("archived", False)
+                    and datetime.fromisoformat(p["date"]).date() == wd
+                ]
+                _non_faits = [
+                    t for t in taches_j
+                    if t["label"] not in _labels_realises
+                    and t["label"] not in st.session_state["planning_skips"].get(wd.isoformat(), [])
+                ]
+
+                col_btn, col_skip = st.columns([1, 1])
+                with col_btn:
+                    if st.button(btn_lbl, key=f"pm_btn_{di}_{wd.isoformat()}",
+                                 use_container_width=True):
+                        st.session_state["pm_selected_day"] = None if is_selected else wd
+                        st.rerun()
+
+                with col_skip:
+                    if not is_other_m and taches_j:
+                        if not _non_faits:
+                            st.button("✅ Tout fait",
+                                      key=f"skip_done_{di}_{wd.isoformat()}",
+                                      use_container_width=True,
+                                      disabled=True)
+                        else:
+                            with st.popover("⬜ Non faits",
+                                            use_container_width=True):
+                                st.markdown(
+                                    f"<div style='font-size:.78rem;font-weight:800;"
+                                    f"color:#0f172a;margin-bottom:8px'>"
+                                    f"🔄 Reporter — {wd.strftime('%d/%m')}"
+                                    f"<span style='font-weight:400;color:#64748b'>"
+                                    f" ({len(_non_faits)} non fait{'s' if len(_non_faits)>1 else ''})"
+                                    f"</span></div>",
+                                    unsafe_allow_html=True)
+
+                                # Bouton tout reporter
+                                if st.button("☑️ Tout reporter",
+                                             key=f"skip_all_pop_{di}_{wd.isoformat()}",
+                                             use_container_width=True,
+                                             type="primary"):
+                                    _skips = st.session_state["planning_skips"]
+                                    _dk = wd.isoformat()
+                                    _skips[_dk] = list(set(
+                                        _skips.get(_dk, []) + [t["label"] for t in _non_faits]
+                                    ))
+                                    st.session_state["planning_skips"] = _skips
+                                    _supa_upsert('planning_skips',
+                                                 json.dumps(_skips, ensure_ascii=False))
+                                    st.rerun()
+
+                                st.divider()
+
+                                # Checkboxes individuelles
+                                for _nf in _non_faits:
+                                    _ic = "💨" if _nf["type"] == "Air" else "🧴"
+                                    _rc = rcp_pm.get(str(_nf["risk"]), "#94a3b8")
+                                    _pop_key = f"pop_skip_{di}_{wd.isoformat()}_{_nf['label'][:20]}"
+                                    st.markdown(
+                                        f"<div style='border-left:3px solid {_rc};"
+                                        f"padding:2px 6px;margin-bottom:2px;"
+                                        f"font-size:.72rem;color:#0f172a'>"
+                                        f"{_ic} {_nf['label'][:26]}</div>",
+                                        unsafe_allow_html=True)
+                                    if st.checkbox("Reporter",
+                                                   key=_pop_key,
+                                                   value=False,
+                                                   label_visibility="collapsed"):
+                                        _skips = st.session_state["planning_skips"]
+                                        _dk = wd.isoformat()
+                                        if _nf["label"] not in _skips.get(_dk, []):
+                                            _skips.setdefault(_dk, [])
+                                            _skips[_dk].append(_nf["label"])
+                                            st.session_state["planning_skips"] = _skips
+                                            _supa_upsert('planning_skips',
+                                                         json.dumps(_skips, ensure_ascii=False))
+                                            st.rerun()
 
         # ── Panel bas de page : détail du jour sélectionné ───────────────
         _sel = st.session_state.get("pm_selected_day")
@@ -5129,7 +5207,7 @@ if active == "planning":
                     st.session_state["planning_skips"] = _skips
                     _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
                     st.rerun()
-
+                    
             # ── Panel fixe bas de page ────────────────────────────────────
             st.markdown(
                 "<div style='position:fixed;bottom:0;left:0;right:0;z-index:9999;"
