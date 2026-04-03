@@ -4129,8 +4129,8 @@ if active == "planning":
         sv_col, _ = st.columns([1, 3])
         with sv_col:
             if st.button("💾 Sauvegarder les contraintes",
-                         key="save_class_constraints",
-                         use_container_width=True, type="primary"):
+                        key="save_class_constraints",
+                        use_container_width=True, type="primary"):
                 payload = {
                     cls: int(st.session_state.get(f"class_max_{cls}", 0))
                     for cls in all_classes
@@ -4140,6 +4140,17 @@ if active == "planning":
                     st.success("✅ Contraintes sauvegardées dans Supabase !")
                 else:
                     st.warning("⚠️ Supabase non connecté — contraintes non sauvegardées.")
+
+                # ── Réinitialiser tous les PDF en cache ──────────────────────────
+                keys_to_delete = [
+                    k for k in st.session_state
+                    if k.startswith("pdf_week_D_")
+                    or k.startswith("pdf_week_iso14_")
+                    or k.startswith("pdf_week_iso16_")
+                    or k.startswith("pdf_quick_")
+                ]
+                for k in keys_to_delete:
+                    del st.session_state[k]
     st.divider()
 
     # ── Sélecteur semaine ─────────────────────────────────────────────────
@@ -4681,7 +4692,7 @@ if active == "planning":
         _pdf_week_key   = f"pdf_week_{week_monday.isoformat()}"
         _pdf_week_ready = st.session_state.get(_pdf_week_key)
 
-        hdr_c1, hdr_c2, hdr_c3 = st.columns([4, 2, 1])
+        hdr_c1, hdr_c2 = st.columns([4, 2, 1])
         with hdr_c1:
             st.markdown(
                 f"<div style='background:#1e293b;border-radius:10px;padding:8px 16px;"
@@ -4694,56 +4705,107 @@ if active == "planning":
                 f"border-radius:8px;padding:3px 12px;font-size:.8rem;font-weight:700'>"
                 f"📋 {_total_sem} prélèv. planifiés</span>"
                 f"</div>",
-                unsafe_allow_html=True)
+                    unsafe_allow_html=True)
         with hdr_c2:
             st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
-            # Bouton impression semaine entière
-            if _pdf_week_ready:
-                st.download_button(
-                    label="⬇️ Étiquettes semaine",
-                    data=_pdf_week_ready["data"],
-                    file_name=_pdf_week_ready["fname"],
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key=f"wk_dl_{week_monday.isoformat()}",
-                    help="Télécharger les étiquettes de toute la semaine")
-            else:
-                if st.button(
-                    "🖨️ Imprimer la semaine",
-                    key=f"wk_print_{week_monday.isoformat()}",
-                    use_container_width=True,
-                    disabled=(_total_sem == 0),
-                    help="Générer les étiquettes de toute la semaine (regroupées par jour)"
-                ):
-                    try:
-                        # Construire la liste [(date, [tasks])] pour chaque jour ouvré
-                        week_days_data = [
-                            (wd, monthly_plan.get(wd, []))
-                            for wd in wd_week
-                            if monthly_plan.get(wd)
+            
+            _pdf_D_ready   = st.session_state.get(f"pdf_week_D_{week_monday.isoformat()}")
+            _pdf_14_ready  = st.session_state.get(f"pdf_week_iso14_{week_monday.isoformat()}")
+            _pdf_16_ready  = st.session_state.get(f"pdf_week_iso16_{week_monday.isoformat()}")
+            _any_pdf_ready = _pdf_D_ready or _pdf_14_ready or _pdf_16_ready
+
+    if _any_pdf_ready:
+        if _pdf_D_ready:
+            st.download_button(
+                label=_pdf_D_ready["label"],
+                data=_pdf_D_ready["data"],
+                file_name=_pdf_D_ready["fname"],
+                mime="application/pdf",
+                use_container_width=True,
+                key=f"wk_dl_D_{week_monday.isoformat()}")
+        if _pdf_14_ready:
+            st.download_button(
+                label=_pdf_14_ready["label"],
+                data=_pdf_14_ready["data"],
+                file_name=_pdf_14_ready["fname"],
+                mime="application/pdf",
+                use_container_width=True,
+                key=f"wk_dl_iso14_{week_monday.isoformat()}")
+        if _pdf_16_ready:
+            st.download_button(
+                label=_pdf_16_ready["label"],
+                data=_pdf_16_ready["data"],
+                file_name=_pdf_16_ready["fname"],
+                mime="application/pdf",
+                use_container_width=True,
+                key=f"wk_dl_iso16_{week_monday.isoformat()}")
+        else:
+            if st.button(
+                "🖨️ Imprimer la semaine",
+                key=f"wk_print_{week_monday.isoformat()}",
+                use_container_width=True,
+                disabled=(_total_sem == 0),
+                help="Générer les étiquettes de toute la semaine (3 PDF : Classe D, Iso 14, Iso 16)"
+            ):
+                try:
+                    week_days_data = [
+                        (wd, monthly_plan.get(wd, []))
+                        for wd in wd_week
+                        if monthly_plan.get(wd)
+                    ]
+                    if week_days_data:
+                        days_D = [
+                            (wd, [t for t in tasks if (t.get("room_class") or "").strip().upper() == "D"])
+                            for wd, tasks in week_days_data
                         ]
-                        if week_days_data:
-                            _pdf_bytes = _generate_pdf_etiquettes(week_days_data, week_days_data)
-                            _fname_wk  = f"etiquettes_sem{week_monday.isocalendar()[1]}_{week_monday.strftime('%Y%m%d')}.pdf"
-                            st.session_state[_pdf_week_key] = {
-                                "data":  _pdf_bytes,
-                                "fname": _fname_wk,
+                        days_D = [(wd, t) for wd, t in days_D if t]
+
+                        days_iso14 = [
+                            (wd, [dict(t, _isolateur="Iso 14/07169")
+                                for t in tasks
+                                if (t.get("room_class") or "").strip().upper() == "A"])
+                            for wd, tasks in week_days_data
+                        ]
+                        days_iso14 = [(wd, t) for wd, t in days_iso14 if t]
+
+                        days_iso16 = [
+                            (wd, [dict(t, _isolateur="Iso 16/0724")
+                                for t in tasks
+                                if (t.get("room_class") or "").strip().upper() == "A"])
+                            for wd, tasks in week_days_data
+                        ]
+                        days_iso16 = [(wd, t) for wd, t in days_iso16 if t]
+
+                        _sem_id = f"sem{week_monday.isocalendar()[1]}_{week_monday.strftime('%Y%m%d')}"
+
+                        if days_D:
+                            _pdf_D = _generate_pdf_etiquettes(days_D, days_D)
+                            st.session_state[f"pdf_week_D_{week_monday.isoformat()}"] = {
+                                "data":  _pdf_D,
+                                "fname": f"etiquettes_{_sem_id}_classeD.pdf",
+                                "label": "⬇️ Classe D",
                             }
-                            st.rerun()
-                        else:
-                            st.warning("Aucun prélèvement planifié cette semaine.")
-                    except ImportError:
-                        st.error("❌ **ReportLab** non installé. Ajoutez `reportlab` dans requirements.txt.")
-                    except Exception as _e:
-                        st.error(f"Erreur PDF semaine : {_e}")
-        with hdr_c3:
-            # Bouton réinitialiser le PDF semaine
-            if _pdf_week_ready:
-                st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
-                if st.button("🔄", key=f"wk_reset_{week_monday.isoformat()}",
-                             use_container_width=True, help="Regénérer le PDF"):
-                    del st.session_state[_pdf_week_key]
-                    st.rerun()
+                        if days_iso14:
+                            _pdf_14 = _generate_pdf_etiquettes(days_iso14, days_iso14)
+                            st.session_state[f"pdf_week_iso14_{week_monday.isoformat()}"] = {
+                                "data":  _pdf_14,
+                                "fname": f"etiquettes_{_sem_id}_iso14.pdf",
+                                "label": "⬇️ Iso 14/07169",
+                            }
+                        if days_iso16:
+                            _pdf_16 = _generate_pdf_etiquettes(days_iso16, days_iso16)
+                            st.session_state[f"pdf_week_iso16_{week_monday.isoformat()}"] = {
+                                "data":  _pdf_16,
+                                "fname": f"etiquettes_{_sem_id}_iso16.pdf",
+                                "label": "⬇️ Iso 16/0724",
+                            }
+                        st.rerun()
+                    else:
+                        st.warning("Aucun prélèvement planifié cette semaine.")
+                except ImportError:
+                    st.error("❌ **ReportLab** non installé.")
+                except Exception as _e:
+                    st.error(f"Erreur PDF semaine : {_e}")
 
         _day_cols = st.columns(len(wd_week))
         for di, wd in enumerate(wd_week):
