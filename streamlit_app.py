@@ -4857,7 +4857,7 @@ if active == "planning":
                     except Exception as _e:
                         st.error(f"Erreur PDF semaine : {_e}")
 
-        # ── Grille des jours ─────────────────────────────────────────────
+       # ── Grille des jours ─────────────────────────────────────────────
         _day_cols = st.columns(len(wd_week))
         for di, wd in enumerate(wd_week):
             taches_j   = monthly_plan.get(wd, [])
@@ -4865,10 +4865,13 @@ if active == "planning":
             is_today_d = (wd == _today_dt)
             is_past_d  = (wd < _today_dt)
             is_other_m = (wd.month != _ch_month)
-            realise_j  = sum(
+
+            realise_j = sum(
                 1 for p in st.session_state.prelevements
-                if p.get("date") and not p.get("archived", False)
-                and datetime.fromisoformat(p["date"]).date() == wd)
+                if p.get("date")
+                and not p.get("archived", False)
+                and datetime.fromisoformat(p["date"]).date() == wd
+            )
             j2_j = [
                 s for s in st.session_state.schedules
                 if s["when"] == "J2"
@@ -4880,38 +4883,41 @@ if active == "planning":
                 and datetime.fromisoformat(s["due_date"]).date() == wd
             ]
 
+            # ── Couleurs / styles ────────────────────────────────────────
             bg_d     = "#dbeafe" if is_today_d else ("#f1f5f9" if is_other_m else ("#f8fafc" if is_past_d else "#ffffff"))
             border_d = "2px solid #2563eb" if is_today_d else ("1px dashed #cbd5e1" if is_other_m else "1.5px solid #e2e8f0")
             jour_col = "#1e40af" if is_today_d else ("#94a3b8" if is_other_m or is_past_d else "#475569")
             op_d     = "0.6" if is_other_m else ("0.75" if is_past_d and not is_today_d else "1")
 
+            # ── Badge statut ─────────────────────────────────────────────
             if realise_j >= prevu_j and prevu_j > 0:
-                stat_bg = "#f0fdf4"; stat_col = "#166534"; stat_lbl = "✅"
+                stat_bg, stat_col, stat_lbl = "#f0fdf4", "#166534", "✅"
             elif realise_j > 0:
-                stat_bg = "#fffbeb"; stat_col = "#92400e"
+                stat_bg, stat_col = "#fffbeb", "#92400e"
                 stat_lbl = f"⏳{realise_j}/{prevu_j}"
             elif prevu_j > 0:
-                stat_bg = "#fef2f2"; stat_col = "#991b1b"
+                stat_bg, stat_col = "#fef2f2", "#991b1b"
                 stat_lbl = f"🔴{prevu_j}"
             else:
-                stat_bg = "#f8fafc"; stat_col = "#94a3b8"; stat_lbl = "—"
+                stat_bg, stat_col, stat_lbl = "#f8fafc", "#94a3b8", "—"
 
+            # ── Points tâches ─────────────────────────────────────────────
             pts_html = ""
-            
             for t in taches_j[:5]:
-                _c   = rcp_pm.get(str(t["risk"]), "#94a3b8")
-                _ic  = "💨" if t["type"] == "Air" else "🧴"
-                _lb  = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
+                _c       = rcp_pm.get(str(t["risk"]), "#94a3b8")
+                _ic      = "💨" if t["type"] == "Air" else "🧴"
+                _lb      = t["label"][:18] + ("…" if len(t["label"]) > 18 else "")
                 _skipped = t["label"] in st.session_state["planning_skips"].get(wd.isoformat(), [])
-                _style   = ("text-decoration:line-through;color:#94a3b8;" if _skipped
-                            else f"color:#0f172a;")
+                _style   = "text-decoration:line-through;color:#94a3b8;" if _skipped else "color:#0f172a;"
                 pts_html += (
                     f"<div style='border-left:2px solid {_c};padding:1px 5px;"
                     f"font-size:.58rem;{_style}margin-bottom:1px'>"
-                    f"{_ic} {_lb}</div>")
+                    f"{_ic} {_lb}</div>"
+                )
             if len(taches_j) > 5:
                 pts_html += f"<div style='font-size:.55rem;color:#94a3b8'>+{len(taches_j)-5}</div>"
 
+            # ── Lectures J2/J7 ───────────────────────────────────────────
             lect_html = ""
             if j2_j:
                 lect_html += f"<div style='font-size:.58rem;color:#d97706;margin-top:2px'>📖×{len(j2_j)}</div>"
@@ -4919,10 +4925,11 @@ if active == "planning":
                 lect_html += f"<div style='font-size:.58rem;color:#0369a1'>📗×{len(j7_j)}</div>"
 
             autre_mois_badge = (
-                f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>"
-                f"{wd.strftime('%b')}</div>"
-                if is_other_m else "")
+                f"<div style='font-size:.5rem;color:#94a3b8;font-style:italic'>{wd.strftime('%b')}</div>"
+                if is_other_m else ""
+            )
 
+            # ── Carte HTML du jour ───────────────────────────────────────
             is_selected = (st.session_state.get("pm_selected_day") == wd)
             card_html = (
                 f"<div style='background:{'#faf5ff' if is_selected else bg_d};"
@@ -4936,29 +4943,26 @@ if active == "planning":
                 f"<div style='background:{stat_bg};border-radius:6px;padding:2px 4px;"
                 f"text-align:center;font-size:.68rem;font-weight:800;color:{stat_col};"
                 f"margin-bottom:4px'>{stat_lbl}</div>"
-                f"{pts_html}{lect_html}</div>")
+                f"{pts_html}{lect_html}</div>"
+            )
 
             with _day_cols[di]:
                 st.markdown(card_html, unsafe_allow_html=True)
-                is_selected = (st.session_state.get("pm_selected_day") == wd)
-                btn_lbl = "🔍 Détail" if not is_selected else "✖ Fermer"
 
-                # ── Boutons skip par tâche ────────────────────────────
+                # ── Boutons skip par tâche ────────────────────────────────
+                # La clé inclut di (index colonne) pour garantir l'unicité
                 if taches_j and not is_other_m:
-                    for _t in taches_j:
-                        _skip_key = f"skip_{wd.isoformat()}_{_t['label']}"
-                        _already  = _t["label"] in st.session_state["planning_skips"].get(
-                            wd.isoformat(), [])
+                    for ti, _t in enumerate(taches_j):
+                        _skip_key = f"skip_{di}_{wd.isoformat()}_{ti}_{_t['label'][:20]}"
+                        _already  = _t["label"] in st.session_state["planning_skips"].get(wd.isoformat(), [])
                         _btn_lbl  = "↩️" if _already else "✗"
-                        _btn_help = ("Annuler le report" if _already
-                                     else f"Sauter et reporter : {_t['label'][:20]}")
-                        if st.button(_btn_lbl, key=_skip_key,
-                                     help=_btn_help, use_container_width=True):
+                        _btn_help = ("Annuler le report" if _already else f"Sauter et reporter : {_t['label'][:20]}")
+
+                        if st.button(_btn_lbl, key=_skip_key, help=_btn_help, use_container_width=True):
                             _skips = st.session_state["planning_skips"]
                             _dk    = wd.isoformat()
                             if _already:
-                                _skips[_dk] = [l for l in _skips.get(_dk, [])
-                                               if l != _t["label"]]
+                                _skips[_dk] = [l for l in _skips.get(_dk, []) if l != _t["label"]]
                                 if not _skips[_dk]:
                                     _skips.pop(_dk, None)
                             else:
@@ -4966,99 +4970,105 @@ if active == "planning":
                                 if _t["label"] not in _skips[_dk]:
                                     _skips[_dk].append(_t["label"])
                             st.session_state["planning_skips"] = _skips
-                            _supa_upsert('planning_skips',
-                                         json.dumps(_skips, ensure_ascii=False))
+                            _supa_upsert('planning_skips', json.dumps(_skips, ensure_ascii=False))
                             st.rerun()
-                if st.button(
-                    btn_lbl,
-                    key=f"pm_btn_{wd.isoformat()}",
-                    use_container_width=True
-                ):
-                    st.session_state["pm_selected_day"] = (
-                        None if is_selected else wd)
+
+                # ── Bouton détail du jour ─────────────────────────────────
+                btn_lbl = "✖ Fermer" if is_selected else "🔍 Détail"
+                if st.button(btn_lbl, key=f"pm_btn_{di}_{wd.isoformat()}", use_container_width=True):
+                    st.session_state["pm_selected_day"] = None if is_selected else wd
                     st.rerun()
 
-    # ── Panel fixe bas de page : détail du jour sélectionné ──────────────
-    _sel = st.session_state.get("pm_selected_day")
-    if _sel:
-        taches_sel = monthly_plan.get(_sel, [])
-        j0r_sel = [
-            p for p in st.session_state.prelevements
-            if p.get("date") and not p.get("archived", False)
-            and datetime.fromisoformat(p["date"]).date() == _sel
-        ]
-        j2r_sel = [
-            s for s in st.session_state.schedules
-            if s["when"] == "J2"
-            and datetime.fromisoformat(s["due_date"]).date() == _sel
-        ]
-        j7r_sel = [
-            s for s in st.session_state.schedules
-            if s["when"] == "J7"
-            and datetime.fromisoformat(s["due_date"]).date() == _sel
-        ]
-        _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
-        rcp_fix  = {
-            "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
-            "4": "#f97316", "5": "#ef4444",
-        }
+        # ── Panel bas de page : détail du jour sélectionné ───────────────
+        _sel = st.session_state.get("pm_selected_day")
+        if _sel:
+            taches_sel = monthly_plan.get(_sel, [])
+            j0r_sel = [
+                p for p in st.session_state.prelevements
+                if p.get("date")
+                and not p.get("archived", False)
+                and datetime.fromisoformat(p["date"]).date() == _sel
+            ]
+            j2r_sel = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J2"
+                and datetime.fromisoformat(s["due_date"]).date() == _sel
+            ]
+            j7r_sel = [
+                s for s in st.session_state.schedules
+                if s["when"] == "J7"
+                and datetime.fromisoformat(s["due_date"]).date() == _sel
+            ]
 
-        _cards = ""
-        for t in taches_sel:
-            _c  = rcp_fix.get(str(t["risk"]), "#94a3b8")
-            _ic = "💨" if t["type"] == "Air" else "🧴"
-            _dn = any(p.get("label") == t["label"] for p in j0r_sel)
-            _bg = "#f0fdf4" if _dn else "#fff"
-            _bd = "#86efac" if _dn else _c + "44"
-            _cards += (
-                f"<div style='background:{_bg};border:1px solid {_bd};"
-                f"border-left:3px solid {_c};border-radius:7px;"
-                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                f"{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
-                f"<div style='font-size:.63rem;color:#64748b'>"
-                f"Cl.{t['room_class'] or '—'} · Nv.{t['risk']}</div></div>")
-        for s in j2r_sel:
-            _dn = s["status"] == "done"
-            _lt = not _dn and _sel < _today_dt
-            _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
-            _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
-            _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-            _cards += (
-                f"<div style='background:{_bg};border:1px solid {_c}44;"
-                f"border-left:3px solid {_c};border-radius:7px;"
-                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                f"📖 J2 — {s['label'][:22]}</div>"
-                f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
-                f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-        for s in j7r_sel:
-            _dn = s["status"] == "done"
-            _lt = not _dn and _sel < _today_dt
-            _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
-            _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
-            _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
-            _cards += (
-                f"<div style='background:{_bg};border:1px solid {_c}44;"
-                f"border-left:3px solid {_c};border-radius:7px;"
-                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                f"📗 J7 — {s['label'][:22]}</div>"
-                f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
-                f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>")
-        for p in j0r_sel:
-            _cards += (
-                f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
-                f"border-left:3px solid #7c3aed;border-radius:7px;"
-                f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
-                f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
-                f"🧪 {p['label'][:22]}</div>"
-                f"<div style='font-size:.63rem;color:#64748b'>"
-                f"{p.get('gelose', '—')} · {p.get('operateur', '—') or '—'}</div></div>")
-        if not _cards:
-            _cards = (
-                "<div style='color:#94a3b8;font-size:.82rem;"
-                "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>")
+            _day_lbl = f"{JOURS_FR_LONG[_sel.weekday()]} {_sel.strftime('%d/%m/%Y')}"
+            rcp_fix  = {"1": "#22c55e", "2": "#84cc16", "3": "#f59e0b", "4": "#f97316", "5": "#ef4444"}
+
+            _cards = ""
+
+            for t in taches_sel:
+                _c  = rcp_fix.get(str(t["risk"]), "#94a3b8")
+                _ic = "💨" if t["type"] == "Air" else "🧴"
+                _dn = any(p.get("label") == t["label"] for p in j0r_sel)
+                _bg = "#f0fdf4" if _dn else "#fff"
+                _bd = "#86efac" if _dn else _c + "44"
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_bd};"
+                    f"border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                    f"{_ic} {'✅ ' if _dn else ''}{t['label']}</div>"
+                    f"<div style='font-size:.63rem;color:#64748b'>"
+                    f"Cl.{t['room_class'] or '—'} · Nv.{t['risk']}</div></div>"
+                )
+
+            for s in j2r_sel:
+                _dn = s["status"] == "done"
+                _lt = not _dn and _sel < _today_dt
+                _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#d97706")
+                _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#fffbeb")
+                _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_c}44;"
+                    f"border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                    f"📖 J2 — {s['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
+                    f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>"
+                )
+
+            for s in j7r_sel:
+                _dn = s["status"] == "done"
+                _lt = not _dn and _sel < _today_dt
+                _c  = "#22c55e" if _dn else ("#ef4444" if _lt else "#0369a1")
+                _bg = "#f0fdf4" if _dn else ("#fef2f2" if _lt else "#eff6ff")
+                _st = "✅" if _dn else ("⚠️" if _lt else "⏳")
+                _cards += (
+                    f"<div style='background:{_bg};border:1px solid {_c}44;"
+                    f"border-left:3px solid {_c};border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                    f"📗 J7 — {s['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:{_c};font-weight:700'>"
+                    f"{_st} {'Fait' if _dn else ('Retard' if _lt else 'À faire')}</div></div>"
+                )
+
+            for p in j0r_sel:
+                _cards += (
+                    f"<div style='background:#faf5ff;border:1px solid #e9d5ff;"
+                    f"border-left:3px solid #7c3aed;border-radius:7px;"
+                    f"padding:6px 10px;flex-shrink:0;min-width:150px;max-width:200px'>"
+                    f"<div style='font-size:.77rem;font-weight:700;color:#0f172a'>"
+                    f"🧪 {p['label'][:22]}</div>"
+                    f"<div style='font-size:.63rem;color:#64748b'>"
+                    f"{p.get('gelose', '—')} · {p.get('operateur', '—') or '—'}</div></div>"
+                )
+
+            if not _cards:
+                _cards = (
+                    "<div style='color:#94a3b8;font-size:.82rem;"
+                    "padding:8px 0;align-self:center'>Aucune activité ce jour.</div>"
+                )
 
         _nb_t  = len(taches_sel)
         _nb_j0 = len(j0r_sel)
