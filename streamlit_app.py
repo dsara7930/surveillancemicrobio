@@ -5411,13 +5411,11 @@ if active == "planning":
                 c.alignment = al_c()
                 c.border    = border_all()
 
-                # Compteur alternance poste spécifique : P1 un jour, P2 le suivant
-                poste_counter = 0
-
                 # Colonnes jours : X (+ numéro poste si classe A spécifique) ou ✓ si réalisé
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
                     for di in range(DAYS_PER_WEEK):
+                        poste_counter = 0  # ← réinitialisé à chaque jour
                         col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
                         d_for_col = day_date_map.get(di)
                         c = ws_matrix.cell(data_row, col)
