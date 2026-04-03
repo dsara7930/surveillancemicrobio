@@ -5415,16 +5415,48 @@ if active == "planning":
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
                     for di in range(DAYS_PER_WEEK):
-                        poste_counter = 0  # ← réinitialisé à chaque jour
-                        col       = FIXED_COLS + 1 + wi * DAYS_PER_WEEK + di
-                        d_for_col = day_date_map.get(di)
-                        c = ws_matrix.cell(data_row, col)
+                        # ── Valeur cellule ────────────────────────────────
+                        _freq_raw_xl  = pt.get('frequency')
+                        _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
+                        try:
+                            _freq_val_xl = float(_freq_raw_xl) if _freq_raw_xl else 0.0
+                        except (TypeError, ValueError):
+                            _freq_val_xl = 0.0
+                        _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
 
-                        if d_for_col is None:
-                            c.value  = ""
-                            c.fill   = fill("E2E8F0")
-                            c.border = border_all()
-                            continue
+                        if is_done:
+                            if _is_multi_day:
+                                n_passages = max(
+                                    sum(1 for t in monthly_plan.get(d_for_col, [])
+                                        if t.get('label') == pt['label']),
+                                    int(_freq_val_xl))
+                                cell_val = "  ".join(f"✓ {i+1}" for i in range(n_passages))
+                            else:
+                                cell_val = "✓"
+                            c.value     = cell_val
+                            c.font      = Font(name="Arial", size=10, bold=True, color=C_GREEN)
+                            c.fill      = fill("DCFCE7")
+
+                        elif is_planned:
+                            if _is_multi_day:
+                                n_passages = max(
+                                    sum(1 for t in monthly_plan.get(d_for_col, [])
+                                        if t.get('label') == pt['label']),
+                                    int(_freq_val_xl))
+                                cell_val = "  ".join(f"X {i+1}" for i in range(n_passages))
+                            else:
+                                cell_val = "X"
+                            c.value     = cell_val
+                            c.font      = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
+                            c.fill      = fill("DBEAFE")
+
+                        else:
+                            c.value = ""
+                            c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
+
+                        c.alignment = al_c()
+                        c.border    = border_all()
+                        continue
 
                         # Vérifier si ce point est planifié ce jour
                         tasks_day  = monthly_plan.get(d_for_col, [])
