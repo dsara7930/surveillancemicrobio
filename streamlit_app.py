@@ -2117,22 +2117,17 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     def _fix_azerty(text: str) -> str:
         import unicodedata
-        
-        def _normalize_ascii(s):
-            return unicodedata.normalize('NFD', str(s or '')).encode('ascii', 'ignore').decode().lower().strip()
-        
-        # Tenter de parser le JSON scanné
-        try:
-            data = json.loads(text)
-            label_scan = data.get("label", "")
-            # Chercher le point correspondant avec accents
-            for pt in st.session_state.points:
-                if _normalize_ascii(pt.get("label", "")) == _normalize_ascii(label_scan):
-                    data["label"] = pt["label"]  # ← remet les accents
-                    return json.dumps(data)
-            return text
-        except Exception:
-            return text
+        # Table de conversion AZERTY → QWERTY pour les caractères parasites
+        AZERTY_MAP = {
+            'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
+            'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
+            'M': ':', ';': 'm',
+            '²': '`', '&': '1', 'é': '2', '"': '3',
+            "'": '4', '(': '5', '-': '6', 'è': '7',
+            '_': '8', 'ç': '9', 'à': '0',
+        }
+        corrected = "".join(AZERTY_MAP.get(c, c) for c in text)
+        return corrected
 
     if "prelev_mode" not in st.session_state:
         st.session_state["prelev_mode"] = "manuel"
@@ -2620,10 +2615,13 @@ vp.addEventListener('wheel',e=>{{
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
             azerty_corrected = False
-            if qr_raw and '{' not in qr_raw:
+
+            if qr_raw and not qr_raw.startswith("{"):
                 qr_fixed = _fix_azerty(qr_raw)
-                if '{' in qr_fixed:
-                    azerty_corrected = True; qr_raw = qr_fixed
+                if qr_fixed.startswith("{"):
+                    azerty_corrected = True
+                    qr_raw = qr_fixed
+
             if azerty_corrected:
                 st.caption("🔄 Correction clavier AZERTY appliquée automatiquement.")
 
