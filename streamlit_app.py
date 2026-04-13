@@ -4366,8 +4366,18 @@ if active == "planning":
                                     _skips.setdefault(dk, [])
                                     if t["label"] not in _skips[dk]:
                                         _skips[dk].append(t["label"])
+                                    
+                                    # 1. Mettre à jour le session_state EN PREMIER
                                     st.session_state["planning_skips"] = _skips
-                                    save_planning_skips(_skips)   # ← remplace l'appel direct à _supa_upsert
+                                    
+                                    # 2. Sauvegarder dans Supabase (synchrone — attend la réponse)
+                                    supa = get_supabase_client()
+                                    if supa:
+                                        supa.table('app_state').upsert(
+                                            {'key': 'planning_skips', 'value': json.dumps(_skips)},
+                                            on_conflict='key'
+                                        ).execute()  # .execute() est bloquant → garanti avant st.rerun()
+                                    
                                     st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
