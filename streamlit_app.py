@@ -6206,6 +6206,19 @@ elif active == "parametres":
     LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
+def _freq_en_semaine(pt: dict, jours_par_semaine: int = 5) -> float:
+    """Convertit la fréquence d'un point de prélèvement en nombre de fois par semaine."""
+    freq  = float(pt.get("frequence", 1) or 1)
+    unite = (pt.get("frequence_unit") or "/ semaine").strip()
+
+    if unite == "/ jour":
+        return freq * jours_par_semaine
+    elif unite == "/ semaine":
+        return freq
+    elif unite == "/ mois":
+        return freq / 4.33          # ≈ semaines par mois
+    else:
+        return freq                 # fallback : on suppose hebdomadaire
 # ══════════════════════════════════════════════════════════════════════════
     # CONTRAINTES MAX / CLASSE / SEMAINE
     # ══════════════════════════════════════════════════════════════════════════
