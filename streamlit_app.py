@@ -2635,22 +2635,23 @@ vp.addEventListener('wheel',e=>{{
 
 
             _scanned_data = None
-            qr_raw = qr_raw.strip().strip('"')  # ← nettoyage guillemets parasites
+            qr_raw = qr_raw_input.strip() if qr_raw_input else ""
 
-            if qr_raw and qr_raw.startswith("{"):
-                try:
-                    _scanned_data = json.loads(qr_raw)
-                except json.JSONDecodeError:
-                    st.markdown(f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#991b1b'>❌ QR code non reconnu</div><div style='font-size:.8rem;color:#b91c1c;margin-top:4px'>Format invalide — rescannez l'étiquette.</div><div style='font-family:monospace;font-size:.72rem;color:#64748b;margin-top:6px'>Reçu : {qr_raw[:80]}{'…' if len(qr_raw)>80 else ''}</div></div>", unsafe_allow_html=True)
-            elif qr_raw and not qr_raw.startswith("{"):
-                st.markdown("<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#92400e'>⚠️ QR code non URC</div></div>", unsafe_allow_html=True)
+            _scanned_data = None
+            if qr_raw:
+                # Chercher le point dont l'id correspond
+                _found = next((p for p in st.session_state.points if str(p["id"]) == qr_raw), None)
+                if _found:
+                    _scanned_data = _found
+                else:
+                    st.markdown("<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#92400e'>⚠️ Numéro non reconnu</div></div>", unsafe_allow_html=True)
 
-            if _scanned_data and (_scanned_data.get("a") == "URC" or "label" in _scanned_data):
-                _lbl  = _scanned_data.get("l") or _scanned_data.get("label", "")
-                _type = _scanned_data.get("t") or _scanned_data.get("type", "")
-                _rc   = _scanned_data.get("r") or _scanned_data.get("class", "")
-                _lc   = int(_scanned_data.get("c") or _scanned_data.get("risk", 1))
-                _gel  = _scanned_data.get("g") or _scanned_data.get("gelose", "")
+            if _scanned_data:
+                _lbl  = _scanned_data.get("label", "")
+                _type = _scanned_data.get("type", "")
+                _rc   = _scanned_data.get("room_class", "")
+                _lc   = int(_scanned_data.get("location_criticality", 1))
+                _gel  = _scanned_data.get("gelose", "")
                 _is_classea = _rc.strip().upper() == "A"
                 lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
 
@@ -3525,32 +3526,14 @@ if active == "planning":
         we = ws + timedelta(days=6)
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
 
-    def _make_qr_bytes(data_dict: dict) -> bytes:
-        payload = json.dumps(data_dict, ensure_ascii=False, separators=(',', ':'))
-        qr = qrcode.QRCode(
-            version=None,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
-            box_size=4,
-            border=2,
-        )
-        qr.add_data(payload)
+    def _make_qr_bytes(point_id) -> bytes:
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2)
+        qr.add_data(str(point_id))  # juste le numéro
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         buf = BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()
-
-    def _qr_payload(pt: dict) -> str:
-        import unicodedata
-        def _ascii(s):
-            return unicodedata.normalize('NFD', str(s or '')).encode('ascii', 'ignore').decode()
-        
-        return json.dumps({
-            "label": _ascii(pt.get("label", "")),
-            "class": _ascii(pt.get("room_class", "")),
-            "type":  _ascii(pt.get("type", "")),
-            "risk":  pt.get("risk_level", 1),
-        }, ensure_ascii=True)
 
     # ── Planning mensuel ─────────────────────────────────────────────────
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
