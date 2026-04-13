@@ -1030,6 +1030,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     tabs_cfg = [
+        ("accueil",      "🏠", "Accueil"),          # ← nouveau
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
@@ -1433,7 +1434,58 @@ def render_faq_tab(can_edit: bool):
             save_faq(st.session_state["faq_items"], supa=True)
             st.success("✅ FAQ réinitialisée.")
             st.rerun()
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB : ACCUEIL
+# ═══════════════════════════════════════════════════════════════════════════════
 
+if active == "accueil":
+    st.markdown("""
+    <style>
+    .home-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        min-height: 420px;
+    }
+    .home-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2.5rem 1.5rem;
+        border: 1px solid #e2e8f0;
+        text-align: center;
+    }
+    .home-card:first-child { border-radius: 12px 0 0 12px; border-right: none; }
+    .home-card:last-child  { border-radius: 0 12px 12px 0; }
+    .home-card img { width: 140px; height: 140px; object-fit: cover; border-radius: 8px; margin-bottom: 1rem; }
+    .home-card h2 { font-size: 1.5rem; font-weight: 500; margin: 0 0 0.4rem; }
+    .home-card p  { font-size: 0.85rem; color: #64748b; margin: 0; }
+    </style>
+
+    <div class="home-grid">
+      <div class="home-card">
+        <img src="https://media4.giphy.com/media/3oKIPj0RCvQEGuNQFG/giphy.webp" />
+        <h2>Planning</h2>
+        <p>Gérer le calendrier des tâches</p>
+      </div>
+      <div class="home-card">
+        <img src="https://media4.giphy.com/media/xUOxfeHOtSheFIdRks/giphy.gif" />
+        <h2>Prélèvements</h2>
+        <p>Identification et surveillance</p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📅 Accéder au Planning", use_container_width=True):
+            st.session_state["tab"] = "planning"
+            st.rerun()
+    with col2:
+        if st.button("🔍 Accéder aux Prélèvements", use_container_width=True):
+            st.session_state["tab"] = "surveillance"
+            st.rerun()
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
 # Criticité germe = Pathogénicité × Résistance × Dissémination 
