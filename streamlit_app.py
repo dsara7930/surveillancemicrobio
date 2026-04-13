@@ -4250,126 +4250,164 @@ if active == "planning":
             
 
 
-# ─────────────────────────────────────────────────────────────
-# PANEL DETAIL JOUR
-# ─────────────────────────────────────────────────────────────
-sel = st.session_state.get("pm_selected_day")
+# ── Panel détail jour ────────────────────────────────────────
+        sel = st.session_state.get("pm_selected_day")
 
-if sel:
-    tasks = monthly_plan.get(sel, [])
+        if sel:
+            st.markdown("---")
+            _day_lbl = JOURS_FR_LONG[sel.weekday()] + " " + sel.strftime("%d/%m/%Y")
+            st.markdown(f"## 📋 {_day_lbl}")
 
-    st.markdown(f"## 📋 {sel.strftime('%d/%m/%Y')}")
+            if st.button("✖️ Fermer", key="close_detail"):
+                st.session_state["pm_selected_day"] = None
+                st.rerun()
 
-    for t in tasks:
-        st.write(f"• {t['label']} (Cl.{t['room_class']})")
+            tasks = monthly_plan.get(sel, [])
 
-    # ── REPORT GLOBAL
-    if tasks:
-        if st.button("🚫 Tout passer en non fait", key=f"all_skip_{sel}"):
+            if not tasks:
+                st.info("Aucun prélèvement planifié ce jour.")
+            else:
+                done_labels = {
+                    p["label"]
+                    for p in st.session_state.prelevements
+                    if p.get("date")
+                    and datetime.fromisoformat(p["date"]).date() == sel
+                }
+                skipped_labels = set(
+                    st.session_state["planning_skips"].get(sel.isoformat(), [])
+                )
 
-            dk = sel.isoformat()
-            _skips = st.session_state["planning_skips"]
+                rcp_fix = {
+                    "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+                    "4": "#f97316", "5": "#ef4444",
+                }
 
-            _skips[dk] = list(set(
-                _skips.get(dk, []) + [t["label"] for t in tasks]
-            ))
-
-            st.session_state["planning_skips"] = _skips
-            _supa_upsert('planning_skips', json.dumps(_skips))
-
-            st.success("Tous les prélèvements reportés")
-            st.rerun()
-
-            # ── Sélection & génération étiquettes (jour sélectionné) ──────
-            if taches_sel:
+                # ── Sélection étiquettes ─────────────────────────────
                 st.markdown(
                     "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
                     "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
                     "<span style='font-size:.88rem;font-weight:800;color:#1e40af'>"
                     "🏷️ Générer les étiquettes pour ce jour</span></div>",
-                    unsafe_allow_html=True)
+                    unsafe_allow_html=True,
+                )
 
-                col_sa, col_sn, _ = st.columns([1, 1, 4])
+                col_sa, col_sn, col_sk, _ = st.columns([1, 1, 1, 3])
                 with col_sa:
                     if st.button("☑️ Tout sélectionner",
-                                 key=f"etiq_all_{_sel.isoformat()}",
+                                 key=f"etiq_all_{sel.isoformat()}",
                                  use_container_width=True):
-                        for _t in taches_sel:
-                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = True
+                        for _ti, _t in enumerate(tasks):
+                            st.session_state[
+                                f"etiq_chk_{sel.isoformat()}_{_ti}"
+                            ] = True
                         st.rerun()
                 with col_sn:
                     if st.button("⬜ Tout désélectionner",
-                                 key=f"etiq_none_{_sel.isoformat()}",
+                                 key=f"etiq_none_{sel.isoformat()}",
                                  use_container_width=True):
-                        for _t in taches_sel:
-                            st.session_state[f"etiq_chk_{_sel.isoformat()}_{_t['label']}"] = False
+                        for _ti, _t in enumerate(tasks):
+                            st.session_state[
+                                f"etiq_chk_{sel.isoformat()}_{_ti}"
+                            ] = False
+                        st.rerun()
+                with col_sk:
+                    if st.button("🚫 Tout reporter",
+                                 key=f"all_skip_{sel.isoformat()}",
+                                 use_container_width=True):
+                        dk     = sel.isoformat()
+                        _skips = st.session_state["planning_skips"]
+                        _skips[dk] = list(set(
+                            _skips.get(dk, []) + [t["label"] for t in tasks]
+                        ))
+                        st.session_state["planning_skips"] = _skips
+                        _supa_upsert('planning_skips', json.dumps(_skips))
+                        st.success("Tous les prélèvements reportés.")
                         st.rerun()
 
-                _chk_cols = st.columns(3)
+                # ── Grille des tâches ────────────────────────────────
+                _chk_cols      = st.columns(3)
                 _selected_tasks = []
-                for _ti, _t in enumerate(taches_sel):
-                    _chk_key = f"etiq_chk_{_sel.isoformat()}_{_t['label']}"
+
+                for _ti, _t in enumerate(tasks):
+                    _chk_key = f"etiq_chk_{sel.isoformat()}_{_ti}"
                     if _chk_key not in st.session_state:
                         st.session_state[_chk_key] = True
-                    _rc = rcp_fix.get(str(_t["risk"]), "#94a3b8")
-                    _ic = "💨" if _t["type"] == "Air" else "🧴"
-                    _dn = any(p.get("label") == _t["label"] for p in j0r_sel)
+                    _rc = rcp_fix.get(str(_t.get("risk", "1")), "#94a3b8")
+                    _ic = "💨" if _t.get("type") == "Air" else "🧴"
+                    _dn = _t["label"] in done_labels
+                    _sk = _t["label"] in skipped_labels
+                    bg  = "#f0fdf4" if _dn else "#fff8f1" if _sk else "#fff"
+
                     with _chk_cols[_ti % 3]:
                         st.markdown(
-                            f"<div style='background:{'#f0fdf4' if _dn else '#fff'};"
+                            f"<div style='background:{bg};"
                             f"border:1px solid {_rc}44;border-left:3px solid {_rc};"
                             f"border-radius:7px;padding:4px 8px;margin-bottom:4px'>"
                             f"<span style='font-size:.72rem;font-weight:700;color:#0f172a'>"
-                            f"{_ic} {'✅ ' if _dn else ''}{_t['label'][:28]}</span><br>"
+                            f"{_ic} {'✅ ' if _dn else '⏭️ ' if _sk else ''}"
+                            f"{_t['label'][:28]}</span><br>"
                             f"<span style='font-size:.6rem;color:#64748b'>"
-                            f"Cl.{_t['room_class'] or '—'} · Nv.{_t['risk']}</span></div>",
-                            unsafe_allow_html=True)
-                        if st.checkbox("Inclure", value=st.session_state[_chk_key],
-                                       key=_chk_key, label_visibility="collapsed"):
+                            f"Cl.{_t.get('room_class') or '—'} · "
+                            f"Nv.{_t.get('risk', '—')}</span></div>",
+                            unsafe_allow_html=True,
+                        )
+                        if st.checkbox(
+                            "Inclure",
+                            value=st.session_state[_chk_key],
+                            key=_chk_key,
+                            label_visibility="collapsed",
+                        ):
                             _selected_tasks.append(_t)
 
                 _n_sel_etiq = len(_selected_tasks)
                 st.markdown(
                     f"<div style='font-size:.8rem;color:#475569;margin:6px 0'>"
-                    f"{_n_sel_etiq} / {len(taches_sel)} point(s) sélectionné(s)</div>",
-                    unsafe_allow_html=True)
+                    f"{_n_sel_etiq} / {len(tasks)} point(s) sélectionné(s)</div>",
+                    unsafe_allow_html=True,
+                )
 
+                # ── Génération PDF ───────────────────────────────────
                 if _n_sel_etiq > 0:
                     if st.button(
                         f"📄 Générer {_n_sel_etiq} "
                         f"étiquette{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}",
                         use_container_width=True,
-                        key=f"etiq_gen_{_sel.isoformat()}",
-                        type="primary"
+                        key=f"etiq_gen_{sel.isoformat()}",
+                        type="primary",
                     ):
                         try:
-                            _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, _sel)
-                            st.session_state[f"pdf_quick_{_sel.isoformat()}"] = {
+                            _pdf_bytes = _generate_pdf_etiquettes(_selected_tasks, sel)
+                            fname_etiq = f"etiquettes_{sel.strftime('%Y%m%d')}.pdf"
+                            st.session_state[f"pdf_quick_{sel.isoformat()}"] = {
                                 "data":  _pdf_bytes,
-                                "fname": f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf",
+                                "fname": fname_etiq,
                             }
-                            fname_etiq = f"etiquettes_{_sel.strftime('%Y%m%d')}.pdf"
-                            st.download_button(
-                                label=f"⬇️ Télécharger {fname_etiq}",
-                                data=_pdf_bytes,
-                                file_name=fname_etiq,
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key=f"etiq_dl_{_sel.isoformat()}")
-                            st.success(
-                                f"✅ {_n_sel_etiq} étiquette{'s' if _n_sel_etiq > 1 else ''} "
-                                f"générée{'s' if _n_sel_etiq > 1 else ''} pour le {_day_lbl}")
+                            st.rerun()
                         except ImportError:
-                            st.error("❌ **ReportLab** non installé.\n\n"
-                                     "Ajoutez `reportlab` dans **requirements.txt**.")
+                            st.error(
+                                "❌ **ReportLab** non installé.\n\n"
+                                "Ajoutez `reportlab` dans **requirements.txt**."
+                            )
                         except Exception as _e:
                             st.error(f"Erreur génération PDF : {_e}")
                             import traceback
                             st.code(traceback.format_exc())
-            else:
-                st.info("Aucun prélèvement planifié ce jour.")
 
-
+                    _pdf_cache = st.session_state.get(f"pdf_quick_{sel.isoformat()}")
+                    if _pdf_cache:
+                        st.download_button(
+                            label=f"⬇️ Télécharger {_pdf_cache['fname']}",
+                            data=_pdf_cache["data"],
+                            file_name=_pdf_cache["fname"],
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key=f"etiq_dl_{sel.isoformat()}",
+                        )
+                        st.success(
+                            f"✅ {_n_sel_etiq} étiquette"
+                            f"{'s' if _n_sel_etiq > 1 else ''} prête"
+                            f"{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}"
+                        )
 
     # ═════════════════════════════════════════════════════════════════════════
     # ONGLET : EXPORT EXCEL
