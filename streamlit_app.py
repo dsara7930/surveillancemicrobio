@@ -3919,9 +3919,17 @@ if active == "planning":
             cls: int(st.session_state.get(f"class_max_{cls}", 0))
             for cls in all_classes
         }
-        # ── Normalisation clé room_class ─────────────────────────────
-        # Les points sont parfois sauvegardés avec "class" au lieu de "room_class"
+        # ── Normalisation des clés des points ────────────────────────
         for _pt in st.session_state.points:
+            # room_class
+            if not _pt.get("room_class"):
+                _pt["room_class"] = _pt.get("class", "")
+            # frequency
+            if "frequency" not in _pt or _pt.get("frequency") is None:
+                _pt["frequency"] = _pt.get("freq", None)
+            # frequency_unit
+            if "frequency_unit" not in _pt or not _pt.get("frequency_unit"):
+                _pt["frequency_unit"] = _pt.get("unit", "/ semaine")
             if "room_class" not in _pt or not _pt.get("room_class"):
                 _pt["room_class"] = _pt.get("class", "")
       
