@@ -4195,11 +4195,6 @@ if active == "planning":
         from datetime import date as date_type
         monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
         
-
-        # DEBUG TEMPORAIRE
-        st.write("Nb jours dans monthly_plan:", len(monthly_plan))
-        st.write("Clés:", sorted([str(k) for k in monthly_plan.keys()])[:10])
-        st.write("Exemple tâches J1:", list(monthly_plan.values())[0] if monthly_plan else "VIDE")
         
         for _wm in pm_mondays:
             _has_skip = any(
