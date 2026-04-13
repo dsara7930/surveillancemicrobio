@@ -4198,6 +4198,7 @@ if active == "planning":
                 week_monday + timedelta(days=i)
                 for i in range(5)
                 if (week_monday + timedelta(days=i)) not in _ch_holidays
+                and _pm_start <= (week_monday + timedelta(days=i)) <= _pm_end
             ]
             if not wd_week:
                 continue
