@@ -3639,6 +3639,7 @@ if active == "planning":
         from reportlab.platypus      import (
             Table, TableStyle, Paragraph, HRFlowable,
             BaseDocTemplate, Frame, PageTemplate, Image as RLImage,
+            Spacer,
         )
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums  import TA_RIGHT
@@ -3649,7 +3650,7 @@ if active == "planning":
         MARGIN_SHEET = 0.4 * rl_cm
 
         W_ETQ  = (A4_W - 2 * MARGIN_SHEET) / N_COLS
-        H_ETQ  = 2.95 * rl_cm                          # ← défini ici, une seule fois
+        H_ETQ  = 2.95 * rl_cm
         _grid_w      = W_ETQ * N_COLS
         _margin_left = MARGIN_SHEET
 
@@ -3794,12 +3795,10 @@ if active == "planning":
             except Exception:
                 inner = left_tbl
 
-            # ← rowHeights=[H_ETQ] correct ici car outer = 1 seule ligne
             outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
             outer.setStyle(TableStyle([
-                ("LINEBEFORE", (0, 0), (0, 0), 1.2, rc_etiq),
-                ("LINEABOVE",  (0, 0), (0, 0), 1.2, rc_etiq),
-                ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                ("LINEBEFORE",     (0, 0), (0, 0), 1.2, rc_etiq),
+                ("LINEABOVE",      (0, 0), (0, 0), 1.2, rc_etiq),
                 ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
                 ("LEFTPADDING",    (0, 0), (0, 0), 11),
                 ("RIGHTPADDING",   (0, 0), (0, 0), 11),
@@ -3810,9 +3809,35 @@ if active == "planning":
             ]))
             return outer
 
-        from reportlab.platypus import Spacer
+        # ── Construction d'une cellule séparateur ────────────────────────────
+        def _build_sep_cell(label):
+            sep_inner = Table(
+                [[Paragraph(label, s_day_sep)]],
+                colWidths=[W_ETQ - 0.55 * rl_cm],
+            )
+            sep_inner.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            outer = Table([[sep_inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+            outer.setStyle(TableStyle([
+                ("LINEBEFORE",     (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
+                ("LINEABOVE",      (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
+                ("LINEAFTER",      (0, 0), (0, 0), 5.5, rlc.HexColor("#1a4e66")),
+                ("LEFTPADDING",    (0, 0), (0, 0), 11),
+                ("RIGHTPADDING",   (0, 0), (0, 0), 11),
+                ("TOPPADDING",     (0, 0), (0, 0), 11),
+                ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
+                ("VALIGN",         (0, 0), (0, 0), "MIDDLE"),
+                ("BACKGROUND",     (0, 0), (0, 0), rlc.HexColor("#e0f2fe")),
+            ]))
+            return outer
 
-        story = []
+        # ── Assemblage des lignes ─────────────────────────────────────────────
+        story           = []
         all_rows        = []
         all_row_heights = []
 
@@ -3843,9 +3868,16 @@ if active == "planning":
                 ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
                 ("TOPPADDING",    (0, 0), (-1, -1), 0),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ("LINEBELOW",     (0, -1), (-1, -1), 1.2, rlc.HexColor("#94a3b8")),  # ← bord bas unique
+                ("LINEBELOW",     (0, -1), (-1, -1), 1.2, rlc.HexColor("#94a3b8")),
             ]))
             story.append(full_tbl)
+
+        # ── Build UNE SEULE FOIS ──────────────────────────────────────────────
+        doc.build(story)
+        buf.seek(0)
+
+        return buf.getvalue()
+
     # ════════════════════════════════════════════════════════════════
     # ONGLETS
     # ════════════════════════════════════════════════════════════════
