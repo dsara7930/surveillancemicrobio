@@ -3857,7 +3857,25 @@ if active == "planning":
     ])
 
     with plan_tab_charge:
+        if not st.session_state.get("points"):
+            _raw_points = _supa_get("points")
+            if _raw_points:
+                try:
+                    st.session_state.points = json.loads(_raw_points)
+                except Exception:
+                    st.session_state.points = []
 
+        if not st.session_state.get("class_constraints_loaded"):
+            _raw_cc = _supa_get("class_constraints")
+            if _raw_cc:
+                try:
+                    _parsed_cc = json.loads(_raw_cc)
+                    st.session_state["_class_constraints_raw"] = _parsed_cc
+                    for _cls_k, _cls_v in _parsed_cc.items():
+                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
+                except Exception:
+                    pass
+            st.session_state["class_constraints_loaded"] = True
        # ── Sélecteurs Année / Mois ──────────────────────────────────
         col_y, col_m = st.columns(2)
         with col_y:
@@ -4176,7 +4194,7 @@ if active == "planning":
 
         from datetime import date as date_type
         monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
-        
+
         # Appliquer les skips
         for _wm in pm_mondays:
             _has_skip = any(
