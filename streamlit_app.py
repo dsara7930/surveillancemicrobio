@@ -3527,8 +3527,13 @@ if active == "planning":
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
 
     def _make_qr_bytes(point_id) -> bytes:
-        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2)
-        qr.add_data(str(point_id))  # juste le numéro
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=4,
+            border=2,
+        )
+        qr.add_data(str(point_id))
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         buf = BytesIO()
