@@ -4303,8 +4303,22 @@ if active == "planning":
                         st.session_state["pm_selected_day"] = wd
                         st.rerun()
 
+                    # ── Affichage des tâches dans la case ──
+                    for t in tasks:
+                        _dn = t["label"] in done_labels
+                        _sk = t["label"] in skipped
+                        _ic = "💨" if t.get("type") == "Air" else "🧴"
+                        _col = "#22c55e" if _dn else "#94a3b8" if _sk else "#1e40af"
+                        _strike = "line-through" if _sk else "none"
+                        st.markdown(
+                            f"<div style='font-size:.72rem;color:{_col};"
+                            f"text-decoration:{_strike};padding:2px 0'>"
+                            f"{_ic} {t['label'][:25]}</div>",
+                            unsafe_allow_html=True,
+                        )
+
                     if non_faits:
-                        with st.popover("⬜ Non faits"):
+                        with st.popover(f"⬜ {len(non_faits)} Non faits"):
                             for ti, t in enumerate(non_faits):
                                 key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
                                 if st.checkbox(t["label"], key=key):
