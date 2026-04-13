@@ -2115,19 +2115,32 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     # HELPERS GLOBAUX
     # ══════════════════════════════════════════════════════════════════════════
-    def _fix_azerty(text: str) -> str:
-        import unicodedata
-        # Table de conversion AZERTY → QWERTY pour les caractères parasites
-        AZERTY_MAP = {
-            'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
-            'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
-            'M': ':', ';': 'm',
-            '²': '`', '&': '1', 'é': '2', '"': '3',
-            "'": '4', '(': '5', '-': '6', 'è': '7',
-            '_': '8', 'ç': '9', 'à': '0',
-        }
-        corrected = "".join(AZERTY_MAP.get(c, c) for c in text)
-        return corrected
+    def _fix_qr_input(text: str) -> str:
+    """Corrige dans l'ordre : encodage → AZERTY → validation JSON"""
+    
+        # 1. Réparer le double-encodage UTF-8/Latin-1 (é → Ã©, è → Ã¨, etc.)
+        def _fix_encoding(s):
+            try:
+                return s.encode('latin-1').decode('utf-8')
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                return s
+
+        # 2. Correction AZERTY caractère par caractère
+        def _fix_azerty(s):
+            AZERTY_MAP = {
+                'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
+                'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
+                'M': ':', ';': 'm',
+                '&': '1', 'é': '2', '"': '3', "'": '4',
+                '(': '5', '-': '6', 'è': '7', '_': '8',
+                'ç': '9', 'à': '0',
+            }
+            return "".join(AZERTY_MAP.get(c, c) for c in s)
+
+        text = _fix_encoding(text)          # étape 1 toujours
+        if not text.startswith("{"):
+            text = _fix_azerty(text)        # étape 2 si toujours pas de JSON
+        return text
 
     if "prelev_mode" not in st.session_state:
         st.session_state["prelev_mode"] = "manuel"
@@ -2614,13 +2627,11 @@ vp.addEventListener('wheel',e=>{{
                 help="Si des caractères spéciaux apparaissent, configurez la douchette en layout EN-US.")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-            azerty_corrected = False
-
-            if qr_raw and not qr_raw.startswith("{"):
-                qr_fixed = _fix_azerty(qr_raw)
-                if qr_fixed.startswith("{"):
-                    azerty_corrected = True
-                    qr_raw = qr_fixed
+            if qr_raw:
+                qr_fixed = _fix_qr_input(qr_raw)
+                if qr_fixed != qr_raw:
+                    st.caption("🔄 Correction automatique appliquée.")
+                qr_raw = qr_fixed
 
             if azerty_corrected:
                 st.caption("🔄 Correction clavier AZERTY appliquée automatiquement.")
