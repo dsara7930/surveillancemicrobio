@@ -10,6 +10,7 @@ import difflib
 import qrcode
 import qrcode.image.pil
 from io import BytesIO
+from datetime import date, datetime, timedelta
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
@@ -966,6 +967,8 @@ if "archived_samples" not in st.session_state:
     st.session_state.archived_samples = load_archived_samples()
 if "points" not in st.session_state:
     st.session_state.points = load_points()
+if "planning_skips" not in st.session_state:
+    st.session_state["planning_skips"] = {} 
 if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
 if "plans" not in st.session_state:
@@ -3567,7 +3570,18 @@ if active == "planning":
     while cur_pm <= _pm_end:
         pm_mondays.append(cur_pm)
         cur_pm += timedelta(weeks=1)
-
+    for _wm in pm_mondays:
+        _has_skip = any(
+            (_wm + timedelta(days=i)).isoformat() in st.session_state["planning_skips"]
+            for i in range(5)
+        )
+        if _has_skip:
+            monthly_plan = _redistribute_skips(
+                monthly_plan,
+                st.session_state["planning_skips"],
+                _wm,
+                _ch_holidays,
+            )
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
         """"
         Planning mensuel  fréquences intrinsèques respectées :
@@ -3708,209 +3722,530 @@ if active == "planning":
     
         return planning
 
-# ═════════════════════════════════════════════════════════════════════════
-    # ONGLETS Planning
-    # ═════════════════════════════════════════════════════════════════════════
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
-        _openpyxl_ok = True
-    except ImportError:
-        _openpyxl_ok = False
+# ═══════════════════════════════════════════════════════════════════════
+# IMPORTS & HELPERS GLOBAUX
+# ═══════════════════════════════════════════════════════════════════════
+import calendar as _cal_global
+import json
+from datetime import date as date_type, datetime, timedelta
+from collections import defaultdict
+from io import BytesIO
 
-    plan_tab_charge, plan_tab_export = st.tabs([
-        "📊 Charge hebdo & Planning mensuel",
-        "📥 Export Excel",
-    ])
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    _openpyxl_ok = True
+except ImportError:
+    _openpyxl_ok = False
 
-    # ═════════════════════════════════════════════════════════════════════════
+_today_dt = date_type.today()
+
+MOIS = [
+    "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+]
+
+JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+
+RC_COLORS = {
+    "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
+    "D": "#f97316", "E": "#ef4444",
+}
+
+RCP_PM = {
+    "1": "#22c55e", "2": "#84cc16", "3": "#f59e0b",
+    "4": "#f97316", "5": "#ef4444",
+}
+
+_RISK_COLORS_ETQ = {
+    "1": "#22c55e", "2": "#84cc16",
+    "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+}
+
+
+def get_week_start(d: date_type) -> date_type:
+    return d - timedelta(days=d.weekday())
+
+
+def fmt_week(monday: date_type) -> str:
+    sunday = monday + timedelta(days=6)
+    return (
+        f"Sem {monday.isocalendar()[1]} — "
+        f"{monday.strftime('%d/%m')} au {sunday.strftime('%d/%m/%Y')}"
+    )
+
+
+def _freq_en_semaine(pt: dict, jours_par_semaine: int = 5) -> float:
+    freq  = float(pt.get("frequence", 1) or 1)
+    unite = (pt.get("frequence_unit") or "/ semaine").strip()
+    if unite == "/ jour":
+        return freq * jours_par_semaine
+    elif unite == "/ semaine":
+        return freq
+    elif unite == "/ mois":
+        return freq / 4.33
+    return freq
+
+
+def _get_prevu_semaine(pt: dict, week_start: date_type,
+                       nb_jours: int, alloc: int):
+    """Retourne (nb_prevu, dates_prevues, alloc)."""
+    if alloc <= 0:
+        return 0, [], alloc
+    freq_sem = _freq_en_semaine(pt, nb_jours)
+    nb_prevu = min(alloc, max(1, round(freq_sem)))
+    dates_prevues = []
+    if nb_prevu > 0 and nb_jours > 0:
+        step = nb_jours / nb_prevu
+        for i in range(nb_prevu):
+            dates_prevues.append(week_start + timedelta(days=int(i * step)))
+    return nb_prevu, dates_prevues, alloc
+
+
+def _compute_monthly_planning(year: int, month: int,
+                               class_max_dict: dict,
+                               holidays: set) -> dict:
+    _, n_days = _cal_global.monthrange(year, month)
+    start = date_type(year, month, 1)
+    end   = date_type(year, month, n_days)
+
+    cur     = start - timedelta(days=start.weekday())
+    mondays = []
+    while cur <= end:
+        mondays.append(cur)
+        cur += timedelta(weeks=1)
+
+    planning = {}
+
+    for monday in mondays:
+        working_days = [
+            monday + timedelta(days=i)
+            for i in range(5)
+            if (monday + timedelta(days=i)) not in holidays
+            and start <= (monday + timedelta(days=i)) <= end
+        ]
+        nb_jours = len(working_days)
+        if nb_jours == 0:
+            continue
+
+        pts_by_class = defaultdict(list)
+        for pt in st.session_state.points:
+            cls = (pt.get("room_class") or "").strip()
+            if cls:
+                pts_by_class[cls].append(pt)
+
+        for cls, pts_cls in pts_by_class.items():
+            max_sem = int(class_max_dict.get(cls, 0))
+            if max_sem <= 0:
+                continue
+
+            pts_surf = [
+                p for p in pts_cls
+                if (p.get("type") or "").strip().lower() not in ("air", "air ambiant")
+            ]
+            pts_air = [
+                p for p in pts_cls
+                if (p.get("type") or "").strip().lower() in ("air", "air ambiant")
+            ]
+
+            freqs    = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_surf]
+            tot_freq = sum(freqs) or 1
+            assigned = 0
+            allocs   = []
+            for ii, f in enumerate(freqs):
+                if ii < len(freqs) - 1:
+                    a = round(f / tot_freq * max_sem)
+                else:
+                    a = max(0, max_sem - assigned)
+                assigned += a
+                allocs.append(a)
+
+            for pt, alloc in zip(pts_surf, allocs):
+                if alloc <= 0:
+                    continue
+                nb_prevu = min(alloc, max(1, round(_freq_en_semaine(pt, nb_jours))))
+                step     = nb_jours / nb_prevu
+                seen     = set()
+                for i in range(nb_prevu):
+                    idx = min(int(i * step), nb_jours - 1)
+                    while idx in seen and idx < nb_jours - 1:
+                        idx += 1
+                    seen.add(idx)
+                    planning.setdefault(working_days[idx], []).append(
+                        {**pt, "room_class": cls}
+                    )
+
+            for pt_air in pts_air:
+                nb_air = max(1, round(_freq_en_semaine(pt_air, nb_jours)))
+                step   = nb_jours / nb_air
+                seen   = set()
+                for i in range(nb_air):
+                    idx = min(int(i * step), nb_jours - 1)
+                    while idx in seen and idx < nb_jours - 1:
+                        idx += 1
+                    seen.add(idx)
+                    planning.setdefault(working_days[idx], []).append(
+                        {**pt_air, "room_class": cls}
+                    )
+
+    return planning
+
+
+def _redistribute_skips(planning: dict, skips: set,
+                         week_monday: date_type, holidays: set) -> dict:
+    working_days = [
+        week_monday + timedelta(days=i)
+        for i in range(5)
+        if (week_monday + timedelta(days=i)) not in holidays
+    ]
+    skipped = [d for d in working_days if d.isoformat() in skips]
+    active  = [d for d in working_days if d.isoformat() not in skips]
+    if not skipped or not active:
+        return planning
+    for d_skip in skipped:
+        tasks = planning.pop(d_skip, [])
+        for i, task in enumerate(tasks):
+            planning.setdefault(active[i % len(active)], []).append(task)
+    return planning
+
+
+def _generate_pdf_etiquettes(tasks, date_obj_or_list):
+    """Génère un PDF d'étiquettes pour un jour ou une semaine."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units     import cm as rl_cm
+    from reportlab.lib           import colors as rlc
+    from reportlab.platypus      import (
+        SimpleDocTemplate, Table, TableStyle,
+        Paragraph, HRFlowable, Spacer,
+        BaseDocTemplate, Frame, PageTemplate, Image as RLImage,
+    )
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums  import TA_RIGHT
+
+    A4_W, A4_H = A4
+    N_COLS = 4
+    W_ETQ  = 5.2 * rl_cm
+    H_ETQ  = 2.95 * rl_cm
+    _grid_w      = W_ETQ * N_COLS
+    _margin_left = (A4_W - _grid_w) / 2
+
+    buf = BytesIO()
+
+    RISK_RL = {k: rlc.HexColor(v) for k, v in _RISK_COLORS_ETQ.items()}
+
+    s_titre  = ParagraphStyle("et_t",  fontName="Helvetica-Bold",
+                               fontSize=7.5, leading=9, spaceAfter=2,
+                               textColor=rlc.HexColor("#0f172a"))
+    s_lbl    = ParagraphStyle("et_l",  fontName="Helvetica",
+                               fontSize=5.5, leading=7,
+                               textColor=rlc.HexColor("#64748b"))
+    s_date   = ParagraphStyle("et_d",  fontName="Helvetica-Bold",
+                               fontSize=9, leading=10,
+                               textColor=rlc.HexColor("#1e40af"))
+    s_logo   = ParagraphStyle("et_lo", fontName="Helvetica",
+                               fontSize=5, leading=6,
+                               textColor=rlc.HexColor("#94a3b8"),
+                               alignment=TA_RIGHT)
+    s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
+                                fontSize=6, leading=7,
+                                textColor=rlc.HexColor("#854d0e"),
+                                spaceAfter=2)
+    s_val    = ParagraphStyle("et_v",  fontName="Helvetica-Bold",
+                               fontSize=7.5, leading=9,
+                               textColor=rlc.HexColor("#0f172a"))
+    s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
+                                fontSize=11, leading=14,
+                                textColor=rlc.HexColor("#1a4e66"))
+
+    if isinstance(date_obj_or_list, list):
+        days_data = date_obj_or_list
+        is_week   = True
+        doc_title = (
+            f"Étiquettes semaine — "
+            f"{days_data[0][0].strftime('%d/%m')} → "
+            f"{days_data[-1][0].strftime('%d/%m/%Y')}"
+        )
+    else:
+        days_data = [(date_obj_or_list, tasks)]
+        is_week   = False
+        doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
+
+    frame = Frame(
+        x1=_margin_left, y1=0,
+        width=_grid_w, height=A4_H,
+        leftPadding=0, rightPadding=0,
+        topPadding=0,  bottomPadding=0,
+    )
+    doc = BaseDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=0, rightMargin=0,
+        topMargin=0,  bottomMargin=0,
+        title=doc_title,
+    )
+    doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
+
+    def _build_cell(task: dict, d_obj: date_type) -> Table:
+        rv      = str(task.get("risk", ""))
+        rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+        lv      = task.get("label", "—")
+        dv      = d_obj.strftime("%d/%m/%Y")
+        W_QR    = 2.0 * rl_cm
+        W_INNER = W_ETQ - 0.55 * rl_cm
+        W_TEXT  = W_INNER - W_QR
+
+        _pt_data = next(
+            (p for p in st.session_state.points if p.get("label") == lv), None
+        )
+
+        # QR Code
+        qr_flowable = None
+        if _pt_data:
+            try:
+                _qr_bytes   = _make_qr_bytes(_qr_payload(_pt_data))
+                _qr_buf     = BytesIO(_qr_bytes)
+                qr_flowable = RLImage(_qr_buf, width=2.0 * rl_cm, height=2.0 * rl_cm)
+            except Exception:
+                qr_flowable = None
+
+        # Bloc classe A (isolateur)
+        classea_rows = []
+        if task.get("room_class", "").strip().upper() == "A":
+            iso_display = task.get("_isolateur")
+            if not iso_display and _pt_data:
+                iso_display = _pt_data.get("num_isolateur", "—") or "—"
+            if not iso_display:
+                iso_display = "—"
+            pst = (_pt_data.get("poste", "") or "") if _pt_data else ""
+            label_iso = iso_display + (f" · {pst}" if pst else "")
+            classea_rows = [[Paragraph(label_iso, s_classea)]]
+
+        # Tableau texte gauche
+        try:
+            left_tbl = Table(
+                [
+                    [Paragraph(lv, s_titre)],
+                    [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
+                    *classea_rows,
+                    [Paragraph("📅 Date", s_lbl)],
+                    [Paragraph(dv, s_date)],
+                    [Paragraph("👤 Préleveur :", s_lbl)],
+                    [Paragraph("", s_val)],
+                    [Paragraph("URC — MicroSurveillance", s_logo)],
+                ],
+                colWidths=[W_TEXT],
+            )
+            left_tbl.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING",    (0, -1), (0, -1), 4),
+            ]))
+        except Exception:
+            left_tbl = Table([[Paragraph(lv, s_titre)]], colWidths=[W_TEXT])
+
+        # Assemblage inner
+        try:
+            if qr_flowable:
+                inner = Table(
+                    [[left_tbl, qr_flowable]],
+                    colWidths=[W_TEXT, W_QR],
+                )
+                inner.setStyle(TableStyle([
+                    ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
+                ]))
+            else:
+                inner = left_tbl
+        except Exception:
+            inner = left_tbl
+
+        # Cellule externe (boîte étiquette)
+        outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+        outer.setStyle(TableStyle([
+            ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+            ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+            ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
+            ("LEFTPADDING",    (0, 0), (0, 0), 11),
+            ("RIGHTPADDING",   (0, 0), (0, 0), 11),
+            ("TOPPADDING",     (0, 0), (0, 0), 11),
+            ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
+            ("VALIGN",         (0, 0), (0, 0), "TOP"),
+            ("BACKGROUND",     (0, 0), (0, 0), rlc.white),
+        ]))
+        return outer
+
+    # Construction du PDF
+    all_rows        = []
+    all_row_heights = []
+
+    for day_date, day_tasks in days_data:
+        if not day_tasks:
+            continue
+
+        # Séparateur jour (mode semaine)
+        if is_week:
+            label = (
+                f"{JOURS[day_date.weekday()]} "
+                f"{day_date.strftime('%d/%m/%Y')} — "
+                f"{len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}"
+            )
+            sep = Table(
+                [[Paragraph(label, s_day_sep)]],
+                colWidths=[_grid_w],
+                rowHeights=[H_ETQ],
+            )
+            sep.setStyle(TableStyle([
+                ("BACKGROUND",   (0, 0), (-1, -1), rlc.HexColor("#bfdbfe")),
+                ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING",  (0, 0), (-1, -1), 14),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 14),
+            ]))
+            all_rows.append([sep] + [""] * (N_COLS - 1))
+            all_row_heights.append(H_ETQ)
+
+        # Lignes étiquettes
+        buffer = []
+        for task in day_tasks:
+            buffer.append(_build_cell(task, day_date))
+            if len(buffer) == N_COLS:
+                all_rows.append(buffer)
+                all_row_heights.append(H_ETQ)
+                buffer = []
+        if buffer:
+            buffer += [""] * (N_COLS - len(buffer))
+            all_rows.append(buffer)
+            all_row_heights.append(H_ETQ)
+
+    # Fallback sécurité
+    if not all_rows:
+        all_rows        = [[""] * N_COLS]
+        all_row_heights = [H_ETQ]
+
+    main_tbl = Table(
+        all_rows,
+        colWidths=[W_ETQ] * N_COLS,
+        rowHeights=all_row_heights,
+    )
+    main_tbl.setStyle(TableStyle([
+        ("PADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN",  (0, 0), (-1, -1), "TOP"),
+    ]))
+
+    doc.build([main_tbl])
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ONGLETS Planning
+# ═══════════════════════════════════════════════════════════════════════
+plan_tab_charge, plan_tab_export = st.tabs([
+    "📊 Charge hebdo & Planning mensuel",
+    "📥 Export Excel",
+])
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # ONGLET : CHARGE HEBDO & PLANNING MENSUEL
-# ═════════════════════════════════════════════════════════════════════════
-    with plan_tab_charge:
-        with plan_tab_charge:
-        # ✅ À ajouter en début de bloc
-            col_y, col_m = st.columns(2)
-            with col_y:
-                _ch_year = st.number_input("Année", min_value=2020, max_value=2030,
-                                        value=st.session_state.cal_year, step=1,
-                                        key="cal_year_sel")
-                st.session_state.cal_year = _ch_year
-            with col_m:
-                MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin",
-                        "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
-                _ch_month = st.selectbox("Mois", range(1,13),
-                                        format_func=lambda m: MOIS[m-1],
-                                        index=st.session_state.cal_month - 1,
-                                        key="cal_month_sel")
-                st.session_state.cal_month = _ch_month
-            _ch_holidays = get_holidays_cached(_ch_year)
+# ═══════════════════════════════════════════════════════════════════════
+with plan_tab_charge:
 
-        st.markdown(
+    # ── Sélecteurs Année / Mois ──────────────────────────────────────
+    col_y, col_m = st.columns(2)
+    with col_y:
+        _ch_year = st.number_input(
+            "Année", min_value=2020, max_value=2030,
+            value=st.session_state.cal_year, step=1,
+            key="cal_year_sel",
+        )
+        st.session_state.cal_year = _ch_year
+
+    with col_m:
+        _ch_month = st.selectbox(
+            "Mois", range(1, 13),
+            format_func=lambda m: MOIS[m - 1],
+            index=st.session_state.cal_month - 1,
+            key="cal_month_sel",
+        )
+        st.session_state.cal_month = _ch_month
+
+    _ch_holidays = get_holidays_cached(_ch_year)
+
+    st.markdown(
         "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
         "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#1e40af'>"
         "💡 Les contraintes max/classe/semaine sont configurables dans "
         "<strong>Paramètres → 🏷️ Contraintes classes</strong>.</div>",
-        unsafe_allow_html=True)
+        unsafe_allow_html=True,
+    )
 
-    class_max_dict = {
-        cls: int(st.session_state.get(f"class_max_{cls}", 0))
-        for cls in sorted({
-            (pt.get('room_class') or '').strip()
-            for pt in st.session_state.points
-            if (pt.get('room_class') or '').strip()
-        })
-    }
+    # ── Calcul des lundis du mois ────────────────────────────────────
+    _, _pm_ndays = _cal_global.monthrange(_ch_year, _ch_month)
+    _pm_start    = date_type(_ch_year, _ch_month, 1)
+    _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
+    cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
+    pm_mondays   = []
+    while cur_pm <= _pm_end:
+        pm_mondays.append(cur_pm)
+        cur_pm += timedelta(weeks=1)
 
-    # ── Contraintes max / classe / semaine ────────────────────────────────
-    st.markdown("#### 🏷️ Contraintes max prélèvements / classe / semaine")
-    st.caption(
-        "**0 = aucun prélèvement** pour cette classe (tous les points sont désactivés). "
-        "**> 0** = le total hebdomadaire de la classe est plafonné à cette valeur, "
-        "puis réparti proportionnellement aux fréquences individuelles (utilisées comme poids). "
-        "**Un même point ne peut pas apparaître 2× le même jour**, "
-        "sauf si sa fréquence est définie en > 1/jour.")
-
-    all_classes = sorted({
-        (pt.get('room_class') or '').strip()
-        for pt in st.session_state.points
-        if (pt.get('room_class') or '').strip()
-    })
-    if "class_constraints_loaded" not in st.session_state:
-        _raw_cc = _supa_get('class_constraints')
-        if _raw_cc:
-            try:
-                _parsed_cc = json.loads(_raw_cc)
-                st.session_state["_class_constraints_raw"] = _parsed_cc
-                for _cls_k, _cls_v in _parsed_cc.items():
-                    st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
-            except Exception:
+    # ── Chargement contraintes depuis Supabase (une seule fois) ──────
+        if "class_constraints_loaded" not in st.session_state:
+            _raw_cc = _supa_get("class_constraints")
+            if _raw_cc:
+                try:
+                    _parsed_cc = json.loads(_raw_cc)
+                    st.session_state["_class_constraints_raw"] = _parsed_cc
+                    for _cls_k, _cls_v in _parsed_cc.items():
+                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
+                except Exception:
+                    st.session_state["_class_constraints_raw"] = {}
+            else:
                 st.session_state["_class_constraints_raw"] = {}
-        else:
-            st.session_state["_class_constraints_raw"] = {}
-        st.session_state["class_constraints_loaded"] = True
+            st.session_state["class_constraints_loaded"] = True
 
-    for _cls in all_classes:
-        _key = f"class_max_{_cls}"
-        if _key not in st.session_state:
-            # Chercher dans les contraintes chargées depuis Supabase
-            _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
-            st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
-    class_max_dict = {}
+        all_classes = sorted({
+            (pt.get("room_class") or "").strip()
+            for pt in st.session_state.points
+            if (pt.get("room_class") or "").strip()
+        })
 
-    if all_classes:
-        rc_colors = {
-            "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
-            "D": "#f97316", "E": "#ef4444",
+        for _cls in all_classes:
+            _key = f"class_max_{_cls}"
+            if _key not in st.session_state:
+                _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
+                st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
+
+        # ── Reconstruction silencieuse de class_max_dict ─────────────────
+        # (Les contraintes sont éditables dans Paramètres → Contraintes classes)
+        class_max_dict = {
+            cls: int(st.session_state.get(f"class_max_{cls}", 0))
+            for cls in all_classes
         }
-        cls_cols = st.columns(min(len(all_classes), 6))
-        for ci, cls in enumerate(all_classes):
-            rc_col  = rc_colors.get(cls.replace(' ', '').upper()[:1], "#6366f1")
-            pts_cls = [pt for pt in st.session_state.points
-                       if (pt.get('room_class') or '').strip() == cls]
-            with cls_cols[ci % len(cls_cols)]:
-                st.markdown(
-                    f"<div style='background:{rc_col}15;border:1.5px solid {rc_col}55;"
-                    f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
-                    f"<div style='font-size:.9rem;font-weight:900;color:{rc_col}'>Classe {cls}</div>"
-                    f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls)} point(s)</div>"
-                    f"</div>",
-                    unsafe_allow_html=True)
-                st.number_input(
-                    f"Max/sem Cl.{cls}", min_value=0, max_value=500,
-                    step=1, key=f"class_max_{cls}",
-                    label_visibility="collapsed",
-                    help=f"0 = aucun prélèvement · >0 = plafond hebdomadaire classe {cls}")
-                new_max = int(st.session_state.get(f"class_max_{cls}", 0))
-                class_max_dict[cls] = new_max
 
-                if new_max > 0:
-                    pts_cls_surf = [pt for pt in pts_cls
-                                    if (pt.get('type') or '').strip().lower()
-                                    not in ('air', 'air ambiant')]
-                    pts_cls_air  = [pt for pt in pts_cls
-                                    if (pt.get('type') or '').strip().lower()
-                                    in ('air', 'air ambiant')]
-                    freqs_p  = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_cls_surf]
-                    tot_p    = sum(freqs_p) or 1
-                    allocs   = []
-                    assigned = 0
-                    for ii, (pt, f) in enumerate(zip(pts_cls_surf, freqs_p)):
-                        if ii < len(pts_cls_surf) - 1:
-                            a = round(f / tot_p * new_max)
-                        else:
-                            a = max(0, new_max - assigned)
-                        assigned += a
-                        allocs.append(a)
-                    preview = "".join(
-                        f"<div style='font-size:.6rem;color:#1e40af'>"
-                        f"{pt['label'][:20]}: <b>{a}×/sem</b></div>"
-                        for pt, a in zip(pts_cls_surf, allocs))
-                    # Points Air affichés séparément avec leur fréquence propre
-                    for pt_air in pts_cls_air:
-                        f_air = _freq_en_semaine(pt_air, 5)
-                        preview += (
-                            f"<div style='font-size:.6rem;color:#0369a1'>"
-                            f"💨 {pt_air['label'][:20]}: <b>{f_air:.0f}×/sem (Air)</b></div>")
-                    st.markdown(
-                        f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                        f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview}</div>",
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f"<div style='background:#fef2f2;border:1px solid #fca5a5;"
-                        f"border-radius:6px;padding:6px 8px;margin-top:2px;"
-                        f"text-align:center'>"
-                        f"<div style='font-size:.62rem;font-weight:700;color:#991b1b'>"
-                        f"🚫 Aucun prélèvement planifié</div>"
-                        f"<div style='font-size:.58rem;color:#b91c1c;margin-top:1px'>"
-                        f"Définissez une valeur &gt; 0 pour activer</div>"
-                        f"</div>",
-                        unsafe_allow_html=True)
-    else:
-        st.info("Aucune classe de salle définie sur les points de prélèvement.")
-        class_max_dict = {}
+        st.divider()
 
-    if all_classes:
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-        sv_col, _ = st.columns([1, 3])
-        with sv_col:
-            if st.button("💾 Sauvegarder les contraintes",
-                        key="save_class_constraints",
-                        use_container_width=True, type="primary"):
-                payload = {
-                    cls: int(st.session_state.get(f"class_max_{cls}", 0))
-                    for cls in all_classes
-                }
-                if _supa_upsert('class_constraints',
-                                json.dumps(payload, ensure_ascii=False)):
-                    st.success("✅ Contraintes sauvegardées dans Supabase !")
-                else:
-                    st.warning("⚠️ Supabase non connecté — contraintes non sauvegardées.")
-
-                # ── Réinitialiser tous les PDF en cache ──────────────────────────
-                keys_to_delete = [
-                    k for k in st.session_state
-                    if k.startswith("pdf_week_D_")
-                    or k.startswith("pdf_week_iso14_")
-                    or k.startswith("pdf_week_iso16_")
-                    or k.startswith("pdf_quick_")
-                ]
-                for k in keys_to_delete:
-                    del st.session_state[k]
-    st.divider()
-
-    # ── Sélecteur semaine ─────────────────────────────────────────────────
+    # ── Sélecteur de semaine ─────────────────────────────────────────
     ch_ws_set = {get_week_start(_today_dt)}
     for _p in st.session_state.prelevements:
         try:
-            ch_ws_set.add(get_week_start(datetime.fromisoformat(_p["date"]).date()))
+            ch_ws_set.add(
+                get_week_start(datetime.fromisoformat(_p["date"]).date())
+            )
         except Exception:
             pass
     for _i in range(1, 9):
         ch_ws_set.add(get_week_start(_today_dt) + timedelta(weeks=_i))
+
     ch_week_starts = sorted(ch_ws_set)
     ch_week_labels = [fmt_week(ws) for ws in ch_week_starts]
+
     ch_cur_idx = 0
     for _i, _ws in enumerate(ch_week_starts):
         if _ws <= _today_dt < _ws + timedelta(days=7):
@@ -3918,10 +4253,13 @@ if active == "planning":
             break
 
     ch_sel_label = st.selectbox(
-        "Semaine à détailler", ch_week_labels, index=ch_cur_idx, key="ch_week_sel")
-    ch_sel_ws       = ch_week_starts[ch_week_labels.index(ch_sel_label)]
-    ch_sel_we       = ch_sel_ws + timedelta(days=6)
-    ch_holidays     = get_holidays_cached(ch_sel_ws.year)
+        "Semaine à détailler", ch_week_labels,
+        index=ch_cur_idx, key="ch_week_sel",
+    )
+    ch_sel_ws = ch_week_starts[ch_week_labels.index(ch_sel_label)]
+    ch_sel_we = ch_sel_ws + timedelta(days=6)
+
+    ch_holidays = get_holidays_cached(ch_sel_ws.year)
     ch_working_days = [
         ch_sel_ws + timedelta(days=i)
         for i in range(5)
@@ -3931,20 +4269,21 @@ if active == "planning":
 
     ch_j0 = [
         p for p in st.session_state.prelevements
-        if p.get('date')
-        and ch_sel_ws <= datetime.fromisoformat(p['date']).date() <= ch_sel_we
-        and not p.get('archived', False)
+        if p.get("date")
+        and ch_sel_ws <= datetime.fromisoformat(p["date"]).date() <= ch_sel_we
+        and not p.get("archived", False)
     ]
     ch_j2 = [
         s for s in st.session_state.schedules
-        if s['when'] == 'J2'
-        and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
+        if s["when"] == "J2"
+        and ch_sel_ws <= datetime.fromisoformat(s["due_date"]).date() <= ch_sel_we
     ]
     ch_j7 = [
         s for s in st.session_state.schedules
-        if s['when'] == 'J7'
-        and ch_sel_ws <= datetime.fromisoformat(s['due_date']).date() <= ch_sel_we
+        if s["when"] == "J7"
+        and ch_sel_ws <= datetime.fromisoformat(s["due_date"]).date() <= ch_sel_we
     ]
+
     total_actes    = len(ch_j0) + len(ch_j2) + len(ch_j7)
     actes_par_jour = total_actes / nb_jours if nb_jours > 0 else 0
 
@@ -3959,53 +4298,58 @@ if active == "planning":
           </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">Actes total</div>
+          <div style="background:rgba(255,255,255,.15);border-radius:10px;
+                      padding:10px 18px;text-align:center">
+            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;
+                        text-transform:uppercase">Actes total</div>
             <div style="font-size:2rem;font-weight:900;color:#fff">{total_actes}</div>
           </div>
-          <div style="background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px;text-align:center">
-            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;text-transform:uppercase">/ jour</div>
+          <div style="background:rgba(255,255,255,.15);border-radius:10px;
+                      padding:10px 18px;text-align:center">
+            <div style="font-size:.72rem;color:#bfdbfe;font-weight:700;
+                        text-transform:uppercase">/ jour</div>
             <div style="font-size:2rem;font-weight:900;color:#fff">{actes_par_jour:.1f}</div>
           </div>
         </div></div>""",
-        unsafe_allow_html=True)
+        unsafe_allow_html=True,
+    )
 
     m2, m3, m4, m5 = st.columns(4)
-    m2.metric("📍 Points actifs", len(st.session_state.points))
-    m3.metric("🧪 Prélèv. J0",   len(ch_j0))
-    m4.metric("📖 Lectures J2",  len(ch_j2))
-    m5.metric("📗 Lectures J7",  len(ch_j7))
+    m2.metric("📍 Points actifs",  len(st.session_state.points))
+    m3.metric("🧪 Prélèv. J0",    len(ch_j0))
+    m4.metric("📖 Lectures J2",   len(ch_j2))
+    m5.metric("📗 Lectures J7",   len(ch_j7))
 
     st.divider()
 
-    
- 
-    # ── Avancement au cours de la semaine (expander) ──────────────────
+    # ── Avancement de la semaine ─────────────────────────────────────
     _av_prevu_total   = 0
     _av_realise_total = 0
     _av_rows          = []
- 
+
     for pt_av in st.session_state.points:
-        rc_av  = (pt_av.get('room_class') or '').strip()
+        rc_av  = (pt_av.get("room_class") or "").strip()
         max_av = int(class_max_dict.get(rc_av, 0))
- 
-        pts_cls_av  = [p for p in st.session_state.points
-                       if (p.get('room_class') or '').strip() == rc_av]
-        freqs_av    = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_av]
-        tot_av      = sum(freqs_av) or 1
-        my_f_av     = max(0.01, _freq_en_semaine(pt_av, nb_jours))
-        alloc_av    = round(my_f_av / tot_av * max_av) if max_av > 0 else 0
- 
+        pts_cls_av = [
+            p for p in st.session_state.points
+            if (p.get("room_class") or "").strip() == rc_av
+        ]
+        freqs_av = [max(0.01, _freq_en_semaine(p, nb_jours)) for p in pts_cls_av]
+        tot_av   = sum(freqs_av) or 1
+        my_f_av  = max(0.01, _freq_en_semaine(pt_av, nb_jours))
+        alloc_av = round(my_f_av / tot_av * max_av) if max_av > 0 else 0
+
         nb_prevu_av, _, _ = _get_prevu_semaine(pt_av, ch_sel_ws, nb_jours, alloc_av)
-        realise_av = sum(1 for p in ch_j0 if p.get('label') == pt_av['label'])
+        realise_av = sum(1 for p in ch_j0 if p.get("label") == pt_av["label"])
+
         _av_prevu_total   += nb_prevu_av
         _av_realise_total += realise_av
         _av_rows.append((pt_av, nb_prevu_av, realise_av))
- 
+
     taux_av  = int(_av_realise_total / _av_prevu_total * 100) if _av_prevu_total > 0 else 0
     taux_ic  = "✅" if taux_av >= 100 else "⏳" if taux_av >= 50 else "🔴"
     taux_col = "#22c55e" if taux_av >= 100 else "#f59e0b" if taux_av >= 50 else "#ef4444"
- 
+
     with st.expander(
         f"📊 Avancement au cours de la semaine "
         f"— {_av_realise_total}/{_av_prevu_total} réalisé(s) {taux_ic} {taux_av}%",
@@ -4018,20 +4362,26 @@ if active == "planning":
             "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Réalisé</div>"
             "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Statut</div>"
             "</div>",
-            unsafe_allow_html=True)
- 
+            unsafe_allow_html=True,
+        )
+
         for pt_av, nb_prevu_av, realise_av in _av_rows:
-            type_icon_av = "💨" if pt_av.get('type') == 'Air' else "🧴"
+            type_icon_av = "💨" if pt_av.get("type") == "Air" else "🧴"
+
             if nb_prevu_av == 0:
-                st_bg_av="#f8fafc"; st_brd_av="#e2e8f0"; st_col_av="#94a3b8"; st_lbl_av="⏸️ Non planifié"
+                st_bg_av  = "#f8fafc"; st_brd_av = "#e2e8f0"
+                st_col_av = "#94a3b8"; st_lbl_av = "⏸️ Non planifié"
             elif realise_av >= nb_prevu_av:
-                st_bg_av="#f0fdf4"; st_brd_av="#86efac"; st_col_av="#166534"; st_lbl_av="✅ Complet"
+                st_bg_av  = "#f0fdf4"; st_brd_av = "#86efac"
+                st_col_av = "#166534"; st_lbl_av = "✅ Complet"
             elif realise_av > 0:
-                pct_av=int(realise_av/nb_prevu_av*100)
-                st_bg_av="#fffbeb"; st_brd_av="#fcd34d"; st_col_av="#92400e"; st_lbl_av=f"⏳ {pct_av}%"
+                pct_av    = int(realise_av / nb_prevu_av * 100)
+                st_bg_av  = "#fffbeb"; st_brd_av = "#fcd34d"
+                st_col_av = "#92400e"; st_lbl_av = f"⏳ {pct_av}%"
             else:
-                st_bg_av="#fef2f2"; st_brd_av="#fca5a5"; st_col_av="#991b1b"; st_lbl_av=f"🔴 0/{nb_prevu_av}"
- 
+                st_bg_av  = "#fef2f2"; st_brd_av = "#fca5a5"
+                st_col_av = "#991b1b"; st_lbl_av = f"🔴 0/{nb_prevu_av}"
+
             st.markdown(
                 "<div style='display:grid;grid-template-columns:3fr 0.8fr 1.4fr;"
                 "gap:4px;background:#fff;border:1px solid #e2e8f0;border-top:none;"
@@ -4045,8 +4395,9 @@ if active == "planning":
                 f"border-radius:8px;padding:3px 10px;font-size:.72rem;"
                 f"font-weight:700;color:{st_col_av}'>{st_lbl_av}</span>"
                 f"</div></div>",
-                unsafe_allow_html=True)
- 
+                unsafe_allow_html=True,
+            )
+
         st.markdown(
             "<div style='background:#1e293b;border-radius:0 0 10px 10px;"
             "padding:8px 14px;display:flex;justify-content:space-between;align-items:center'>"
@@ -4056,46 +4407,36 @@ if active == "planning":
             f"<span style='font-size:.78rem;color:#86efac'>Réalisé : {_av_realise_total}</span>"
             f"<span style='font-size:.88rem;font-weight:800;color:{taux_col}'>"
             f"{taux_av}% réalisé</span></div></div>",
-            unsafe_allow_html=True)
+            unsafe_allow_html=True,
+        )
 
-    # ── Planning mensuel automatique ──────────────────────────────────────
+    # ── Planning mensuel automatique ─────────────────────────────────
     st.markdown("#### 📅 Planning mensuel automatique")
     st.caption(
         "Répartition basée sur les contraintes max/classe/semaine définies ci-dessus. "
         "**0 = aucun prélèvement** pour la classe concernée. "
-        "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour.")
-
-    class_max_dict = {
-        cls: int(st.session_state.get(f"class_max_{cls}", 0))
-        for cls in all_classes
-    }
+        "Un point n'apparaît jamais 2× le même jour sauf si sa fréquence est > 1/jour."
+    )
 
     monthly_plan = _compute_monthly_planning(
         _ch_year, _ch_month,
         class_max_dict,
-        _ch_holidays)
+        _ch_holidays,
+    )
 
-    # ── Appliquer les redistributions de skips ──────────────────────────────
+    # Appliquer les redistributions de skips
     for _wm in pm_mondays:
         _has_skip = any(
-            d.isoformat() in st.session_state["planning_skips"]
+            (_wm + timedelta(days=i)).isoformat() in st.session_state["planning_skips"]
             for i in range(5)
-            for d in [_wm + timedelta(days=i)]
         )
         if _has_skip:
             monthly_plan = _redistribute_skips(
-                monthly_plan, st.session_state["planning_skips"],
-                _wm, _ch_holidays)
-
-    import calendar as _cal_pm
-    _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
-    _pm_start    = date_type(_ch_year, _ch_month, 1)
-    _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
-    cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
-    pm_mondays   = []
-    while cur_pm <= _pm_end:
-        pm_mondays.append(cur_pm)
-        cur_pm += timedelta(weeks=1)
+                monthly_plan,
+                st.session_state["planning_skips"],
+                _wm,
+                _ch_holidays,
+            )
 
     if "pm_selected_day" not in st.session_state:
         st.session_state["pm_selected_day"] = None
