@@ -965,7 +965,7 @@ if "map_points" not in st.session_state:
 if "map_image" not in st.session_state:
     st.session_state.map_image = None
 if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "logigramme"
+    st.session_state.active_tab = "accueil"
 if "origin_measures" not in st.session_state:
     st.session_state.origin_measures = load_origin_measures()
 if "show_new_measure" not in st.session_state:
@@ -1480,11 +1480,11 @@ if active == "accueil":
     col1, col2 = st.columns(2)
     with col1:
         if st.button("📅 Accéder au Planning", use_container_width=True):
-            st.session_state["tab"] = "planning"
+            st.session_state.active_tab = "planning"   # ← corrigé
             st.rerun()
     with col2:
         if st.button("🔍 Accéder aux Prélèvements", use_container_width=True):
-            st.session_state["tab"] = "surveillance"
+            st.session_state.active_tab = "surveillance"  # ← corrigé
             st.rerun()
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : LOGIGRAMME — COMPLET
