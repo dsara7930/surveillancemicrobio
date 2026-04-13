@@ -3647,10 +3647,8 @@ if active == "planning":
         N_COLS      = 4
         MARGIN_SHEET = 0.4 * rl_cm          # marge physique de la planche sur chaque bord
 
-        W_ETQ       = (A4_W - 2 * MARGIN_SHEET) / N_COLS   # largeur étiquette calculée
-        H_ETQ       = 2.95 * rl_cm
-
-        _grid_w      = W_ETQ * N_COLS        # = A4_W - 2*MARGIN_SHEET
+        W_ETQ  = (A4_W - 2 * MARGIN_SHEET) / N_COLS
+        _grid_w = W_ETQ * N_COLS  # utilisé pour centrer le tableau si besoin
         _margin_left = MARGIN_SHEET          # aligné exactement sur le bord de la planche
 
         RISK_RL   = {k: rlc.HexColor(v) for k, v in {
@@ -3701,6 +3699,10 @@ if active == "planning":
             leftPadding=0, rightPadding=0,
             topPadding=0,  bottomPadding=0,
         )
+        from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
+
+        MARGIN_SHEET = 0.4 * rl_cm
+
         doc = BaseDocTemplate(
             buf,
             pagesize=A4,
@@ -3708,7 +3710,15 @@ if active == "planning":
             rightMargin=MARGIN_SHEET,
             topMargin=MARGIN_SHEET,
             bottomMargin=MARGIN_SHEET,
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
         )
+
+
+        
+
         doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
 
         def _build_cell(task, d_obj):
