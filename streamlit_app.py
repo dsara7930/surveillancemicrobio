@@ -4358,6 +4358,7 @@ if active == "planning":
 
                     if non_faits:
                         with st.popover(f"⬜ {len(non_faits)} Non faits"):
+                            changed = False
                             for ti, t in enumerate(non_faits):
                                 key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
                                 if st.checkbox(t["label"], key=key):
@@ -4366,18 +4367,19 @@ if active == "planning":
                                     _skips.setdefault(dk, [])
                                     if t["label"] not in _skips[dk]:
                                         _skips[dk].append(t["label"])
-                                    
-                                    # 1. Mettre à jour le session_state EN PREMIER
-                                    st.session_state["planning_skips"] = _skips
-                                    
-                                    # 2. Sauvegarder dans Supabase (synchrone — attend la réponse)
+                                        st.session_state["planning_skips"] = _skips
+                                        changed = True
+
+                            if changed:
+                                if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
                                     supa = get_supabase_client()
                                     if supa:
                                         supa.table('app_state').upsert(
-                                            {'key': 'planning_skips', 'value': json.dumps(_skips)},
+                                            {'key': 'planning_skips',
+                                            'value': json.dumps(st.session_state["planning_skips"])},
                                             on_conflict='key'
-                                        ).execute()  # .execute() est bloquant → garanti avant st.rerun()
-                                    
+                                        ).execute()
+                                    st.success("✅ Enregistré !")
                                     st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
