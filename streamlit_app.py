@@ -829,7 +829,19 @@ def find_germ_match(query, germs):
             best_score = score
             best_match = g
     return best_match, best_score
+def load_planning_skips():
+    raw_json = _supa_get('planning_skips')
+    if raw_json:
+        try:
+            raw = json.loads(raw_json)
+            if isinstance(raw, dict):
+                return raw
+        except Exception:
+            pass
+    return {}
 
+def save_planning_skips(skips):
+    _supa_upsert('planning_skips', json.dumps(skips, ensure_ascii=False))
 # ── Helpers scoring ────────────────────────────────────────────────────────────
 def _get_location_criticality(sample):
     if "location_criticality" in sample:
@@ -973,6 +985,8 @@ if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
 if "plans" not in st.session_state:
     st.session_state.plans = load_plans()
+if "planning_skips" not in st.session_state:
+    st.session_state["planning_skips"] = load_planning_skips()
 if "faq_items" not in st.session_state:
     st.session_state.faq_items = load_faq()
 if "_seuil_alerte" not in st.session_state:
@@ -4353,7 +4367,7 @@ if active == "planning":
                                     if t["label"] not in _skips[dk]:
                                         _skips[dk].append(t["label"])
                                     st.session_state["planning_skips"] = _skips
-                                    _supa_upsert('planning_skips', json.dumps(_skips))
+                                    save_planning_skips(_skips)   # ← remplace l'appel direct à _supa_upsert
                                     st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
