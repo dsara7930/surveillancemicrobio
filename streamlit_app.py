@@ -3644,7 +3644,7 @@ if active == "planning":
         W_ETQ       = 5.2 * rl_cm
         H_ETQ       = 2.95 * rl_cm
         _grid_w     = W_ETQ * N_COLS
-        _margin_left = (A4_W - _grid_w) / 2
+        _margin_left = 0.5 * rl_cm
         buf         = BytesIO()
 
         RISK_RL   = {k: rlc.HexColor(v) for k, v in {
