@@ -4232,7 +4232,7 @@ if active == "planning":
                     if non_faits:
                         with st.popover("⬜ Non faits"):
                             for t in non_faits:
-                                key = f"skip_{wd}_{t['label']}"
+                                key = f"skip_{wd.isoformat()}_{t['label'].replace(' ', '_')}"
                                 if st.checkbox(t["label"], key=key):
                                     _skips = st.session_state["planning_skips"]
                                     dk     = wd.isoformat()
@@ -4240,8 +4240,7 @@ if active == "planning":
                                     if t["label"] not in _skips[dk]:
                                         _skips[dk].append(t["label"])
                                     st.session_state["planning_skips"] = _skips
-                                    _supa_upsert('planning_skips',
-                                                 json.dumps(_skips))
+                                    _supa_upsert('planning_skips', json.dumps(_skips))
                                     st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
