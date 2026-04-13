@@ -3809,27 +3809,19 @@ if active == "planning":
             ]))
             return outer
 
-        # ── Assemblage de toutes les lignes ──────────────────────────────────
-        story           = []
-        all_rows        = []
-        all_row_heights = []
+            # ── Assemblage story ─────────────────────────────────────────────────
+        from reportlab.platypus import Spacer
+
+        story = []
 
         for (d_obj, day_tasks) in days_data:
-            # Séparateur de jour
             n_prelevements = len(day_tasks)
             sep_label = (
                 f"{d_obj.strftime('%A %d/%m/%Y').capitalize()} "
                 f"— {n_prelevements} prélèvement{'s' if n_prelevements > 1 else ''}"
             )
 
-            # Vider le buffer de lignes en cours si besoin avant le séparateur
-            if all_rows:
-                # Compléter la dernière ligne si incomplète
-                last_row = all_rows[-1]
-                while len(last_row) < N_COLS:
-                    last_row.append("")
-
-            # Ligne séparateur pleine largeur
+            # ── Séparateur jour : flowable indépendant, pleine largeur ───────
             sep_cell = Table(
                 [[Paragraph(sep_label, s_day_sep)]],
                 colWidths=[_grid_w],
@@ -3841,18 +3833,39 @@ if active == "planning":
                 ("BOTTOMPADDING", (0, 0), (0, 0), 4),
                 ("RIGHTPADDING",  (0, 0), (0, 0), 8),
             ]))
-            all_rows.append([sep_cell])
-            all_row_heights.append(0.7 * rl_cm)
+            story.append(sep_cell)
+            story.append(Spacer(1, 0.15 * rl_cm))
 
-            # Étiquettes du jour, par blocs de N_COLS
+            # ── Étiquettes du jour : tableau propre par jour ─────────────────
             cells_day = [_build_cell(t, d_obj) for t in day_tasks]
+
+            rows        = []
+            row_heights = []
             for i in range(0, len(cells_day), N_COLS):
                 chunk = cells_day[i:i + N_COLS]
                 while len(chunk) < N_COLS:
-                    chunk.append("")
-                all_rows.append(chunk)
-                all_row_heights.append(H_ETQ)
+                    chunk.append("")          # cellule vide pour compléter la ligne
+                rows.append(chunk)
+                row_heights.append(H_ETQ)    # H_ETQ = 2.95 cm, une valeur par ligne
 
+            if rows:
+                day_tbl = Table(
+                    rows,
+                    colWidths=[W_ETQ] * N_COLS,   # W_ETQ = (A4 - 2×0.4cm) / 4
+                    rowHeights=row_heights,
+                )
+                day_tbl.setStyle(TableStyle([
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]))
+                story.append(day_tbl)
+                story.append(Spacer(1, 0.2 * rl_cm))
+
+        doc.build(story)
+        buf.seek(0)
+        return buf.getvalue()
         # ── Tableau global ───────────────────────────────────────────────────
         if all_rows:
             main_tbl = Table(
