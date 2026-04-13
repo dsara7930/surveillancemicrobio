@@ -829,6 +829,7 @@ def find_germ_match(query, germs):
             best_score = score
             best_match = g
     return best_match, best_score
+
 def load_planning_skips():
     raw_json = _supa_get('planning_skips')
     if raw_json:
@@ -4378,6 +4379,20 @@ if active == "planning":
                                             _skips[dk].append(label)
                                     st.session_state["planning_skips"] = _skips
                                     
+                                    # Debug avant rerun
+                                    ok = _supa_upsert('planning_skips', json.dumps(_skips))
+                                    if not ok:
+                                        st.error("❌ Sauvegarde Supabase échouée !")
+                                        st.stop()
+                                    else:
+                                        relu = _supa_get('planning_skips')
+                                        if relu != json.dumps(_skips):
+                                            st.error(f"❌ Données différentes après relecture !\nEnvoyé: {_skips}\nReçu: {relu}")
+                                            st.stop()
+                                        else:
+                                            st.success("✅ OK — données confirmées en base")
+                                            st.stop()  # ← remplacez par st.rerun() une fois confirmé
+                                    
                                     # Sauvegarde Supabase bloquante avant rerun
                                     supa = get_supabase_client()
                                     if supa:
@@ -4391,9 +4406,6 @@ if active == "planning":
                         st.button("✅", disabled=True, key=f"done_{wd}")
 
             st.divider()
-
-            
-
 
 # ── Panel détail jour ────────────────────────────────────────
         sel = st.session_state.get("pm_selected_day")
