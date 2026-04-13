@@ -3645,11 +3645,13 @@ if active == "planning":
 
         A4_W, A4_H  = A4
         N_COLS      = 4
-        W_ETQ       = 5.2 * rl_cm
+        MARGIN_SHEET = 0.4 * rl_cm          # marge physique de la planche sur chaque bord
+
+        W_ETQ       = (A4_W - 2 * MARGIN_SHEET) / N_COLS   # largeur étiquette calculée
         H_ETQ       = 2.95 * rl_cm
-        _grid_w     = W_ETQ * N_COLS
-        _margin_left = (A4_W - _grid_w) / 2
-        buf         = BytesIO()
+
+        _grid_w      = W_ETQ * N_COLS        # = A4_W - 2*MARGIN_SHEET
+        _margin_left = MARGIN_SHEET          # aligné exactement sur le bord de la planche
 
         RISK_RL   = {k: rlc.HexColor(v) for k, v in {
             "1": "#22c55e", "2": "#84cc16",
@@ -3700,10 +3702,12 @@ if active == "planning":
             topPadding=0,  bottomPadding=0,
         )
         doc = BaseDocTemplate(
-            buf, pagesize=A4,
-            leftMargin=0, rightMargin=0,
-            topMargin=0,  bottomMargin=0,
-            title=doc_title,
+            buf,
+            pagesize=A4,
+            leftMargin=MARGIN_SHEET,
+            rightMargin=MARGIN_SHEET,
+            topMargin=MARGIN_SHEET,
+            bottomMargin=MARGIN_SHEET,
         )
         doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
 
