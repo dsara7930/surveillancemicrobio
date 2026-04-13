@@ -2635,6 +2635,8 @@ vp.addEventListener('wheel',e=>{{
 
 
             _scanned_data = None
+            qr_raw = qr_raw.strip().strip('"')  # ← nettoyage guillemets parasites
+
             if qr_raw and qr_raw.startswith("{"):
                 try:
                     _scanned_data = json.loads(qr_raw)
