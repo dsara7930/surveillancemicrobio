@@ -3642,43 +3642,47 @@ if active == "planning":
         )
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums  import TA_RIGHT
+        from io import BytesIO
 
-        A4_W, A4_H  = A4
-        N_COLS      = 4
-        MARGIN_SHEET = 0.4 * rl_cm          # marge physique de la planche sur chaque bord
+        A4_W, A4_H   = A4
+        N_COLS       = 4
+        MARGIN_SHEET = 0.4 * rl_cm
 
         W_ETQ  = (A4_W - 2 * MARGIN_SHEET) / N_COLS
-        _grid_w = W_ETQ * N_COLS  # utilisé pour centrer le tableau si besoin
-        _margin_left = MARGIN_SHEET          # aligné exactement sur le bord de la planche
+        H_ETQ  = 2.95 * rl_cm                          # ← défini ici, une seule fois
+        _grid_w      = W_ETQ * N_COLS
+        _margin_left = MARGIN_SHEET
+
         buf = BytesIO()
-        RISK_RL   = {k: rlc.HexColor(v) for k, v in {
+
+        RISK_RL = {k: rlc.HexColor(v) for k, v in {
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
         }.items()}
 
         s_titre   = ParagraphStyle("et_t",  fontName="Helvetica-Bold",
-                                   fontSize=7.5, leading=9, spaceAfter=2,
-                                   textColor=rlc.HexColor("#0f172a"))
+                                fontSize=7.5, leading=9, spaceAfter=2,
+                                textColor=rlc.HexColor("#0f172a"))
         s_lbl     = ParagraphStyle("et_l",  fontName="Helvetica",
-                                   fontSize=5.5, leading=7,
-                                   textColor=rlc.HexColor("#64748b"))
+                                fontSize=5.5, leading=7,
+                                textColor=rlc.HexColor("#64748b"))
         s_date    = ParagraphStyle("et_d",  fontName="Helvetica-Bold",
-                                   fontSize=9, leading=10,
-                                   textColor=rlc.HexColor("#1e40af"))
+                                fontSize=9, leading=10,
+                                textColor=rlc.HexColor("#1e40af"))
         s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
-                                   fontSize=5, leading=6,
-                                   textColor=rlc.HexColor("#94a3b8"),
-                                   alignment=TA_RIGHT)
+                                fontSize=5, leading=6,
+                                textColor=rlc.HexColor("#94a3b8"),
+                                alignment=TA_RIGHT)
         s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
-                                   fontSize=6, leading=7,
-                                   textColor=rlc.HexColor("#854d0e"),
-                                   spaceAfter=2)
+                                fontSize=6, leading=7,
+                                textColor=rlc.HexColor("#854d0e"),
+                                spaceAfter=2)
         s_val     = ParagraphStyle("et_v",  fontName="Helvetica-Bold",
-                                   fontSize=7.5, leading=9,
-                                   textColor=rlc.HexColor("#0f172a"))
+                                fontSize=7.5, leading=9,
+                                textColor=rlc.HexColor("#0f172a"))
         s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
-                                   fontSize=11, leading=14,
-                                   textColor=rlc.HexColor("#1a4e66"))
+                                fontSize=11, leading=14,
+                                textColor=rlc.HexColor("#1a4e66"))
 
         if isinstance(date_obj_or_list, list):
             days_data = date_obj_or_list
@@ -3693,16 +3697,7 @@ if active == "planning":
             is_week   = False
             doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
 
-        frame = Frame(
-            x1=_margin_left, y1=0,
-            width=_grid_w, height=A4_H,
-            leftPadding=0, rightPadding=0,
-            topPadding=0,  bottomPadding=0,
-        )
-        from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
-
-        MARGIN_SHEET = 0.4 * rl_cm
-
+        # ── Document & Frame ─────────────────────────────────────────────────
         doc = BaseDocTemplate(
             buf,
             pagesize=A4,
@@ -3710,14 +3705,19 @@ if active == "planning":
             rightMargin=MARGIN_SHEET,
             topMargin=MARGIN_SHEET,
             bottomMargin=MARGIN_SHEET,
-            leftPadding=0,
-            rightPadding=0,
-            topPadding=0,
-            bottomPadding=0,
         )
 
+        frame = Frame(
+            x1=MARGIN_SHEET,
+            y1=MARGIN_SHEET,
+            width=A4_W  - 2 * MARGIN_SHEET,
+            height=A4_H - 2 * MARGIN_SHEET,
+            leftPadding=0, rightPadding=0,
+            topPadding=0,  bottomPadding=0,
+        )
         doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
 
+        # ── Construction d'une cellule étiquette ─────────────────────────────
         def _build_cell(task, d_obj):
             rv      = str(task.get("risk", ""))
             rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
@@ -3794,6 +3794,7 @@ if active == "planning":
             except Exception:
                 inner = left_tbl
 
+            # ← rowHeights=[H_ETQ] correct ici car outer = 1 seule ligne
             outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
             outer.setStyle(TableStyle([
                 ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
@@ -3808,61 +3809,74 @@ if active == "planning":
             ]))
             return outer
 
+        # ── Assemblage de toutes les lignes ──────────────────────────────────
+        story           = []
         all_rows        = []
         all_row_heights = []
 
-        for day_date, day_tasks in days_data:
-            if not day_tasks:
-                continue
-            if is_week:
-                label = (
-                    f"{JOURS_FR_LONG[day_date.weekday()]} "
-                    f"{day_date.strftime('%d/%m/%Y')} — "
-                    f"{len(day_tasks)} prélèvement{'s' if len(day_tasks) > 1 else ''}"
-                )
-                sep = Table(
-                    [[Paragraph(label, s_day_sep)]],
-                    colWidths=[_grid_w],
-                    rowHeights=[H_ETQ],
-                )
-                sep.setStyle(TableStyle([
-                    ("BACKGROUND",   (0, 0), (-1, -1), rlc.HexColor("#bfdbfe")),
-                    ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-                    ("LEFTPADDING",  (0, 0), (-1, -1), 14),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 14),
-                ]))
-                all_rows.append([sep] + [""] * (N_COLS - 1))
+        for (d_obj, day_tasks) in days_data:
+            # Séparateur de jour
+            n_prelevements = len(day_tasks)
+            sep_label = (
+                f"{d_obj.strftime('%A %d/%m/%Y').capitalize()} "
+                f"— {n_prelevements} prélèvement{'s' if n_prelevements > 1 else ''}"
+            )
+
+            # Vider le buffer de lignes en cours si besoin avant le séparateur
+            if all_rows:
+                # Compléter la dernière ligne si incomplète
+                last_row = all_rows[-1]
+                while len(last_row) < N_COLS:
+                    last_row.append("")
+
+            # Ligne séparateur pleine largeur
+            sep_cell = Table(
+                [[Paragraph(sep_label, s_day_sep)]],
+                colWidths=[_grid_w],
+            )
+            sep_cell.setStyle(TableStyle([
+                ("BACKGROUND",    (0, 0), (0, 0), rlc.HexColor("#e0f2fe")),
+                ("LEFTPADDING",   (0, 0), (0, 0), 8),
+                ("TOPPADDING",    (0, 0), (0, 0), 4),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 4),
+                ("RIGHTPADDING",  (0, 0), (0, 0), 8),
+            ]))
+            all_rows.append([sep_cell])
+            all_row_heights.append(0.7 * rl_cm)
+
+            # Étiquettes du jour, par blocs de N_COLS
+            cells_day = [_build_cell(t, d_obj) for t in day_tasks]
+            for i in range(0, len(cells_day), N_COLS):
+                chunk = cells_day[i:i + N_COLS]
+                while len(chunk) < N_COLS:
+                    chunk.append("")
+                all_rows.append(chunk)
                 all_row_heights.append(H_ETQ)
 
-            buffer = []
-            for task in day_tasks:
-                buffer.append(_build_cell(task, day_date))
-                if len(buffer) == N_COLS:
-                    all_rows.append(buffer)
-                    all_row_heights.append(H_ETQ)
-                    buffer = []
-            if buffer:
-                buffer += [""] * (N_COLS - len(buffer))
-                all_rows.append(buffer)
-                all_row_heights.append(H_ETQ)
+        # ── Tableau global ───────────────────────────────────────────────────
+        if all_rows:
+            main_tbl = Table(
+                all_rows,
+                colWidths=[W_ETQ] * N_COLS,
+                rowHeights=all_row_heights,   # ← une hauteur PAR ligne
+            )
+            main_tbl.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                # Fusionner la cellule séparateur sur toute la largeur
+                *[
+                    ("SPAN", (0, i), (N_COLS - 1, i))
+                    for i, h in enumerate(all_row_heights)
+                    if h == 0.7 * rl_cm
+                ],
+            ]))
+            story.append(main_tbl)
 
-        if not all_rows:
-            all_rows        = [[""] * N_COLS]
-            all_row_heights = [H_ETQ]
-
-        main_tbl = Table(
-            all_rows,
-            colWidths=[W_ETQ] * N_COLS,
-            rowHeights=all_row_heights,
-        )
-        main_tbl.setStyle(TableStyle([
-            ("PADDING", (0, 0), (-1, -1), 0),
-            ("VALIGN",  (0, 0), (-1, -1), "TOP"),
-        ]))
-        doc.build([main_tbl])
+        doc.build(story)
         buf.seek(0)
         return buf.getvalue()
-
     # ════════════════════════════════════════════════════════════════
     # ONGLETS
     # ════════════════════════════════════════════════════════════════
