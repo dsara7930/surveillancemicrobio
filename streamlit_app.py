@@ -3800,7 +3800,7 @@ if active == "planning":
             qr_flowable = None
             if _pt_data:
                 try:
-                    _qr_buf     = BytesIO(_make_qr_bytes(_qr_payload(_pt_data)))
+                    _qr_buf = BytesIO(_make_qr_bytes(_pt_data["id"]))
                     qr_flowable = RLImage(_qr_buf, width=2.0 * rl_cm, height=2.0 * rl_cm)
                 except Exception:
                     qr_flowable = None
