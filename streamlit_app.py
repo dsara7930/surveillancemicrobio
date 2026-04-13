@@ -4191,6 +4191,9 @@ if active == "planning":
 
         if "pm_selected_day" not in st.session_state:
             st.session_state["pm_selected_day"] = None
+        st.write("class_max_dict:", class_max_dict)
+        st.write("nb points:", len(st.session_state.points))
+        st.write("monthly_plan sample:", dict(list(monthly_plan.items())[:3]))
 
         # ── Rendu calendrier semaine par semaine ─────────────────────
         for week_monday in pm_mondays:
