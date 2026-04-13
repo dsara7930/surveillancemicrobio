@@ -4477,11 +4477,18 @@ if active == "planning":
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
 
+        try:
+            import openpyxl
+            _openpyxl_ok = True
+        except ImportError:
+            _openpyxl_ok = False
+
         if not _openpyxl_ok:
             st.error(
                 "❌ **openpyxl** n'est pas installé.\n\n"
                 "Ajoutez `openpyxl` dans votre fichier **requirements.txt** "
-                "puis redémarrez l'application.")
+                "puis redémarrez l'application."
+            )
             st.stop()
 
         exp_scope = st.selectbox(
