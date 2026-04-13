@@ -2051,19 +2051,23 @@ if active == "surveillance":
     # HELPERS GLOBAUX
     # ══════════════════════════════════════════════════════════════════════════
     def _fix_azerty(text: str) -> str:
-        azerty_map = {
-            '&':'1','é':'2','"':'3',"'":'4','(':'5','-':'6','è':'7','_':'8','ç':'9','à':'0',
-            ')':'=','%':'{','µ':'}','^':'[','$':']','ù':'%','*':'\\','!':'/',
-            'a':'q','A':'Q','z':'w','Z':'W','q':'a','Q':'A','w':'z','W':'Z','m':';','M':':',
-        }
-        if '{' in text:
+        import unicodedata
+        
+        def _normalize_ascii(s):
+            return unicodedata.normalize('NFD', str(s or '')).encode('ascii', 'ignore').decode().lower().strip()
+        
+        # Tenter de parser le JSON scanné
+        try:
+            data = json.loads(text)
+            label_scan = data.get("label", "")
+            # Chercher le point correspondant avec accents
+            for pt in st.session_state.points:
+                if _normalize_ascii(pt.get("label", "")) == _normalize_ascii(label_scan):
+                    data["label"] = pt["label"]  # ← remet les accents
+                    return json.dumps(data)
             return text
-        fixed = ''.join(azerty_map.get(c, c) for c in text)
-        if '{' not in fixed:
-            alt = text.replace('%', '{').replace('µ', '}')
-            if '{' in alt:
-                return alt
-        return fixed
+        except Exception:
+            return text
 
     if "prelev_mode" not in st.session_state:
         st.session_state["prelev_mode"] = "manuel"
@@ -3459,17 +3463,17 @@ if active == "planning":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    def _qr_payload(pt: dict) -> dict:
+    def _qr_payload(pt: dict) -> str:
         import unicodedata
-        return {
-            "a": "URC",
-            "i": pt.get("id", ""),
-            "l": pt.get("label", ""),
-            "t": pt.get("type", ""),
-            "r": pt.get("room_class", ""),
-            "c": int(pt.get("location_criticality", 1)),
-            "g": pt.get("gelose", ""),
-        }
+        def _ascii(s):
+            return unicodedata.normalize('NFD', str(s or '')).encode('ascii', 'ignore').decode()
+        
+        return json.dumps({
+            "label": _ascii(pt.get("label", "")),
+            "class": _ascii(pt.get("room_class", "")),
+            "type":  _ascii(pt.get("type", "")),
+            "risk":  pt.get("risk_level", 1),
+        }, ensure_ascii=True)
 
     # ── Planning mensuel ─────────────────────────────────────────────────
     def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
