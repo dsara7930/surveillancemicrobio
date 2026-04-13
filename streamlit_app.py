@@ -2116,7 +2116,7 @@ if active == "surveillance":
     # HELPERS GLOBAUX
     # ══════════════════════════════════════════════════════════════════════════
     def _fix_qr_input(text: str) -> str:
-    """Corrige dans l'ordre : encodage → AZERTY → validation JSON"""
+    
     
         # 1. Réparer le double-encodage UTF-8/Latin-1 (é → Ã©, è → Ã¨, etc.)
         def _fix_encoding(s):
