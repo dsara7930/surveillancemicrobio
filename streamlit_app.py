@@ -3919,35 +3919,12 @@ if active == "planning":
             cls: int(st.session_state.get(f"class_max_{cls}", 0))
             for cls in all_classes
         }
-
-        # ── Diagnostic visuel ────────────────────────────────────────
-        with st.expander("🔍 Diagnostic planning", expanded=False):
-            st.write("**Classes détectées :**", all_classes)
-            st.write("**class_max_dict :**", class_max_dict)
-            st.write("**Nb points :**", len(st.session_state.points))
-            _sample = [
-                {"label": p.get("label"), "class": p.get("room_class"),
-                 "freq": p.get("frequency"), "unit": p.get("frequency_unit")}
-                for p in st.session_state.points[:5]
-            ]
-            st.write("**Premiers points :**", _sample)
-            _all_zeros = all(v == 0 for v in class_max_dict.values())
-            if _all_zeros:
-                st.error(
-                    "⚠️ Toutes les contraintes sont à 0 → aucun prélèvement planifié. "
-                    "Configurez les valeurs dans **Paramètres → Contraintes classes** "
-                    "et sauvegardez."
-                )
-            else:
-                st.success("✅ Contraintes chargées correctement.")
-
-        st.markdown(
-            "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
-            "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#1e40af'>"
-            "💡 Les contraintes max/classe/semaine sont configurables dans "
-            "<strong>Paramètres → 🏷️ Contraintes classes</strong>.</div>",
-            unsafe_allow_html=True,
-        )
+        # ── Normalisation clé room_class ─────────────────────────────
+        # Les points sont parfois sauvegardés avec "class" au lieu de "room_class"
+        for _pt in st.session_state.points:
+            if "room_class" not in _pt or not _pt.get("room_class"):
+                _pt["room_class"] = _pt.get("class", "")
+      
         # ── Calcul des lundis du mois ────────────────────────────────
         import calendar as _cal_pm
         _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
