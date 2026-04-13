@@ -3858,7 +3858,7 @@ if active == "planning":
 
     with plan_tab_charge:
 
-        # ── Sélecteurs Année / Mois ──────────────────────────────────
+       # ── Sélecteurs Année / Mois ──────────────────────────────────
         col_y, col_m = st.columns(2)
         with col_y:
             _ch_year = st.number_input(
@@ -3878,6 +3878,69 @@ if active == "planning":
 
         _ch_holidays = get_holidays_cached(_ch_year)
 
+        # ── Calcul des lundis du mois ────────────────────────────────
+        import calendar as _cal_pm
+        _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
+        _pm_start    = date_type(_ch_year, _ch_month, 1)
+        _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
+        cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
+        pm_mondays   = []
+        while cur_pm <= _pm_end:
+            pm_mondays.append(cur_pm)
+            cur_pm += timedelta(weeks=1)
+
+        # ── Chargement contraintes Supabase ──────────────────────────
+        if "class_constraints_loaded" not in st.session_state:
+            _raw_cc = _supa_get("class_constraints")
+            if _raw_cc:
+                try:
+                    _parsed_cc = json.loads(_raw_cc)
+                    st.session_state["_class_constraints_raw"] = _parsed_cc
+                    for _cls_k, _cls_v in _parsed_cc.items():
+                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
+                except Exception:
+                    st.session_state["_class_constraints_raw"] = {}
+            else:
+                st.session_state["_class_constraints_raw"] = {}
+            st.session_state["class_constraints_loaded"] = True
+
+        all_classes = sorted({
+            (pt.get("room_class") or "").strip()
+            for pt in st.session_state.points
+            if (pt.get("room_class") or "").strip()
+        })
+        for _cls in all_classes:
+            _key = f"class_max_{_cls}"
+            if _key not in st.session_state:
+                _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
+                st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
+
+        class_max_dict = {
+            cls: int(st.session_state.get(f"class_max_{cls}", 0))
+            for cls in all_classes
+        }
+
+        # ── Diagnostic visuel ────────────────────────────────────────
+        with st.expander("🔍 Diagnostic planning", expanded=False):
+            st.write("**Classes détectées :**", all_classes)
+            st.write("**class_max_dict :**", class_max_dict)
+            st.write("**Nb points :**", len(st.session_state.points))
+            _sample = [
+                {"label": p.get("label"), "class": p.get("room_class"),
+                 "freq": p.get("frequency"), "unit": p.get("frequency_unit")}
+                for p in st.session_state.points[:5]
+            ]
+            st.write("**Premiers points :**", _sample)
+            _all_zeros = all(v == 0 for v in class_max_dict.values())
+            if _all_zeros:
+                st.error(
+                    "⚠️ Toutes les contraintes sont à 0 → aucun prélèvement planifié. "
+                    "Configurez les valeurs dans **Paramètres → Contraintes classes** "
+                    "et sauvegardez."
+                )
+            else:
+                st.success("✅ Contraintes chargées correctement.")
+
         st.markdown(
             "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;"
             "padding:8px 14px;margin-bottom:10px;font-size:.78rem;color:#1e40af'>"
@@ -3885,7 +3948,6 @@ if active == "planning":
             "<strong>Paramètres → 🏷️ Contraintes classes</strong>.</div>",
             unsafe_allow_html=True,
         )
-
         # ── Calcul des lundis du mois ────────────────────────────────
         import calendar as _cal_pm
         _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
