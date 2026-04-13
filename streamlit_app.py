@@ -3797,7 +3797,8 @@ if active == "planning":
             # ← rowHeights=[H_ETQ] correct ici car outer = 1 seule ligne
             outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
             outer.setStyle(TableStyle([
-                ("BOX",            (0, 0), (0, 0), 1.2, rc_etiq),
+                ("LINEBEFORE", (0, 0), (0, 0), 1.2, rc_etiq),
+                ("LINEABOVE",  (0, 0), (0, 0), 1.2, rc_etiq),
                 ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
                 ("LINEAFTER",      (0, 0), (0, 0), 5.5, rc_etiq),
                 ("LEFTPADDING",    (0, 0), (0, 0), 11),
@@ -3842,6 +3843,7 @@ if active == "planning":
                 ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
                 ("TOPPADDING",    (0, 0), (-1, -1), 0),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LINEBELOW",     (0, -1), (-1, -1), 1.2, rlc.HexColor("#94a3b8")),  # ← bord bas unique
             ]))
             story.append(full_tbl)
     # ════════════════════════════════════════════════════════════════
