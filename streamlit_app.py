@@ -4174,6 +4174,9 @@ if active == "planning":
             _ch_year, _ch_month, class_max_dict, _ch_holidays
         )
 
+        from datetime import date as date_type
+        monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
+        
         # Appliquer les skips
         for _wm in pm_mondays:
             _has_skip = any(
@@ -4191,9 +4194,6 @@ if active == "planning":
 
         if "pm_selected_day" not in st.session_state:
             st.session_state["pm_selected_day"] = None
-        st.write("class_max_dict:", class_max_dict)
-        st.write("nb points:", len(st.session_state.points))
-        st.write("monthly_plan sample:", dict(list(monthly_plan.items())[:3]))
 
         # ── Rendu calendrier semaine par semaine ─────────────────────
         for week_monday in pm_mondays:
