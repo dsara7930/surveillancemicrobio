@@ -4231,8 +4231,8 @@ if active == "planning":
 
                     if non_faits:
                         with st.popover("⬜ Non faits"):
-                            for t in non_faits:
-                                key = f"skip_{wd.isoformat()}_{t['label'].replace(' ', '_')}"
+                            for ti, t in enumerate(non_faits):
+                                key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
                                 if st.checkbox(t["label"], key=key):
                                     _skips = st.session_state["planning_skips"]
                                     dk     = wd.isoformat()
