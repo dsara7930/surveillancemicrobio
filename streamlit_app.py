@@ -2643,11 +2643,14 @@ vp.addEventListener('wheel',e=>{{
             elif qr_raw and not qr_raw.startswith("{"):
                 st.markdown("<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#92400e'>⚠️ QR code non URC</div></div>", unsafe_allow_html=True)
 
-            if _scanned_data and _scanned_data.get("a")=="URC":
-                _lbl=_scanned_data.get("l",""); _type=_scanned_data.get("t","")
-                _rc=_scanned_data.get("r",""); _lc=int(_scanned_data.get("c",1))
-                _gel=_scanned_data.get("g",""); _is_classea=_rc.strip().upper()=="A"
-                lc_col_s={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(_lc),"#94a3b8")
+            if _scanned_data and (_scanned_data.get("a") == "URC" or "label" in _scanned_data):
+                _lbl  = _scanned_data.get("l") or _scanned_data.get("label", "")
+                _type = _scanned_data.get("t") or _scanned_data.get("type", "")
+                _rc   = _scanned_data.get("r") or _scanned_data.get("class", "")
+                _lc   = int(_scanned_data.get("c") or _scanned_data.get("risk", 1))
+                _gel  = _scanned_data.get("g") or _scanned_data.get("gelose", "")
+                _is_classea = _rc.strip().upper() == "A"
+                lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
 
                 st.markdown(
                     f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
