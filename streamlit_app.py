@@ -4038,11 +4038,8 @@ if active == "planning":
             my_f_av  = max(0.01, _freq_en_semaine(pt_av, nb_jours))
             alloc_av = round(my_f_av / tot_av * max_av) if max_av > 0 else 0
 
-            nb_prevu_av, _, _ = _doit_prelever_cette_semaine_mensuel(
-                alloc_av, ch_sel_ws
-            ) if alloc_av > 0 else (0, 0)
-            nb_prevu_av  = alloc_av  # allocation directe
-            realise_av   = sum(1 for p in ch_j0 if p.get("label") == pt_av["label"])
+            nb_prevu_av = alloc_av
+            realise_av  = sum(1 for p in ch_j0 if p.get("label") == pt_av["label"])
 
             _av_prevu_total   += nb_prevu_av
             _av_realise_total += realise_av
