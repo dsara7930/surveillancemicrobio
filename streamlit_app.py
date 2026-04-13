@@ -4358,28 +4358,34 @@ if active == "planning":
 
                     if non_faits:
                         with st.popover(f"⬜ {len(non_faits)} Non faits"):
-                            changed = False
+                            
+                            # Cases à cocher sans rerun
+                            selections = []
                             for ti, t in enumerate(non_faits):
                                 key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
-                                if st.checkbox(t["label"], key=key):
+                                checked = st.checkbox(t["label"], key=key)
+                                if checked:
+                                    selections.append(t["label"])
+
+                            # Bouton enregistrer — visible seulement si au moins une sélection
+                            if selections:
+                                if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
                                     _skips = st.session_state["planning_skips"]
                                     dk     = wd.isoformat()
                                     _skips.setdefault(dk, [])
-                                    if t["label"] not in _skips[dk]:
-                                        _skips[dk].append(t["label"])
-                                        st.session_state["planning_skips"] = _skips
-                                        changed = True
-
-                            if changed:
-                                if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
+                                    for label in selections:
+                                        if label not in _skips[dk]:
+                                            _skips[dk].append(label)
+                                    st.session_state["planning_skips"] = _skips
+                                    
+                                    # Sauvegarde Supabase bloquante avant rerun
                                     supa = get_supabase_client()
                                     if supa:
                                         supa.table('app_state').upsert(
                                             {'key': 'planning_skips',
-                                            'value': json.dumps(st.session_state["planning_skips"])},
+                                            'value': json.dumps(_skips)},
                                             on_conflict='key'
                                         ).execute()
-                                    st.success("✅ Enregistré !")
                                     st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
