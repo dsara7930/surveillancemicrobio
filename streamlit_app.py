@@ -3650,7 +3650,7 @@ if active == "planning":
         W_ETQ  = (A4_W - 2 * MARGIN_SHEET) / N_COLS
         _grid_w = W_ETQ * N_COLS  # utilisé pour centrer le tableau si besoin
         _margin_left = MARGIN_SHEET          # aligné exactement sur le bord de la planche
-
+        buf = BytesIO()
         RISK_RL   = {k: rlc.HexColor(v) for k, v in {
             "1": "#22c55e", "2": "#84cc16",
             "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
@@ -3715,9 +3715,6 @@ if active == "planning":
             topPadding=0,
             bottomPadding=0,
         )
-
-
-        
 
         doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
 
