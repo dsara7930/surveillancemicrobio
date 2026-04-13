@@ -980,8 +980,6 @@ if "archived_samples" not in st.session_state:
     st.session_state.archived_samples = load_archived_samples()
 if "points" not in st.session_state:
     st.session_state.points = load_points()
-if "planning_skips" not in st.session_state:
-    st.session_state["planning_skips"] = {} 
 if "operators" not in st.session_state:
     st.session_state.operators = load_operators()
 if "plans" not in st.session_state:
