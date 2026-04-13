@@ -4685,7 +4685,7 @@ if active == "planning":
 
             # ── Ligne 4 : en-têtes colonnes fixes ─────────────────────────
             ws_matrix.row_dimensions[4].height = 34
-            fixed_headers = ["Point de prélèvement", "Classe", "Type"]
+            fixed_headers = ["Point de prélèvement", "Lieu", "Type"]
             fixed_widths  = [32, 9, 10]
             for ci, (h, w) in enumerate(zip(fixed_headers, fixed_widths), start=1):
                 c = ws_matrix.cell(4, ci)
@@ -4751,11 +4751,19 @@ if active == "planning":
                 c.alignment = al_l()
                 c.border    = border_all()
 
-                # Col 2 : classe
+                # Col 2 : lieu
+                rc_upper = rc.strip().upper()
+                if rc_upper == "A":
+                    lieu_lbl = "Isolateur"
+                elif rc_upper in ("B", "C", "D"):
+                    lieu_lbl = "Salle"
+                else:
+                    lieu_lbl = rc or "—"
+
                 c = ws_matrix.cell(data_row, 2)
-                c.value     = rc or "—"
+                c.value     = lieu_lbl
                 c.font      = Font(name="Arial", size=9, bold=True,
-                                   color=RISK_FC.get(rv, C_TEXT))
+                                color=RISK_FC.get(rv, C_TEXT))
                 c.fill      = fill(RISK_BG.get(rv, row_bg))
                 c.alignment = al_c()
                 c.border    = border_all()
