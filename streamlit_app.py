@@ -3815,50 +3815,47 @@ if active == "planning":
 
         for (d_obj, day_tasks) in days_data:
             n_prelevements = len(day_tasks)
-
             sep_label = (
                 f"{d_obj.strftime('%A %d/%m/%Y').capitalize()} "
                 f"— {n_prelevements} prélèvement{'s' if n_prelevements > 1 else ''}"
             )
 
-            # ── Séparateur ─────────────────────────────
+            # ── Cellule séparateur : même taille que les étiquettes ──────────────
             def _build_sep_cell(label):
                 sep_inner = Table(
                     [[Paragraph(label, s_day_sep)]],
                     colWidths=[W_ETQ - 0.55 * rl_cm],
                 )
                 sep_inner.setStyle(TableStyle([
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
                 ]))
-
                 outer = Table([[sep_inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
                 outer.setStyle(TableStyle([
-                    ("BOX", (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
-                    ("BACKGROUND", (0, 0), (0, 0), rlc.HexColor("#e0f2fe")),
-                    ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
-                    ("LEFTPADDING", (0, 0), (0, 0), 11),
-                    ("RIGHTPADDING", (0, 0), (0, 0), 11),
-                    ("TOPPADDING", (0, 0), (0, 0), 11),
-                    ("BOTTOMPADDING", (0, 0), (0, 0), 11),
+                    ("BOX",            (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
+                    ("ROUNDEDCORNERS", (0, 0), (0, 0), [5]),
+                    ("LINEAFTER",      (0, 0), (0, 0), 5.5, rlc.HexColor("#1a4e66")),
+                    ("LEFTPADDING",    (0, 0), (0, 0), 11),
+                    ("RIGHTPADDING",   (0, 0), (0, 0), 11),
+                    ("TOPPADDING",     (0, 0), (0, 0), 11),
+                    ("BOTTOMPADDING",  (0, 0), (0, 0), 11),
+                    ("VALIGN",         (0, 0), (0, 0), "MIDDLE"),
+                    ("BACKGROUND",     (0, 0), (0, 0), rlc.HexColor("#e0f2fe")),
                 ]))
+                return outer
 
-                return outer  # ✅ FIN DE LA FONCTION
+            # ── Étiquettes du jour : séparateur en tête de liste ─────────────────
+            cells_day = [_build_sep_cell(sep_label)] + [_build_cell(t, d_obj) for t in day_tasks]
 
-            # ✅ ICI ON EST BIEN EN DEHORS DE LA FONCTION
-            cells_day = [_build_sep_cell(sep_label)] + [
-                _build_cell(t, d_obj) for t in day_tasks
-            ]
-
-            rows = []
+            rows        = []
             row_heights = []
-
             for i in range(0, len(cells_day), N_COLS):
                 chunk = cells_day[i:i + N_COLS]
-                chunk += [""] * (N_COLS - len(chunk))
+                while len(chunk) < N_COLS:
+                    chunk.append("")
                 rows.append(chunk)
                 row_heights.append(H_ETQ)
 
@@ -3868,14 +3865,12 @@ if active == "planning":
                     colWidths=[W_ETQ] * N_COLS,
                     rowHeights=row_heights,
                 )
-
                 day_tbl.setStyle(TableStyle([
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
                 ]))
-
                 story.append(day_tbl)
                 story.append(Spacer(1, 0.2 * rl_cm))
 
