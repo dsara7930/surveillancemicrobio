@@ -2633,8 +2633,6 @@ vp.addEventListener('wheel',e=>{{
                     st.caption("🔄 Correction automatique appliquée.")
                 qr_raw = qr_fixed
 
-            if azerty_corrected:
-                st.caption("🔄 Correction clavier AZERTY appliquée automatiquement.")
 
             _scanned_data = None
             if qr_raw and qr_raw.startswith("{"):
