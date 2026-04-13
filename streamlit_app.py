@@ -4367,39 +4367,35 @@ if active == "planning":
                                     selections.append(t["label"])
 
                             # Bouton enregistrer — visible seulement si au moins une sélection
-                            if selections:
-                                if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
-                                    _skips = st.session_state["planning_skips"]
-                                    dk     = wd.isoformat()
-                                    _skips.setdefault(dk, [])
-                                    for label in selections:
-                                        if label not in _skips[dk]:
-                                            _skips[dk].append(label)
-                                    st.session_state["planning_skips"] = _skips
+                            if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
+                                _skips = st.session_state["planning_skips"]
+                                dk     = wd.isoformat()
+                                _skips.setdefault(dk, [])
+                                for label in selections:
+                                    if label not in _skips[dk]:
+                                        _skips[dk].append(label)
+                                st.session_state["planning_skips"] = _skips
+                                
+                                # ── Debug ──
+                                result = _supa_upsert('planning_skips', json.dumps(_skips))
+                                st.write("✅ Upsert réussi :", result)
+                                st.write("📦 Données envoyées :", _skips)
+                                
+                                # ── Vérification relecture immédiate ──
+                                relu = _supa_get('planning_skips')
+                                st.write("🔁 Relu depuis Supabase :", relu)
+                                
+                                st.stop()  # ← Ne pas rerun pour voir les logs
                                     
-                                    # Debug avant rerun
-                                    ok = _supa_upsert('planning_skips', json.dumps(_skips))
-                                    if not ok:
-                                        st.error("❌ Sauvegarde Supabase échouée !")
-                                        st.stop()
-                                    else:
-                                        relu = _supa_get('planning_skips')
-                                        if relu != json.dumps(_skips):
-                                            st.error(f"❌ Données différentes après relecture !\nEnvoyé: {_skips}\nReçu: {relu}")
-                                            st.stop()
-                                        else:
-                                            st.success("✅ OK — données confirmées en base")
-                                            st.stop()  # ← remplacez par st.rerun() une fois confirmé
-                                    
-                                    # Sauvegarde Supabase bloquante avant rerun
-                                    supa = get_supabase_client()
-                                    if supa:
-                                        supa.table('app_state').upsert(
-                                            {'key': 'planning_skips',
-                                            'value': json.dumps(_skips)},
-                                            on_conflict='key'
-                                        ).execute()
-                                    st.rerun()
+                                # Sauvegarde Supabase bloquante avant rerun
+                                supa = get_supabase_client()
+                                if supa:
+                                    supa.table('app_state').upsert(
+                                        {'key': 'planning_skips',
+                                        'value': json.dumps(_skips)},
+                                        on_conflict='key'
+                                    ).execute()
+                                st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
 
