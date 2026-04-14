@@ -3712,12 +3712,12 @@ if active == "planning":
 
         A4_W, A4_H   = A4
         N_COLS       = 4
-        MARGIN_SHEET = 0.4 * rl_cm
+        MARGIN_SHEET = 0              # ← suppression des marges
 
-        W_ETQ  = (A4_W - 2 * MARGIN_SHEET) / N_COLS
-        H_ETQ  = 2.95 * rl_cm
+        W_ETQ  = 5.2  * rl_cm        # ← taille fixe
+        H_ETQ  = 2.92 * rl_cm        # ← taille fixe
         _grid_w      = W_ETQ * N_COLS
-        _margin_left = MARGIN_SHEET
+        _margin_left = MARGIN_SHEET   # = 0
 
         buf = BytesIO()
 
@@ -3767,17 +3767,17 @@ if active == "planning":
         doc = BaseDocTemplate(
             buf,
             pagesize=A4,
-            leftMargin=MARGIN_SHEET,
-            rightMargin=MARGIN_SHEET,
-            topMargin=MARGIN_SHEET,
-            bottomMargin=MARGIN_SHEET,
+            leftMargin=0,
+            rightMargin=0,
+            topMargin=0,
+            bottomMargin=0,
         )
 
         frame = Frame(
-            x1=MARGIN_SHEET,
-            y1=MARGIN_SHEET,
-            width=A4_W  - 2 * MARGIN_SHEET,
-            height=A4_H - 2 * MARGIN_SHEET,
+            x1=0,
+            y1=0,
+            width=A4_W,
+            height=A4_H,
             leftPadding=0, rightPadding=0,
             topPadding=0,  bottomPadding=0,
         )
