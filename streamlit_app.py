@@ -11,6 +11,7 @@ import qrcode
 import qrcode.image.pil
 from io import BytesIO
 from datetime import date, datetime, timedelta
+import streamlit.components.v1 as components
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
@@ -2494,19 +2495,30 @@ vp.addEventListener('wheel',e=>{{
                 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                    # Récupérer la zone depuis map_points
+                    _cur_label_save = selected_point.get("label", "")
+                    _mp_for_zone = next(
+                        (mp for mp in st.session_state.get("map_points", [])
+                        if mp.get("label") == _cur_label_save),
+                        None
+                    )
+                    _zone_for_save = _mp_for_zone.get("zone") if _mp_for_zone else None
+
                     sample = {
-                        "id": pid, "label": selected_point['label'],
+                        "id": pid,
+                        "label": selected_point['label'],
                         "type": selected_point.get('type'),
-                        "gelose": selected_point.get('gelose','—'),
-                        "room_class": selected_point.get('room_class',''),
+                        "gelose": selected_point.get('gelose', '—'),
+                        "room_class": selected_point.get('room_class', ''),
                         "location_criticality": pt_loc_crit,
                         "operateur": p_oper if p_oper else "Non renseigné",
                         "date": str(p_date) if p_date else str(today),
                         "archived": False,
-                        "num_isolateur": p_isolateur if str(pt_room).strip().upper()=="A" else "",
-                        "poste": p_poste if str(pt_room).strip().upper()=="A" else "",
+                        "num_isolateur": p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                        "poste": p_poste if str(pt_room).strip().upper() == "A" else "",
                         "commentaire": p_commentaire if p_commentaire else "",
                         "created_via": "manuel",
+                        "zone": _zone_for_save,  # ← ajout ici
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
@@ -4969,447 +4981,266 @@ if active == "historique":
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 0 : PLAN INTERACTIF
         # ══════════════════════════════════════════════════════════════════════
-        with hist_tab_plan:
-            import json as _json_plan
-
-            # ── Chargement map_points robuste ─────────────────────────────────
-            map_points_raw = list(st.session_state.get("map_points", []))
-            if not map_points_raw:
-                try:
-                    _raw_mp = _supa_get('map_points')
-                    if _raw_mp:
-                        _loaded = json.loads(_raw_mp) if isinstance(_raw_mp, str) else _raw_mp
-                        if isinstance(_loaded, list) and _loaded:
-                            st.session_state["map_points"] = _loaded
-                            map_points_raw = _loaded
-                except Exception:
-                    pass
-
-            # Coordonnées avec float garanti
-            pt_coords = {}
-            for mp in map_points_raw:
-                _lbl = mp.get("label", "")
-                if not _lbl:
-                    continue
-                try:
-                    pt_coords[_lbl] = {
-                        "x": float(mp.get("x", "")),
-                        "y": float(mp.get("y", "")),
-                    }
-                except (TypeError, ValueError):
-                    continue
-
-            STATUS_COL = {"action":"#ef4444","alert":"#f59e0b","ok":"#22c55e","none":"#94a3b8"}
-            STATUS_IC  = {"action":"🚨","alert":"⚠️","ok":"✅","none":"⬜"}
-            STATUS_LBL = {"action":"ACTION","alert":"ALERTE","ok":"Conforme","none":"Aucune donnée"}
-
-            plans_dispo = st.session_state.get("plans", [])
-            if not plans_dispo:
+        def render_heatmap_prelevements():
+            st.markdown("### 🗺️ Heatmap des prélèvements par zone")
+            st.markdown(
+                "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;"
+                "padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af'>"
+                "ℹ️ Chaque cellule représente une zone de la grille 10×10 (A→J / 1→10). "
+                "L'intensité du bleu indique la fréquence de prélèvement. "
+                "<b>Survolez</b> une cellule pour voir la répartition par type de surface."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        
+            # ── Préparer les données ──────────────────────────────────────────────
+            prelevements = st.session_state.get("prelevements", [])
+        
+            # Garder uniquement ceux qui ont une zone définie
+            with_zone = [
+                {
+                    "zone":  p.get("zone", ""),
+                    "type":  p.get("type", "—"),
+                    "label": p.get("label", ""),
+                }
+                for p in prelevements
+                if p.get("zone")
+            ]
+        
+            if not with_zone:
                 st.markdown(
                     "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-                    "border-radius:12px;padding:40px;text-align:center'>"
+                    "border-radius:12px;padding:32px;text-align:center'>"
                     "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
                     "<div style='font-weight:700;color:#475569;margin-bottom:4px'>"
-                    "Aucun plan disponible</div>"
+                    "Aucun prélèvement localisé</div>"
                     "<div style='font-size:.8rem;color:#94a3b8'>"
-                    "Créez des plans dans <strong>Paramètres → Plans</strong>.</div></div>",
-                    unsafe_allow_html=True)
-            else:
-                plan_sel_name = st.selectbox(
-                    "Plan à afficher",
-                    [p["name"] for p in plans_dispo],
-                    key="hist_tab_plan_sel")
-                plan_sel = next((p for p in plans_dispo if p["name"] == plan_sel_name), None)
-
-                # ── Filtres ───────────────────────────────────────────────────
-                st.markdown(
-                    "<div style='background:#f0f9ff;border:1px solid #bae6fd;"
-                    "border-radius:10px;padding:12px 16px;margin:8px 0 12px 0'>"
-                    "<div style='font-size:.8rem;font-weight:700;color:#0369a1;"
-                    "margin-bottom:8px'>🔍 Filtres</div>",
-                    unsafe_allow_html=True)
-                fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 2, 2])
-                all_dates_plan = [_parse_date(r.get("date","")) for r in surv_f
-                                  if _parse_date(r.get("date",""))]
-                d_min_plan = min(all_dates_plan) if all_dates_plan else dt_date.today()
-                d_max_plan = max(all_dates_plan) if all_dates_plan else dt_date.today()
-                with fc1:
-                    filt_date_debut = st.date_input("Du", value=d_min_plan,
-                        min_value=d_min_plan, max_value=d_max_plan,
-                        key="hist_tab_plan_date_debut")
-                with fc2:
-                    filt_date_fin = st.date_input("Au", value=d_max_plan,
-                        min_value=d_min_plan, max_value=d_max_plan,
-                        key="hist_tab_plan_date_fin")
-                with fc3:
-                    filt_points = st.multiselect("Points",
-                        sorted({r.get("prelevement","") for r in surv_f
-                                if r.get("prelevement")}),
-                        placeholder="Tous les points",
-                        key="hist_tab_plan_filt_pts")
-                with fc4:
-                    filt_germs = st.multiselect("Germes",
-                        sorted({r.get("germ_match","") for r in surv_f
-                                if r.get("germ_match") and
-                                r.get("germ_match") not in ("Négatif","—","")}),
-                        placeholder="Tous les germes",
-                        key="hist_tab_plan_filt_germs")
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                _surv_plan_all = [
-                    r for r in surv_f
-                    if (_parse_date(r.get("date","")) is not None
-                        and filt_date_debut <= _parse_date(r.get("date","")) <= filt_date_fin)
-                    and (not filt_points or r.get("prelevement","") in filt_points)
-                    and (not filt_germs  or r.get("germ_match","")  in filt_germs)
-                ]
-                
-                # ─── APRÈS (corrigé) ─────────────────────────────────────────────────
-                # Déduplication par (sample_id, prelevement) → on conserve le pire
-                # résultat pour chaque combinaison point × session de prélèvement.
-                # Cela évite qu'un même sample_id pour des points différents se télescopent.
-                prio = {"ok": 0, "alert": 1, "action": 2}
-                _seen = {}
-                for r in _surv_plan_all:
-                    sid = r.get("sample_id", "")
-                    pt_lbl = r.get("prelevement", "")
-                    # Clé = (sample_id, label du point) — sans sample_id on garde tout
-                    if not sid:
-                        _seen[id(r)] = r   # clé unique → toujours conservé
-                        continue
-                    key = (sid, pt_lbl)
-                    if key not in _seen:
-                        _seen[key] = r
-                    else:
-                        existing = _seen[key]
-                        if prio.get(r.get("status","ok"), 0) > prio.get(existing.get("status","ok"), 0):
-                            _seen[key] = r
-
-                surv_plan = sorted(
-                    _seen.values(),
-                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min
+                    "Utilisez <b>Surveillance → Nouveau prélèvement</b> et "
+                    "enregistrez une zone sur le plan.</div></div>",
+                    unsafe_allow_html=True,
                 )
-
-                # ── Métriques ─────────────────────────────────────────────────
-                nb_action = sum(1 for r in surv_plan if r.get("status")=="action")
-                nb_alert  = sum(1 for r in surv_plan if r.get("status")=="alert")
-                nb_ok     = sum(1 for r in surv_plan if r.get("status")=="ok")
-                nb_pts_pos = len({r.get("prelevement") for r in surv_plan
-                                  if pt_coords.get(r.get("prelevement",""))})
-                m1,m2,m3,m4,m5 = st.columns(5)
-                m1.metric("📋 Prélèvements", len(surv_plan))
-                m2.metric("✅ Conformes", nb_ok)
-                m3.metric("⚠️ Alertes",   nb_alert)
-                m4.metric("🚨 Actions",    nb_action)
-                m5.metric("📍 Points",     nb_pts_pos)
-
-                pts_no_coords = {r.get("prelevement","") for r in surv_plan} - set(pt_coords.keys())
-                pts_no_coords.discard("")
-                if pts_no_coords:
-                    st.info(
-                        f"💡 **{len(pts_no_coords)} point(s)** sans position sur ce plan : "
-                        f"**{', '.join(sorted(pts_no_coords))}**. "
-                        f"Positionnez-les via **Surveillance → Nouveau prélèvement**.")
-
-                # ── Construction pts_on_plan ──────────────────────────────────
-                # Grouper par coordonnées exactes → une pastille par groupe
-                # Si N prélèvements au même endroit : pastille avec chiffre N
-                # Si 1 prélèvement : pastille avec UFC ou ✓
-                from collections import defaultdict as _dd
-                prio = {"action":2,"alert":1,"ok":0,"none":-1}
-                
-                # Grouper par LABEL (pas par coordonnées) → chaque point garde sa position unique
-                label_groups = _dd(list)
-                for r in surv_plan:
-                    pt_label = r.get("prelevement","")
-                    if not pt_label:
-                        continue
-                    coords = pt_coords.get(pt_label)
-                    if not coords:
-                        continue
-                    label_groups[pt_label].append({
-                        "label":  pt_label,
-                        "x":      coords["x"],
-                        "y":      coords["y"],
-                        "status": r.get("status","ok"),
-                        "ufc":    int(r.get("ufc",0) or 0),
-                        "germ":   r.get("germ_match","—") or "—",
-                        "date":   r.get("date","—"),
-                        "oper":   r.get("operateur","—") or "—",
-                    })
-                
-                pts_on_plan = []
-                for pt_label, items in label_groups.items():
-                    n      = len(items)
-                    worst  = max(items, key=lambda x: prio.get(x["status"],0))
-                    w_st   = worst["status"]
-                    w_col  = STATUS_COL.get(w_st,"#94a3b8")
-                    # Coordonnées exactes du point (toutes les entrées ont les mêmes coords pour ce label)
-                    cx = items[0]["x"]
-                    cy = items[0]["y"]
-                    # Trier les détails par date décroissante
-                    details = sorted(items, key=lambda x: x["date"], reverse=True)
-                
-                    if n == 1:
-                        it = items[0]
-                        txt = str(it["ufc"]) if it["ufc"] > 0 else "✓"
-                    else:
-                        txt = str(n)  # Chiffre = nombre de prélèvements pour ce point
-                
-                    pts_on_plan.append({
-                        "label":   pt_label,
-                        "x":       cx,
-                        "y":       cy,
-                        "status":  w_st,
-                        "color":   w_col,
-                        "text":    txt,
-                        "count":   n,
-                        "grouped": n > 1,
-                        "details": details,
-                    })
-
-                pts_json = _json_plan.dumps(pts_on_plan, ensure_ascii=False)
-
-                if plan_sel and plan_sel.get("image_b64"):
-                    img_b64 = plan_sel["image_b64"]
-                    if not img_b64.startswith("data:"):
-                        img_b64 = "data:image/png;base64," + img_b64
-
-                    # ── Calcul stats par zone ─────────────────────────────
-                    prio = {"ok":0,"alert":1,"action":2}
-                    zone_stats = {}   # zone_id → {count, worst_status, labels, details}
-
-                    for r in surv_plan:
-                        pt_lbl = r.get("prelevement","")
-                        mp     = next((m for m in map_points_raw if m.get("label")==pt_lbl), None)
-                        if not mp or not mp.get("zone"):
-                            continue
-                        z = mp["zone"]
-                        if z not in zone_stats:
-                            zone_stats[z] = {
-                                "count":0,"worst":"ok","labels":set(),"details":[],
-                                "col": mp.get("zone_col", ord(z[0])-ord('A')),
-                                "row": mp.get("zone_row", int(z[1:])-1),
-                            }
-                        zone_stats[z]["count"]  += 1
-                        zone_stats[z]["labels"].add(pt_lbl)
-                        if prio.get(r.get("status","ok"),0) > prio.get(zone_stats[z]["worst"],0):
-                            zone_stats[z]["worst"] = r.get("status","ok")
-                        zone_stats[z]["details"].append({
-                            "label": pt_lbl,
-                            "germ":  r.get("germ_match","—"),
-                            "ufc":   int(r.get("ufc",0) or 0),
-                            "date":  r.get("date","—"),
-                            "status":r.get("status","ok"),
-                        })
-
-                    import json as _jz
-                    zones_json = _jz.dumps([
-                        {
-                            "id":      z,
-                            "col":     d["col"],
-                            "row":     d["row"],
-                            "count":   d["count"],
-                            "worst":   d["worst"],
-                            "labels":  list(d["labels"]),
-                            "details": d["details"][:6],
-                        }
-                        for z, d in zone_stats.items()
-                    ], ensure_ascii=False)
-
-                    plan_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}}
-body{{background:#0f172a;height:100vh;display:flex;flex-direction:column}}
-.header{{padding:8px 14px;background:#1e293b;border-bottom:1px solid #334155;
-         display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0}}
-.title{{font-size:.82rem;font-weight:800;color:#e2e8f0}}
-.legend{{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}}
-.leg{{display:flex;align-items:center;gap:5px;font-size:.65rem;color:#94a3b8}}
-.leg-dot{{width:10px;height:10px;border-radius:2px}}
-.main{{flex:1;overflow:auto;display:flex;align-items:flex-start;
-       justify-content:center;padding:10px;background:#1e293b}}
-.outer{{position:relative;display:inline-block;max-width:100%}}
-img{{display:block;width:100%;border-radius:8px;opacity:.85}}
-.grid{{position:absolute;inset:0;display:grid;
-       grid-template-columns:repeat(10,1fr);
-       grid-template-rows:repeat(10,1fr)}}
-.cell{{border:1px solid rgba(255,255,255,.12);position:relative;
-       transition:transform .1s}}
-.cell:hover{{transform:scale(1.08);z-index:10}}
-.cell .lbl{{position:absolute;inset:0;display:flex;align-items:center;
-            justify-content:center;font-size:9px;font-weight:800;
-            color:rgba(255,255,255,.0);pointer-events:none}}
-.cell:hover .lbl{{color:rgba(255,255,255,.9)}}
-.cell.c0{{background:rgba(248,250,252,.06)}}
-.cell.ok{{background:rgba(34,197,94,.35);border-color:rgba(34,197,94,.6)}}
-.cell.alert{{background:rgba(245,158,11,.45);border-color:rgba(245,158,11,.7)}}
-.cell.action{{background:rgba(239,68,68,.55);border-color:rgba(239,68,68,.8);
-              animation:pulse 2s infinite}}
-@keyframes pulse{{
-  0%,100%{{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
-  50%{{box-shadow:0 0 0 6px rgba(239,68,68,.25)}}
-}}
-.tt{{position:fixed;background:#0f172a;border:1.5px solid #334155;
-     border-radius:10px;padding:10px 14px;font-size:.72rem;
-     color:#e2e8f0;z-index:9999;pointer-events:none;
-     max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.7);
-     display:none;line-height:1.6}}
-.tt.show{{display:block}}
-.tt-zone{{font-size:1.1rem;font-weight:900;margin-bottom:4px}}
-.tt-row{{color:#94a3b8;font-size:.65rem;padding:1px 0}}
-.tt-row b{{color:#e2e8f0}}
-.sep{{border:none;border-top:1px solid #1e3a5f;margin:5px 0}}
-</style></head><body>
-<div class="header">
-  <div class="title">🗺️ Heatmap par zone — {plan_sel_name}</div>
-  <div class="legend">
-    <div class="leg"><div class="leg-dot" style="background:rgba(248,250,252,.2)"></div>Aucun prélèvement</div>
-    <div class="leg"><div class="leg-dot" style="background:#22c55e"></div>Conforme</div>
-    <div class="leg"><div class="leg-dot" style="background:#f59e0b"></div>Alerte</div>
-    <div class="leg"><div class="leg-dot" style="background:#ef4444"></div>Action</div>
-  </div>
-</div>
-<div class="main"><div class="outer">
-  <img src="{img_b64}">
-  <div class="grid" id="g"></div>
-</div></div>
-<div class="tt" id="tt"></div>
-<script>
-const ZONES = {zones_json};
-const COLS  = "ABCDEFGHIJ".split("");
-const tt    = document.getElementById('tt');
-
-// Build lookup by zone id
-const zm = {{}};
-ZONES.forEach(z => zm[z.id] = z);
-
-const g = document.getElementById('g');
-const ST_COL = {{ok:"#22c55e",alert:"#f59e0b",action:"#ef4444"}};
-const ST_LBL = {{ok:"✅ Conforme",alert:"⚠️ Alerte",action:"🚨 Action"}};
-
-for(let r=0;r<10;r++){{
-  for(let c=0;c<10;c++){{
-    const zid = COLS[c]+(r+1);
-    const zd  = zm[zid];
-    const el  = document.createElement('div');
-    el.className = 'cell ' + (zd ? zd.worst : 'c0');
-    const lbl = document.createElement('div');
-    lbl.className = 'lbl';
-    lbl.textContent = zid;
-    el.appendChild(lbl);
-    if(zd){{
-      el.addEventListener('mouseenter', e => showTT(e, zd));
-      el.addEventListener('mouseleave', () => tt.classList.remove('show'));
-      el.addEventListener('mousemove',  moveTT);
-    }}
-    g.appendChild(el);
-  }}
-}}
-
-function showTT(e, z){{
-  const sc  = ST_COL[z.worst] || '#94a3b8';
-  const sl  = ST_LBL[z.worst] || z.worst;
-  let body  = `<div style="font-size:.62rem;color:#64748b;margin-bottom:4px">
-    Zone ${{z.id}} — ${{z.count}} prélèvement(s)</div>
-    <div style="background:${{sc}}22;color:${{sc}};border:1px solid ${{sc}}55;
-    border-radius:5px;padding:2px 8px;font-size:.65rem;font-weight:700;
-    display:inline-block;margin-bottom:6px">${{sl}}</div>`;
-  body += `<div class="tt-row">📍 Points : <b>${{z.labels.slice(0,3).join(', ')}}${{z.labels.length>3?'…':''}}</b></div>`;
-  z.details.slice(0,4).forEach(d=>{{
-    const dc=ST_COL[d.status]||'#94a3b8';
-    body+=`<hr class="sep"><div class="tt-row"><b>${{d.label.slice(0,22)}}</b></div>
-    <div class="tt-row">🦠 ${{d.germ}} · <b>${{d.ufc}} UFC</b></div>
-    <div class="tt-row" style="color:${{dc}}">${{ST_LBL[d.status]||d.status}} · ${{d.date}}</div>`;
-  }});
-  if(z.details.length>4) body+=`<div style="font-size:.6rem;color:#64748b;margin-top:4px">+${{z.details.length-4}} autre(s)</div>`;
-  tt.innerHTML=body;
-  tt.classList.add('show');
-  moveTT(e);
-}}
-function moveTT(e){{
-  let x=e.clientX+14, y=e.clientY-10;
-  if(x+270>window.innerWidth) x=e.clientX-270;
-  if(y+240>window.innerHeight) y=e.clientY-240;
-  tt.style.left=x+'px'; tt.style.top=y+'px';
-}}
-</script></body></html>"""
-                    st.components.v1.html(plan_html, height=520, scrolling=False)
-
-                st.divider()
-                st.markdown(
-                    "<div style='font-size:.88rem;font-weight:700;color:#1e40af;margin-bottom:10px'>"
-                    "📊 Récapitulatif par zone</div>",
-                    unsafe_allow_html=True)
-
-                # Agrégation par zone
-                zone_recap = {}
-                for r in surv_plan:
-                    pt_lbl = r.get("prelevement","")
-                    mp     = next((m for m in map_points_raw if m.get("label")==pt_lbl), None)
-                    z      = mp.get("zone") if mp else None
-                    if not z:
-                        z = "—"
-                    if z not in zone_recap:
-                        zone_recap[z] = {"total":0,"ok":0,"alert":0,"action":0,
-                                         "labels":set(),"germes":[]}
-                    s = zone_recap[z]
-                    s["total"] += 1
-                    s[r.get("status","ok")] = s.get(r.get("status","ok"),0) + 1
-                    s["labels"].add(pt_lbl)
-                    germ = r.get("germ_match","")
-                    if germ and germ not in ("Négatif","—",""):
-                        s["germes"].append(germ)
-
-                sorted_zones = sorted(
-                    zone_recap.items(),
-                    key=lambda x: ({"action":0,"alert":1,"ok":2,"—":3}.get(
-                        "action" if x[1]["action"]>0 else
-                        "alert"  if x[1]["alert"]>0 else "ok", 3), x[0]))
-
-                st.markdown(
-                    "<div style='display:grid;"
-                    "grid-template-columns:0.8fr 0.6fr 0.5fr 0.5fr 0.5fr 1.2fr 2fr;"
-                    "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;padding:10px 14px'>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Zone</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Total</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>✅</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>⚠️</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>🚨</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Points</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes</div>"
-                    "</div>",
-                    unsafe_allow_html=True)
-
-                for ri, (z_id, zd) in enumerate(sorted_zones):
-                    worst = ("action" if zd["action"]>0 else
-                             "alert"  if zd["alert"]>0  else "ok")
-                    wc    = {"ok":"#22c55e","alert":"#f59e0b","action":"#ef4444"}.get(worst,"#94a3b8")
-                    wi    = {"ok":"✅","alert":"⚠️","action":"🚨"}.get(worst,"—")
-                    pts_str   = ", ".join(sorted(zd["labels"])[:3]) or "—"
-                    germs_str = ", ".join(list(dict.fromkeys(zd["germes"]))[:3]) or "—"
-                    row_bg    = "#f8fafc" if ri%2==0 else "#ffffff"
-                    st.markdown(
-                        "<div style='display:grid;"
-                        "grid-template-columns:0.8fr 0.6fr 0.5fr 0.5fr 0.5fr 1.2fr 2fr;"
-                        f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;border-top:none;"
-                        "padding:9px 14px;align-items:center'>"
-                        f"<div style='font-size:.95rem;font-weight:900;color:{wc}'>{wi} {z_id}</div>"
-                        f"<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>{zd['total']}</div>"
-                        f"<div style='font-size:.9rem;font-weight:700;color:#22c55e;text-align:center'>{zd.get('ok',0)}</div>"
-                        f"<div style='font-size:.9rem;font-weight:700;color:#f59e0b;text-align:center'>{zd.get('alert',0)}</div>"
-                        f"<div style='font-size:.9rem;font-weight:700;color:#ef4444;text-align:center'>{zd.get('action',0)}</div>"
-                        f"<div style='font-size:.72rem;color:#1e40af'>{pts_str}</div>"
-                        f"<div style='font-size:.72rem;color:#475569;font-style:italic'>{germs_str}</div>"
-                        "</div>",
-                        unsafe_allow_html=True)
-
-                st.markdown(
-                    f"<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
-                    f"<div style='font-size:.78rem;color:#94a3b8'>"
-                    f"{len(zone_recap)} zone(s) · {len(surv_plan)} prélèvement(s)"
-                    f"</div></div>",
-                    unsafe_allow_html=True)
-
+                return
+        
+            prelevements_json = json.dumps(with_zone, ensure_ascii=False)
+        
+            # ── HTML du composant ─────────────────────────────────────────────────
+            html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+        *{{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}
+        body{{background:#fff;padding:12px 4px 8px}}
+        .controls{{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}}
+        .controls label{{font-size:12px;color:#64748b}}
+        .controls select{{font-size:12px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer}}
+        .legend-bar{{display:flex;align-items:center;gap:8px;margin-bottom:12px}}
+        .legend-bar .grad{{height:10px;width:160px;border-radius:5px;background:linear-gradient(to right,#E6F1FB,#378ADD,#042C53)}}
+        .legend-bar span{{font-size:11px;color:#94a3b8}}
+        .col-labels{{display:flex;margin-bottom:3px;padding-left:26px}}
+        .col-lbl{{width:40px;text-align:center;font-size:10px;color:#94a3b8;font-weight:600}}
+        .grid-outer{{display:flex;gap:0}}
+        .row-labels{{display:flex;flex-direction:column;width:26px}}
+        .row-lbl{{height:40px;display:flex;align-items:center;justify-content:flex-end;padding-right:5px;font-size:10px;color:#94a3b8;font-weight:600}}
+        .grid{{display:grid;grid-template-columns:repeat(10,40px);grid-template-rows:repeat(10,40px);gap:3px}}
+        .cell{{width:40px;height:40px;border-radius:6px;cursor:pointer;position:relative;
+            transition:transform .12s;display:flex;align-items:center;justify-content:center;
+            border:1.5px solid transparent}}
+        .cell:hover{{transform:scale(1.15);z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.18);border-color:rgba(0,0,0,.22)}}
+        .cell.zero{{background:#f8fafc;border:1.5px dashed #e2e8f0}}
+        .cell .cnt{{font-size:10px;font-weight:600;pointer-events:none}}
+        .stats{{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}}
+        .stat-card{{flex:1;min-width:80px;background:#f8fafc;border:1px solid #e2e8f0;
+                    border-radius:8px;padding:8px 10px}}
+        .stat-card .sv{{font-size:18px;font-weight:600;color:#0f172a}}
+        .stat-card .sl{{font-size:10px;color:#94a3b8;margin-top:2px}}
+        .chk-row{{display:flex;align-items:center;gap:6px}}
+        .chk-row input{{width:14px;height:14px;cursor:pointer;accent-color:#378ADD}}
+        /* Tooltip */
+        #tooltip{{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:10px;
+                padding:12px 14px;pointer-events:none;opacity:0;transition:opacity .15s;
+                z-index:9999;min-width:170px;max-width:230px;
+                box-shadow:0 4px 20px rgba(0,0,0,.13)}}
+        #tooltip.show{{opacity:1}}
+        .tt-zone{{font-size:15px;font-weight:600;color:#0f172a;margin-bottom:4px}}
+        .tt-total{{font-size:12px;color:#64748b;margin-bottom:9px}}
+        .tt-bar-row{{display:flex;align-items:center;gap:6px;margin-bottom:4px}}
+        .tt-bar-label{{font-size:11px;color:#64748b;width:80px;flex-shrink:0;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+        .tt-bar{{height:7px;border-radius:4px;min-width:3px}}
+        .tt-pct{{font-size:11px;color:#64748b;min-width:30px}}
+        .tt-none{{font-size:12px;color:#94a3b8;font-style:italic}}
+        </style>
+        </head>
+        <body>
+        
+        <div class="controls">
+        <label>Type de surface :</label>
+        <select id="typeFilter">
+            <option value="all">Tous</option>
+            <option value="Sol">Sol</option>
+            <option value="Paroi">Paroi</option>
+            <option value="Plafond">Plafond</option>
+            <option value="Air">Air</option>
+            <option value="Surface">Surface</option>
+        </select>
+        <div class="chk-row">
+            <input type="checkbox" id="showCount" checked>
+            <label for="showCount">Afficher les compteurs</label>
+        </div>
+        </div>
+        
+        <div class="legend-bar">
+        <span>0</span>
+        <div class="grad"></div>
+        <span id="maxLbl">max</span>
+        <span style="margin-left:8px;font-size:11px;color:#94a3b8">prélèvements</span>
+        </div>
+        
+        <div class="col-labels" id="colLabels"></div>
+        <div class="grid-outer">
+        <div class="row-labels" id="rowLabels"></div>
+        <div class="grid" id="grid"></div>
+        </div>
+        
+        <div class="stats" id="statsRow"></div>
+        <div id="tooltip"></div>
+        
+        <script>
+        const RAW_DATA = {prelevements_json};
+        const COLS = "ABCDEFGHIJ".split("");
+        const ROWS = [1,2,3,4,5,6,7,8,9,10];
+        const TYPE_COLORS = {{
+        "Sol":"#378ADD","Paroi":"#1D9E75","Plafond":"#D85A30",
+        "Air":"#D4537E","Surface":"#7F77DD","—":"#888780"
+        }};
+        
+        function hexRgb(h){{
+        return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+        }}
+        function lerp(t,a,b){{return a.map((v,i)=>Math.round(v+(b[i]-v)*t));}}
+        const C0=hexRgb("#E6F1FB"),C1=hexRgb("#378ADD"),C2=hexRgb("#042C53");
+        function cellColor(v,max){{
+        if(v===0) return null;
+        const t=Math.min(v/max,1);
+        const rgb=t<0.5?lerp(t*2,C0,C1):lerp((t-0.5)*2,C1,C2);
+        return `rgb(${{rgb[0]}},${{rgb[1]}},${{rgb[2]}})`;
+        }}
+        function textColor(v,max){{
+        if(v===0) return "#94a3b8";
+        return Math.min(v/max,1)>0.45?"#E6F1FB":"#0C447C";
+        }}
+        
+        function buildCounts(data){{
+        const counts={{}},details={{}};
+        for(const d of data){{
+            counts[d.zone]=(counts[d.zone]||0)+1;
+            if(!details[d.zone]) details[d.zone]={{}};
+            details[d.zone][d.type]=(details[d.zone][d.type]||0)+1;
+        }}
+        return {{counts,details}};
+        }}
+        
+        function render(){{
+        const typeVal=document.getElementById("typeFilter").value;
+        const filtered=typeVal==="all"?RAW_DATA:RAW_DATA.filter(d=>d.type===typeVal);
+        const {{counts,details}}=buildCounts(filtered);
+        const maxCount=Math.max(1,...Object.values(counts));
+        const showCnt=document.getElementById("showCount").checked;
+        
+        document.getElementById("maxLbl").textContent=maxCount;
+        
+        document.getElementById("colLabels").innerHTML=
+            COLS.map(c=>`<div class="col-lbl">${{c}}</div>`).join("");
+        document.getElementById("rowLabels").innerHTML=
+            ROWS.map(r=>`<div class="row-lbl">${{r}}</div>`).join("");
+        
+        const grid=document.getElementById("grid");
+        grid.innerHTML="";
+        for(let ri=0;ri<10;ri++){{
+            for(let ci=0;ci<10;ci++){{
+            const zone=COLS[ci]+ROWS[ri];
+            const v=counts[zone]||0;
+            const cell=document.createElement("div");
+            cell.className="cell"+(v===0?" zero":"");
+            const bg=cellColor(v,maxCount);
+            if(bg) cell.style.background=bg;
+            if(showCnt&&v>0){{
+                const span=document.createElement("span");
+                span.className="cnt";
+                span.style.color=textColor(v,maxCount);
+                span.textContent=v;
+                cell.appendChild(span);
+            }}
+            cell.addEventListener("mouseenter",e=>showTT(e,zone,v,details[zone]||{{}}));
+            cell.addEventListener("mousemove",moveTT);
+            cell.addEventListener("mouseleave",hideTT);
+            grid.appendChild(cell);
+            }}
+        }}
+        
+        const total=filtered.length;
+        const zonesUsed=Object.keys(counts).length;
+        const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+        document.getElementById("statsRow").innerHTML=`
+            <div class="stat-card"><div class="sv">${{total}}</div>
+            <div class="sl">prélevements${{typeVal!=="all"?" (filtrés)":""}}</div></div>
+            <div class="stat-card"><div class="sv">${{zonesUsed}}</div>
+            <div class="sl">zones / 100</div></div>
+            <div class="stat-card"><div class="sv">${{top?top[0]:"—"}}</div>
+            <div class="sl">zone + prélevée${{top?" ("+top[1]+"×)":""}}</div></div>
+            <div class="stat-card"><div class="sv">${{total>0?Math.round(zonesUsed):0}}</div>
+            <div class="sl">zones touchées</div></div>
+        `;
+        }}
+        
+        function showTT(e,zone,total,detail){{
+        const tt=document.getElementById("tooltip");
+        const entries=Object.entries(detail).sort((a,b)=>b[1]-a[1]);
+        const maxD=Math.max(1,...entries.map(x=>x[1]));
+        let html=`<div class="tt-zone">Zone ${{zone}}</div>
+            <div class="tt-total">${{total}} prélèvement${{total>1?"s":""}}</div>`;
+        if(!entries.length){{
+            html+=`<div class="tt-none">Aucun prélèvement</div>`;
+        }}else{{
+            for(const [type,count] of entries){{
+            const pct=Math.round((count/total)*100);
+            const w=Math.round((count/maxD)*90);
+            const col=TYPE_COLORS[type]||"#888780";
+            html+=`<div class="tt-bar-row">
+                <span class="tt-bar-label">${{type}}</span>
+                <div class="tt-bar" style="width:${{w}}px;background:${{col}}"></div>
+                <span class="tt-pct">${{pct}}%</span>
+            </div>`;
+            }}
+        }}
+        tt.innerHTML=html;
+        positionTT(e.clientX,e.clientY);
+        tt.classList.add("show");
+        }}
+        function moveTT(e){{positionTT(e.clientX,e.clientY);}}
+        function positionTT(x,y){{
+        const tt=document.getElementById("tooltip");
+        let left=x+14,top=y-20;
+        if(left+240>window.innerWidth-10) left=x-240-14;
+        if(top+180>window.innerHeight-10) top=y-180;
+        tt.style.left=left+"px";
+        tt.style.top=top+"px";
+        }}
+        function hideTT(){{document.getElementById("tooltip").classList.remove("show");}}
+        
+        document.getElementById("typeFilter").addEventListener("change",render);
+        document.getElementById("showCount").addEventListener("change",render);
+        render();
+        </script>
+        </body>
+        </html>
+        """
+        
+            components.html(html, height=520, scrolling=False)
+        with hist_tab_plan:
+            render_heatmap_prelevements()
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
@@ -6597,6 +6428,7 @@ elif active == "parametres":
                     "🔁 Fréquence", min_value=1, max_value=31, value=1, step=1, key="np_freq")
             with np6:
                 np_fu = st.selectbox("Unité", PT_FREQ_UNIT_OPTS, index=0, key="np_freq_unit")
+            
 
             # Aperçu grille (utilise np_lc défini ci-dessus)
             st.markdown(f"""
