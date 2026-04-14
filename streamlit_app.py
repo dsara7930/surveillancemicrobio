@@ -3113,55 +3113,55 @@ def _render_traitement_lecture(proc_id):
         else:
             ncol=0
 
-        # ── Module gélose positive ────────────────────────────────────────────
-        if "Positif" in res:
-            with st.expander("📷 Analyser la gélose par webcam (optionnel — aide au comptage)", expanded=False):
-                st.markdown(
-                    "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
-                    "⚠️ Ce module est une aide indicative au comptage. Le nombre d'UFC saisi ci-dessus fait foi.</div>",
-                    unsafe_allow_html=True)
-                st.components.v1.html(GELOSE_MODULE_HTML, height=620, scrolling=False)
+    # ── Module gélose positive ────────────────────────────────────────────
+    if "Positif" in res:
+        with st.expander("📷 Analyser la gélose par webcam (optionnel — aide au comptage)", expanded=False):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
+                "⚠️ Ce module est une aide indicative au comptage. Le nombre d'UFC saisi ci-dessus fait foi.</div>",
+                unsafe_allow_html=True)
+            st.components.v1.html(GELOSE_MODULE_HTML, height=620, scrolling=False)
 
-        vc1,vc2=st.columns(2)
-        with vc1:
-            if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
-                proc['status']='done'
-                save_schedules(st.session_state.schedules)
-                if "Négatif" in res:
-                    j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7' and x['status']=='pending'), None)
-                    if proc['when']=='J7' or (proc['when']=='J2' and not j7_sch):
-                        if smp:
-                            smp['archived']=True
-                            st.session_state.archived_samples.append(smp)
-                            save_archived_samples(st.session_state.archived_samples)
-                            save_prelevements(st.session_state.prelevements)
-                        st.success("✅ Lecture négative — prélèvement archivé.")
-                    else:
-                        st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
-                    st.session_state.surveillance.append({
-                        "date":str(today),"prelevement":proc['label'],"sample_id":proc.get('sample_id',''),
-                        "germ_saisi":"","germ_match":"Négatif","match_score":"—","ufc":0,"germ_score":0,
-                        "location_criticality":loc_crit,"total_score":0,"risk":0,
-                        "room_class":smp.get('room_class','') if smp else '',
-                        "alert_threshold":"Score ≥ 24","action_threshold":"Score > 36",
-                        "triggered_by":None,"status":"ok","operateur":pt_oper,
-                        "remarque":f"Lecture {proc['when']} négative"})
-                    save_surveillance(st.session_state.surveillance)
+    vc1,vc2=st.columns(2)
+    with vc1:
+        if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
+            proc['status']='done'
+            save_schedules(st.session_state.schedules)
+            if "Négatif" in res:
+                j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7' and x['status']=='pending'), None)
+                if proc['when']=='J7' or (proc['when']=='J2' and not j7_sch):
+                    if smp:
+                        smp['archived']=True
+                        st.session_state.archived_samples.append(smp)
+                        save_archived_samples(st.session_state.archived_samples)
+                        save_prelevements(st.session_state.prelevements)
+                    st.success("✅ Lecture négative — prélèvement archivé.")
                 else:
-                    st.session_state.pending_identifications.append({
-                        "sample_id":proc['sample_id'],"label":proc['label'],
-                        "when":proc['when'],"colonies":int(ncol),"date":str(today),"status":"pending"})
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    if proc['when']=='J2':
-                        j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7'), None)
-                        if j7_sch: j7_sch['status']='skipped'; save_schedules(st.session_state.schedules)
-                        st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
-                    else:
-                        st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
-                st.session_state.current_process=None; st.rerun()
-        with vc2:
-            if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
-                st.session_state.current_process=None; st.rerun()
+                    st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
+                st.session_state.surveillance.append({
+                    "date":str(today),"prelevement":proc['label'],"sample_id":proc.get('sample_id',''),
+                    "germ_saisi":"","germ_match":"Négatif","match_score":"—","ufc":0,"germ_score":0,
+                    "location_criticality":loc_crit,"total_score":0,"risk":0,
+                    "room_class":smp.get('room_class','') if smp else '',
+                    "alert_threshold":"Score ≥ 24","action_threshold":"Score > 36",
+                    "triggered_by":None,"status":"ok","operateur":pt_oper,
+                    "remarque":f"Lecture {proc['when']} négative"})
+                save_surveillance(st.session_state.surveillance)
+            else:
+                st.session_state.pending_identifications.append({
+                    "sample_id":proc['sample_id'],"label":proc['label'],
+                    "when":proc['when'],"colonies":int(ncol),"date":str(today),"status":"pending"})
+                save_pending_identifications(st.session_state.pending_identifications)
+                if proc['when']=='J2':
+                    j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7'), None)
+                    if j7_sch: j7_sch['status']='skipped'; save_schedules(st.session_state.schedules)
+                    st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
+                else:
+                    st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
+            st.session_state.current_process=None; st.rerun()
+    with vc2:
+        if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
+            st.session_state.current_process=None; st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
