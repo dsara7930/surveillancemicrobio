@@ -1030,7 +1030,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     tabs_cfg = [
-        ("accueil",      "🏠", "Accueil"),          # ← nouveau
+        ("accueil",      "🏠", "Accueil"),         
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
@@ -2519,93 +2519,94 @@ vp.addEventListener('wheel',e=>{{
                 st.divider()
                 st.markdown("#### 📋 Prélèvements en cours")
                 actifs = [s for s in st.session_state.prelevements if not s.get("archived")]
-                if not actifs:
-                    st.info("Aucun prélèvement en cours.")
-                for idx, samp in enumerate(st.session_state.prelevements):
-                    if samp.get("archived"): continue
-                    col_info, col_edit, col_del = st.columns([5,1,1])
-                    with col_info:
-                        loc_c    = int(samp.get("location_criticality",1))
-                        lc_col_r = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
-                        room_cl  = samp.get('room_class','') or ''
-                        room_badge = f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;margin-left:4px'>Cl.{room_cl}</span>" if room_cl else ""
-                        via_badge  = "<span style='background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>" if samp.get("created_via")=="qr_scan" else ""
-                        _comment_html = f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>💬 {samp['commentaire']}</div>" if samp.get('commentaire') else ""
-                        _classea_html = ""
-                        if str(samp.get("room_class","")).strip().upper()=="A":
-                            iso=samp.get("num_isolateur","—") or "—"; pst=samp.get("poste","—") or "—"
-                            _classea_html = f"<div style='font-size:.68rem;color:#854d0e;margin-top:2px'>🔬 {iso} · {pst}</div>"
-                        st.markdown(
-                            f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 16px;margin-bottom:6px'>"
-                            f"<span style='font-weight:700'>{samp['label']}</span>{room_badge}{via_badge} "
-                            f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} · <span style='color:{lc_col_r};font-weight:600'>Nv.{loc_c}</span> · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
-                            f"{_classea_html}{_comment_html}</div>", unsafe_allow_html=True)
-                    with col_edit:
-                        if st.button("✏️", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True, help="Modifier"):
-                            st.session_state["edit_prelev_id"] = samp["id"]; st.rerun()
-                    with col_del:
-                        if st.button("🗑️", key=f"del_prelev_btn_{samp['id']}", use_container_width=True, help="Supprimer"):
-                            sid = samp["id"]
-                            st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id')!=sid]
-                            st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']!=sid]
-                            st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id')!=sid]
-                            save_schedules(st.session_state.schedules); save_prelevements(st.session_state.prelevements); save_pending_identifications(st.session_state.pending_identifications)
-                            if st.session_state.get("edit_prelev_id")==sid: st.session_state["edit_prelev_id"]=None
-                            st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé."); st.rerun()
+                with st.expander(f"📋 Prélèvements en cours ({len(actifs)})", expanded=False):
+                    if not actifs:
+                        st.info("Aucun prélèvement en cours.")
+                    for idx, samp in enumerate(st.session_state.prelevements):
+                        if samp.get("archived"): continue
+                        col_info, col_edit, col_del = st.columns([5,1,1])
+                        with col_info:
+                            loc_c    = int(samp.get("location_criticality",1))
+                            lc_col_r = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
+                            room_cl  = samp.get('room_class','') or ''
+                            room_badge = f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;margin-left:4px'>Cl.{room_cl}</span>" if room_cl else ""
+                            via_badge  = "<span style='background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>" if samp.get("created_via")=="qr_scan" else ""
+                            _comment_html = f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>💬 {samp['commentaire']}</div>" if samp.get('commentaire') else ""
+                            _classea_html = ""
+                            if str(samp.get("room_class","")).strip().upper()=="A":
+                                iso=samp.get("num_isolateur","—") or "—"; pst=samp.get("poste","—") or "—"
+                                _classea_html = f"<div style='font-size:.68rem;color:#854d0e;margin-top:2px'>🔬 {iso} · {pst}</div>"
+                            st.markdown(
+                                f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 16px;margin-bottom:6px'>"
+                                f"<span style='font-weight:700'>{samp['label']}</span>{room_badge}{via_badge} "
+                                f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} · <span style='color:{lc_col_r};font-weight:600'>Nv.{loc_c}</span> · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
+                                f"{_classea_html}{_comment_html}</div>", unsafe_allow_html=True)
+                        with col_edit:
+                            if st.button("✏️", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True, help="Modifier"):
+                                st.session_state["edit_prelev_id"] = samp["id"]; st.rerun()
+                        with col_del:
+                            if st.button("🗑️", key=f"del_prelev_btn_{samp['id']}", use_container_width=True, help="Supprimer"):
+                                sid = samp["id"]
+                                st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id')!=sid]
+                                st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']!=sid]
+                                st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id')!=sid]
+                                save_schedules(st.session_state.schedules); save_prelevements(st.session_state.prelevements); save_pending_identifications(st.session_state.pending_identifications)
+                                if st.session_state.get("edit_prelev_id")==sid: st.session_state["edit_prelev_id"]=None
+                                st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé."); st.rerun()
 
-                    if st.session_state.get("edit_prelev_id")==samp["id"]:
-                        with st.container():
-                            st.markdown("<div style='background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:12px'>", unsafe_allow_html=True)
-                            st.markdown(f"**✏️ Modifier — {samp['label']}**")
-                            e_col1, e_col2 = st.columns(2)
-                            with e_col1:
-                                oper_list_e = [o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
-                                current_oper = samp.get("operateur","")
-                                if oper_list_e:
-                                    oper_options = ["— Sélectionner —"]+oper_list_e
-                                    oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
-                                    new_oper = st.selectbox("Opérateur", oper_options, index=oper_idx, key=f"edit_oper_{samp['id']}")
-                                    new_oper = new_oper if new_oper!="— Sélectionner —" else ""
-                                else:
-                                    new_oper = st.text_input("Opérateur", value=current_oper, key=f"edit_oper_{samp['id']}")
-                                try: current_date = datetime.fromisoformat(samp["date"]).date()
-                                except: current_date = datetime.today().date()
-                                new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
-                            with e_col2:
-                                new_gelose      = st.text_input("Gélose", value=samp.get("gelose",""), key=f"edit_gelose_{samp['id']}")
-                                new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
-                                new_isolateur=""; new_poste="Poste 1"
-                                if str(samp.get("room_class","")).strip().upper()=="A":
-                                    new_isolateur = st.text_input("Isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
-                                    new_poste = st.radio("Poste",["Poste 1","Poste 2","Commun"],
-                                        index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1")) if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
-                                        horizontal=True, key=f"edit_poste_{samp['id']}")
-                            new_j2=next_working_day_offset(new_date,2); new_j7=next_working_day_offset(new_date,5)
-                            if new_date!=current_date:
-                                st.markdown(f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
-                            btn_c1,btn_c2=st.columns(2)
-                            with btn_c1:
-                                if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
-                                    st.session_state.prelevements[idx]["operateur"]=new_oper
-                                    st.session_state.prelevements[idx]["date"]=str(new_date)
-                                    st.session_state.prelevements[idx]["gelose"]=new_gelose
-                                    st.session_state.prelevements[idx]["commentaire"]=new_commentaire
+                        if st.session_state.get("edit_prelev_id")==samp["id"]:
+                            with st.container():
+                                st.markdown("<div style='background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:12px'>", unsafe_allow_html=True)
+                                st.markdown(f"**✏️ Modifier — {samp['label']}**")
+                                e_col1, e_col2 = st.columns(2)
+                                with e_col1:
+                                    oper_list_e = [o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
+                                    current_oper = samp.get("operateur","")
+                                    if oper_list_e:
+                                        oper_options = ["— Sélectionner —"]+oper_list_e
+                                        oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
+                                        new_oper = st.selectbox("Opérateur", oper_options, index=oper_idx, key=f"edit_oper_{samp['id']}")
+                                        new_oper = new_oper if new_oper!="— Sélectionner —" else ""
+                                    else:
+                                        new_oper = st.text_input("Opérateur", value=current_oper, key=f"edit_oper_{samp['id']}")
+                                    try: current_date = datetime.fromisoformat(samp["date"]).date()
+                                    except: current_date = datetime.today().date()
+                                    new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
+                                with e_col2:
+                                    new_gelose      = st.text_input("Gélose", value=samp.get("gelose",""), key=f"edit_gelose_{samp['id']}")
+                                    new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
+                                    new_isolateur=""; new_poste="Poste 1"
                                     if str(samp.get("room_class","")).strip().upper()=="A":
-                                        st.session_state.prelevements[idx]["num_isolateur"]=new_isolateur
-                                        st.session_state.prelevements[idx]["poste"]=new_poste
-                                    if new_date!=current_date:
-                                        for sch in st.session_state.schedules:
-                                            if sch["sample_id"]==samp["id"]:
-                                                if sch["when"]=="J2": sch["due_date"]=new_j2.isoformat()
-                                                elif sch["when"]=="J7": sch["due_date"]=new_j7.isoformat()
-                                        save_schedules(st.session_state.schedules)
-                                    save_prelevements(st.session_state.prelevements)
-                                    st.session_state["edit_prelev_id"]=None
-                                    st.success("✅ Prélèvement mis à jour !"); st.rerun()
-                            with btn_c2:
-                                if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
-                                    st.session_state["edit_prelev_id"]=None; st.rerun()
-                            st.markdown("</div>", unsafe_allow_html=True)
+                                        new_isolateur = st.text_input("Isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
+                                        new_poste = st.radio("Poste",["Poste 1","Poste 2","Commun"],
+                                            index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1")) if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
+                                            horizontal=True, key=f"edit_poste_{samp['id']}")
+                                new_j2=next_working_day_offset(new_date,2); new_j7=next_working_day_offset(new_date,5)
+                                if new_date!=current_date:
+                                    st.markdown(f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
+                                btn_c1,btn_c2=st.columns(2)
+                                with btn_c1:
+                                    if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
+                                        st.session_state.prelevements[idx]["operateur"]=new_oper
+                                        st.session_state.prelevements[idx]["date"]=str(new_date)
+                                        st.session_state.prelevements[idx]["gelose"]=new_gelose
+                                        st.session_state.prelevements[idx]["commentaire"]=new_commentaire
+                                        if str(samp.get("room_class","")).strip().upper()=="A":
+                                            st.session_state.prelevements[idx]["num_isolateur"]=new_isolateur
+                                            st.session_state.prelevements[idx]["poste"]=new_poste
+                                        if new_date!=current_date:
+                                            for sch in st.session_state.schedules:
+                                                if sch["sample_id"]==samp["id"]:
+                                                    if sch["when"]=="J2": sch["due_date"]=new_j2.isoformat()
+                                                    elif sch["when"]=="J7": sch["due_date"]=new_j7.isoformat()
+                                            save_schedules(st.session_state.schedules)
+                                        save_prelevements(st.session_state.prelevements)
+                                        st.session_state["edit_prelev_id"]=None
+                                        st.success("✅ Prélèvement mis à jour !"); st.rerun()
+                                with btn_c2:
+                                    if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
+                                        st.session_state["edit_prelev_id"]=None; st.rerun()
+                                st.markdown("</div>", unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
         # MODE SCAN QR
