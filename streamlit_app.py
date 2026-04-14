@@ -80,14 +80,11 @@ def is_working_day(d):
         return False
     return d not in get_holidays_cached(d.year)
 
-def next_working_day_offset(d, offset_working_days):
-    current = d
-    counted = 0
-    while counted < offset_working_days:
-        current += timedelta(days=1)
-        if is_working_day(current):
-            counted += 1
-    return current
+def next_working_day_offset(start_date, n_days):
+    result = start_date + timedelta(days=n_days)
+    while result.weekday() >= 5 or result in JOURS_FERIES:   # 5=sam, 6=dim
+        result += timedelta(days=1)
+    return result
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(layout="wide", page_title="MicroSurveillance URC", page_icon="🦠")
@@ -2990,59 +2987,89 @@ function resetAll(){
 </script>
 """
 
-    def _render_lecture_card(s, tab_prefix=""):
-        sched_date = datetime.fromisoformat(s["due_date"]).date()
-        is_late    = sched_date <= today
-        border_col = "#ef4444" if is_late else "#3b82f6"
-        bg_col     = "#fef2f2" if is_late else "#eff6ff"
-        badge_col  = "#dc2626" if is_late else "#1d4ed8"
-        status_txt = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-        smp        = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
-        pt_type    = smp.get('type','?')      if smp else '?'
-        pt_gelose  = smp.get('gelose','?')    if smp else '?'
-        pt_oper    = smp.get('operateur','?') if smp else '?'
-        pt_room_cl = smp.get('room_class','') if smp else ''
-        loc_crit   = _get_location_criticality(smp) if smp else 1
-        lc_col_s   = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-        lc_lbl_s   = _loc_crit_label(loc_crit)
-        room_cl_badge = f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:.62rem;font-weight:800;margin-left:6px'>Cl.{pt_room_cl}</span>" if pt_room_cl else ""
-        extra_info = ""
-        if smp and str(smp.get("room_class","")).strip().upper()=="A":
-            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
-            extra_info=f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;border:1px solid #fde047;font-size:.7rem;color:#854d0e;font-weight:600;margin-top:6px'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
-        with st.container():
-            st.markdown(f"""
-            <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;padding:14px 16px;margin-bottom:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div>
-                  <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
-                  {room_cl_badge}
-                  <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
-                  <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
-                </div>
-                <span style="font-size:.75rem;color:#475569">📅 {s['due_date'][:10]}</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div></div>
-                <div style="background:#dbeafe;border-radius:6px;padding:6px 8px;border:1px solid #93c5fd"><div style="font-size:.55rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.75rem;font-weight:800;color:#1e40af">{pt_room_cl or '—'}</div></div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div><div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div></div>
-                <div style="background:{lc_col_s}11;border-radius:6px;padding:6px 8px;border:1px solid {lc_col_s}44"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Criticité lieu</div><div style="font-size:.75rem;font-weight:600;color:{lc_col_s}">Nv.{loc_crit} — {lc_lbl_s}</div></div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0"><div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div><div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div></div>
-              </div>
-              {extra_info}
-            </div>""", unsafe_allow_html=True)
-            bc1,bc2=st.columns([3,1])
-            with bc1:
-                if st.button(f"🔬 Traiter cette lecture ({s['when']})", key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
-                    st.session_state.current_process=s['id']; st.rerun()
-            with bc2:
-                if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}", use_container_width=True):
-                    sid=s.get('sample_id')
-                    st.session_state.schedules=[x for x in st.session_state.schedules if x['sample_id']!=sid]
-                    st.session_state.prelevements=[x for x in st.session_state.prelevements if x['id']!=sid]
-                    st.session_state.pending_identifications=[x for x in st.session_state.pending_identifications if x.get('sample_id')!=sid]
-                    save_schedules(st.session_state.schedules); save_prelevements(st.session_state.prelevements); save_pending_identifications(st.session_state.pending_identifications)
-                    st.success("Prélèvement, lectures et identifications supprimés."); st.rerun()
+    # ── APRÈS — remplacez TOUTE la fonction _render_lecture_card par ceci ──
+def _render_lecture_card(s, tab_prefix=""):
+    sched_date  = datetime.fromisoformat(s["due_date"]).date()
+    is_late     = sched_date <= today
+    border_col  = "#ef4444" if is_late else "#3b82f6"
+    bg_col      = "#fef2f2" if is_late else "#eff6ff"
+    badge_col   = "#dc2626" if is_late else "#1d4ed8"
+    status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
+    smp         = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
+    pt_type     = smp.get('type','?')        if smp else '?'
+    pt_gelose   = smp.get('gelose','?')      if smp else '?'
+    pt_oper     = smp.get('operateur','?')   if smp else '?'
+    pt_date_p   = smp.get('date','—')        if smp else '—'   # ← date prélèvement
+    pt_comment  = smp.get('commentaire','')  if smp else ''     # ← commentaire
+    comment_short = (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
+
+    extra_info = ""
+    if smp and str(smp.get("room_class","")).strip().upper() == "A":
+        iso = smp.get("num_isolateur","—") or "—"
+        pst = smp.get("poste","—") or "—"
+        extra_info = (
+            f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
+            f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
+            f"font-weight:600;margin-top:6px'>🔬 Classe A · Isolateur : {iso} · {pst}</div>")
+
+    with st.container():
+        st.markdown(f"""
+        <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
+                    padding:14px 16px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div>
+              <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+              <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
+                           padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
+              <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
+            </div>
+            <span style="font-size:.75rem;color:#475569">📅 Échéance : {s['due_date'][:10]}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+            <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+              <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
+              <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+            </div>
+            <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;border:1px solid #86efac">
+              <div style="font-size:.55rem;color:#166534;text-transform:uppercase">Date prélèv.</div>
+              <div style="font-size:.75rem;font-weight:700;color:#166534">📅 {pt_date_p}</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+              <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
+              <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+              <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
+              <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
+            </div>
+            <div style="background:#fffbeb;border-radius:6px;padding:6px 8px;border:1px solid #fde047">
+              <div style="font-size:.55rem;color:#92400e;text-transform:uppercase">Commentaire</div>
+              <div style="font-size:.72rem;font-weight:600;color:#78350f" title="{pt_comment}">
+                💬 {comment_short}</div>
+            </div>
+          </div>
+          {extra_info}
+        </div>""", unsafe_allow_html=True)
+
+        bc1, bc2 = st.columns([3, 1])
+        with bc1:
+            if st.button(f"🔬 Traiter cette lecture ({s['when']})",
+                         key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
+                st.session_state.current_process = s['id']
+                st.rerun()
+        with bc2:
+            if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
+                         use_container_width=True):
+                sid = s.get('sample_id')
+                st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
+                st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']        != sid]
+                st.session_state.pending_identifications = [
+                    x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+                save_schedules(st.session_state.schedules)
+                save_prelevements(st.session_state.prelevements)
+                save_pending_identifications(st.session_state.pending_identifications)
+                st.success("Prélèvement, lectures et identifications supprimés.")
+                st.rerun()
 
     def _render_traitement_lecture(proc_id):
         proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
@@ -3141,47 +3168,108 @@ function resetAll(){
     # ══════════════════════════════════════════════════════════════════════════
     with tab_j2:
         st.markdown("#### 📖 Lectures J2 en attente")
-        _active_sids={p['id'] for p in st.session_state.prelevements if not p.get("archived")}
-        pending_j2=[s for s in st.session_state.schedules if s["when"]=="J2" and s["status"]=="pending" and s.get("sample_id") in _active_sids]
-        overdue_j2 =[s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date()<=today]
-        upcoming_j2=[s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date()>today]
-        if not pending_j2:
-            st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
+        _active_sids = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+        pending_j2   = [s for s in st.session_state.schedules
+                        if s["when"] == "J2" and s["status"] == "pending"
+                        and s.get("sample_id") in _active_sids]
+        overdue_j2   = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
+
+        # Détecter si un traitement J2 est actif
+        _proc_j2 = None
+        if st.session_state.get("current_process"):
+            _proc_j2 = next((x for x in st.session_state.schedules
+                             if x['id'] == st.session_state.current_process
+                             and x['when'] == 'J2'), None)
+
+        # Layout : liste à gauche, traitement à droite si actif
+        if _proc_j2:
+            col_left, col_right = st.columns([1, 1], gap="medium")
         else:
-            if overdue_j2:
-                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible</span></div>', unsafe_allow_html=True)
-            if upcoming_j2:
-                st.markdown(f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 16px;margin-bottom:12px"><span style="color:#16a34a;font-size:.8rem">📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>', unsafe_allow_html=True)
-            for s in overdue_j2+upcoming_j2:
-                _render_lecture_card(s, "j2_")
-        if st.session_state.current_process:
-            proc_check=next((x for x in st.session_state.schedules if x['id']==st.session_state.current_process and x['when']=='J2'), None)
-            if proc_check: _render_traitement_lecture(st.session_state.current_process)
+            col_left = st.container()
+            col_right = None
+
+        with col_left:
+            if not pending_j2:
+                st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
+            else:
+                if overdue_j2:
+                    st.markdown(
+                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                        f'padding:12px 16px;margin-bottom:12px">'
+                        f'<span style="color:#dc2626;font-weight:700">'
+                        f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible'
+                        f'</span></div>', unsafe_allow_html=True)
+                if upcoming_j2:
+                    st.markdown(
+                        f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:12px">'
+                        f'<span style="color:#16a34a;font-size:.8rem">'
+                        f'📆 {len(upcoming_j2)} lecture(s) J2 à venir'
+                        f'</span></div>', unsafe_allow_html=True)
+                for s in overdue_j2 + upcoming_j2:
+                    _render_lecture_card(s, "j2_")
+
+        if _proc_j2 and col_right is not None:
+            with col_right:
+                _render_traitement_lecture(st.session_state.current_process)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
     with tab_j7:
         st.markdown("#### 📗 Lectures J7 en attente")
-        _active_sids_j7={p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+        _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+
         def _j2_done_for(sample_id):
-            j2=next((x for x in st.session_state.schedules if x['sample_id']==sample_id and x['when']=='J2'), None)
-            return j2 is None or j2['status']=='done'
-        pending_j7=[s for s in st.session_state.schedules if s["when"]=="J7" and s["status"]=="pending" and s.get("sample_id") in _active_sids_j7 and _j2_done_for(s["sample_id"])]
-        overdue_j7 =[s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date()<=today]
-        upcoming_j7=[s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date()>today]
-        if not pending_j7:
-            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
+            j2 = next((x for x in st.session_state.schedules
+                       if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+            return j2 is None or j2['status'] == 'done'
+
+        pending_j7  = [s for s in st.session_state.schedules
+                       if s["when"] == "J7" and s["status"] == "pending"
+                       and s.get("sample_id") in _active_sids_j7
+                       and _j2_done_for(s["sample_id"])]
+        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+
+        # Détecter si un traitement J7 est actif
+        _proc_j7 = None
+        if st.session_state.get("current_process"):
+            _proc_j7 = next((x for x in st.session_state.schedules
+                             if x['id'] == st.session_state.current_process
+                             and x['when'] == 'J7'), None)
+
+        if _proc_j7:
+            col_left7, col_right7 = st.columns([1, 1], gap="medium")
         else:
-            if overdue_j7:
-                st.markdown(f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:12px 16px;margin-bottom:12px"><span style="color:#dc2626;font-weight:700">🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible</span></div>', unsafe_allow_html=True)
-            if upcoming_j7:
-                st.markdown(f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 16px;margin-bottom:12px"><span style="color:#1d4ed8;font-size:.8rem">📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>', unsafe_allow_html=True)
-            for s in overdue_j7+upcoming_j7:
-                _render_lecture_card(s, "j7_")
-        if st.session_state.current_process:
-            proc_check=next((x for x in st.session_state.schedules if x['id']==st.session_state.current_process and x['when']=='J7'), None)
-            if proc_check: _render_traitement_lecture(st.session_state.current_process)
+            col_left7  = st.container()
+            col_right7 = None
+
+        with col_left7:
+            if not pending_j7:
+                st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
+            else:
+                if overdue_j7:
+                    st.markdown(
+                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                        f'padding:12px 16px;margin-bottom:12px">'
+                        f'<span style="color:#dc2626;font-weight:700">'
+                        f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible'
+                        f'</span></div>', unsafe_allow_html=True)
+                if upcoming_j7:
+                    st.markdown(
+                        f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:12px">'
+                        f'<span style="color:#1d4ed8;font-size:.8rem">'
+                        f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
+                        f'</span></div>', unsafe_allow_html=True)
+                for s in overdue_j7 + upcoming_j7:
+                    _render_lecture_card(s, "j7_")
+
+        if _proc_j7 and col_right7 is not None:
+            with col_right7:
+                _render_traitement_lecture(st.session_state.current_process)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
