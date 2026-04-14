@@ -1471,7 +1471,7 @@ if active == "accueil":
         <p>Gérer le calendrier des tâches</p>
       </div>
       <div class="home-card">
-        <img src="https://i.pinimg.com/originals/8b/2b/16/8b2b16ccce84bb90cc7281c31810f11e.gif" />
+        <img src="https://i.pinimg.com/originals/b2/4c/9e/b24c9e272f886980409584f6299b12ed.gif" />
         <h2>Prélèvements</h2>
         <p>Identification et surveillance</p>
       </div>
