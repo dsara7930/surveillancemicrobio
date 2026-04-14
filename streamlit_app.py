@@ -3071,47 +3071,47 @@ def _render_lecture_card(s, tab_prefix=""):
                 st.success("Prélèvement, lectures et identifications supprimés.")
                 st.rerun()
 
-    def _render_traitement_lecture(proc_id):
-        proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
-        if not proc: return
-        smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
-        pt_type  =smp.get('type','?')      if smp else '?'
-        pt_gelose=smp.get('gelose','?')    if smp else '?'
-        pt_oper  =smp.get('operateur','?') if smp else '?'
-        pt_date  =smp.get('date','?')      if smp else '?'
-        pt_room_p=smp.get('room_class','') if smp else ''
-        loc_crit =_get_location_criticality(smp) if smp else 1
-        lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-        classea_band=""
-        if smp and str(smp.get("room_class","")).strip().upper()=="A":
-            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
-            classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
-        st.markdown("---")
-        st.markdown(f"""
-        <div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;padding:16px;margin-bottom:16px">
-          <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">
-            🔬 Traitement lecture — <span style="font-style:italic">{proc['label']}</span>
-            <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
-            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div></div>
-            <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;border:1px solid #93c5fd"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:3px">{pt_room_p or '—'}</div></div>
-            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div></div>
-            <div style="background:{lc_col_p}11;border-radius:8px;padding:10px;text-align:center;border:1px solid {lc_col_p}44"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Criticité lieu</div><div style="font-size:.85rem;font-weight:700;color:{lc_col_p};margin-top:3px">Nv.{loc_crit}</div></div>
-            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
-            <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
-          </div>
-          {classea_band}
-        </div>""", unsafe_allow_html=True)
+def _render_traitement_lecture(proc_id):
+    proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
+    if not proc: return
+    smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
+    pt_type  =smp.get('type','?')      if smp else '?'
+    pt_gelose=smp.get('gelose','?')    if smp else '?'
+    pt_oper  =smp.get('operateur','?') if smp else '?'
+    pt_date  =smp.get('date','?')      if smp else '?'
+    pt_room_p=smp.get('room_class','') if smp else ''
+    loc_crit =_get_location_criticality(smp) if smp else 1
+    lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
+    classea_band=""
+    if smp and str(smp.get("room_class","")).strip().upper()=="A":
+        iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
+        classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
+    st.markdown("---")
+    st.markdown(f"""
+    <div style="background:#f8fafc;border:2px solid #2563eb;border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:1rem;font-weight:700;color:#1e40af;margin-bottom:12px">
+        🔬 Traitement lecture — <span style="font-style:italic">{proc['label']}</span>
+        <span style="background:#2563eb;color:#fff;font-size:.65rem;font-weight:700;padding:3px 10px;border-radius:10px;margin-left:8px">{proc['when']}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+        <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Type</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{'💨' if pt_type=='Air' else '🧴'} {pt_type}</div></div>
+        <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center;border:1px solid #93c5fd"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe</div><div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:3px">{pt_room_p or '—'}</div></div>
+        <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Gélose</div><div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:3px">🧫 {pt_gelose}</div></div>
+        <div style="background:{lc_col_p}11;border-radius:8px;padding:10px;text-align:center;border:1px solid {lc_col_p}44"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Criticité lieu</div><div style="font-size:.85rem;font-weight:700;color:{lc_col_p};margin-top:3px">Nv.{loc_crit}</div></div>
+        <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Opérateur</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_oper}</div></div>
+        <div style="background:#eff6ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Date prélèv.</div><div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:3px">{pt_date}</div></div>
+        </div>
+        {classea_band}
+    </div>""", unsafe_allow_html=True)
 
-        lc1,lc2=st.columns([2,2])
-        with lc1:
-            res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
-        with lc2:
-            if "Positif" in res:
-                ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
-            else:
-                ncol=0
+    lc1,lc2=st.columns([2,2])
+    with lc1:
+        res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
+    with lc2:
+        if "Positif" in res:
+            ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
+        else:
+            ncol=0
 
         # ── Module gélose positive ────────────────────────────────────────────
         if "Positif" in res:
