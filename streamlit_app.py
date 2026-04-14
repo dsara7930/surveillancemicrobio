@@ -1459,7 +1459,7 @@ if active == "accueil":
     }
     .home-card:first-child { border-radius: 12px 0 0 12px; border-right: none; }
     .home-card:last-child  { border-radius: 0 12px 12px 0; }
-    .home-card img { width: 440px; height: 440px; object-fit: cover; border-radius: 8px; margin-bottom: 1rem; }
+    .home-card img { width: 440px; height: 440px; object-fit: contain; border-radius: 8px; margin-bottom: 1rem; }
     .home-card h2 { font-size: 1.5rem; font-weight: 500; margin: 0 0 0.4rem; }
     .home-card p  { font-size: 0.85rem; color: #64748b; margin: 0; }
     </style>
