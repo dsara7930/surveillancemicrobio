@@ -82,7 +82,7 @@ def is_working_day(d):
 
 def next_working_day_offset(start_date, n_days):
     result = start_date + timedelta(days=n_days)
-    while result.weekday() >= 5 or result in JOURS_FERIES:   # 5=sam, 6=dim
+    while result.weekday() >= 5 or result in get_holidays_cached(result.year):
         result += timedelta(days=1)
     return result
 
