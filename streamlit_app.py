@@ -3715,7 +3715,7 @@ if active == "planning":
         MARGIN_SHEET = 0              # ← suppression des marges
 
         W_ETQ  = 5.2  * rl_cm        # ← taille fixe
-        H_ETQ  = 2.92 * rl_cm        # ← taille fixe
+        H_ETQ  = 2.95 * rl_cm        # ← taille fixe
         _grid_w      = W_ETQ * N_COLS
         _margin_left = MARGIN_SHEET   # = 0
 
