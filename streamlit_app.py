@@ -2756,9 +2756,9 @@ button:disabled{opacity:.4;cursor:default}
 .btn-blue:hover{opacity:.85;background:#185FA5}
 canvas{display:block;width:100%}
 .slider-row{display:flex;align-items:center;gap:8px;margin:.4rem 0}
-.slider-row label{font-size:11px;color:#64748b;min-width:120px}
+.slider-row label{font-size:11px;color:#64748b;min-width:130px}
 .slider-row input[type=range]{flex:1}
-.slider-row span{font-size:12px;font-weight:600;min-width:28px;text-align:right}
+.slider-row span{font-size:12px;font-weight:600;min-width:36px;text-align:right}
 .ufc-big{font-size:38px;font-weight:700;color:#0f172a;line-height:1}
 .char-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.5rem}
 .char-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;color:#475569}
@@ -2773,9 +2773,10 @@ canvas{display:block;width:100%}
 .hint-prob{font-size:10px;font-weight:600;margin-top:3px}
 .hint-prob.r3{color:#A32D2D}.hint-prob.r2{color:#854F0B}.hint-prob.r1{color:#3B6D11}
 .disclaim{background:#FAEEDA;border:1px solid #FAC775;border-radius:6px;padding:8px 10px;font-size:10px;color:#633806;line-height:1.5;margin-top:.5rem}
-.confirm-row{display:flex;align-items:center;gap:8px;margin-top:.75rem}
+.confirm-row{display:flex;align-items:center;gap:8px;margin-top:.75rem;flex-wrap:wrap}
 .confirm-row label{font-size:12px;color:#64748b}
 .confirm-row input{width:80px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-weight:700}
+.debug-row{font-size:10px;color:#94a3b8;margin-top:4px}
 </style>
 <div class="wrap">
 <div class="step-bar">
@@ -2798,14 +2799,17 @@ canvas{display:block;width:100%}
 </div>
 
 <div class="card" id="card-analysis" style="display:none">
-  <div class="card-lbl">Ajustez si nécessaire — les colonies sont entourées en bleu</div>
+  <div class="card-lbl">Colonies détectées (cercles bleus) — ajustez si nécessaire</div>
   <div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:.5rem">
     <canvas id="cv-out"></canvas>
   </div>
-  <div class="slider-row"><label>Sensibilité</label><input type="range" min="1" max="100" value="40" step="1" id="sl-t" oninput="reanalyze()"><span id="sv-t">40</span></div>
-  <div class="slider-row"><label>Taille min (px)</label><input type="range" min="2" max="40" value="8" step="1" id="sl-mn" oninput="reanalyze()"><span id="sv-mn">8</span></div>
-  <div class="slider-row"><label>Taille max (px)</label><input type="range" min="20" max="120" value="60" step="1" id="sl-mx" oninput="reanalyze()"><span id="sv-mx">60</span></div>
+  <div class="slider-row"><label>Contraste seuil</label><input type="range" min="2" max="80" value="25" step="1" id="sl-t" oninput="reanalyze()"><span id="sv-t">25</span></div>
+  <div class="slider-row"><label>Taille min (px radius)</label><input type="range" min="2" max="30" value="5" step="1" id="sl-mn" oninput="reanalyze()"><span id="sv-mn">5</span></div>
+  <div class="slider-row"><label>Taille max (px radius)</label><input type="range" min="15" max="120" value="55" step="1" id="sl-mx" oninput="reanalyze()"><span id="sv-mx">55</span></div>
+  <div class="slider-row"><label>Rondeur min (0–1)</label><input type="range" min="0.3" max="1.0" value="0.62" step="0.02" id="sl-circ" oninput="reanalyze()"><span id="sv-circ">0.62</span></div>
+  <div class="slider-row"><label>Ratio aspect min</label><input type="range" min="0.3" max="1.0" value="0.55" step="0.05" id="sl-asp" oninput="reanalyze()"><span id="sv-asp">0.55</span></div>
   <div style="margin:.5rem 0"><span class="ufc-big" id="ufc-count">—</span> <span style="font-size:13px;color:#64748b">colonies détectées</span></div>
+  <div class="debug-row" id="debug-info"></div>
   <div class="btn-row">
     <button class="btn-blue" onclick="goStep3()">Utiliser ce comptage</button>
     <button onclick="resetCam()">Reprendre</button>
@@ -2866,11 +2870,17 @@ function step(n){
 }
 
 function startCam(){
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280}}})
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})
     .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
       document.getElementById('cam-hint').textContent='Caméra active — centrez la gélose';
       document.getElementById('btn-snap').disabled=false;})
-    .catch(e=>{document.getElementById('cam-hint').textContent='Erreur : '+e.message;});
+    .catch(()=>{
+      navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280}}})
+        .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
+          document.getElementById('cam-hint').textContent='Caméra active';
+          document.getElementById('btn-snap').disabled=false;})
+        .catch(e=>{document.getElementById('cam-hint').textContent='Erreur : '+e.message;});
+    });
 }
 
 function snap(){
@@ -2897,40 +2907,96 @@ function reanalyze(){
   const t=parseInt(document.getElementById('sl-t').value);
   const mn=parseInt(document.getElementById('sl-mn').value);
   const mx=parseInt(document.getElementById('sl-mx').value);
+  const circ=parseFloat(document.getElementById('sl-circ').value);
+  const asp=parseFloat(document.getElementById('sl-asp').value);
   document.getElementById('sv-t').textContent=t;
   document.getElementById('sv-mn').textContent=mn;
   document.getElementById('sv-mx').textContent=mx;
+  document.getElementById('sv-circ').textContent=circ.toFixed(2);
+  document.getElementById('sv-asp').textContent=asp.toFixed(2);
   const img=new Image();
-  img.onload=()=>analyze(img,t,mn,mx);
+  img.onload=()=>analyze(img,t,mn,mx,circ,asp);
   img.src=imgData;
 }
 
-function analyze(img,thresh,minR,maxR){
+function analyze(img,thresh,minR,maxR,minCirc,minAsp){
   const out=document.getElementById('cv-out');
   out.width=img.width;out.height=img.height;
-  const ctx=out.getContext('2d');ctx.drawImage(img,0,0);
+  const ctx=out.getContext('2d');
+  ctx.drawImage(img,0,0);
   const d=ctx.getImageData(0,0,img.width,img.height).data;
-  const w=img.width,h=img.height;
-  const bright=new Uint8Array(w*h);
-  for(let i=0;i<w*h;i++){const r=d[i*4],g=d[i*4+1],b=d[i*4+2];bright[i]=(0.299*r+0.587*g+0.114*b)>(255-thresh*1.8)?1:0;}
-  const vis=new Uint8Array(w*h);const blobs=[];
-  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
-    const idx=y*w+x;if(!bright[idx]||vis[idx])continue;
-    const q=[idx];vis[idx]=1;let sx=0,sy=0,n=0,qi=0;
-    while(qi<q.length){const ci=q[qi++];const cx=ci%w,cy=Math.floor(ci/w);sx+=cx;sy+=cy;n++;
-      for(const[dx,dy]of[[-1,0],[1,0],[0,-1],[0,1]]){const ni=(cy+dy)*w+(cx+dx);if(ni>=0&&ni<w*h&&bright[ni]&&!vis[ni]){vis[ni]=1;q.push(ni);}}}
-    const r=Math.sqrt(n/Math.PI);
-    if(r>=minR&&r<=maxR)blobs.push({cx:Math.round(sx/n),cy:Math.round(sy/n),r:Math.round(r)});
+  const w=img.width,h=img.height,n=w*h;
+
+  // ── Luminance de chaque pixel ──────────────────────────────────────────────
+  const lum=new Float32Array(n);
+  for(let i=0;i<n;i++) lum[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+
+  // ── Fond adaptatif : médiane sur échantillon ───────────────────────────────
+  const step_s=Math.max(1,Math.floor(n/4000));
+  const sample=[];
+  for(let i=0;i<n;i+=step_s) sample.push(lum[i]);
+  sample.sort((a,b)=>a-b);
+  const bgLum=sample[Math.floor(sample.length*0.5)];
+
+  // ── Masque candidats : contraste absolu > seuil ────────────────────────────
+  const tVal=thresh*1.6;
+  const bright=new Uint8Array(n);
+  for(let i=0;i<n;i++) bright[i]=(Math.abs(lum[i]-bgLum)>tVal)?1:0;
+
+  // ── BFS avec métriques de forme ───────────────────────────────────────────
+  const vis=new Uint8Array(n);
+  const blobs=[];
+  let rejected_small=0,rejected_big=0,rejected_shape=0;
+
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const idx=y*w+x;
+      if(!bright[idx]||vis[idx])continue;
+      const q=[idx];vis[idx]=1;
+      let sx=0,sy=0,cnt=0,qi=0;
+      let x0=x,x1=x,y0=y,y1=y;
+      while(qi<q.length){
+        const ci=q[qi++];
+        const cx=ci%w,cy=(ci/w)|0;
+        sx+=cx;sy+=cy;cnt++;
+        if(cx<x0)x0=cx;if(cx>x1)x1=cx;
+        if(cy<y0)y0=cy;if(cy>y1)y1=cy;
+        const nb=[ci-1,ci+1,ci-w,ci+w];
+        for(let k=0;k<4;k++){
+          const ni=nb[k];
+          if(ni>=0&&ni<n&&bright[ni]&&!vis[ni]){vis[ni]=1;q.push(ni);}
+        }
+      }
+      // Métriques
+      const r=Math.sqrt(cnt/Math.PI);
+      if(r<minR){rejected_small++;continue;}
+      if(r>maxR){rejected_big++;continue;}
+      const bW=x1-x0+1,bH=y1-y0+1;
+      const aspect=Math.min(bW,bH)/Math.max(bW,bH);           // 1 = carré/rond
+      const fill=cnt/(bW*bH);                                   // π/4≈0.785 pour un cercle
+      // Rondeur = remplissage * aspect (penalise poussière plate+allongée)
+      const roundness=fill*aspect;
+      if(roundness<minCirc||aspect<minAsp){rejected_shape++;continue;}
+      blobs.push({cx:Math.round(sx/cnt),cy:Math.round(sy/cnt),r:Math.round(r),roundness,aspect});
+    }
   }
+
+  // ── Rendu ────────────────────────────────────────────────────────────────
   ctx.drawImage(img,0,0);
   blobs.forEach((b,i)=>{
-    ctx.strokeStyle='#185FA5';ctx.lineWidth=2;ctx.fillStyle='rgba(24,95,165,0.12)';
-    ctx.beginPath();ctx.arc(b.cx,b.cy,b.r,0,Math.PI*2);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#185FA5';ctx.font='bold 10px sans-serif';ctx.fillText(i+1,b.cx-4,b.cy+4);
+    ctx.strokeStyle='#185FA5';ctx.lineWidth=2;
+    ctx.fillStyle='rgba(24,95,165,0.13)';
+    ctx.beginPath();ctx.arc(b.cx,b.cy,b.r+2,0,Math.PI*2);
+    ctx.fill();ctx.stroke();
+    ctx.fillStyle='#185FA5';ctx.font='bold 10px sans-serif';
+    ctx.fillText(i+1,b.cx-4,b.cy+4);
   });
+
   ufcVal=blobs.length;
   document.getElementById('ufc-count').textContent=blobs.length;
   document.getElementById('ufc-final').value=blobs.length;
+  document.getElementById('debug-info').textContent=
+    `Fond estimé : ${Math.round(bgLum)} lum | Rejetés : trop petits ${rejected_small}, trop grands ${rejected_big}, forme ${rejected_shape}`;
 }
 
 function goStep3(){
@@ -2972,7 +3038,7 @@ function transmit(){
   const ufc=parseInt(document.getElementById('ufc-final').value)||0;
   document.getElementById('card-hints').style.display='none';
   document.getElementById('card-done').style.display='block';
-  document.getElementById('done-txt').textContent=ufc+' UFC transmis — en attente de confirmation microbiologie';
+  document.getElementById('done-txt').textContent=ufc+' UFC — en attente de confirmation microbiologie';
 }
 
 function resetAll(){
@@ -3098,14 +3164,17 @@ function resetAll(){
             else:
                 ncol=0
 
-        # ── Module gélose positive ────────────────────────────────────────────
-        if "Positif" in res:
-            with st.expander("📷 Analyser la gélose par webcam (optionnel — aide au comptage)", expanded=False):
-                st.markdown(
-                    "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
-                    "⚠️ Ce module est une aide indicative au comptage. Le nombre d'UFC saisi ci-dessus fait foi.</div>",
-                    unsafe_allow_html=True)
-                st.components.v1.html(GELOSE_MODULE_HTML, height=620, scrolling=False)
+        # ── Module gélose (proposé dans les deux cas) ─────────────────────────
+        with st.expander(
+            "📷 Aide au comptage par webcam (optionnel — colonies ET vérification négative)",
+            expanded=False):
+            st.markdown(
+                "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;"
+                "padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
+                "⚠️ Module d'aide indicative. Le résultat saisi ci-dessus fait foi. "
+                "En cas de gélose négative, utilisez ce module pour confirmer l'absence de colonie.</div>",
+                unsafe_allow_html=True)
+            st.components.v1.html(GELOSE_MODULE_HTML, height=660, scrolling=False)
 
         vc1,vc2=st.columns(2)
         with vc1:
@@ -3160,40 +3229,40 @@ function resetAll(){
         overdue_j2   = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
         upcoming_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
 
-        # Détecter si un traitement J2 est actif
-        _proc_j2 = None
-        if st.session_state.get("current_process"):
-            _proc_j2 = next((x for x in st.session_state.schedules
-                                if x['id'] == st.session_state.current_process
-                                and x['when'] == 'J2'), None)
-
-        # Layout : liste à gauche, traitement à droite si actif
-        if _proc_j2:
-            col_left, col_right = st.columns([1, 1], gap="medium")
+        if not pending_j2:
+            st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
         else:
-            col_left = st.container()
-            col_right = None
+            if overdue_j2:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                    f'padding:12px 16px;margin-bottom:12px">'
+                    f'<span style="color:#dc2626;font-weight:700">'
+                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible'
+                    f'</span></div>', unsafe_allow_html=True)
+            if upcoming_j2:
+                st.markdown(
+                    f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
+                    f'padding:10px 16px;margin-bottom:12px">'
+                    f'<span style="color:#16a34a;font-size:.8rem">'
+                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir'
+                    f'</span></div>', unsafe_allow_html=True)
 
-        with col_left:
-            if not pending_j2:
-                st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
-            else:
-                if overdue_j2:
+            for s in overdue_j2 + upcoming_j2:
+                _render_lecture_card(s, "j2_")
+                # ── Traitement inline : apparaît sous la carte cliquée ─────────
+                if st.session_state.get("current_process") == s['id']:
                     st.markdown(
-                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                        f'padding:12px 16px;margin-bottom:12px">'
-                        f'<span style="color:#dc2626;font-weight:700">'
-                        f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible'
-                        f'</span></div>', unsafe_allow_html=True)
-                if upcoming_j2:
+                        "<div style='border-left:3px solid #3b82f6;margin-left:8px;"
+                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
+                        unsafe_allow_html=True)
                     st.markdown(
-                        f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
-                        f'padding:10px 16px;margin-bottom:12px">'
-                        f'<span style="color:#16a34a;font-size:.8rem">'
-                        f'📆 {len(upcoming_j2)} lecture(s) J2 à venir'
-                        f'</span></div>', unsafe_allow_html=True)
-                for s in overdue_j2 + upcoming_j2:
-                    _render_lecture_card(s, "j2_")
+                        f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
+                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
+                        f"font-size:.8rem;font-weight:700;color:#1e40af'>"
+                        f"🔬 Traitement lecture J2 — {s['label']}</div>",
+                        unsafe_allow_html=True)
+                    _render_traitement_lecture(st.session_state.current_process)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
         if _proc_j2 and col_right is not None:
             with col_right:
@@ -3218,39 +3287,40 @@ function resetAll(){
         overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
         upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
 
-        # Détecter si un traitement J7 est actif
-        _proc_j7 = None
-        if st.session_state.get("current_process"):
-            _proc_j7 = next((x for x in st.session_state.schedules
-                                if x['id'] == st.session_state.current_process
-                                and x['when'] == 'J7'), None)
-
-        if _proc_j7:
-            col_left7, col_right7 = st.columns([1, 1], gap="medium")
+        if not pending_j7:
+            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
         else:
-            col_left7  = st.container()
-            col_right7 = None
+            if overdue_j7:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                    f'padding:12px 16px;margin-bottom:12px">'
+                    f'<span style="color:#dc2626;font-weight:700">'
+                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible'
+                    f'</span></div>', unsafe_allow_html=True)
+            if upcoming_j7:
+                st.markdown(
+                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                    f'padding:10px 16px;margin-bottom:12px">'
+                    f'<span style="color:#1d4ed8;font-size:.8rem">'
+                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
+                    f'</span></div>', unsafe_allow_html=True)
 
-        with col_left7:
-            if not pending_j7:
-                st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
-            else:
-                if overdue_j7:
+            for s in overdue_j7 + upcoming_j7:
+                _render_lecture_card(s, "j7_")
+                # ── Traitement inline : apparaît sous la carte cliquée ─────────
+                if st.session_state.get("current_process") == s['id']:
                     st.markdown(
-                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                        f'padding:12px 16px;margin-bottom:12px">'
-                        f'<span style="color:#dc2626;font-weight:700">'
-                        f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible'
-                        f'</span></div>', unsafe_allow_html=True)
-                if upcoming_j7:
+                        "<div style='border-left:3px solid #22c55e;margin-left:8px;"
+                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
+                        unsafe_allow_html=True)
                     st.markdown(
-                        f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
-                        f'padding:10px 16px;margin-bottom:12px">'
-                        f'<span style="color:#1d4ed8;font-size:.8rem">'
-                        f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
-                        f'</span></div>', unsafe_allow_html=True)
-                for s in overdue_j7 + upcoming_j7:
-                    _render_lecture_card(s, "j7_")
+                        f"<div style='background:#f0fdf4;border:1px solid #86efac;"
+                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
+                        f"font-size:.8rem;font-weight:700;color:#166534'>"
+                        f"🔬 Traitement lecture J7 — {s['label']}</div>",
+                        unsafe_allow_html=True)
+                    _render_traitement_lecture(st.session_state.current_process)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
         if _proc_j7 and col_right7 is not None:
             with col_right7:
