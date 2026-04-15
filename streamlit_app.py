@@ -4720,10 +4720,7 @@ if active == "planning":
         else:
             _chosen_monday = None
 
-        exp_oper_filter = st.selectbox(
-            "Filtrer par opérateur",
-            ["Tous"] + [o['nom'] for o in st.session_state.operators],
-            key="exp_oper")
+        
         only_working = st.checkbox(
             "Inclure uniquement les jours ouvrés", value=True)
 
