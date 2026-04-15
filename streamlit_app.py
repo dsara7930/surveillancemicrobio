@@ -3264,10 +3264,7 @@ function resetAll(){
                     _render_traitement_lecture(st.session_state.current_process)
                     st.markdown("</div>", unsafe_allow_html=True)
 
-        if _proc_j2 and col_right is not None:
-            with col_right:
-                _render_traitement_lecture(st.session_state.current_process)
-
+        
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
@@ -3322,9 +3319,7 @@ function resetAll(){
                     _render_traitement_lecture(st.session_state.current_process)
                     st.markdown("</div>", unsafe_allow_html=True)
 
-        if _proc_j7 and col_right7 is not None:
-            with col_right7:
-                _render_traitement_lecture(st.session_state.current_process)
+       
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
