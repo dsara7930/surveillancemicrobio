@@ -12,9 +12,6 @@ import qrcode.image.pil
 from io import BytesIO
 from datetime import date, datetime, timedelta
 import streamlit.components.v1 as components
-import numpy as np
-import cv2
-from PIL import Image
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
@@ -2731,978 +2728,591 @@ vp.addEventListener('wheel',e=>{{
                         _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
                     st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
 
-  # =============================================================================
-    # CONSTANTES
-    # =============================================================================
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPERS PARTAGÉS J2/J7
+    # ══════════════════════════════════════════════════════════════════════════
 
-    GERMES: list[dict] = [
-        {
-            "n": "Staphylococcus aureus",
-            "c": ["jaune", "doré", "orangé", "convexe", "opaque"],
-            "r": 3,
-            "d": "Colonie jaune-dorée, convexe, opaque, 1-2 mm",
-        },
-        {
-            "n": "Staphylococcus epidermidis",
-            "c": ["blanc", "gris", "petite", "convexe"],
-            "r": 2,
-            "d": "Colonie blanche-grisâtre, petite, convexe",
-        },
-        {
-            "n": "Micrococcus luteus",
-            "c": ["jaune", "citron", "vif", "lisse"],
-            "r": 1,
-            "d": "Colonie jaune citron, circulaire, lisse",
-        },
-        {
-            "n": "Bacillus sp.",
-            "c": ["grande", "rugueuse", "cireuse", "mate", "irrégulière", "crème"],
-            "r": 2,
-            "d": "Grande colonie mate, rugueuse, bords irréguliers",
-        },
-        {
-            "n": "Aspergillus sp.",
-            "c": ["filamenteuse", "verte", "noire", "poudreuse", "moisissure"],
-            "r": 3,
-            "d": "Colonie filamenteuse, verte à noire, poudreuse",
-        },
-        {
-            "n": "Candida sp.",
-            "c": ["levure", "crème", "brillante", "lisse"],
-            "r": 2,
-            "d": "Colonie crème, brillante, lisse",
-        },
-        {
-            "n": "Pseudomonas aeruginosa",
-            "c": ["verte", "bleu-vert", "fluorescente", "plate", "irrégulière"],
-            "r": 3,
-            "d": "Colonie verte-bleutée, plate, bords irréguliers",
-        },
-        {
-            "n": "Enterococcus sp.",
-            "c": ["grise", "petite", "alpha"],
-            "r": 2,
-            "d": "Petite colonie grise à blanche, 0.5-1 mm",
-        },
-    ]
+    # ── Module gélose positive (OpenCV webcam) ────────────────────────────────
+    GELOSE_MODULE_HTML = """
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+.wrap{padding:.75rem;max-width:680px}
+.step-bar{display:flex;gap:6px;margin-bottom:.75rem}
+.step{flex:1;padding:6px;border-radius:6px;font-size:11px;font-weight:600;text-align:center;background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0}
+.step.active{background:#eff6ff;color:#1e40af;border-color:#93c5fd}
+.step.done{background:#f0fdf4;color:#166534;border-color:#86efac}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:.75rem 1rem;margin-bottom:.75rem}
+.card-lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;font-weight:600}
+.cam-box{background:#0a0a0a;border-radius:8px;overflow:hidden;position:relative;aspect-ratio:4/3;max-height:260px}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.cam-guide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.cam-circle{width:200px;height:200px;border-radius:50%;border:2px solid rgba(255,255,255,.55);box-shadow:0 0 0 1000px rgba(0,0,0,.38)}
+.cam-hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:rgba(255,255,255,.8);font-weight:600}
+.btn-row{display:flex;gap:6px;margin-top:.5rem;flex-wrap:wrap}
+button{padding:7px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#1e293b;transition:opacity .15s}
+button:hover{background:#f8fafc}
+button:disabled{opacity:.4;cursor:default}
+.btn-blue{background:#185FA5;color:#fff;border-color:#185FA5}
+.btn-blue:hover{opacity:.85;background:#185FA5}
+canvas{display:block;width:100%}
+.slider-row{display:flex;align-items:center;gap:8px;margin:.4rem 0}
+.slider-row label{font-size:11px;color:#64748b;min-width:130px}
+.slider-row input[type=range]{flex:1}
+.slider-row span{font-size:12px;font-weight:600;min-width:36px;text-align:right}
+.ufc-big{font-size:38px;font-weight:700;color:#0f172a;line-height:1}
+.char-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.5rem}
+.char-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;color:#475569}
+.char-btn.sel{background:#eff6ff;color:#1e40af;border-color:#93c5fd}
+.hint-list{display:flex;flex-direction:column;gap:5px}
+.hint-item{background:#f8fafc;border-radius:6px;padding:7px 10px;border-left:3px solid #888}
+.hint-item.r3{border-left-color:#E24B4A}
+.hint-item.r2{border-left-color:#EF9F27}
+.hint-item.r1{border-left-color:#639922}
+.hint-name{font-size:12px;font-weight:600;color:#0f172a}
+.hint-desc{font-size:11px;color:#64748b;margin-top:2px}
+.hint-prob{font-size:10px;font-weight:600;margin-top:3px}
+.hint-prob.r3{color:#A32D2D}.hint-prob.r2{color:#854F0B}.hint-prob.r1{color:#3B6D11}
+.disclaim{background:#FAEEDA;border:1px solid #FAC775;border-radius:6px;padding:8px 10px;font-size:10px;color:#633806;line-height:1.5;margin-top:.5rem}
+.confirm-row{display:flex;align-items:center;gap:8px;margin-top:.75rem;flex-wrap:wrap}
+.confirm-row label{font-size:12px;color:#64748b}
+.confirm-row input{width:80px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-weight:700}
+.debug-row{font-size:10px;color:#94a3b8;margin-top:4px}
+</style>
+<div class="wrap">
+<div class="step-bar">
+  <div class="step active" id="s1">1 · Capture</div>
+  <div class="step" id="s2">2 · Analyse</div>
+  <div class="step" id="s3">3 · Orientation</div>
+</div>
 
-    CHARS: list[tuple[str, str]] = [
-        ("jaune", "Jaune / doré"),
-        ("blanc", "Blanc / crème"),
-        ("verte", "Vert"),
-        ("gris", "Gris"),
-        ("orange", "Orange"),
-        ("noir", "Noir"),
-        ("convexe", "Convexe"),
-        ("plate", "Plate"),
-        ("rugueuse", "Rugueuse"),
-        ("lisse", "Lisse"),
-        ("brillante", "Brillante"),
-        ("mate", "Mate"),
-        ("petite", "Petite (<1 mm)"),
-        ("grande", "Grande (>3 mm)"),
-        ("irrégulière", "Bords irréguliers"),
-        ("filamenteuse", "Filamenteuse"),
-        ("poudreuse", "Poudreuse"),
-        ("levure", "Levure"),
-    ]
+<div class="card" id="card-cam">
+  <div class="card-lbl">Placez la gélose sous la webcam — centrez dans le cercle</div>
+  <div class="cam-box">
+    <video id="vid" autoplay muted playsinline></video>
+    <div class="cam-guide"><div class="cam-circle"></div></div>
+    <div class="cam-hint" id="cam-hint">Caméra non démarrée</div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-blue" onclick="startCam()">Démarrer la caméra</button>
+    <button id="btn-snap" onclick="snap()" disabled>Capturer</button>
+  </div>
+</div>
 
-    RISK_LABEL = {
-        1: "Risque faible",
-        2: "Risque modéré",
-        3: "Risque élevé",
-    }
+<div class="card" id="card-analysis" style="display:none">
+  <div class="card-lbl">Colonies détectées (cercles bleus) — ajustez si nécessaire</div>
+  <div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:.5rem">
+    <canvas id="cv-out"></canvas>
+  </div>
+  <div class="slider-row"><label>Contraste seuil</label><input type="range" min="2" max="80" value="25" step="1" id="sl-t" oninput="reanalyze()"><span id="sv-t">25</span></div>
+  <div class="slider-row"><label>Taille min (px radius)</label><input type="range" min="2" max="30" value="5" step="1" id="sl-mn" oninput="reanalyze()"><span id="sv-mn">5</span></div>
+  <div class="slider-row"><label>Taille max (px radius)</label><input type="range" min="15" max="120" value="55" step="1" id="sl-mx" oninput="reanalyze()"><span id="sv-mx">55</span></div>
+  <div class="slider-row"><label>Rondeur min (0–1)</label><input type="range" min="0.3" max="1.0" value="0.62" step="0.02" id="sl-circ" oninput="reanalyze()"><span id="sv-circ">0.62</span></div>
+  <div class="slider-row"><label>Ratio aspect min</label><input type="range" min="0.3" max="1.0" value="0.55" step="0.05" id="sl-asp" oninput="reanalyze()"><span id="sv-asp">0.55</span></div>
+  <div style="margin:.5rem 0"><span class="ufc-big" id="ufc-count">—</span> <span style="font-size:13px;color:#64748b">colonies détectées</span></div>
+  <div class="debug-row" id="debug-info"></div>
+  <div class="btn-row">
+    <button class="btn-blue" onclick="goStep3()">Utiliser ce comptage</button>
+    <button onclick="resetCam()">Reprendre</button>
+  </div>
+</div>
 
-    RISK_COLOR = {
-        1: "#3d9a22",
-        2: "#b45309",
-        3: "#b91c1c",
-    }
+<div class="card" id="card-hints" style="display:none">
+  <div class="card-lbl">Caractéristiques observées — sélectionnez ce qui correspond</div>
+  <div class="char-grid" id="char-btns"></div>
+  <div id="hint-results" style="display:none;margin-bottom:.5rem">
+    <div style="font-size:10px;color:#94a3b8;margin-bottom:5px;font-weight:600">HYPOTHÈSES INDICATIVES (confirmation microbiologie requise)</div>
+    <div class="hint-list" id="hint-list"></div>
+    <div class="disclaim">Information indicative uniquement. L'identification définitive est réalisée par la microbiologie via l'onglet "Identifications en attente".</div>
+  </div>
+  <div class="confirm-row">
+    <label>UFC à transmettre :</label>
+    <input type="number" id="ufc-final" min="0" value="0">
+    <button class="btn-blue" onclick="transmit()">Transmettre</button>
+    <button onclick="resetAll()">Nouvelle analyse</button>
+  </div>
+</div>
 
-    RISK_BG = {
-        1: "#f0fdf4",
-        2: "#fffbeb",
-        3: "#fff1f2",
-    }
+<div class="card" id="card-done" style="display:none">
+  <div style="text-align:center;padding:.5rem 0">
+    <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:4px">Transmis vers identifications en attente</div>
+    <div style="font-size:12px;color:#64748b" id="done-txt"></div>
+    <div style="margin-top:.75rem"><button onclick="resetAll()">Nouvelle analyse</button></div>
+  </div>
+</div>
+</div>
 
-    RISK_BORDER = {
-        1: "#86efac",
-        2: "#fde047",
-        3: "#fca5a5",
-    }
+<script>
+const GERMS=[
+  {n:'Staphylococcus aureus',c:['jaune','doré','orangé','convexe','opaque','1-2mm'],r:3,d:'Colonie jaune-dorée, convexe, opaque, 1-2mm'},
+  {n:'Staphylococcus epidermidis',c:['blanc','gris','petite','convexe'],r:2,d:'Colonie blanche-grisâtre, petite, convexe'},
+  {n:'Micrococcus luteus',c:['jaune','citron','vif','lisse','1-3mm'],r:1,d:'Colonie jaune citron, circulaire, lisse'},
+  {n:'Bacillus sp.',c:['grande','rugueuse','cireuse','mate','irrégulière','crème'],r:2,d:'Grande colonie mate, rugueuse, bords irréguliers'},
+  {n:'Aspergillus sp.',c:['filamenteuse','verte','noire','poudreuse','moisissure'],r:3,d:'Colonie filamenteuse, verte à noire, poudreuse'},
+  {n:'Candida sp.',c:['levure','crème','brillante','lisse','2-4mm'],r:2,d:'Colonie crème, brillante, lisse'},
+  {n:'Pseudomonas aeruginosa',c:['verte','bleu-vert','fluorescente','plate','irrégulière'],r:3,d:'Colonie verte-bleutée, plate, bords irréguliers'},
+  {n:'Enterococcus sp.',c:['grise','petite','alpha','0.5-1mm'],r:2,d:'Petite colonie grise à blanche, 0.5-1mm'},
+];
+const CHARS=[
+  {id:'jaune',l:'Jaune / doré'},{id:'blanc',l:'Blanc / crème'},{id:'verte',l:'Vert'},
+  {id:'gris',l:'Gris'},{id:'orange',l:'Orange'},{id:'noir',l:'Noir'},
+  {id:'convexe',l:'Convexe'},{id:'plate',l:'Plate'},{id:'rugueuse',l:'Rugueuse'},
+  {id:'lisse',l:'Lisse'},{id:'brillante',l:'Brillante'},{id:'mate',l:'Mate'},
+  {id:'petite',l:'Petite (<1mm)'},{id:'grande',l:'Grande (>3mm)'},{id:'irrégulière',l:'Bords irréguliers'},
+  {id:'filamenteuse',l:'Filamenteuse'},{id:'poudreuse',l:'Poudreuse'},{id:'levure',l:'Levure'},
+];
+let sel=new Set(),stream=null,imgData=null,ufcVal=0;
 
-    # =============================================================================
-    # DATACLASSES
-    # =============================================================================
+function step(n){
+  ['s1','s2','s3'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.className='step'+(i+1<n?' done':i+1===n?' active':'');
+  });
+}
 
-    @dataclass
-    class Colony:
-        cx: int
-        cy: int
-        r: int
-        area: int
-        circularity: float
+function startCam(){
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})
+    .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
+      document.getElementById('cam-hint').textContent='Caméra active — centrez la gélose';
+      document.getElementById('btn-snap').disabled=false;})
+    .catch(()=>{
+      navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280}}})
+        .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
+          document.getElementById('cam-hint').textContent='Caméra active';
+          document.getElementById('btn-snap').disabled=false;})
+        .catch(e=>{document.getElementById('cam-hint').textContent='Erreur : '+e.message;});
+    });
+}
 
+function snap(){
+  const v=document.getElementById('vid'),c=document.createElement('canvas');
+  c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+  imgData=c.toDataURL('image/jpeg',.95);
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  document.getElementById('card-cam').style.display='none';
+  document.getElementById('card-analysis').style.display='block';
+  step(2);setTimeout(reanalyze,80);
+}
 
-    @dataclass
-    class AnalysisResult:
-        annotated_bgr: np.ndarray
-        count: int
-        colonies: list[Colony]
-        otsu_thresh: float
-        inverted: bool
-        scale: float
-        labels_found: int
-        rejected_size: int
-        rejected_circ: int
-        img_shape: str
+function resetCam(){
+  imgData=null;
+  document.getElementById('card-analysis').style.display='none';
+  document.getElementById('card-cam').style.display='block';
+  step(1);document.getElementById('btn-snap').disabled=true;
+  document.getElementById('cam-hint').textContent='Caméra non démarrée';
+  startCam();
+}
 
+function reanalyze(){
+  if(!imgData)return;
+  const t=parseInt(document.getElementById('sl-t').value);
+  const mn=parseInt(document.getElementById('sl-mn').value);
+  const mx=parseInt(document.getElementById('sl-mx').value);
+  const circ=parseFloat(document.getElementById('sl-circ').value);
+  const asp=parseFloat(document.getElementById('sl-asp').value);
+  document.getElementById('sv-t').textContent=t;
+  document.getElementById('sv-mn').textContent=mn;
+  document.getElementById('sv-mx').textContent=mx;
+  document.getElementById('sv-circ').textContent=circ.toFixed(2);
+  document.getElementById('sv-asp').textContent=asp.toFixed(2);
+  const img=new Image();
+  img.onload=()=>analyze(img,t,mn,mx,circ,asp);
+  img.src=imgData;
+}
 
-    # =============================================================================
-    # CŒUR DU TRAITEMENT — OpenCV
-    # =============================================================================
+function analyze(img, thresh, minR, maxR, minCirc, minAsp){
 
-    def analyze_gelose_opencv(
-        image_bytes: bytes,
-        dist_thresh: float = 0.50,
-        min_r: int = 4,
-        max_r: int = 55,
-        min_circularity: float = 0.35,
-        max_dim: int = 900,
-    ) -> AnalysisResult:
-        """
-        Analyse une image de gélose et retourne les colonies détectées.
+  const out = document.getElementById('cv-out');
+  out.width = img.width;
+  out.height = img.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(img, 0, 0);
 
-        Pipeline :
-            Sharpening Laplacien → Otsu binarisation → Morpho open
-            → Distance Transform → Watershed → filtrage circularité/taille
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const d = imageData.data;
+  const w = img.width, h = img.height;
+  const n = w * h;
 
-        Args:
-            image_bytes    : image brute (JPEG/PNG bytes)
-            dist_thresh    : seuil sur la distance transform normalisée (0-1).
-                            Augmenter si des groupes sont comptés comme une seule colonie.
-            min_r / max_r  : rayon min/max en pixels (espace redimensionné)
-            min_circularity: 4π·A/P² — 0.35 accepte les formes légèrement irrégulières
-            max_dim        : dimension max pour le resize (performance + précision)
+  // ─────────────────────────────────────────────
+  // 1. NIVEAUX DE GRIS + NORMALISATION CONTRASTE
+  // ─────────────────────────────────────────────
+  const lum = new Float32Array(n);
+  let min = 255, max = 0;
 
-        Returns:
-            AnalysisResult (toutes les coordonnées sont dans l'espace redimensionné)
+  for (let i = 0; i < n; i++) {
+    const val = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+    lum[i] = val;
+    if (val < min) min = val;
+    if (val > max) max = val;
+  }
 
-        Raises:
-            ValueError : si les bytes ne correspondent pas à une image décodable
-        """
-        if not image_bytes:
-            raise ValueError("image_bytes est vide.")
+  const scale = 255 / (max - min + 1);
+  for (let i = 0; i < n; i++) {
+    lum[i] = (lum[i] - min) * scale;
+  }
 
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError("Image non décodable. Vérifiez le format (JPEG / PNG).")
-
-        # ── Resize ────────────────────────────────────────────────────────────────
-        h, w = img.shape[:2]
-        scale = 1.0
-        if max(h, w) > max_dim:
-            scale = max_dim / max(h, w)
-            img = cv2.resize(
-                img,
-                (int(w * scale), int(h * scale)),
-                interpolation=cv2.INTER_AREA,
-            )
-
-        # ── 1. Sharpening Laplacien ───────────────────────────────────────────────
-        kernel_lap = np.array(
-            [[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float32
-        )
-        lap = cv2.filter2D(img, cv2.CV_32F, kernel_lap)
-        sharp = np.clip(np.float32(img) - lap, 0, 255).astype(np.uint8)
-
-        # ── 2. Niveaux de gris + Otsu ─────────────────────────────────────────────
-        gray = cv2.cvtColor(sharp, cv2.COLOR_BGR2GRAY)
-        otsu_thresh, binary = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU
-        )
-
-        # ── 3. Nettoyage morphologique ────────────────────────────────────────────
-        k3 = np.ones((3, 3), np.uint8)
-        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, k3)
-
-        # ── 4. Auto-inversion : colonies = objets sombres sur fond clair ──────────
-        inverted = False
-        if np.sum(binary == 255) > np.sum(binary == 0):
-            binary = cv2.bitwise_not(binary)
-            inverted = True
-
-        # ── 5. Distance Transform ─────────────────────────────────────────────────
-        dist = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
-        dist_norm = cv2.normalize(dist, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        _, sure_fg = cv2.threshold(
-            dist_norm, int(dist_thresh * 255), 255, cv2.THRESH_BINARY
-        )
-        sure_fg = sure_fg.astype(np.uint8)
-
-        # ── 6. Watershed ──────────────────────────────────────────────────────────
-        sure_bg = cv2.dilate(binary, k3, iterations=3)
-        unknown = cv2.subtract(sure_bg, sure_fg)
-
-        num_labels, markers = cv2.connectedComponents(sure_fg)
-        markers = markers + 1          # fond = 1, colonies ≥ 2
-        markers[unknown == 255] = 0    # région inconnue = 0
-
-        img_ws = img.copy()
-        cv2.watershed(img_ws, markers)
-
-        # ── 7. Extraction + filtrage des colonies ─────────────────────────────────
-        colonies: list[Colony] = []
-        rejected_size = 0
-        rejected_circ = 0
-
-        for label in range(2, num_labels + 1):
-            mask = np.zeros(markers.shape, dtype=np.uint8)
-            mask[markers == label] = 255
-            cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for cnt in cnts:
-                area = cv2.contourArea(cnt)
-                if area < np.pi * min_r ** 2:
-                    rejected_size += 1
-                    continue
-
-                (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                r = int(radius)
-
-                if not (min_r <= r <= max_r):
-                    rejected_size += 1
-                    continue
-
-                perimeter = cv2.arcLength(cnt, True)
-                circ = (4 * np.pi * area / perimeter ** 2) if perimeter > 0 else 0.0
-
-                if circ < min_circularity:
-                    rejected_circ += 1
-                    continue
-
-                colonies.append(Colony(
-                    cx=int(cx),
-                    cy=int(cy),
-                    r=r,
-                    area=int(area),
-                    circularity=round(float(circ), 3),
-                ))
-
-        # ── 8. Annotation de l'image ──────────────────────────────────────────────
-        annotated = img.copy()
-        for i, col in enumerate(colonies):
-            overlay = annotated.copy()
-            cv2.circle(overlay, (col.cx, col.cy), col.r + 3, (165, 95, 24), -1)
-            annotated = cv2.addWeighted(overlay, 0.18, annotated, 0.82, 0)
-            cv2.circle(annotated, (col.cx, col.cy), col.r + 3, (165, 95, 24), 2)
-            cv2.putText(
-                annotated,
-                str(i + 1),
-                (col.cx - 5, col.cy + 4),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                (24, 95, 165),
-                1,
-                cv2.LINE_AA,
-            )
-
-        return AnalysisResult(
-            annotated_bgr=annotated,
-            count=len(colonies),
-            colonies=colonies,
-            otsu_thresh=round(float(otsu_thresh), 1),
-            inverted=inverted,
-            scale=round(scale, 3),
-            labels_found=num_labels - 1,
-            rejected_size=rejected_size,
-            rejected_circ=rejected_circ,
-            img_shape=f"{img.shape[1]}×{img.shape[0]}",
-        )
-
-
-    # =============================================================================
-    # HELPERS UI
-    # =============================================================================
-
-    def _compute_hints(selected_chars: set[str]) -> list[dict]:
-        """
-        Calcule les 3 meilleures hypothèses de germes selon les caractéristiques
-        sélectionnées. Matching par token exact (pas de sous-chaîne).
-        """
-        if not selected_chars:
-            return []
-
-        scored: list[dict] = []
-        for g in GERMES:
-            germ_tokens = {token.lower() for token in g["c"]}
-            score = sum(1 for sel in selected_chars if sel.lower() in germ_tokens)
-            if score > 0:
-                scored.append({**g, "score": score})
-
-        scored.sort(key=lambda x: (-x["score"], -x["r"]))
-        return scored[:3]
-
-
-    def _render_hints(hints: list[dict]) -> None:
-        """Affiche les hypothèses de germes en HTML Streamlit."""
-        if not hints:
-            return
-
-        max_score = hints[0]["score"]
-        st.markdown(
-            "<div style='font-size:.7rem;color:#94a3b8;font-weight:600;"
-            "text-transform:uppercase;margin-bottom:6px'>"
-            "Hypothèses indicatives — confirmation microbiologie requise</div>",
-            unsafe_allow_html=True,
-        )
-
-        for g in hints:
-            pct  = round(g["score"] / max_score * 100)
-            col  = RISK_COLOR[g["r"]]
-            bg   = RISK_BG[g["r"]]
-            bord = RISK_BORDER[g["r"]]
-            st.markdown(
-                f"""
-                <div style="background:{bg};border:1px solid {bord};
-                            border-left:4px solid {col};border-radius:6px;
-                            padding:8px 12px;margin-bottom:6px">
-                <div style="font-size:.8rem;font-weight:700;color:#0f172a">{g['n']}</div>
-                <div style="font-size:.72rem;color:#475569;margin-top:2px">{g['d']}</div>
-                <div style="font-size:.68rem;font-weight:600;color:{col};margin-top:4px">
-                    {RISK_LABEL[g['r']]} · correspondance {pct}%
-                </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown(
-            "<div style='background:#FAEEDA;border:1px solid #FAC775;border-radius:6px;"
-            "padding:8px 10px;font-size:.68rem;color:#633806;line-height:1.5'>"
-            "ℹ️ Information indicative uniquement. L'identification définitive est "
-            "réalisée par la microbiologie via l'onglet « Identifications en attente ».</div>",
-            unsafe_allow_html=True,
-        )
-
-
-    def _step_bar(step: int) -> None:
-        """Affiche la barre de progression en 3 étapes."""
-        cols = st.columns(3)
-        labels = ["1 · Capture", "2 · Analyse", "3 · Orientation"]
-        colors = {
-            "done":   ("#f0fdf4", "#166534", "#86efac"),
-            "active": ("#eff6ff", "#1e40af", "#93c5fd"),
-            "idle":   ("#f1f5f9", "#94a3b8", "#e2e8f0"),
+  // ─────────────────────────────────────────────
+  // 2. MOYENNE LOCALE (robuste à la lumière)
+  // ─────────────────────────────────────────────
+  function getLocalMean(x, y, size=3){
+    let sum = 0, count = 0;
+    for(let dy=-size; dy<=size; dy++){
+      for(let dx=-size; dx<=size; dx++){
+        const nx = x+dx, ny = y+dy;
+        if(nx>=0 && ny>=0 && nx<w && ny<h){
+          sum += lum[ny*w + nx];
+          count++;
         }
-        for i, (col, lbl) in enumerate(zip(cols, labels)):
-            state = "done" if i + 1 < step else ("active" if i + 1 == step else "idle")
-            bg, fg, border = colors[state]
-            col.markdown(
-                f"<div style='background:{bg};color:{fg};border:1px solid {border};"
-                f"border-radius:6px;padding:6px;font-size:11px;font-weight:700;"
-                f"text-align:center'>{lbl}</div>",
-                unsafe_allow_html=True,
-            )
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+      }
+    }
+    return sum / count;
+  }
 
+  // ─────────────────────────────────────────────
+  // 3. MASQUE CONTRASTE LOCAL
+  // ─────────────────────────────────────────────
+  const bright = new Uint8Array(n);
 
-    # =============================================================================
-    # POINT D'ENTRÉE PRINCIPAL
-    # =============================================================================
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const i = y*w + x;
+      const localMean = getLocalMean(x, y, 3);
+      bright[i] = (Math.abs(lum[i] - localMean) > thresh * 0.8) ? 1 : 0;
+    }
+  }
 
-    def render_gelose_opencv_full(proc_id: str) -> tuple[Optional[int], set[str]]:
-        """
-        Interface complète de lecture de gélose (3 étapes) utilisant OpenCV.
+  // ─────────────────────────────────────────────
+  // 4. NETTOYAGE BRUIT (morpho simple)
+  // ─────────────────────────────────────────────
+  const clean = new Uint8Array(n);
 
-        Usage dans _render_traitement_lecture() :
-            ufc, chars = render_gelose_opencv_full(proc_id)
-            if ufc is not None:
-                # transmettre ufc vers votre pipeline existant
-
-        Returns:
-            (ufc_final, selected_chars)
-            ufc_final vaut None tant que l'utilisateur n'a pas cliqué "Transmettre".
-        """
-        SK = f"_gelose_cv_{proc_id}"
-
-        # ── Initialisation de l'état de session ───────────────────────────────────
-        defaults: dict = {
-            "step":        1,
-            "img_bytes":   None,
-            "result":      None,   # AnalysisResult | None
-            "sel_chars":   [],     # liste (pas set) pour éviter les problèmes Streamlit
-            "transmitted": False,
-            "ufc_final":   0,
+  for(let y=1; y<h-1; y++){
+    for(let x=1; x<w-1; x++){
+      let count = 0;
+      for(let dy=-1; dy<=1; dy++){
+        for(let dx=-1; dx<=1; dx++){
+          if(bright[(y+dy)*w + (x+dx)]) count++;
         }
-        for k, v in defaults.items():
-            key = f"{SK}_{k}"
-            if key not in st.session_state:
-                st.session_state[key] = v
+      }
+      clean[y*w + x] = count >= 4 ? 1 : 0;
+    }
+  }
 
-        def S(k):
-            return st.session_state[f"{SK}_{k}"]
+  // ─────────────────────────────────────────────
+  // 5. DETECTION BLOBS (BFS amélioré)
+  // ─────────────────────────────────────────────
+  const vis = new Uint8Array(n);
+  const blobs = [];
 
-        def set_S(k, v):
-            st.session_state[f"{SK}_{k}"] = v
+  let rejected_small=0, rejected_big=0, rejected_shape=0;
 
-        def reset_all():
-            for k, v in defaults.items():
-                st.session_state[f"{SK}_{k}"] = v
+  for(let y=1; y<h-1; y++){
+    for(let x=1; x<w-1; x++){
+      const idx = y*w + x;
+      if(!clean[idx] || vis[idx]) continue;
 
-        step = S("step")
-        _step_bar(step)
+      const q = [idx];
+      vis[idx] = 1;
 
-        # =========================================================================
-        # ÉTAPE 1 — CAPTURE
-        # =========================================================================
-        if step == 1:
-            st.markdown(
-                "<div style='font-size:.7rem;color:#94a3b8;font-weight:600;"
-                "text-transform:uppercase;margin-bottom:6px'>"
-                "Placez la gélose face à la caméra — centrez dans le cadre</div>",
-                unsafe_allow_html=True,
-            )
-            img_file = st.camera_input(
-                "Capture", label_visibility="collapsed", key=f"{SK}_cam"
-            )
-            if img_file is not None:
-                set_S("img_bytes", img_file.getvalue())
-                set_S("result",    None)
-                set_S("step",      2)
-                st.rerun()
+      let sx=0, sy=0, cnt=0, qi=0;
+      let x0=x, x1=x, y0=y, y1=y;
 
-        # =========================================================================
-        # ÉTAPE 2 — ANALYSE OPENCV
-        # =========================================================================
-        elif step == 2:
-            col_params, col_result = st.columns([1, 1], gap="medium")
+      while(qi < q.length){
+        const ci = q[qi++];
+        const cx = ci % w;
+        const cy = (ci / w) | 0;
 
-            with col_params:
-                st.markdown("**Paramètres de détection**")
+        sx += cx;
+        sy += cy;
+        cnt++;
 
-                dist_thresh = st.slider(
-                    "Séparation colonies jointives",
-                    0.20, 0.90, 0.50, 0.05,
-                    help=(
-                        "Distance Transform threshold. "
-                        "Augmenter si des groupes sont comptés comme une seule colonie."
-                    ),
-                    key=f"{SK}_dt",
-                )
-                min_r = st.slider(
-                    "Rayon min (px)", 2, 25, 4,
-                    help="Colonies plus petites que ce rayon sont ignorées.",
-                    key=f"{SK}_mnr",
-                )
-                max_r = st.slider(
-                    "Rayon max (px)", 20, 120, 55,
-                    help="Colonies plus grandes que ce rayon sont ignorées.",
-                    key=f"{SK}_mxr",
-                )
-                min_circ = st.slider(
-                    "Circularité min (0–1)", 0.10, 0.90, 0.35, 0.05,
-                    help=(
-                        "4π·Aire/Périmètre². "
-                        "0.35 détecte aussi les formes légèrement irrégulières."
-                    ),
-                    key=f"{SK}_mc",
-                )
+        if(cx<x0)x0=cx; if(cx>x1)x1=cx;
+        if(cy<y0)y0=cy; if(cy>y1)y1=cy;
 
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button(
-                        "🔬 Analyser",
-                        key=f"{SK}_run",
-                        type="primary",
-                        use_container_width=True,
-                    ):
-                        with st.spinner("Analyse OpenCV…"):
-                            try:
-                                result = analyze_gelose_opencv(
-                                    S("img_bytes"),
-                                    dist_thresh=dist_thresh,
-                                    min_r=min_r,
-                                    max_r=max_r,
-                                    min_circularity=min_circ,
-                                )
-                                set_S("result", result)
-                            except Exception as exc:
-                                logger.exception("Erreur analyse gélose")
-                                st.error(f"Erreur OpenCV : {exc}")
+        const nb = [ci-1, ci+1, ci-w, ci+w];
+        for(let k=0;k<4;k++){
+          const ni = nb[k];
+          if(ni>=0 && ni<n && clean[ni] && !vis[ni]){
+            vis[ni]=1;
+            q.push(ni);
+          }
+        }
+      }
 
-                with c2:
-                    if st.button(
-                        "📷 Reprendre",
-                        key=f"{SK}_redo",
-                        use_container_width=True,
-                    ):
-                        set_S("step",   1)
-                        set_S("result", None)
-                        st.rerun()
+      const r = Math.sqrt(cnt / Math.PI);
 
-                # ── Debug info ────────────────────────────────────────────────────
-                result: Optional[AnalysisResult] = S("result")
-                if result is not None:
-                    st.markdown(
-                        f"<div style='font-size:.65rem;color:#94a3b8;margin-top:8px'>"
-                        f"Otsu : {result.otsu_thresh} · "
-                        f"Inversé : {'oui' if result.inverted else 'non'} · "
-                        f"Labels : {result.labels_found} · "
-                        f"Rejetés taille : {result.rejected_size} · "
-                        f"Rejetés forme : {result.rejected_circ}"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
+      if(r < minR){ rejected_small++; continue; }
+      if(r > maxR){ rejected_big++; continue; }
 
-            with col_result:
-                result = S("result")
-                if result is not None:
-                    ann_rgb = cv2.cvtColor(result.annotated_bgr, cv2.COLOR_BGR2RGB)
-                    st.image(ann_rgb, use_container_width=True)
-                    st.markdown(
-                        f"<div style='text-align:center'>"
-                        f"<span style='font-size:2.4rem;font-weight:800;color:#0f172a'>"
-                        f"{result.count}</span> "
-                        f"<span style='font-size:.85rem;color:#64748b'>colonies détectées</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-                    if st.button(
-                        "✅ Utiliser ce comptage →",
-                        key=f"{SK}_next",
-                        type="primary",
-                        use_container_width=True,
-                    ):
-                        set_S("ufc_final", result.count)
-                        set_S("step",      3)
-                        st.rerun()
-                else:
-                    # Aperçu brut (pas encore analysé)
-                    try:
-                        raw_pil = Image.open(io.BytesIO(S("img_bytes")))
-                        st.image(
-                            raw_pil,
-                            use_container_width=True,
-                            caption="Image capturée — cliquez Analyser",
-                        )
-                    except Exception:
-                        st.warning("Aperçu non disponible.")
+      const bW = x1-x0+1;
+      const bH = y1-y0+1;
 
-        # =========================================================================
-        # ÉTAPE 3 — ORIENTATION + TRANSMISSION
-        # =========================================================================
-        elif step == 3:
+      const aspect = Math.min(bW,bH) / Math.max(bW,bH);
+      const fill = cnt / (bW*bH);
+      const roundness = fill * aspect;
 
-            if S("transmitted"):
-                st.success(
-                    f"✅ **{S('ufc_final')} UFC** transmis vers identifications en attente"
-                )
-                if st.button("🔄 Nouvelle analyse", key=f"{SK}_reset"):
-                    reset_all()
-                    st.rerun()
-                return S("ufc_final"), set(S("sel_chars"))
+      // seuils plus tolérants
+      if(roundness < minCirc*0.75 || aspect < minAsp*0.7){
+        rejected_shape++;
+        continue;
+      }
 
-            # ── Caractéristiques observées ────────────────────────────────────────
-            st.markdown(
-                "<div style='font-size:.7rem;color:#94a3b8;font-weight:600;"
-                "text-transform:uppercase;margin-bottom:8px'>"
-                "Caractéristiques observées — sélectionnez ce qui correspond</div>",
-                unsafe_allow_html=True,
-            )
+      blobs.push({
+        cx: Math.round(sx/cnt),
+        cy: Math.round(sy/cnt),
+        r: Math.round(r)
+      });
+    }
+  }
 
-            sel: list[str] = list(S("sel_chars"))  # copie de travail
-            n_cols = 4
-            char_rows = [CHARS[i : i + n_cols] for i in range(0, len(CHARS), n_cols)]
+  // ─────────────────────────────────────────────
+  // 6. AFFICHAGE
+  // ─────────────────────────────────────────────
+  ctx.drawImage(img, 0, 0);
 
-            for row in char_rows:
-                row_cols = st.columns(len(row))
-                for col_w, (cid, clabel) in zip(row_cols, row):
-                    checked = col_w.checkbox(
-                        clabel,
-                        value=(cid in sel),
-                        key=f"{SK}_char_{cid}",
-                    )
-                    if checked and cid not in sel:
-                        sel.append(cid)
-                    elif not checked and cid in sel:
-                        sel.remove(cid)
+  blobs.forEach((b,i)=>{
+    ctx.strokeStyle='#185FA5';
+    ctx.lineWidth=2;
+    ctx.fillStyle='rgba(24,95,165,0.15)';
 
-            set_S("sel_chars", sel)
+    ctx.beginPath();
+    ctx.arc(b.cx, b.cy, b.r+2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
 
-            # ── Hypothèses ───────────────────────────────────────────────────────
-            hints = _compute_hints(set(sel))
-            if hints:
-                st.markdown("---")
-                _render_hints(hints)
+    ctx.fillStyle='#185FA5';
+    ctx.font='bold 10px sans-serif';
+    ctx.fillText(i+1, b.cx-4, b.cy+4);
+  });
 
-            # ── UFC + Transmission ────────────────────────────────────────────────
-            st.markdown("---")
-            c1, c2, c3 = st.columns([2, 1, 1])
+  // ─────────────────────────────────────────────
+  // 7. RESULTATS
+  // ─────────────────────────────────────────────
+  ufcVal = blobs.length;
 
-            with c1:
-                st.markdown(
-                    "<div style='font-size:.75rem;color:#64748b;margin-bottom:4px'>"
-                    "UFC à transmettre</div>",
-                    unsafe_allow_html=True,
-                )
-                ufc_val = st.number_input(
-                    "UFC",
-                    min_value=0,
-                    value=int(S("ufc_final")),
-                    label_visibility="collapsed",
-                    key=f"{SK}_ufcinput",
-                )
-                set_S("ufc_final", int(ufc_val))
+  document.getElementById('ufc-count').textContent = blobs.length;
+  document.getElementById('ufc-final').value = blobs.length;
 
-            with c2:
-                if st.button(
-                    "📤 Transmettre",
-                    key=f"{SK}_transmit",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    set_S("transmitted", True)
-                    st.rerun()
+  document.getElementById('debug-info').textContent =
+    `Colonies: ${blobs.length} | Rejetés → petits:${rejected_small}, gros:${rejected_big}, forme:${rejected_shape}`;
+}
 
-            with c3:
-                if st.button(
-                    "↩ Retour analyse",
-                    key=f"{SK}_back",
-                    use_container_width=True,
-                ):
-                    set_S("step", 2)
-                    st.rerun()
+function goStep3(){
+  document.getElementById('card-analysis').style.display='none';
+  document.getElementById('card-hints').style.display='block';
+  step(3);buildChars();
+}
 
-        # ── Valeur de retour par défaut (pas encore transmis) ─────────────────────
-        return None, set(S("sel_chars"))
+function buildChars(){
+  const wrap=document.getElementById('char-btns');wrap.innerHTML='';
+  CHARS.forEach(c=>{
+    const b=document.createElement('button');
+    b.textContent=c.l;b.className='char-btn';b.dataset.id=c.id;
+    b.onclick=()=>{
+      if(sel.has(c.id)){sel.delete(c.id);b.classList.remove('sel');}
+      else{sel.add(c.id);b.classList.add('sel');}
+      updateHints();
+    };wrap.appendChild(b);
+  });
+}
 
+function updateHints(){
+  if(!sel.size){document.getElementById('hint-results').style.display='none';return;}
+  const sc=GERMS.map(g=>{let s=0;sel.forEach(c=>{if(g.c.some(gc=>gc.includes(c)||c.includes(gc)))s++;});return{...g,s};})
+    .filter(g=>g.s>0).sort((a,b)=>b.s-a.s).slice(0,3);
+  const mx=sc[0]?.s||1;
+  const rn={1:'Risque faible',2:'Risque modéré',3:'Risque élevé'};
+  const rc={1:'r1',2:'r2',3:'r3'};
+  document.getElementById('hint-list').innerHTML=sc.map(g=>`
+    <div class="hint-item ${rc[g.r]}">
+      <div class="hint-name">${g.n}</div>
+      <div class="hint-desc">${g.d}</div>
+      <div class="hint-prob ${rc[g.r]}">${rn[g.r]} · correspondance ${Math.round(g.s/mx*100)}%</div>
+    </div>`).join('');
+  document.getElementById('hint-results').style.display='block';
+}
 
-    # =============================================================================
-    # LECTURE CARD
-    # =============================================================================
+function transmit(){
+  const ufc=parseInt(document.getElementById('ufc-final').value)||0;
+  document.getElementById('card-hints').style.display='none';
+  document.getElementById('card-done').style.display='block';
+  document.getElementById('done-txt').textContent=ufc+' UFC — en attente de confirmation microbiologie';
+}
 
-    def _render_lecture_card(s: dict, tab_prefix: str = "") -> None:
-        """Affiche la carte d'une lecture planifiée avec actions (Traiter / Supprimer)."""
+function resetAll(){
+  imgData=null;sel.clear();ufcVal=0;
+  ['card-analysis','card-hints','card-done'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('card-cam').style.display='block';
+  document.getElementById('hint-results').style.display='none';
+  document.getElementById('btn-snap').disabled=true;
+  document.getElementById('cam-hint').textContent='Caméra non démarrée';
+  step(1);
+}
+</script>
+"""
+
+    # ── APRÈS — remplacez TOUTE la fonction _render_lecture_card par ceci ──
+    def _render_lecture_card(s, tab_prefix=""):
         sched_date  = datetime.fromisoformat(s["due_date"]).date()
         is_late     = sched_date <= today
         border_col  = "#ef4444" if is_late else "#3b82f6"
         bg_col      = "#fef2f2" if is_late else "#eff6ff"
         badge_col   = "#dc2626" if is_late else "#1d4ed8"
         status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-
-        smp = next(
-            (p for p in st.session_state.prelevements if p["id"] == s["sample_id"]),
-            None,
-        )
-        pt_type    = smp.get("type",        "?")  if smp else "?"
-        pt_gelose  = smp.get("gelose",      "?")  if smp else "?"
-        pt_oper    = smp.get("operateur",   "?")  if smp else "?"
-        pt_date_p  = smp.get("date",        "—")  if smp else "—"
-        pt_comment = smp.get("commentaire", "")   if smp else ""
-        comment_short = (
-            (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
-        )
+        smp         = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
+        pt_type     = smp.get('type','?')        if smp else '?'
+        pt_gelose   = smp.get('gelose','?')      if smp else '?'
+        pt_oper     = smp.get('operateur','?')   if smp else '?'
+        pt_date_p   = smp.get('date','—')        if smp else '—'   # ← date prélèvement
+        pt_comment  = smp.get('commentaire','')  if smp else ''     # ← commentaire
+        comment_short = (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
 
         extra_info = ""
-        if smp and str(smp.get("room_class", "")).strip().upper() == "A":
-            iso = smp.get("num_isolateur", "—") or "—"
-            pst = smp.get("poste", "—") or "—"
+        if smp and str(smp.get("room_class","")).strip().upper() == "A":
+            iso = smp.get("num_isolateur","—") or "—"
+            pst = smp.get("poste","—") or "—"
             extra_info = (
                 f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
                 f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
-                f"font-weight:600;margin-top:6px'>"
-                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>"
-            )
+                f"font-weight:600;margin-top:6px'>🔬 Classe A · Isolateur : {iso} · {pst}</div>")
 
         with st.container():
-            st.markdown(
-                f"""
-                <div style="background:{bg_col};border:1.5px solid {border_col};
-                            border-radius:10px;padding:14px 16px;margin-bottom:8px">
-                <div style="display:flex;align-items:center;justify-content:space-between;
-                            margin-bottom:8px">
-                    <div>
-                    <span style="font-weight:700;font-size:.9rem;color:#0f172a">
-                        {s['label']}
-                    </span>
-                    <span style="background:{border_col};color:#fff;font-size:.6rem;
-                                font-weight:700;padding:2px 8px;border-radius:10px;
-                                margin-left:8px">{s['when']}</span>
-                    <span style="color:{badge_col};font-size:.65rem;font-weight:600;
-                                margin-left:6px">{status_txt}</span>
-                    </div>
-                    <span style="font-size:.75rem;color:#475569">
-                    📅 Échéance : {s['due_date'][:10]}
-                    </span>
+            st.markdown(f"""
+            <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
+                        padding:14px 16px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div>
+                <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
+                            padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
+                <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                                border:1px solid #e2e8f0">
-                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">
-                        Type
-                    </div>
-                    <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
-                    </div>
-                    <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;
-                                border:1px solid #86efac">
-                    <div style="font-size:.55rem;color:#166534;text-transform:uppercase">
-                        Date prélèv.
-                    </div>
-                    <div style="font-size:.75rem;font-weight:700;color:#166534">
-                        📅 {pt_date_p}
-                    </div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                                border:1px solid #e2e8f0">
-                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">
-                        Gélose
-                    </div>
-                    <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">
-                        🧫 {pt_gelose}
-                    </div>
-                    </div>
-                    <div style="background:#fff;border-radius:6px;padding:6px 8px;
-                                border:1px solid #e2e8f0">
-                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">
-                        Opérateur
-                    </div>
-                    <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
-                    </div>
-                    <div style="background:#fffbeb;border-radius:6px;padding:6px 8px;
-                                border:1px solid #fde047">
-                    <div style="font-size:.55rem;color:#92400e;text-transform:uppercase">
-                        Commentaire
-                    </div>
-                    <div style="font-size:.72rem;font-weight:600;color:#78350f"
-                        title="{pt_comment}">
-                        💬 {comment_short}
-                    </div>
-                    </div>
+                <span style="font-size:.75rem;color:#475569">📅 Échéance : {s['due_date'][:10]}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
+                <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
                 </div>
-                {extra_info}
+                <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;border:1px solid #86efac">
+                <div style="font-size:.55rem;color:#166534;text-transform:uppercase">Date prélèv.</div>
+                <div style="font-size:.75rem;font-weight:700;color:#166534">📅 {pt_date_p}</div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
+                </div>
+                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
+                <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
+                </div>
+                <div style="background:#fffbeb;border-radius:6px;padding:6px 8px;border:1px solid #fde047">
+                <div style="font-size:.55rem;color:#92400e;text-transform:uppercase">Commentaire</div>
+                <div style="font-size:.72rem;font-weight:600;color:#78350f" title="{pt_comment}">
+                    💬 {comment_short}</div>
+                </div>
+            </div>
+            {extra_info}
+            </div>""", unsafe_allow_html=True)
 
             bc1, bc2 = st.columns([3, 1])
             with bc1:
-                if st.button(
-                    f"🔬 Traiter cette lecture ({s['when']})",
-                    key=f"{tab_prefix}proc_{s['id']}",
-                    use_container_width=True,
-                ):
-                    st.session_state.current_process = s["id"]
+                if st.button(f"🔬 Traiter cette lecture ({s['when']})",
+                            key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
+                    st.session_state.current_process = s['id']
                     st.rerun()
             with bc2:
-                if st.button(
-                    "🗑️ Supprimer",
-                    key=f"{tab_prefix}del_sch_{s['id']}",
-                    use_container_width=True,
-                ):
-                    sid = s.get("sample_id")
-                    st.session_state.schedules = [
-                        x for x in st.session_state.schedules if x["sample_id"] != sid
-                    ]
-                    st.session_state.prelevements = [
-                        x for x in st.session_state.prelevements if x["id"] != sid
-                    ]
+                if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
+                            use_container_width=True):
+                    sid = s.get('sample_id')
+                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']        != sid]
                     st.session_state.pending_identifications = [
-                        x
-                        for x in st.session_state.pending_identifications
-                        if x.get("sample_id") != sid
-                    ]
+                        x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
                     save_schedules(st.session_state.schedules)
                     save_prelevements(st.session_state.prelevements)
                     save_pending_identifications(st.session_state.pending_identifications)
                     st.success("Prélèvement, lectures et identifications supprimés.")
                     st.rerun()
 
-
-    # =============================================================================
-    # TRAITEMENT LECTURE
-    # =============================================================================
-
-    def _render_traitement_lecture(proc_id: str) -> None:
-        """
-        Interface de saisie du résultat d'une lecture (J2 ou J7).
-        Intègre render_gelose_opencv_full() comme aide au comptage.
-        Le résultat saisi manuellement (Négatif / Positif) fait toujours foi.
-        """
-        proc = next(
-            (x for x in st.session_state.schedules if x["id"] == proc_id), None
-        )
-        if proc is None:
-            st.error("Lecture introuvable.")
-            return
-
-        smp = next(
-            (p for p in st.session_state.prelevements if p["id"] == proc["sample_id"]),
-            None,
-        )
-        pt_type   = smp.get("type",       "?") if smp else "?"
-        pt_gelose = smp.get("gelose",     "?") if smp else "?"
-        pt_oper   = smp.get("operateur",  "?") if smp else "?"
-        pt_date   = smp.get("date",       "?") if smp else "?"
-        loc_crit  = _get_location_criticality(smp) if smp else 1
-        lc_col    = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(
-            str(loc_crit), "#94a3b8"
-        )
-
-        # Bandeau Classe A
-        classea_band = ""
-        if smp and str(smp.get("room_class", "")).strip().upper() == "A":
-            iso = smp.get("num_isolateur", "—") or "—"
-            pst = smp.get("poste", "—") or "—"
-            classea_band = (
-                f"<div style='background:#fef9c3;border:1px solid #fde047;"
-                f"border-radius:8px;padding:8px 12px;margin-top:10px;"
-                f"font-size:.75rem;font-weight:700;color:#854d0e'>"
-                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>"
-            )
-        if classea_band:
-            st.markdown(classea_band, unsafe_allow_html=True)
-
+    def _render_traitement_lecture(proc_id):
+        proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
+        if not proc: return
+        smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
+        pt_type  =smp.get('type','?')      if smp else '?'
+        pt_gelose=smp.get('gelose','?')    if smp else '?'
+        pt_oper  =smp.get('operateur','?') if smp else '?'
+        pt_date  =smp.get('date','?')      if smp else '?'
+        pt_room_p=smp.get('room_class','') if smp else ''
+        loc_crit =_get_location_criticality(smp) if smp else 1
+        lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
+        classea_band=""
+        if smp and str(smp.get("room_class","")).strip().upper()=="A":
+            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
+            classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
         st.markdown("---")
+        
 
-        lc1, lc2 = st.columns([2, 2])
+        lc1,lc2=st.columns([2,2])
         with lc1:
-            res = st.radio(
-                "Résultat",
-                ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"],
-                index=0,
-                key=f"res_{proc_id}",
-            )
+            res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
         with lc2:
-            ncol = 0
             if "Positif" in res:
-                ncol = st.number_input(
-                    "Nombre de colonies (UFC)",
-                    min_value=1,
-                    value=1,
-                    key=f"ncol_{proc_id}",
-                )
+                ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
+            else:
+                ncol=0
 
-        # ── Module gélose OpenCV (aide au comptage) ───────────────────────────────
+        # ── Module gélose (proposé dans les deux cas) ─────────────────────────
         with st.expander(
             "📷 Aide au comptage par webcam (optionnel — colonies ET vérification négative)",
-            expanded=False,
-        ):
+            expanded=False):
             st.markdown(
-                "<div style='background:#fffbeb;border:1px solid #fcd34d;"
-                "border-radius:8px;padding:8px 12px;font-size:.75rem;color:#92400e;"
-                "margin-bottom:8px'>"
+                "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;"
+                "padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
                 "⚠️ Module d'aide indicative. Le résultat saisi ci-dessus fait foi. "
-                "En cas de gélose négative, utilisez ce module pour confirmer "
-                "l'absence de colonie.</div>",
-                unsafe_allow_html=True,
-            )
-            ufc_from_cv, chars_from_cv = render_gelose_opencv_full(proc_id)
-            if ufc_from_cv is not None:
-                st.info(
-                    f"📊 Comptage OpenCV : **{ufc_from_cv} UFC** — "
-                    "reportez cette valeur dans le champ ci-dessus si vous le souhaitez."
-                )
+                "En cas de gélose négative, utilisez ce module pour confirmer l'absence de colonie.</div>",
+                unsafe_allow_html=True)
+            st.components.v1.html(GELOSE_MODULE_HTML, height=660, scrolling=False)
 
-        # ── Validation ───────────────────────────────────────────────────────────
-        vc1, vc2 = st.columns(2)
-
+        vc1,vc2=st.columns(2)
         with vc1:
-            if st.button(
-                "✅ Valider la lecture",
-                use_container_width=True,
-                key=f"submit_proc_{proc_id}",
-            ):
-                proc["status"] = "done"
+            if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
+                proc['status']='done'
                 save_schedules(st.session_state.schedules)
-
                 if "Négatif" in res:
-                    j7_sch = next(
-                        (
-                            x
-                            for x in st.session_state.schedules
-                            if x["sample_id"] == proc["sample_id"]
-                            and x["when"] == "J7"
-                            and x["status"] == "pending"
-                        ),
-                        None,
-                    )
-                    # Archivage si J7 ou si J2 sans J7 planifié
-                    if proc["when"] == "J7" or (proc["when"] == "J2" and not j7_sch):
+                    j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7' and x['status']=='pending'), None)
+                    if proc['when']=='J7' or (proc['when']=='J2' and not j7_sch):
                         if smp:
-                            smp["archived"] = True
+                            smp['archived']=True
                             st.session_state.archived_samples.append(smp)
                             save_archived_samples(st.session_state.archived_samples)
                             save_prelevements(st.session_state.prelevements)
                         st.success("✅ Lecture négative — prélèvement archivé.")
                     else:
-                        due = j7_sch["due_date"][:10] if j7_sch else "?"
-                        st.success(f"✅ J2 négative — en attente J7 ({due}).")
-
+                        st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
                     st.session_state.surveillance.append({
-                        "date":               str(today),
-                        "prelevement":        proc["label"],
-                        "sample_id":          proc.get("sample_id", ""),
-                        "germ_saisi":         "",
-                        "germ_match":         "Négatif",
-                        "match_score":        "—",
-                        "ufc":                0,
-                        "germ_score":         0,
-                        "location_criticality": loc_crit,
-                        "total_score":        0,
-                        "risk":               0,
-                        "room_class":         smp.get("room_class", "") if smp else "",
-                        "alert_threshold":    "Score ≥ 24",
-                        "action_threshold":   "Score > 36",
-                        "triggered_by":       None,
-                        "status":             "ok",
-                        "operateur":          pt_oper,
-                        "remarque":           f"Lecture {proc['when']} négative",
-                    })
+                        "date":str(today),"prelevement":proc['label'],"sample_id":proc.get('sample_id',''),
+                        "germ_saisi":"","germ_match":"Négatif","match_score":"—","ufc":0,"germ_score":0,
+                        "location_criticality":loc_crit,"total_score":0,"risk":0,
+                        "room_class":smp.get('room_class','') if smp else '',
+                        "alert_threshold":"Score ≥ 24","action_threshold":"Score > 36",
+                        "triggered_by":None,"status":"ok","operateur":pt_oper,
+                        "remarque":f"Lecture {proc['when']} négative"})
                     save_surveillance(st.session_state.surveillance)
-
                 else:
-                    # Résultat positif → identification requise
                     st.session_state.pending_identifications.append({
-                        "sample_id": proc["sample_id"],
-                        "label":     proc["label"],
-                        "when":      proc["when"],
-                        "colonies":  int(ncol),
-                        "date":      str(today),
-                        "status":    "pending",
-                    })
+                        "sample_id":proc['sample_id'],"label":proc['label'],
+                        "when":proc['when'],"colonies":int(ncol),"date":str(today),"status":"pending"})
                     save_pending_identifications(st.session_state.pending_identifications)
-
-                    if proc["when"] == "J2":
-                        # Passer J7 en "skipped" si J2 positive
-                        j7_sch = next(
-                            (
-                                x
-                                for x in st.session_state.schedules
-                                if x["sample_id"] == proc["sample_id"]
-                                and x["when"] == "J7"
-                            ),
-                            None,
-                        )
-                        if j7_sch:
-                            j7_sch["status"] = "skipped"
-                            save_schedules(st.session_state.schedules)
+                    if proc['when']=='J2':
+                        j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7'), None)
+                        if j7_sch: j7_sch['status']='skipped'; save_schedules(st.session_state.schedules)
                         st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
                     else:
                         st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
-
-                st.session_state.current_process = None
-                st.rerun()
-
+                st.session_state.current_process=None; st.rerun()
         with vc2:
-            if st.button(
-                "↩️ Annuler / Retour",
-                use_container_width=True,
-                key=f"cancel_proc_{proc_id}",
-            ):
-                st.session_state.current_process = None
-                st.rerun()
+            if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
+                st.session_state.current_process=None; st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
