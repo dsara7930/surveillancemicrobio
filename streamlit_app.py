@@ -2919,84 +2919,181 @@ function reanalyze(){
   img.src=imgData;
 }
 
-function analyze(img,thresh,minR,maxR,minCirc,minAsp){
-  const out=document.getElementById('cv-out');
-  out.width=img.width;out.height=img.height;
-  const ctx=out.getContext('2d');
-  ctx.drawImage(img,0,0);
-  const d=ctx.getImageData(0,0,img.width,img.height).data;
-  const w=img.width,h=img.height,n=w*h;
+function analyze(img, thresh, minR, maxR, minCirc, minAsp){
 
-  // ── Luminance de chaque pixel ──────────────────────────────────────────────
-  const lum=new Float32Array(n);
-  for(let i=0;i<n;i++) lum[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+  const out = document.getElementById('cv-out');
+  out.width = img.width;
+  out.height = img.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(img, 0, 0);
 
-  // ── Fond adaptatif : médiane sur échantillon ───────────────────────────────
-  const step_s=Math.max(1,Math.floor(n/4000));
-  const sample=[];
-  for(let i=0;i<n;i+=step_s) sample.push(lum[i]);
-  sample.sort((a,b)=>a-b);
-  const bgLum=sample[Math.floor(sample.length*0.5)];
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const d = imageData.data;
+  const w = img.width, h = img.height;
+  const n = w * h;
 
-  // ── Masque candidats : contraste absolu > seuil ────────────────────────────
-  const tVal=thresh*1.6;
-  const bright=new Uint8Array(n);
-  for(let i=0;i<n;i++) bright[i]=(Math.abs(lum[i]-bgLum)>tVal)?1:0;
+  // ─────────────────────────────────────────────
+  // 1. NIVEAUX DE GRIS + NORMALISATION CONTRASTE
+  // ─────────────────────────────────────────────
+  const lum = new Float32Array(n);
+  let min = 255, max = 0;
 
-  // ── BFS avec métriques de forme ───────────────────────────────────────────
-  const vis=new Uint8Array(n);
-  const blobs=[];
-  let rejected_small=0,rejected_big=0,rejected_shape=0;
+  for (let i = 0; i < n; i++) {
+    const val = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+    lum[i] = val;
+    if (val < min) min = val;
+    if (val > max) max = val;
+  }
 
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      const idx=y*w+x;
-      if(!bright[idx]||vis[idx])continue;
-      const q=[idx];vis[idx]=1;
-      let sx=0,sy=0,cnt=0,qi=0;
-      let x0=x,x1=x,y0=y,y1=y;
-      while(qi<q.length){
-        const ci=q[qi++];
-        const cx=ci%w,cy=(ci/w)|0;
-        sx+=cx;sy+=cy;cnt++;
-        if(cx<x0)x0=cx;if(cx>x1)x1=cx;
-        if(cy<y0)y0=cy;if(cy>y1)y1=cy;
-        const nb=[ci-1,ci+1,ci-w,ci+w];
-        for(let k=0;k<4;k++){
-          const ni=nb[k];
-          if(ni>=0&&ni<n&&bright[ni]&&!vis[ni]){vis[ni]=1;q.push(ni);}
+  const scale = 255 / (max - min + 1);
+  for (let i = 0; i < n; i++) {
+    lum[i] = (lum[i] - min) * scale;
+  }
+
+  // ─────────────────────────────────────────────
+  // 2. MOYENNE LOCALE (robuste à la lumière)
+  // ─────────────────────────────────────────────
+  function getLocalMean(x, y, size=3){
+    let sum = 0, count = 0;
+    for(let dy=-size; dy<=size; dy++){
+      for(let dx=-size; dx<=size; dx++){
+        const nx = x+dx, ny = y+dy;
+        if(nx>=0 && ny>=0 && nx<w && ny<h){
+          sum += lum[ny*w + nx];
+          count++;
         }
       }
-      // Métriques
-      const r=Math.sqrt(cnt/Math.PI);
-      if(r<minR){rejected_small++;continue;}
-      if(r>maxR){rejected_big++;continue;}
-      const bW=x1-x0+1,bH=y1-y0+1;
-      const aspect=Math.min(bW,bH)/Math.max(bW,bH);           // 1 = carré/rond
-      const fill=cnt/(bW*bH);                                   // π/4≈0.785 pour un cercle
-      // Rondeur = remplissage * aspect (penalise poussière plate+allongée)
-      const roundness=fill*aspect;
-      if(roundness<minCirc||aspect<minAsp){rejected_shape++;continue;}
-      blobs.push({cx:Math.round(sx/cnt),cy:Math.round(sy/cnt),r:Math.round(r),roundness,aspect});
+    }
+    return sum / count;
+  }
+
+  // ─────────────────────────────────────────────
+  // 3. MASQUE CONTRASTE LOCAL
+  // ─────────────────────────────────────────────
+  const bright = new Uint8Array(n);
+
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      const i = y*w + x;
+      const localMean = getLocalMean(x, y, 3);
+      bright[i] = (Math.abs(lum[i] - localMean) > thresh * 0.8) ? 1 : 0;
     }
   }
 
-  // ── Rendu ────────────────────────────────────────────────────────────────
-  ctx.drawImage(img,0,0);
+  // ─────────────────────────────────────────────
+  // 4. NETTOYAGE BRUIT (morpho simple)
+  // ─────────────────────────────────────────────
+  const clean = new Uint8Array(n);
+
+  for(let y=1; y<h-1; y++){
+    for(let x=1; x<w-1; x++){
+      let count = 0;
+      for(let dy=-1; dy<=1; dy++){
+        for(let dx=-1; dx<=1; dx++){
+          if(bright[(y+dy)*w + (x+dx)]) count++;
+        }
+      }
+      clean[y*w + x] = count >= 4 ? 1 : 0;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 5. DETECTION BLOBS (BFS amélioré)
+  // ─────────────────────────────────────────────
+  const vis = new Uint8Array(n);
+  const blobs = [];
+
+  let rejected_small=0, rejected_big=0, rejected_shape=0;
+
+  for(let y=1; y<h-1; y++){
+    for(let x=1; x<w-1; x++){
+      const idx = y*w + x;
+      if(!clean[idx] || vis[idx]) continue;
+
+      const q = [idx];
+      vis[idx] = 1;
+
+      let sx=0, sy=0, cnt=0, qi=0;
+      let x0=x, x1=x, y0=y, y1=y;
+
+      while(qi < q.length){
+        const ci = q[qi++];
+        const cx = ci % w;
+        const cy = (ci / w) | 0;
+
+        sx += cx;
+        sy += cy;
+        cnt++;
+
+        if(cx<x0)x0=cx; if(cx>x1)x1=cx;
+        if(cy<y0)y0=cy; if(cy>y1)y1=cy;
+
+        const nb = [ci-1, ci+1, ci-w, ci+w];
+        for(let k=0;k<4;k++){
+          const ni = nb[k];
+          if(ni>=0 && ni<n && clean[ni] && !vis[ni]){
+            vis[ni]=1;
+            q.push(ni);
+          }
+        }
+      }
+
+      const r = Math.sqrt(cnt / Math.PI);
+
+      if(r < minR){ rejected_small++; continue; }
+      if(r > maxR){ rejected_big++; continue; }
+
+      const bW = x1-x0+1;
+      const bH = y1-y0+1;
+
+      const aspect = Math.min(bW,bH) / Math.max(bW,bH);
+      const fill = cnt / (bW*bH);
+      const roundness = fill * aspect;
+
+      // seuils plus tolérants
+      if(roundness < minCirc*0.75 || aspect < minAsp*0.7){
+        rejected_shape++;
+        continue;
+      }
+
+      blobs.push({
+        cx: Math.round(sx/cnt),
+        cy: Math.round(sy/cnt),
+        r: Math.round(r)
+      });
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // 6. AFFICHAGE
+  // ─────────────────────────────────────────────
+  ctx.drawImage(img, 0, 0);
+
   blobs.forEach((b,i)=>{
-    ctx.strokeStyle='#185FA5';ctx.lineWidth=2;
-    ctx.fillStyle='rgba(24,95,165,0.13)';
-    ctx.beginPath();ctx.arc(b.cx,b.cy,b.r+2,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-    ctx.fillStyle='#185FA5';ctx.font='bold 10px sans-serif';
-    ctx.fillText(i+1,b.cx-4,b.cy+4);
+    ctx.strokeStyle='#185FA5';
+    ctx.lineWidth=2;
+    ctx.fillStyle='rgba(24,95,165,0.15)';
+
+    ctx.beginPath();
+    ctx.arc(b.cx, b.cy, b.r+2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle='#185FA5';
+    ctx.font='bold 10px sans-serif';
+    ctx.fillText(i+1, b.cx-4, b.cy+4);
   });
 
-  ufcVal=blobs.length;
-  document.getElementById('ufc-count').textContent=blobs.length;
-  document.getElementById('ufc-final').value=blobs.length;
-  document.getElementById('debug-info').textContent=
-    `Fond estimé : ${Math.round(bgLum)} lum | Rejetés : trop petits ${rejected_small}, trop grands ${rejected_big}, forme ${rejected_shape}`;
+  // ─────────────────────────────────────────────
+  // 7. RESULTATS
+  // ─────────────────────────────────────────────
+  ufcVal = blobs.length;
+
+  document.getElementById('ufc-count').textContent = blobs.length;
+  document.getElementById('ufc-final').value = blobs.length;
+
+  document.getElementById('debug-info').textContent =
+    `Colonies: ${blobs.length} | Rejetés → petits:${rejected_small}, gros:${rejected_big}, forme:${rejected_shape}`;
 }
 
 function goStep3(){
@@ -5940,47 +6037,172 @@ if active == "historique":
                                 st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB : PARAMÈTRES — COMPLET
-# ═══════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # TAB : PARAMÈTRES — COMPLET (AVEC IA)
+    # ═══════════════════════════════════════════════════════════════════════════════
 
-elif active == "parametres":
-    can_edit = check_access_protege("Paramètres & Seuils")
-    if not can_edit:
-        st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
-    st.markdown("### ⚙️ Paramètres")
+    if active == "parametres":
+        can_edit = check_access_protege("Paramètres & Seuils")
+        if not can_edit:
+            st.info("👁️ Mode lecture seule — connectez-vous pour modifier les paramètres.")
+        st.markdown("### ⚙️ Paramètres")
 
-    (subtab_mesures, subtab_points, subtab_contraintes, subtab_plans, subtab_seuils,
-    subtab_operateurs, subtab_backup, subtab_supabase, subtab_faq) = st.tabs([
-        "📋 Mesures correctives", "📍 Points de prélèvement", "🏷️ Contraintes classes",
-        "🗺️ Plans", "⚖️ Seuils d'alerte", "👤 Opérateurs",
-        "💾 Sauvegarde", "☁️ Base de données", "❓ FAQ"
-    ])
+        (subtab_mesures,
+        subtab_entrainement,
+        subtab_points,
+        subtab_contraintes,
+        subtab_plans,
+        subtab_seuils,
+        subtab_operateurs,
+        subtab_backup,
+        subtab_supabase,
+        subtab_faq) = st.tabs([
+            "📋 Mesures correctives",
+            "🧠 Entraînement IA",
+            "📍 Points de prélèvement",
+            "🏷️ Contraintes classes",
+            "🗺️ Plans",
+            "⚖️ Seuils d'alerte",
+            "👤 Opérateurs",
+            "💾 Sauvegarde",
+            "☁️ Base de données",
+            "❓ FAQ"
+        ])
 
-    # ── Constantes Points ──────────────────────────────────────────────────────
-    LOC_CRIT_OPTS = [
-        "1 — Limité",
-        "2 — Modéré",
-        "3 — Important",
-        "4 — Critique",
-    ]
-    LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
-    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
-    PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
+        # ═══════════════════════════════════════════════════════════════════════
+        # 📁 CHEMIN TRAINING LOCAL
+        # ═══════════════════════════════════════════════════════════════════════
+        IA_PATH = r"R:\Commun\1- Doc de travail\4- URC\URC - INTERNES\Maria (hiver 2025)\URC\IA"
+        MODEL_PATH = os.path.join(IA_PATH, "colonies_model.joblib")
+        DATASET_PATH = os.path.join(IA_PATH, "dataset")
 
-    def _freq_en_semaine(pt: dict, jours_par_semaine: int = 5) -> float:
-        """Convertit la fréquence d'un point de prélèvement en nombre de fois par semaine."""
-        freq  = float(pt.get("frequence", 1) or 1)
-        unite = (pt.get("frequence_unit") or "/ semaine").strip()
+        os.makedirs(DATASET_PATH, exist_ok=True)
 
-        if unite == "/ jour":
-            return freq * jours_par_semaine
-        elif unite == "/ semaine":
-            return freq
-        elif unite == "/ mois":
-            return freq / 4.33          # ≈ semaines par mois
-        else:
-            return freq                 # fallback : on suppose hebdomadaire
+
+        # ── Constantes Points ──────────────────────────────────────────────────────
+        LOC_CRIT_OPTS = [
+            "1 — Limité",
+            "2 — Modéré",
+            "3 — Important",
+            "4 — Critique",
+        ]
+        LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
+        LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
+        PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
+
+        def _freq_en_semaine(pt: dict, jours_par_semaine: int = 5) -> float:
+            """Convertit la fréquence d'un point de prélèvement en nombre de fois par semaine."""
+            freq  = float(pt.get("frequence", 1) or 1)
+            unite = (pt.get("frequence_unit") or "/ semaine").strip()
+
+            if unite == "/ jour":
+                return freq * jours_par_semaine
+            elif unite == "/ semaine":
+                return freq
+            elif unite == "/ mois":
+                return freq / 4.33          # ≈ semaines par mois
+            else:
+                return freq                 # fallback : on suppose hebdomadaire
+    # ══════════════════════════════════════════════════════════════════════════
+    # 🧠 ENTRAÎNEMENT IA COLONIES
+    # ══════════════════════════════════════════════════════════════════════════
+    with subtab_entrainement:
+
+        st.markdown("### 🧠 Entraînement du modèle de détection des colonies")
+
+        import os
+        import numpy as np
+        from PIL import Image
+
+        DATASET_DIR = r"R:\Commun\1- Doc de travail\4- URC\URC - INTERNES\Maria (hiver 2025)\URC l'entrainement de l'IA"
+        os.makedirs(DATASET_DIR, exist_ok=True)
+
+        st.markdown("#### 📸 Ajouter une image d'entraînement")
+
+        uploaded = st.file_uploader("Image de gélose", type=["jpg", "png", "jpeg"])
+
+        true_count = st.number_input("Nombre réel de colonies", min_value=0, step=1)
+
+        if uploaded is not None:
+            img = Image.open(uploaded).convert("RGB")
+            st.image(img, caption="Image chargée", use_column_width=True)
+
+            if st.button("💾 Sauvegarder dans dataset"):
+                fname = os.path.join(
+                    DATASET_DIR,
+                    f"img_{len(os.listdir(DATASET_DIR))}_{true_count}.jpg"
+                )
+                img.save(fname)
+                st.success(f"Image sauvegardée : {fname}")
+
+        st.markdown("---")
+
+        st.markdown("#### 🧠 Entraîner le modèle")
+
+        if st.button("🚀 Lancer l'entraînement"):
+
+            try:
+                import tensorflow as tf
+                from tensorflow.keras import layers, models
+
+                X = []
+                y = []
+
+                files = os.listdir(DATASET_DIR)
+
+                if len(files) < 5:
+                    st.warning("Pas assez d'images pour entraîner (min 5)")
+                else:
+                    for f in files:
+                        path = os.path.join(DATASET_DIR, f)
+
+                        img = Image.open(path).resize((128,128))
+                        arr = np.array(img) / 255.0
+
+                        count = int(f.split("_")[-1].split(".")[0])
+
+                        X.append(arr)
+                        y.append(count)
+
+                    X = np.array(X)
+                    y = np.array(y)
+
+                    model = models.Sequential([
+                        layers.Conv2D(16, (3,3), activation='relu', input_shape=(128,128,3)),
+                        layers.MaxPooling2D(),
+
+                        layers.Conv2D(32, (3,3), activation='relu'),
+                        layers.MaxPooling2D(),
+
+                        layers.Conv2D(64, (3,3), activation='relu'),
+                        layers.Flatten(),
+
+                        layers.Dense(64, activation='relu'),
+                        layers.Dense(1)
+                    ])
+
+                    model.compile(optimizer='adam', loss='mse')
+
+                    with st.spinner("Entraînement en cours..."):
+                        model.fit(X, y, epochs=10, verbose=0)
+
+                    model.save(os.path.join(DATASET_DIR, "model_colonies.h5"))
+
+                    st.success("✅ Modèle entraîné et sauvegardé sur le réseau !")
+
+            except Exception as e:
+                st.error(f"Erreur : {e}")
+
+        st.markdown("---")
+
+        st.markdown("#### 📊 Dataset actuel")
+
+        files = os.listdir(DATASET_DIR)
+        st.write(f"Nombre d'images : {len(files)}")
+
+        if files:
+            st.write(files[:10])
+
 # ══════════════════════════════════════════════════════════════════════════
     # CONTRAINTES MAX / CLASSE / SEMAINE
     # ══════════════════════════════════════════════════════════════════════════
