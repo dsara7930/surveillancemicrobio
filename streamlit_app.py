@@ -6261,25 +6261,63 @@ if active == "historique":
                     +" — "+r.get("germ_match","—")+" — "+str(r.get("ufc","—"))+" UFC/m³"):
                     if st.session_state.get("edit_surv_idx") == real_i:
                         st.markdown("**✏️ Modifier cette entrée**")
-                        e1,e2 = st.columns(2)
+
+                        # ── Ligne 0 : titre du prélèvement + lieu ──────────────────────────
+                        e0a, e0b = st.columns(2)
+                        with e0a:
+                            new_prelevement = st.text_input(
+                                "Titre du prélèvement",
+                                value=r.get("prelevement", ""),
+                                key=f"es_prev_{real_i}")
+                        with e0b:
+                            new_lieu = st.text_input(
+                                "Lieu",
+                                value=r.get("lieu", ""),
+                                key=f"es_lieu_{real_i}")
+
+                        e1, e2 = st.columns(2)
                         with e1:
-                            new_germ      = st.text_input("Germe",    value=r.get("germ_match",""), key=f"es_germ_{real_i}")
-                            new_ufc       = st.number_input("UFC",    value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
-                            new_operateur = st.text_input("Opérateur",value=r.get("operateur",""),  key=f"es_oper_{real_i}")
+                            new_germ      = st.text_input("Germe",     value=r.get("germ_match",""), key=f"es_germ_{real_i}")
+                            new_ufc       = st.number_input("UFC",     value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
+                            new_operateur = st.text_input("Opérateur", value=r.get("operateur",""),   key=f"es_oper_{real_i}")
+
+                            # ── Criticité manuelle ──────────────────────────────────────────
+                            CRIT_OPTIONS = {
+                                0: "0 – Non définie",
+                                1: "1 – Faible",
+                                2: "2 – Modérée",
+                                3: "3 – Élevée",
+                                4: "4 – Critique",
+                            }
+                            current_crit = int(
+                                r.get("criticite_override",
+                                    _get_criticite(r.get("germ_match", ""))) or 0
+                            )
+                            new_criticite = st.selectbox(
+                                "Criticité du germe",
+                                options=list(CRIT_OPTIONS.keys()),
+                                format_func=lambda x: CRIT_OPTIONS[x],
+                                index=current_crit,
+                                key=f"es_crit_{real_i}")
+
                         with e2:
-                            new_remarque    = st.text_area("Remarque",   value=r.get("remarque",""),   height=70, key=f"es_rem_{real_i}")
-                            new_commentaire = st.text_area("Commentaire",value=r.get("commentaire",""),height=70, key=f"es_com_{real_i}")
-                        sb1,sb2 = st.columns(2)
+                            new_remarque    = st.text_area("Remarque",    value=r.get("remarque",""),    height=70, key=f"es_rem_{real_i}")
+                            new_commentaire = st.text_area("Commentaire", value=r.get("commentaire",""), height=70, key=f"es_com_{real_i}")
+
+                        sb1, sb2 = st.columns(2)
                         with sb1:
                             if st.button("💾 Sauvegarder", key=f"es_save_{real_i}",
-                                         use_container_width=True, type="primary"):
+                                        use_container_width=True, type="primary"):
                                 st.session_state.surveillance[real_i].update({
-                                    "germ_match":  new_germ,
-                                    "germ_saisi":  new_germ,
-                                    "ufc":         new_ufc,
-                                    "operateur":   new_operateur,
-                                    "remarque":    new_remarque,
-                                    "commentaire": new_commentaire,
+                                    "prelevement":        new_prelevement,
+                                    "lieu":               new_lieu,
+                                    "germ_match":         new_germ,
+                                    "germ_saisi":         new_germ,
+                                    "ufc":                new_ufc,
+                                    "operateur":          new_operateur,
+                                    "remarque":           new_remarque,
+                                    "commentaire":        new_commentaire,
+                                    "criticite_override": new_criticite,
                                 })
                                 save_surveillance(st.session_state.surveillance)
                                 st.session_state["edit_surv_idx"] = None
@@ -6290,7 +6328,8 @@ if active == "historique":
                                 st.rerun()
                     else:
                         c1,c2,c3,c4 = st.columns([3,3,3,1])
-                        crit_r = _get_criticite(r.get("germ_match",""))
+                        crit_r = r.get("criticite_override") if r.get("criticite_override") is not None \
+                                 else _get_criticite(r.get("germ_match",""))
                         c1.markdown(
                             "**Germe saisi :** "+str(r.get("germ_saisi","—"))
                             +"\n\n**Correspondance :** "+str(r.get("germ_match","—"))
