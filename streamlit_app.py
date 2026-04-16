@@ -872,7 +872,7 @@ def _evaluate_score(total):
     return "ok", "✅ Conforme", "#22c55e"
 
 def _loc_crit_label(n):
-    return {1: "Non critique", 2: "Semi-critique", 3: "Critique"}.get(n, str(n))
+    return {1: "Limité", 2: "Modéré", 3: "Important", 4: "Critique"}.get(n, str(n))
 
 # ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
 def check_access_protege(onglet_nom: str) -> bool:
@@ -1694,7 +1694,7 @@ if active == "logigramme":
                     status_bg  = "#fef2f2"
                     status_c   = "#991b1b"
                 elif risk_num >= 24:
-                    status_txt = "⚠️ Alerte probable si lieu ≥ semi-critique"
+                    status_txt = "⚠️ Alerte probable si lieu ≥ modéré"
                     status_bg  = "#fffbeb"
                     status_c   = "#92400e"
                 else:
@@ -2179,7 +2179,7 @@ if active == "surveillance":
                 with p_col1:
                     point_labels = [
                         f"{pt['label']} — {pt.get('type','?')} — "
-                        f"{'Critique' if pt.get('location_criticality',1)==3 else 'Semi-critique' if pt.get('location_criticality',1)==2 else 'Non critique'}"
+                        f"{'Critique' if pt.get('location_criticality',1)==4 else 'Important' if pt.get('location_criticality',1)==3 else 'Modéré' if pt.get('location_criticality',1)==2 else 'Limité'}"
                         for pt in st.session_state.points
                     ]
                     sel_idx = st.selectbox(
@@ -6074,7 +6074,7 @@ if active == "parametres":
         "4 — Critique",
     ]
     LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
-    LOC_CRIT_LABELS = {"1": "Non critique", "2": "Semi-critique", "3": "Critique", "4": "Critique"}
+    LOC_CRIT_LABELS = {"1": "Limité", "2": "Modéré", "3": "Important", "4": "Critique"}
     PT_FREQ_UNIT_OPTS = ["/ jour", "/ semaine", "/ mois"]
 
     def _freq_en_semaine(pt: dict, jours_par_semaine: int = 5) -> float:
