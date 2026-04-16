@@ -3673,8 +3673,7 @@ function resetAll(){
                 _lc_override_key = f"lc_override_{_key}"
 
                 # ── Initialise la criticité override depuis Supabase (une seule fois) ──
-                if _lc_override_key not in st.session_state:
-                    st.session_state[_lc_override_key] = _get_location_criticality(smp) if smp else 1
+                st.session_state[_lc_override_key] = _get_location_criticality(smp) if smp else 1
 
                 # loc_crit = valeur courante (override ou Supabase)
                 loc_crit = st.session_state[_lc_override_key]
@@ -3692,23 +3691,24 @@ function resetAll(){
                     # ── Bandeau criticité + selectbox de surcharge ────────────
                     _bc1, _bc2 = st.columns([4, 1])
                     with _bc2:
-                        _LOC_CRIT_OPTS = ["1 – Faible", "2 – Modérée", "3 – Élevée"]
-                        _lc_index = max(0, min(int(loc_crit or 1) - 1, len(_LOC_CRIT_OPTS) - 1))
+                        _lc_index = max(0, min(int(loc_crit or 1) - 1, len(LOC_CRIT_OPTS) - 1))
                         _new_lc_label = st.selectbox(
                             "✏️ Criticité lieu",
-                            _LOC_CRIT_OPTS,
+                            LOC_CRIT_OPTS,
                             index=_lc_index,
                             key=f"lc_sel_{_key}",
                             help="Modifier manuellement la criticité du lieu pour ce calcul")
                         loc_crit = int(_new_lc_label[0])
-                        st.session_state[_lc_override_key] = loc_crit  # mémorise
+                        st.session_state[_lc_override_key] = loc_crit
 
-                    _lc_col = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(loc_crit), "#94a3b8")
+                    _lc_col = LOC_CRIT_COLORS.get(str(loc_crit), "#94a3b8")
+                    _lc_lbl = LOC_CRIT_LABELS.get(str(loc_crit), "?")
+
                     with _bc1:
                         st.markdown(
                             f"<div style='background:{_lc_col}11;border:1px solid {_lc_col}44;border-radius:8px;"
                             f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{_lc_col}'>"
-                            f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_loc_crit_label(loc_crit)}"
+                            f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_lc_lbl}"
                             f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
                             unsafe_allow_html=True)
 
