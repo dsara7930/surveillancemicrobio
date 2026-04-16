@@ -3622,7 +3622,7 @@ function resetAll(){
                     st.session_state["_last_mesures_popup"] = None
                     st.rerun()
 
-        # ── Liste des identifications en attente ──────────────────────────────
+       # ── Liste des identifications en attente ──────────────────────────────
         st.markdown("#### 🔴 Identifications en attente")
 
         def _j7_done_or_absent(sample_id):
@@ -3666,30 +3666,50 @@ function resetAll(){
 
                 smp = next((p for p in st.session_state.prelevements if p['id'] == _sid), None)
                 pt_oper = smp.get('operateur', '?') if smp else '?'
-
-                # ── Criticité lue depuis Supabase / paramètres ────────────────
-                loc_crit = _get_location_criticality(smp) if smp else 1
-
-                lc_col_id = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(loc_crit), "#94a3b8")
                 pt_class = smp.get('room_class', '') if smp else ''
+
+                _key = _sid.replace("-", "_")
+                germs_list_key = f"germs_list_{_key}"
+                _lc_override_key = f"lc_override_{_key}"
+
+                # ── Initialise la criticité override depuis Supabase (une seule fois) ──
+                if _lc_override_key not in st.session_state:
+                    st.session_state[_lc_override_key] = _get_location_criticality(smp) if smp else 1
+
+                # loc_crit = valeur courante (override ou Supabase)
+                loc_crit = st.session_state[_lc_override_key]
 
                 real_indices = [
                     st.session_state.pending_identifications.index(e)
                     for e in _entries
                     if e in st.session_state.pending_identifications
                 ]
-                _key = _sid.replace("-", "_")
-                germs_list_key = f"germs_list_{_key}"
                 if germs_list_key not in st.session_state:
                     st.session_state[germs_list_key] = [{"germ": "— Sélectionner un germe —", "ufc": 0}]
 
                 with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
-                    st.markdown(
-                        f"<div style='background:{lc_col_id}11;border:1px solid {lc_col_id}44;border-radius:8px;"
-                        f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{lc_col_id}'>"
-                        f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_loc_crit_label(loc_crit)}"
-                        f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
-                        unsafe_allow_html=True)
+
+                    # ── Bandeau criticité + selectbox de surcharge ────────────
+                    _bc1, _bc2 = st.columns([4, 1])
+                    with _bc2:
+                        _LOC_CRIT_OPTS = ["1 – Faible", "2 – Modérée", "3 – Élevée"]
+                        _new_lc_label = st.selectbox(
+                            "✏️ Criticité lieu",
+                            _LOC_CRIT_OPTS,
+                            index=max(0, loc_crit - 1),  # 1→0, 2→1, 3→2
+                            key=f"lc_sel_{_key}",
+                            help="Modifier manuellement la criticité du lieu pour ce calcul")
+                        loc_crit = int(_new_lc_label[0])
+                        st.session_state[_lc_override_key] = loc_crit  # mémorise
+
+                    _lc_col = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(loc_crit), "#94a3b8")
+                    with _bc1:
+                        st.markdown(
+                            f"<div style='background:{_lc_col}11;border:1px solid {_lc_col}44;border-radius:8px;"
+                            f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{_lc_col}'>"
+                            f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_loc_crit_label(loc_crit)}"
+                            f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
+                            unsafe_allow_html=True)
 
                     if len(_entries) > 1:
                         _ufc_detail = "  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
@@ -3816,8 +3836,8 @@ function resetAll(){
                                 else:
                                     worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
 
-                                    # ── Criticité re-lue à la sauvegarde ─────────────────────────
-                                    loc_crit = _get_location_criticality(smp) if smp else 1
+                                    # ── Criticité depuis la session (inclut override manuel) ──
+                                    loc_crit = st.session_state[_lc_override_key]
 
                                     total_sc = loc_crit * worst_entry["germ_score"]
                                     status, status_lbl, status_col = _evaluate_score(total_sc)
@@ -3881,6 +3901,7 @@ function resetAll(){
                                         save_prelevements(st.session_state.prelevements)
 
                                     del st.session_state[germs_list_key]
+                                    del st.session_state[_lc_override_key]  # reset override après save
 
                                     if status in ("alert", "action"):
                                         st.session_state["_show_mesures_popup"] = {
@@ -3923,6 +3944,8 @@ function resetAll(){
                             save_pending_identifications(st.session_state.pending_identifications)
                             if germs_list_key in st.session_state:
                                 del st.session_state[germs_list_key]
+                            if _lc_override_key in st.session_state:
+                                del st.session_state[_lc_override_key]  # reset override si annulation
                             st.rerun()
 
                     with idc3:
@@ -3932,6 +3955,8 @@ function resetAll(){
                             save_pending_identifications(st.session_state.pending_identifications)
                             if germs_list_key in st.session_state:
                                 del st.session_state[germs_list_key]
+                            if _lc_override_key in st.session_state:
+                                del st.session_state[_lc_override_key]  # reset override si suppression
                             st.rerun()
 
         # ── Derniers résultats ────────────────────────────────────────────────
@@ -6263,7 +6288,7 @@ if active == "historique":
                         st.markdown("**✏️ Modifier cette entrée**")
 
                         # ── Ligne 0 : titre du prélèvement + lieu ──────────────────────────
-                        e0a, e0b, e0c = st.columns([3, 3, 1.5])
+                        e0a, e0b = st.columns([3, 3, 1.5])
                         with e0a:
                             new_prelevement = st.text_input(
                                 "Titre du prélèvement",
@@ -6274,16 +6299,7 @@ if active == "historique":
                                 "Lieu",
                                 value=r.get("lieu", ""),
                                 key=f"es_lieu_{real_i}")
-                        with e0c:
-                            _LOC_CRIT_OPTS = ["1 – Faible", "2 – Modérée", "3 – Élevée"]
-                            current_lc = int(r.get("location_criticality", 1))
-                            current_lc_index = max(0, current_lc - 1)  # 1→0, 2→1, 3→2
-                            new_lc_label = st.selectbox(
-                                "Criticité lieu",
-                                _LOC_CRIT_OPTS,
-                                index=current_lc_index,
-                                key=f"es_lc_{real_i}")
-                            new_lc = int(new_lc_label[0])  # extrait "1", "2" ou "3"
+                        
                         e1, e2 = st.columns(2)
                         with e1:
                             new_germ      = st.text_input("Germe",     value=r.get("germ_match",""), key=f"es_germ_{real_i}")
