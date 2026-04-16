@@ -3418,32 +3418,91 @@ function resetAll(){
 
        
 
-    # ══════════════════════════════════════════════════════════════════════════
+   # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
+
+    # ── Chargement criticité depuis Supabase (cache 5 min) ────────────────────
+    @st.cache_data(ttl=300)
+    def _load_locations_criticality():
+        """Retourne {id: crit, name: crit} depuis Supabase table 'locations'."""
+        try:
+            res = supabase.table("locations").select("id, name, criticality").execute()
+            mapping = {}
+            for row in (res.data or []):
+                crit = int(row.get("criticality", 1))
+                if row.get("id"):
+                    mapping[row["id"]] = crit
+                if row.get("name"):
+                    mapping[row["name"]] = crit
+            return mapping
+        except Exception:
+            return {}
+
+    if "locations_criticality_map" not in st.session_state:
+        st.session_state.locations_criticality_map = _load_locations_criticality()
+
+    def _get_location_criticality(smp: dict) -> int:
+        """
+        Résolution de la criticité dans cet ordre :
+          1. Supabase / paramètres (locations_criticality_map, via id, room, lieu)
+          2. Paramètres session  (st.session_state.locations, si présent)
+          3. Champ stocké dans le prélèvement (location_criticality / criticality)
+          4. Défaut = 1
+        """
+        # 1. Map Supabase
+        loc_map: dict = st.session_state.get("locations_criticality_map", {})
+        for key in (smp.get("location_id"), smp.get("room"), smp.get("lieu")):
+            if key and key in loc_map:
+                return int(loc_map[key])
+
+        # 2. Paramètres session (liste d'objets lieux)
+        for loc in st.session_state.get("locations", []):
+            for key in (smp.get("location_id"), smp.get("room"), smp.get("lieu")):
+                if key and (loc.get("id") == key or loc.get("name") == key):
+                    try:
+                        return int(loc.get("criticality", 1))
+                    except (ValueError, TypeError):
+                        pass
+
+        # 3. Valeur stockée dans le prélèvement
+        raw = smp.get("location_criticality") or smp.get("criticality")
+        if raw is not None:
+            try:
+                return int(raw)
+            except (ValueError, TypeError):
+                pass
+
+        return 1
+
     with tab_ident:
         def _render_alerte_mesures(pop_data, key_suffix):
-            _is_action=pop_data["status"]=="action"
-            _border="#ef4444" if _is_action else "#f59e0b"
-            _bg_head="#fef2f2" if _is_action else "#fffbeb"
-            _hd_col="#991b1b" if _is_action else "#92400e"
-            _ic="🚨" if _is_action else "⚠️"
-            _txt="ACTION REQUISE" if _is_action else "ALERTE"
-            _germ_sc=pop_data.get("germ_score","—")
-            _loc_c=pop_data.get("loc_criticality","—")
-            _total=pop_data.get("total_score","—")
-            type_colors={"action":"#ef4444","alert":"#f59e0b","both":"#818cf8"}
-            type_labels={"action":"🚨 Action","alert":"⚠️ Alerte","both":"⚠️🚨 Les deux"}
+            _is_action = pop_data["status"] == "action"
+            _border = "#ef4444" if _is_action else "#f59e0b"
+            _bg_head = "#fef2f2" if _is_action else "#fffbeb"
+            _hd_col = "#991b1b" if _is_action else "#92400e"
+            _ic = "🚨" if _is_action else "⚠️"
+            _txt = "ACTION REQUISE" if _is_action else "ALERTE"
+            _germ_sc = pop_data.get("germ_score", "—")
+            _loc_c = pop_data.get("loc_criticality", "—")
+            _total = pop_data.get("total_score", "—")
+            type_colors = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
+            type_labels = {"action": "🚨 Action", "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
+
             def _match(m):
-                if pop_data["status"]=="alert"  and m.get("type") not in ("alert","both"):  return False
-                if pop_data["status"]=="action" and m.get("type") not in ("action","both"): return False
-                mr=m.get("risk","all")
-                if mr!="all":
-                    gr=pop_data.get("risk",1)
-                    if isinstance(mr,list): return gr in mr
-                    return mr==gr
+                if pop_data["status"] == "alert" and m.get("type") not in ("alert", "both"):
+                    return False
+                if pop_data["status"] == "action" and m.get("type") not in ("action", "both"):
+                    return False
+                mr = m.get("risk", "all")
+                if mr != "all":
+                    gr = pop_data.get("risk", 1)
+                    if isinstance(mr, list):
+                        return gr in mr
+                    return mr == gr
                 return True
-            mesures=[m for m in st.session_state.origin_measures if _match(m)]
+
+            mesures = [m for m in st.session_state.origin_measures if _match(m)]
             st.markdown(f"""
             <div style="border:2.5px solid {_border};border-radius:14px;overflow:hidden;margin-top:16px;margin-bottom:4px">
                 <div style="background:{_bg_head};padding:16px 20px;border-bottom:1.5px solid {_border}44">
@@ -3462,135 +3521,251 @@ function resetAll(){
                 </div>
                 </div>
                 <div style="background:#fff;padding:14px 20px 6px 20px">
-                <div style="font-size:.82rem;font-weight:800;color:{_hd_col};margin-bottom:10px">📋 Mesures correctives applicables</div>""", unsafe_allow_html=True)
+                <div style="font-size:.82rem;font-weight:800;color:{_hd_col};margin-bottom:10px">📋 Mesures correctives applicables</div>""",
+                unsafe_allow_html=True)
+
             if mesures:
                 for _m in mesures:
-                    _tc=type_colors.get(_m["type"],"#94a3b8"); _tl=type_labels.get(_m["type"],_m["type"])
-                    st.markdown(f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:12px'><div style='font-size:.83rem;color:#0f172a;line-height:1.5;flex:1'><span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div><span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;padding:3px 9px;font-size:.65rem;font-weight:800;white-space:nowrap;flex-shrink:0'>{_tl}</span></div>", unsafe_allow_html=True)
+                    _tc = type_colors.get(_m["type"], "#94a3b8")
+                    _tl = type_labels.get(_m["type"], _m["type"])
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};"
+                        f"border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:7px;display:flex;"
+                        f"align-items:center;justify-content:space-between;gap:12px'>"
+                        f"<div style='font-size:.83rem;color:#0f172a;line-height:1.5;flex:1'>"
+                        f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
+                        f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;"
+                        f"padding:3px 9px;font-size:.65rem;font-weight:800;white-space:nowrap;flex-shrink:0'>{_tl}</span></div>",
+                        unsafe_allow_html=True)
             else:
-                st.markdown("<div style='font-size:.8rem;color:#94a3b8;font-style:italic;padding:6px 0 10px'>Aucune mesure corrective configurée — ajoutez-en dans <strong>Paramètres → Mesures correctives</strong>.</div>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='font-size:.8rem;color:#94a3b8;font-style:italic;padding:6px 0 10px'>"
+                    "Aucune mesure corrective configurée — ajoutez-en dans <strong>Paramètres → Mesures correctives</strong>.</div>",
+                    unsafe_allow_html=True)
+
             st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
-            _b1,_b2,_b3=st.columns([3,2,1])
+
+            _b1, _b2, _b3 = st.columns([3, 2, 1])
             with _b1:
-                if st.button("✅ Compris — Mesures prises en charge",use_container_width=True,type="primary",key=f"alert_ok_{key_suffix}"):
-                    st.session_state["_last_mesures_popup"]=pop_data; st.session_state["_show_mesures_popup"]=None; st.rerun()
+                if st.button("✅ Compris — Mesures prises en charge", use_container_width=True,
+                             type="primary", key=f"alert_ok_{key_suffix}"):
+                    st.session_state["_last_mesures_popup"] = pop_data
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
             with _b2:
-                if st.button("🖨️ Imprimer / noter",use_container_width=True,key=f"alert_print_{key_suffix}"):
-                    st.session_state["_last_mesures_popup"]=pop_data; st.session_state["_show_mesures_popup"]=None; st.rerun()
+                if st.button("🖨️ Imprimer / noter", use_container_width=True,
+                             key=f"alert_print_{key_suffix}"):
+                    st.session_state["_last_mesures_popup"] = pop_data
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
             with _b3:
-                if st.button("✕ Ignorer",use_container_width=True,key=f"alert_dismiss_{key_suffix}"):
-                    st.session_state["_show_mesures_popup"]=None; st.rerun()
+                if st.button("✕ Ignorer", use_container_width=True,
+                             key=f"alert_dismiss_{key_suffix}"):
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
 
+        # ── Popup mesures actif ────────────────────────────────────────────────
         if st.session_state.get("_show_mesures_popup"):
-            _render_alerte_mesures(st.session_state["_show_mesures_popup"],"main")
+            _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
 
+        # ── Récapitulatif dernière alerte ──────────────────────────────────────
         if not st.session_state.get("_show_mesures_popup") and st.session_state.get("_last_mesures_popup"):
-            _last=st.session_state["_last_mesures_popup"]
-            _is_action=_last["status"]=="action"
-            _sc="#ef4444" if _is_action else "#f59e0b"
-            _ic="🚨" if _is_action else "⚠️"
-            _txt="ACTION REQUISE" if _is_action else "ALERTE"
-            with st.expander(f"{_ic} Récapitulatif — {_txt} · {_last['label']} · Score {_last.get('total_score','—')}",expanded=False):
+            _last = st.session_state["_last_mesures_popup"]
+            _is_action = _last["status"] == "action"
+            _sc = "#ef4444" if _is_action else "#f59e0b"
+            _ic = "🚨" if _is_action else "⚠️"
+            _txt = "ACTION REQUISE" if _is_action else "ALERTE"
+
+            with st.expander(
+                f"{_ic} Récapitulatif — {_txt} · {_last['label']} · Score {_last.get('total_score', '—')}",
+                expanded=False
+            ):
                 def _match_last(m):
-                    if _last["status"]=="alert"  and m.get("type") not in ("alert","both"):  return False
-                    if _last["status"]=="action" and m.get("type") not in ("action","both"): return False
-                    mr=m.get("risk","all")
-                    if mr!="all":
-                        gr=_last.get("risk",1)
-                        if isinstance(mr,list): return gr in mr
-                        return mr==gr
+                    if _last["status"] == "alert" and m.get("type") not in ("alert", "both"):
+                        return False
+                    if _last["status"] == "action" and m.get("type") not in ("action", "both"):
+                        return False
+                    mr = m.get("risk", "all")
+                    if mr != "all":
+                        gr = _last.get("risk", 1)
+                        if isinstance(mr, list):
+                            return gr in mr
+                        return mr == gr
                     return True
-                _mes_last=[m for m in st.session_state.origin_measures if _match_last(m)]
-                type_colors_l={"action":"#ef4444","alert":"#f59e0b","both":"#818cf8"}
-                type_labels_l={"action":"🚨 Action","alert":"⚠️ Alerte","both":"⚠️🚨 Les deux"}
-                st.markdown(f"<div style='font-size:.8rem;color:{_sc};font-weight:700;margin-bottom:8px'>📋 {_last.get('germ','—')} · Lieu Nv.{_last.get('loc_criticality','—')} × Germe {_last.get('germ_score','—')} = Score {_last.get('total_score','—')}</div>", unsafe_allow_html=True)
+
+                _mes_last = [m for m in st.session_state.origin_measures if _match_last(m)]
+                type_colors_l = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
+                type_labels_l = {"action": "🚨 Action", "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
+                st.markdown(
+                    f"<div style='font-size:.8rem;color:{_sc};font-weight:700;margin-bottom:8px'>"
+                    f"📋 {_last.get('germ', '—')} · Lieu Nv.{_last.get('loc_criticality', '—')} "
+                    f"× Germe {_last.get('germ_score', '—')} = Score {_last.get('total_score', '—')}</div>",
+                    unsafe_allow_html=True)
+
                 if _mes_last:
                     for _m in _mes_last:
-                        _tc=type_colors_l.get(_m["type"],"#94a3b8"); _tl=type_labels_l.get(_m["type"],_m["type"])
-                        st.markdown(f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px'><div style='font-size:.8rem;color:#0f172a;flex:1'><span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div><span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;padding:2px 8px;font-size:.63rem;font-weight:800;white-space:nowrap'>{_tl}</span></div>", unsafe_allow_html=True)
+                        _tc = type_colors_l.get(_m["type"], "#94a3b8")
+                        _tl = type_labels_l.get(_m["type"], _m["type"])
+                        st.markdown(
+                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};"
+                            f"border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;display:flex;"
+                            f"align-items:center;justify-content:space-between;gap:10px'>"
+                            f"<div style='font-size:.8rem;color:#0f172a;flex:1'>"
+                            f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
+                            f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;"
+                            f"padding:2px 8px;font-size:.63rem;font-weight:800;white-space:nowrap'>{_tl}</span></div>",
+                            unsafe_allow_html=True)
                 else:
                     st.caption("Aucune mesure corrective configurée.")
-                if st.button("✕ Effacer ce récapitulatif",key="dismiss_last_mesures"):
-                    st.session_state["_last_mesures_popup"]=None; st.rerun()
 
+                if st.button("✕ Effacer ce récapitulatif", key="dismiss_last_mesures"):
+                    st.session_state["_last_mesures_popup"] = None
+                    st.rerun()
+
+        # ── Liste des identifications en attente ──────────────────────────────
         st.markdown("#### 🔴 Identifications en attente")
-        def _j7_done_or_absent(sample_id):
-            j7=next((x for x in st.session_state.schedules if x['sample_id']==sample_id and x['when']=='J7'), None)
-            return j7 is None or j7['status'] in ('done','skipped')
 
-        _all_pending=[p for p in st.session_state.pending_identifications if p.get('status')=='pending' and _j7_done_or_absent(p['sample_id'])]
-        _seen_sids={}
+        def _j7_done_or_absent(sample_id):
+            j7 = next(
+                (x for x in st.session_state.schedules
+                 if x['sample_id'] == sample_id and x['when'] == 'J7'), None)
+            return j7 is None or j7['status'] in ('done', 'skipped')
+
+        _all_pending = [
+            p for p in st.session_state.pending_identifications
+            if p.get('status') == 'pending' and _j7_done_or_absent(p['sample_id'])
+        ]
+
+        _seen_sids = {}
         for _p in _all_pending:
-            _sid=_p['sample_id']
+            _sid = _p['sample_id']
             if _sid not in _seen_sids:
-                _seen_sids[_sid]={"sample_id":_sid,"label":_p['label'],"date":_p['date'],"entries":[],"when_list":[],"colonies":0}
+                _seen_sids[_sid] = {
+                    "sample_id": _sid, "label": _p['label'],
+                    "date": _p['date'], "entries": [], "when_list": [], "colonies": 0
+                }
             _seen_sids[_sid]["entries"].append(_p)
             _seen_sids[_sid]["when_list"].append(_p['when'])
-            if _p['when']=='J7' or _seen_sids[_sid]["colonies"]==0:
-                _seen_sids[_sid]["colonies"]=_p['colonies']
-        pending_ids_grouped=list(_seen_sids.values())
+            if _p['when'] == 'J7' or _seen_sids[_sid]["colonies"] == 0:
+                _seen_sids[_sid]["colonies"] = _p['colonies']
+
+        pending_ids_grouped = list(_seen_sids.values())
 
         if not pending_ids_grouped:
             st.success("✅ Aucune identification en attente.")
         else:
-            germ_names=sorted([g['name'] for g in st.session_state.germs])
+            germ_names = sorted([g['name'] for g in st.session_state.germs])
+
             for pg in pending_ids_grouped:
-                _sid=pg["sample_id"]; _entries=pg["entries"]
-                _when_str=" + ".join(sorted(set(pg["when_list"]))); _ufc=pg["colonies"]
-                _label=pg["label"]; _date=pg["date"]
-                smp=next((p for p in st.session_state.prelevements if p['id']==_sid), None)
-                pt_oper=smp.get('operateur','?') if smp else '?'
-                loc_crit=_get_location_criticality(smp) if smp else 1
-                lc_col_id={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-                pt_class=smp.get('room_class','') if smp else ''
-                real_indices=[st.session_state.pending_identifications.index(e) for e in _entries if e in st.session_state.pending_identifications]
-                _key=_sid.replace("-","_")
-                germs_list_key=f"germs_list_{_key}"
+                _sid = pg["sample_id"]
+                _entries = pg["entries"]
+                _when_str = " + ".join(sorted(set(pg["when_list"])))
+                _ufc = pg["colonies"]
+                _label = pg["label"]
+                _date = pg["date"]
+
+                smp = next((p for p in st.session_state.prelevements if p['id'] == _sid), None)
+                pt_oper = smp.get('operateur', '?') if smp else '?'
+
+                # ── Criticité lue depuis Supabase / paramètres ────────────────
+                loc_crit = _get_location_criticality(smp) if smp else 1
+
+                lc_col_id = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(loc_crit), "#94a3b8")
+                pt_class = smp.get('room_class', '') if smp else ''
+
+                real_indices = [
+                    st.session_state.pending_identifications.index(e)
+                    for e in _entries
+                    if e in st.session_state.pending_identifications
+                ]
+                _key = _sid.replace("-", "_")
+                germs_list_key = f"germs_list_{_key}"
                 if germs_list_key not in st.session_state:
-                    st.session_state[germs_list_key]=[{"germ":"— Sélectionner un germe —","ufc":0}]
+                    st.session_state[germs_list_key] = [{"germ": "— Sélectionner un germe —", "ufc": 0}]
 
                 with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
-                    st.markdown(f"<div style='background:{lc_col_id}11;border:1px solid {lc_col_id}44;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{lc_col_id}'>🏷️ Criticité du lieu : Niveau {loc_crit} — {_loc_crit_label(loc_crit)} &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>", unsafe_allow_html=True)
-                    if len(_entries)>1:
-                        _ufc_detail="  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
-                        st.markdown(f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:.75rem;color:#854d0e;font-weight:600'>⚠️ Lectures J2 <em>et</em> J7 positives — une seule identification requise · {_ufc_detail}</div>", unsafe_allow_html=True)
-                    st.markdown("<div style='font-size:.8rem;font-weight:700;color:#475569;margin-bottom:6px'>🧫 Germes identifiés</div>", unsafe_allow_html=True)
-                    germs_to_remove=[]; current_germs=st.session_state[germs_list_key]
-                    for gi,germ_entry in enumerate(current_germs):
-                        cols=st.columns([3,1,0.4])
-                        with cols[0]:
-                            selected=st.selectbox(f"Germe {gi+1} *" if gi==0 else f"Germe {gi+1}",["— Sélectionner un germe —"]+germ_names,
-                                index=(["— Sélectionner un germe —"]+germ_names).index(germ_entry["germ"]) if germ_entry["germ"] in germ_names else 0,
-                                key=f"germ_sel_{_key}_{gi}")
-                            current_germs[gi]["germ"]=selected
-                        with cols[1]:
-                            ufc_val=st.number_input("UFC",min_value=0,value=int(germ_entry["ufc"]) if germ_entry["ufc"] else 0,step=1,key=f"germ_ufc_{_key}_{gi}")
-                            current_germs[gi]["ufc"]=ufc_val
-                        with cols[2]:
-                            st.markdown("<div style='margin-top:22px'>",unsafe_allow_html=True)
-                            if gi>0:
-                                if st.button("🗑️",key=f"del_germ_{_key}_{gi}",help="Supprimer ce germe"):
-                                    germs_to_remove.append(gi)
-                            st.markdown("</div>",unsafe_allow_html=True)
-                    for idx_r in sorted(germs_to_remove,reverse=True):
-                        st.session_state[germs_list_key].pop(idx_r); st.rerun()
-                    if st.button("➕ Ajouter un germe",key=f"add_germ_{_key}"):
-                        st.session_state[germs_list_key].append({"germ":"— Sélectionner un germe —","ufc":0}); st.rerun()
+                    st.markdown(
+                        f"<div style='background:{lc_col_id}11;border:1px solid {lc_col_id}44;border-radius:8px;"
+                        f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{lc_col_id}'>"
+                        f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_loc_crit_label(loc_crit)}"
+                        f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
+                        unsafe_allow_html=True)
 
-                    valid_germs=[g for g in current_germs if g["germ"] and g["germ"]!="— Sélectionner un germe —"]
+                    if len(_entries) > 1:
+                        _ufc_detail = "  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
+                        st.markdown(
+                            f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
+                            f"padding:8px 12px;margin-bottom:8px;font-size:.75rem;color:#854d0e;font-weight:600'>"
+                            f"⚠️ Lectures J2 <em>et</em> J7 positives — une seule identification requise"
+                            f" · {_ufc_detail}</div>",
+                            unsafe_allow_html=True)
+
+                    st.markdown(
+                        "<div style='font-size:.8rem;font-weight:700;color:#475569;margin-bottom:6px'>"
+                        "🧫 Germes identifiés</div>",
+                        unsafe_allow_html=True)
+
+                    germs_to_remove = []
+                    current_germs = st.session_state[germs_list_key]
+
+                    for gi, germ_entry in enumerate(current_germs):
+                        cols = st.columns([3, 1, 0.4])
+                        with cols[0]:
+                            selected = st.selectbox(
+                                f"Germe {gi + 1} *" if gi == 0 else f"Germe {gi + 1}",
+                                ["— Sélectionner un germe —"] + germ_names,
+                                index=(["— Sélectionner un germe —"] + germ_names).index(germ_entry["germ"])
+                                if germ_entry["germ"] in germ_names else 0,
+                                key=f"germ_sel_{_key}_{gi}")
+                            current_germs[gi]["germ"] = selected
+                        with cols[1]:
+                            ufc_val = st.number_input(
+                                "UFC", min_value=0,
+                                value=int(germ_entry["ufc"]) if germ_entry["ufc"] else 0,
+                                step=1, key=f"germ_ufc_{_key}_{gi}")
+                            current_germs[gi]["ufc"] = ufc_val
+                        with cols[2]:
+                            st.markdown("<div style='margin-top:22px'>", unsafe_allow_html=True)
+                            if gi > 0:
+                                if st.button("🗑️", key=f"del_germ_{_key}_{gi}", help="Supprimer ce germe"):
+                                    germs_to_remove.append(gi)
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                    for idx_r in sorted(germs_to_remove, reverse=True):
+                        st.session_state[germs_list_key].pop(idx_r)
+                        st.rerun()
+
+                    if st.button("➕ Ajouter un germe", key=f"add_germ_{_key}"):
+                        st.session_state[germs_list_key].append({"germ": "— Sélectionner un germe —", "ufc": 0})
+                        st.rerun()
+
+                    valid_germs = [
+                        g for g in current_germs
+                        if g["germ"] and g["germ"] != "— Sélectionner un germe —"
+                    ]
+
                     if valid_germs:
-                        scored_germs=[]
+                        scored_germs = []
                         for vg in valid_germs:
-                            gobj=next((g for g in st.session_state.germs if g['name']==vg["germ"]),None)
+                            gobj = next((g for g in st.session_state.germs if g['name'] == vg["germ"]), None)
                             if gobj:
-                                gs=int(gobj.get('pathogenicity',1))*int(gobj.get('resistance',1))*int(gobj.get('dissemination',1))
-                                scored_germs.append({"name":vg["germ"],"score":gs,"ufc":vg["ufc"],"obj":gobj})
+                                gs = (int(gobj.get('pathogenicity', 1))
+                                      * int(gobj.get('resistance', 1))
+                                      * int(gobj.get('dissemination', 1)))
+                                scored_germs.append({"name": vg["germ"], "score": gs, "ufc": vg["ufc"], "obj": gobj})
+
                         if scored_germs:
-                            worst=max(scored_germs,key=lambda x:x["score"])
-                            ts_prev=loc_crit*worst["score"]
-                            st_prev,_,sc_prev=_evaluate_score(ts_prev)
-                            ufc_total_prev=sum(s["ufc"] for s in scored_germs)
-                            preview_rows="".join(f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td><td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td><td style='padding:2px 8px;text-align:center;font-weight:700;color:{'#ef4444' if s['name']==worst['name'] else '#64748b'}'>{s['score']}{'  👑' if s['name']==worst['name'] else ''}</td></tr>" for s in scored_germs)
+                            worst = max(scored_germs, key=lambda x: x["score"])
+                            ts_prev = loc_crit * worst["score"]
+                            st_prev, _, sc_prev = _evaluate_score(ts_prev)
+                            ufc_total_prev = sum(s["ufc"] for s in scored_germs)
+                            preview_rows = "".join(
+                                f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
+                                f"<td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td>"
+                                f"<td style='padding:2px 8px;text-align:center;font-weight:700;"
+                                f"color:{'#ef4444' if s['name'] == worst['name'] else '#64748b'}'>"
+                                f"{s['score']}{'  👑' if s['name'] == worst['name'] else ''}</td></tr>"
+                                for s in scored_germs)
                             st.markdown(f"""<div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;border-radius:8px;padding:10px 14px;margin-top:8px">
                             <div style="font-size:.6rem;color:#475569;text-transform:uppercase;font-weight:700;margin-bottom:6px">Aperçu score — germe le plus critique 👑</div>
                             <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
@@ -3600,93 +3775,204 @@ function resetAll(){
                             </table>
                             <div style="display:flex;align-items:center;gap:12px">
                                 <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
-                                <div style="font-size:.72rem;color:#475569">Lieu {loc_crit} × Germe le + critique {worst['score']}<br><span style="font-weight:700;color:{sc_prev}">{'🚨 ACTION' if st_prev=='action' else '⚠️ ALERTE' if st_prev=='alert' else '✅ Conforme'}</span></div>
+                                <div style="font-size:.72rem;color:#475569">Lieu {loc_crit} × Germe le + critique {worst['score']}<br><span style="font-weight:700;color:{sc_prev}">{'🚨 ACTION' if st_prev == 'action' else '⚠️ ALERTE' if st_prev == 'alert' else '✅ Conforme'}</span></div>
                             </div></div>""", unsafe_allow_html=True)
-                        ic1,ic2=st.columns([3,1])
-                        with ic1: remarque=st.text_area("Remarque",height=68,key=f"rem_id_{_key}")
-                        with ic2: date_id=st.date_input("Date identification",value=datetime.today(),key=f"date_id_{_key}")
 
-                    idc1,idc2,idc3=st.columns([2,2,1])
+                        ic1, ic2 = st.columns([3, 1])
+                        with ic1:
+                            remarque = st.text_area("Remarque", height=68, key=f"rem_id_{_key}")
+                        with ic2:
+                            date_id = st.date_input("Date identification", value=datetime.today(),
+                                                    key=f"date_id_{_key}")
+
+                    idc1, idc2, idc3 = st.columns([2, 2, 1])
+
                     with idc1:
-                        if st.button("🔍 Analyser & Enregistrer",use_container_width=True,key=f"submit_id_{_key}"):
-                            valid_entries=[g for g in st.session_state[germs_list_key] if g["germ"] and g["germ"]!="— Sélectionner un germe —"]
+                        if st.button("🔍 Analyser & Enregistrer", use_container_width=True,
+                                     key=f"submit_id_{_key}"):
+                            valid_entries = [
+                                g for g in st.session_state[germs_list_key]
+                                if g["germ"] and g["germ"] != "— Sélectionner un germe —"
+                            ]
                             if not valid_entries:
                                 st.error("Veuillez sélectionner au moins un germe.")
                             else:
-                                scored_entries=[]
+                                scored_entries = []
                                 for ve in valid_entries:
-                                    match,score_fuzzy=find_germ_match(ve["germ"],st.session_state.germs)
-                                    if match and score_fuzzy>0.4:
-                                        gs=_get_germ_score(match)
-                                        scored_entries.append({"germ_saisi":ve["germ"],"germ_match":match["name"],"match_score":f"{int(score_fuzzy*100)}%","ufc":ve["ufc"],"germ_score":gs,"match_obj":match})
+                                    match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
+                                    if match and score_fuzzy > 0.4:
+                                        gs = _get_germ_score(match)
+                                        scored_entries.append({
+                                            "germ_saisi": ve["germ"],
+                                            "germ_match": match["name"],
+                                            "match_score": f"{int(score_fuzzy * 100)}%",
+                                            "ufc": ve["ufc"],
+                                            "germ_score": gs,
+                                            "match_obj": match
+                                        })
+
                                 if not scored_entries:
                                     st.warning("⚠️ Aucune correspondance trouvée pour les germes saisis.")
                                 else:
-                                    worst_entry=max(scored_entries,key=lambda x:x["germ_score"])
-                                    total_sc=loc_crit*worst_entry["germ_score"]
-                                    status,status_lbl,status_col=_evaluate_score(total_sc)
-                                    ufc_total=sum(e["ufc"] for e in scored_entries)
-                                    triggered_by=None
-                                    if status in ("alert","action"):
-                                        triggered_by=f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_match']})" if loc_crit>1 else f"germe {worst_entry['germ_match']} (score {worst_entry['germ_score']})"
-                                    germs_detail=[{"name":e["germ_match"],"germ_saisi":e["germ_saisi"],"match_score":e["match_score"],"ufc":e["ufc"],"germ_score":e["germ_score"],"is_worst":e["germ_match"]==worst_entry["germ_match"]} for e in scored_entries]
+                                    worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
+
+                                    # ── Criticité re-lue à la sauvegarde ─────────────────────────
+                                    loc_crit = _get_location_criticality(smp) if smp else 1
+
+                                    total_sc = loc_crit * worst_entry["germ_score"]
+                                    status, status_lbl, status_col = _evaluate_score(total_sc)
+                                    ufc_total = sum(e["ufc"] for e in scored_entries)
+
+                                    triggered_by = None
+                                    if status in ("alert", "action"):
+                                        triggered_by = (
+                                            f"lieu {loc_crit} × germe {worst_entry['germ_score']}"
+                                            f" ({worst_entry['germ_match']})"
+                                            if loc_crit > 1
+                                            else f"germe {worst_entry['germ_match']}"
+                                                 f" (score {worst_entry['germ_score']})"
+                                        )
+
+                                    germs_detail = [
+                                        {
+                                            "name": e["germ_match"],
+                                            "germ_saisi": e["germ_saisi"],
+                                            "match_score": e["match_score"],
+                                            "ufc": e["ufc"],
+                                            "germ_score": e["germ_score"],
+                                            "is_worst": e["germ_match"] == worst_entry["germ_match"]
+                                        }
+                                        for e in scored_entries
+                                    ]
+
                                     st.session_state.surveillance.append({
-                                        "date":str(date_id),"prelevement":_label,"sample_id":_sid,
-                                        "germ_saisi":worst_entry["germ_saisi"],"germ_match":worst_entry["germ_match"],"match_score":worst_entry["match_score"],
-                                        "ufc":worst_entry["ufc"],"ufc_total":ufc_total,"germ_score":worst_entry["germ_score"],
-                                        "germs_detail":germs_detail,"multi_germ":len(scored_entries)>1,
-                                        "location_criticality":loc_crit,"total_score":total_sc,
-                                        "risk":worst_entry["match_obj"].get("risk",worst_entry["germ_score"]),
-                                        "room_class":pt_class,"alert_threshold":"Score ≥ 24","action_threshold":"Score > 36",
-                                        "triggered_by":triggered_by,"status":status,"operateur":pt_oper,"remarque":remarque,"readings":_when_str})
+                                        "date": str(date_id),
+                                        "prelevement": _label,
+                                        "sample_id": _sid,
+                                        "germ_saisi": worst_entry["germ_saisi"],
+                                        "germ_match": worst_entry["germ_match"],
+                                        "match_score": worst_entry["match_score"],
+                                        "ufc": worst_entry["ufc"],
+                                        "ufc_total": ufc_total,
+                                        "germ_score": worst_entry["germ_score"],
+                                        "germs_detail": germs_detail,
+                                        "multi_germ": len(scored_entries) > 1,
+                                        "location_criticality": loc_crit,
+                                        "total_score": total_sc,
+                                        "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                        "room_class": pt_class,
+                                        "alert_threshold": "Score ≥ 24",
+                                        "action_threshold": "Score > 36",
+                                        "triggered_by": triggered_by,
+                                        "status": status,
+                                        "operateur": pt_oper,
+                                        "remarque": remarque,
+                                        "readings": _when_str
+                                    })
                                     save_surveillance(st.session_state.surveillance)
-                                    for _ri in real_indices: st.session_state.pending_identifications[_ri]['status']='done'
+
+                                    for _ri in real_indices:
+                                        st.session_state.pending_identifications[_ri]['status'] = 'done'
+
                                     if smp and not smp.get('archived'):
-                                        smp['archived']=True; st.session_state.archived_samples.append(smp)
-                                        save_archived_samples(st.session_state.archived_samples); save_prelevements(st.session_state.prelevements)
+                                        smp['archived'] = True
+                                        st.session_state.archived_samples.append(smp)
+                                        save_archived_samples(st.session_state.archived_samples)
+                                        save_prelevements(st.session_state.prelevements)
+
                                     del st.session_state[germs_list_key]
-                                    if status in ("alert","action"):
-                                        st.session_state["_show_mesures_popup"]={"status":status,"germ":worst_entry["germ_match"],"ufc":worst_entry["ufc"],"risk":worst_entry["match_obj"].get("risk",worst_entry["germ_score"]),"label":_label,"room_class":pt_class,"triggered_by":triggered_by,"germ_score":worst_entry["germ_score"],"loc_criticality":loc_crit,"total_score":total_sc,"th_germe":{"alert":"Score ≥ 24","action":"Score > 36"},"germs_detail":germs_detail}
+
+                                    if status in ("alert", "action"):
+                                        st.session_state["_show_mesures_popup"] = {
+                                            "status": status,
+                                            "germ": worst_entry["germ_match"],
+                                            "ufc": worst_entry["ufc"],
+                                            "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                            "label": _label,
+                                            "room_class": pt_class,
+                                            "triggered_by": triggered_by,
+                                            "germ_score": worst_entry["germ_score"],
+                                            "loc_criticality": loc_crit,
+                                            "total_score": total_sc,
+                                            "th_germe": {"alert": "Score ≥ 24", "action": "Score > 36"},
+                                            "germs_detail": germs_detail
+                                        }
                                     else:
-                                        germs_summary=", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
-                                        st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc} = lieu {loc_crit} × germe le + critique {worst_entry['germ_score']}) | UFC total : **{ufc_total}**")
+                                        germs_summary = ", ".join(
+                                            f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
+                                        st.success(
+                                            f"✅ {germs_summary} — **Conforme** (score {total_sc} = "
+                                            f"lieu {loc_crit} × germe le + critique {worst_entry['germ_score']})"
+                                            f" | UFC total : **{ufc_total}**")
+
                                     st.rerun()
+
                     with idc2:
-                        if st.button("↩️ Corriger la lecture",use_container_width=True,key=f"cancel_id_{_key}"):
+                        if st.button("↩️ Corriger la lecture", use_container_width=True,
+                                     key=f"cancel_id_{_key}"):
                             for _e in _entries:
-                                sch=next((x for x in st.session_state.schedules if x['sample_id']==_sid and x['when']==_e['when'] and x['status']=='done'),None)
-                                if sch: sch['status']='pending'
+                                sch = next(
+                                    (x for x in st.session_state.schedules
+                                     if x['sample_id'] == _sid and x['when'] == _e['when']
+                                     and x['status'] == 'done'), None)
+                                if sch:
+                                    sch['status'] = 'pending'
                             save_schedules(st.session_state.schedules)
-                            for _ri in sorted(real_indices,reverse=True): st.session_state.pending_identifications.pop(_ri)
+                            for _ri in sorted(real_indices, reverse=True):
+                                st.session_state.pending_identifications.pop(_ri)
                             save_pending_identifications(st.session_state.pending_identifications)
-                            if germs_list_key in st.session_state: del st.session_state[germs_list_key]
-                            st.rerun()
-                    with idc3:
-                        if st.button("🗑️",use_container_width=True,key=f"del_id_{_key}"):
-                            for _ri in sorted(real_indices,reverse=True): st.session_state.pending_identifications.pop(_ri)
-                            save_pending_identifications(st.session_state.pending_identifications)
-                            if germs_list_key in st.session_state: del st.session_state[germs_list_key]
+                            if germs_list_key in st.session_state:
+                                del st.session_state[germs_list_key]
                             st.rerun()
 
+                    with idc3:
+                        if st.button("🗑️", use_container_width=True, key=f"del_id_{_key}"):
+                            for _ri in sorted(real_indices, reverse=True):
+                                st.session_state.pending_identifications.pop(_ri)
+                            save_pending_identifications(st.session_state.pending_identifications)
+                            if germs_list_key in st.session_state:
+                                del st.session_state[germs_list_key]
+                            st.rerun()
+
+        # ── Derniers résultats ────────────────────────────────────────────────
         if st.session_state.surveillance:
             st.divider()
             st.markdown("### 📋 Derniers résultats")
             for r in reversed(st.session_state.surveillance[-10:]):
-                sc="#ef4444" if r["status"]=="action" else "#f59e0b" if r["status"]=="alert" else "#22c55e"
-                ic="🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
-                ufc_display=f"{r['ufc']} UFC" if r.get('ufc') else "—"
-                total_score=r.get("total_score"); germ_score=r.get("germ_score"); loc_crit_r=r.get("location_criticality")
-                score_badge=f"<span style='background:{sc}22;color:{sc};border:1px solid {sc}55;border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:6px'>Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>" if total_score is not None else ""
-                trig=r.get("triggered_by")
-                trig_badge=f"<span style='background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:4px;padding:1px 6px;font-size:.6rem;font-weight:600;margin-left:4px'>⚡ {trig}</span>" if trig else ""
-                st.markdown(f"""<div style="background:#f8fafc;border-left:3px solid {sc};border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px">
-                    <span style="font-size:1.1rem">{ic}</span>
-                    <div style="flex:1">
-                    <div style="font-size:.78rem;color:#1e293b;font-weight:600">{r['prelevement']} — <span style="font-style:italic">{r['germ_match']}</span>{score_badge}{trig_badge}</div>
-                    <div style="font-size:.68rem;color:#475569;margin-top:2px">{r['date']} · {ufc_display} · Lieu Nv.{r.get('location_criticality','—')} · {r.get('operateur') or 'N/A'}</div>
-                    </div>
-                    <div style="text-align:right"><span style="font-size:.75rem;color:{sc};font-weight:800">{ufc_display}</span></div>
-                </div>""", unsafe_allow_html=True)
+                sc = "#ef4444" if r["status"] == "action" else "#f59e0b" if r["status"] == "alert" else "#22c55e"
+                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
+                ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
+                total_score = r.get("total_score")
+                germ_score = r.get("germ_score")
+                loc_crit_r = r.get("location_criticality")
+                score_badge = (
+                    f"<span style='background:{sc}22;color:{sc};border:1px solid {sc}55;border-radius:4px;"
+                    f"padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:6px'>"
+                    f"Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>"
+                    if total_score is not None else ""
+                )
+                trig = r.get("triggered_by")
+                trig_badge = (
+                    f"<span style='background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:4px;"
+                    f"padding:1px 6px;font-size:.6rem;font-weight:600;margin-left:4px'>⚡ {trig}</span>"
+                    if trig else ""
+                )
+                st.markdown(
+                    f"<div style='background:#f8fafc;border-left:3px solid {sc};border-radius:8px;"
+                    f"padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px'>"
+                    f"<span style='font-size:1.1rem'>{ic}</span>"
+                    f"<div style='flex:1'>"
+                    f"<div style='font-size:.78rem;color:#1e293b;font-weight:600'>"
+                    f"{r['prelevement']} — <span style='font-style:italic'>{r['germ_match']}</span>"
+                    f"{score_badge}{trig_badge}</div>"
+                    f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
+                    f"{r['date']} · {ufc_display} · Lieu Nv.{r.get('location_criticality', '—')}"
+                    f" · {r.get('operateur') or 'N/A'}</div>"
+                    f"</div>"
+                    f"<div style='text-align:right'>"
+                    f"<span style='font-size:.75rem;color:{sc};font-weight:800'>{ufc_display}</span>"
+                    f"</div></div>",
+                    unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
