@@ -6263,7 +6263,7 @@ if active == "historique":
                         st.markdown("**✏️ Modifier cette entrée**")
 
                         # ── Ligne 0 : titre du prélèvement + lieu ──────────────────────────
-                        e0a, e0b = st.columns(2)
+                        e0a, e0b, e0c = st.columns([3, 3, 1.5])
                         with e0a:
                             new_prelevement = st.text_input(
                                 "Titre du prélèvement",
@@ -6274,7 +6274,17 @@ if active == "historique":
                                 "Lieu",
                                 value=r.get("lieu", ""),
                                 key=f"es_lieu_{real_i}")
-
+                        with e0c:
+                            # Criticité du lieu — même logique que dans le formulaire d'ajout
+                            current_lc = int(r.get("location_criticality", 1))
+                            current_lc_index = next(
+                                (i for i, o in enumerate(LOC_CRIT_OPTS) if int(o[0]) == current_lc), 0)
+                            new_lc_label = st.selectbox(
+                                "Criticité lieu",
+                                LOC_CRIT_OPTS,
+                                index=current_lc_index,
+                                key=f"es_lc_{real_i}")
+                            new_lc = int(new_lc_label[0])
                         e1, e2 = st.columns(2)
                         with e1:
                             new_germ      = st.text_input("Germe",     value=r.get("germ_match",""), key=f"es_germ_{real_i}")
