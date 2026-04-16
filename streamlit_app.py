@@ -3655,7 +3655,11 @@ function resetAll(){
             st.success("✅ Aucune identification en attente.")
         else:
             germ_names = sorted([g['name'] for g in st.session_state.germs])
-
+            # Coller ces 3 lignes juste AVANT la boucle "for pg in pending_ids_grouped:"
+            LOC_CRIT_OPTS   = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Critique"]
+            LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
+            LOC_CRIT_LABELS = {"1": "Limité", "2": "Modéré", "3": "Important", "4": "Critique"}
+            
             for pg in pending_ids_grouped:
                 _sid = pg["sample_id"]
                 _entries = pg["entries"]
