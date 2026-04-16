@@ -3693,10 +3693,11 @@ function resetAll(){
                     _bc1, _bc2 = st.columns([4, 1])
                     with _bc2:
                         _LOC_CRIT_OPTS = ["1 – Faible", "2 – Modérée", "3 – Élevée"]
+                        _lc_index = max(0, min(int(loc_crit or 1) - 1, len(_LOC_CRIT_OPTS) - 1))
                         _new_lc_label = st.selectbox(
                             "✏️ Criticité lieu",
                             _LOC_CRIT_OPTS,
-                            index=max(0, loc_crit - 1),  # 1→0, 2→1, 3→2
+                            index=_lc_index,
                             key=f"lc_sel_{_key}",
                             help="Modifier manuellement la criticité du lieu pour ce calcul")
                         loc_crit = int(_new_lc_label[0])
