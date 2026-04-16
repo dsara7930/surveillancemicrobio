@@ -2567,6 +2567,21 @@ vp.addEventListener('wheel',e=>{{
                             with st.container():
                                 st.markdown("<div style='background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:12px'>", unsafe_allow_html=True)
                                 st.markdown(f"**✏️ Modifier — {samp['label']}**")
+                                
+                                # ── Nouveau : modification du point de prélèvement ──────────
+                                pt_names = sorted([p['name'] for p in st.session_state.get('points_prelevement', [])])
+                                if pt_names:
+                                    current_label = samp.get("label", "")
+                                    pt_options = pt_names if current_label in pt_names else [current_label] + pt_names
+                                    new_label = st.selectbox(
+                                        "📍 Point de prélèvement",
+                                        pt_options,
+                                        index=pt_options.index(current_label) if current_label in pt_options else 0,
+                                        key=f"edit_label_{samp['id']}")
+                                else:
+                                    new_label = st.text_input("📍 Point de prélèvement", value=samp.get("label", ""), key=f"edit_label_{samp['id']}")
+                                # ────────────────────────────────────────────────────────────
+
                                 e_col1, e_col2 = st.columns(2)
                                 with e_col1:
                                     oper_list_e = [o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
@@ -2596,6 +2611,7 @@ vp.addEventListener('wheel',e=>{{
                                 btn_c1,btn_c2=st.columns(2)
                                 with btn_c1:
                                     if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
+                                        st.session_state.prelevements[idx]["label"]=new_label          # ← nouveau
                                         st.session_state.prelevements[idx]["operateur"]=new_oper
                                         st.session_state.prelevements[idx]["date"]=str(new_date)
                                         st.session_state.prelevements[idx]["gelose"]=new_gelose
@@ -6293,7 +6309,7 @@ if active == "historique":
                         st.markdown("**✏️ Modifier cette entrée**")
 
                         # ── Ligne 0 : titre du prélèvement + lieu ──────────────────────────
-                        e0a, e0b = st.columns([3, 3, 1.5])
+                        e0a, e0b = st.columns([3, 3])
                         with e0a:
                             new_prelevement = st.text_input(
                                 "Titre du prélèvement",
