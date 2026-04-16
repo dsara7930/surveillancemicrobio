@@ -6275,16 +6275,15 @@ if active == "historique":
                                 value=r.get("lieu", ""),
                                 key=f"es_lieu_{real_i}")
                         with e0c:
-                            # Criticité du lieu — même logique que dans le formulaire d'ajout
+                            _LOC_CRIT_OPTS = ["1 – Faible", "2 – Modérée", "3 – Élevée"]
                             current_lc = int(r.get("location_criticality", 1))
-                            current_lc_index = next(
-                                (i for i, o in enumerate(LOC_CRIT_OPTS) if int(o[0]) == current_lc), 0)
+                            current_lc_index = max(0, current_lc - 1)  # 1→0, 2→1, 3→2
                             new_lc_label = st.selectbox(
                                 "Criticité lieu",
-                                LOC_CRIT_OPTS,
+                                _LOC_CRIT_OPTS,
                                 index=current_lc_index,
                                 key=f"es_lc_{real_i}")
-                            new_lc = int(new_lc_label[0])
+                            new_lc = int(new_lc_label[0])  # extrait "1", "2" ou "3"
                         e1, e2 = st.columns(2)
                         with e1:
                             new_germ      = st.text_input("Germe",     value=r.get("germ_match",""), key=f"es_germ_{real_i}")
