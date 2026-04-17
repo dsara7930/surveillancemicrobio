@@ -3060,20 +3060,14 @@ vp.addEventListener('wheel',e=>{{
 
             for s in overdue_j2 + upcoming_j2:
                 _render_lecture_card(s, "j2_")
-                # ── Traitement inline : apparaît sous la carte cliquée ─────────
                 if st.session_state.get("current_process") == s['id']:
-                    st.markdown(
-                        "<div style='border-left:3px solid #3b82f6;margin-left:8px;"
-                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
-                        unsafe_allow_html=True)
-                    st.markdown(
-                        f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
-                        f"font-size:.8rem;font-weight:700;color:#1e40af'>"
-                        f"🔬 Traitement lecture J2 — {s['label']}</div>",
-                        unsafe_allow_html=True)
-                    _render_traitement_lecture(st.session_state.current_process)
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    # ── Vérifier que c'est bien un schedule J2 ──
+                    _cp = next((x for x in st.session_state.schedules
+                                if x['id'] == st.session_state.current_process), None)
+                    if _cp and _cp.get("when") == "J2":
+                        st.markdown(...)
+                        _render_traitement_lecture(st.session_state.current_process)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
@@ -3111,23 +3105,16 @@ vp.addEventListener('wheel',e=>{{
                     f'<span style="color:#1d4ed8;font-size:.8rem">'
                     f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
                     f'</span></div>', unsafe_allow_html=True)
-
             for s in overdue_j7 + upcoming_j7:
                 _render_lecture_card(s, "j7_")
-                # ── Traitement inline : apparaît sous la carte cliquée ─────────
                 if st.session_state.get("current_process") == s['id']:
-                    st.markdown(
-                        "<div style='border-left:3px solid #22c55e;margin-left:8px;"
-                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
-                        unsafe_allow_html=True)
-                    st.markdown(
-                        f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
-                        f"font-size:.8rem;font-weight:700;color:#166534'>"
-                        f"🔬 Traitement lecture J7 — {s['label']}</div>",
-                        unsafe_allow_html=True)
-                    _render_traitement_lecture(st.session_state.current_process)
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    # ── Vérifier que c'est bien un schedule J7 ──
+                    _cp = next((x for x in st.session_state.schedules
+                                if x['id'] == st.session_state.current_process), None)
+                    if _cp and _cp.get("when") == "J7":
+                        st.markdown(...)
+                        _render_traitement_lecture(st.session_state.current_process)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
        
 
