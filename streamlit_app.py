@@ -3002,7 +3002,6 @@ vp.addEventListener('wheel',e=>{{
                         "when":      proc["when"],
                         "colonies":  ncol,
                         "date":      str(datetime.today().date()),
-                        "remarque":  remarque,
                         "status":    "pending",
                     })
                     save_pending_identifications(st.session_state.pending_identifications)
