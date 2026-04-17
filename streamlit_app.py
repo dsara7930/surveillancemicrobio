@@ -13,6 +13,8 @@ from io import BytesIO
 from datetime import date, datetime, timedelta
 import streamlit.components.v1 as components
 import uuid
+import sys
+import re
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
@@ -3597,8 +3599,8 @@ vp.addEventListener('wheel',e=>{{
                                             st.session_state.archived_samples.append(smp)
                                             save_archived_samples(st.session_state.archived_samples)
                                             save_prelevements(st.session_state.prelevements)
-                                        del st.session_state[germs_list_key]
-                                        del st.session_state[_lc_override_key]
+                                        st.session_state.pop(germs_list_key, None)
+                                        st.session_state.pop(_lc_override_key, None)
                                         if status in ("alert", "action"):
                                             st.session_state["_show_mesures_popup"] = {
                                                 "status":        status,
