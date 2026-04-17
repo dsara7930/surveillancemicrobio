@@ -2920,21 +2920,31 @@ vp.addEventListener('wheel',e=>{{
                     st.rerun()
 
     def _render_traitement_lecture(proc_id):
-        proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
+        proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
         if not proc: return
-        smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
-        pt_room_p = smp.get('room_class', '') if smp else ''
-
-        if smp and str(smp.get("room_class", "")).strip().upper() == "A":
-            iso = smp.get("num_isolateur", "—") or "—"
-            pst = smp.get("poste", "—") or "—"
-            st.markdown(
-                f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
-                f"padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>"
-                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>",
-                unsafe_allow_html=True)
-
+        smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
+        pt_type  =smp.get('type','?')      if smp else '?'
+        pt_gelose=smp.get('gelose','?')    if smp else '?'
+        pt_oper  =smp.get('operateur','?') if smp else '?'
+        pt_date  =smp.get('date','?')      if smp else '?'
+        pt_room_p=smp.get('room_class','') if smp else ''
+        loc_crit =_get_location_criticality(smp) if smp else 1
+        lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
+        classea_band=""
+        if smp and str(smp.get("room_class","")).strip().upper()=="A":
+            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
+            classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
         st.markdown("---")
+        
+
+        lc1,lc2=st.columns([2,2])
+        with lc1:
+            res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
+        with lc2:
+            if "Positif" in res:
+                ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
+            else:
+                ncol=0
 
         # ── Retour J2 (visible si on traite J7) ──────────────────────────────────
         if proc["when"] == "J7":
