@@ -3078,16 +3078,24 @@ vp.addEventListener('wheel',e=>{{
 
         def _j2_done_for(sample_id):
             j2 = next((x for x in st.session_state.schedules
-                        if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
+                    if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+            if j2 is None or j2['status'] != 'done':
+                return False
+            # Si J2 positif et identification encore en attente → bloquer J7
+            j2_positive = any(
+                p for p in st.session_state.pending_identifications
+                if p.get('sample_id') == sample_id
+                and p.get('when') == 'J2'
+                and p.get('status') == 'pending'
+            )
+            return not j2_positive
 
-        pending_j7  = [s for s in st.session_state.schedules
-                        if s["when"] == "J7" and s["status"] == "pending"
-                        and s.get("sample_id") in _active_sids_j7
-                        and _j2_done_for(s["sample_id"])]
+        pending_j7 = [s for s in st.session_state.schedules
+                    if s["when"] == "J7" and s["status"] == "pending"
+                    and s.get("sample_id") in _active_sids_j7
+                    and _j2_done_for(s["sample_id"])]
         overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
         upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
-
         if not pending_j7:
             st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
         else:
