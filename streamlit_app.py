@@ -2981,8 +2981,7 @@ vp.addEventListener('wheel',e=>{{
             else:
                 ncol = 0
 
-        remarque = st.text_area("📝 Remarque", height=60, key=f"remarque_{proc_id}")
-        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        
 
         btn1, _, btn3 = st.columns([3, 1, 1])
 
@@ -2992,7 +2991,6 @@ vp.addEventListener('wheel',e=>{{
                 proc["status"]    = "done"
                 proc["colonies"]  = ncol
                 proc["date_read"] = str(datetime.today().date())
-                proc["remarque"]  = remarque
                 save_schedules(st.session_state.schedules)
 
                 if "Positif" in res and ncol > 0:
