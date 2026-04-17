@@ -2891,18 +2891,14 @@ vp.addEventListener('wheel',e=>{{
                             st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
     
-            bc1, bc2, bc3 = st.columns([3, 1, 1])
+            bc1, bc2 = st.columns([3, 1])
             with bc1:
                 if st.button(f"🔬 Traiter cette lecture ({s['when']})",
                             key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
                     st.session_state.current_process = s['id']
                     st.rerun()
+            
             with bc2:
-                if st.button("✏️ Renommer", key=f"{tab_prefix}rename_{s['id']}",
-                            use_container_width=True, help="Changer le nom du point"):
-                    st.session_state[_rename_key] = not st.session_state[_rename_key]
-                    st.rerun()
-            with bc3:
                 if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
                             use_container_width=True):
                     sid = s.get('sample_id')
