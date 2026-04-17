@@ -3012,14 +3012,41 @@ vp.addEventListener('wheel',e=>{{
                         "status":    "pending",
                     })
                     save_pending_identifications(st.session_state.pending_identifications)
-                    st.success(f"🔴 Positif — {ncol} UFC · identification en attente.")
-                else:
-                    if proc["when"] == "J7" and smp and not smp.get("archived"):
+
+                    # ── J2 positif → skipper J7, NE PAS archiver ──
+                    if proc["when"] == "J2":
+                        _j7 = next((x for x in st.session_state.schedules
+                                    if x["sample_id"] == proc["sample_id"]
+                                    and x["when"] == "J7"), None)
+                        if _j7:
+                            _j7["status"] = "skipped"
+                            save_schedules(st.session_state.schedules)
+                        st.success(f"🔴 J2 positive — {ncol} UFC · identification en attente.")
+
+                    # ── J7 positif → archiver ──
+                    elif proc["when"] == "J7" and smp and not smp.get("archived"):
                         smp["archived"] = True
                         st.session_state.archived_samples.append(smp)
                         save_archived_samples(st.session_state.archived_samples)
                         save_prelevements(st.session_state.prelevements)
-                    st.success("✅ Négatif enregistré.")
+                        st.success(f"🔴 J7 positive — {ncol} UFC · identification en attente.")
+
+                else:
+                    # ── Négatif J2 → rien à archiver, J7 reste en attente ──
+                    if proc["when"] == "J2":
+                        j7_sch = next((x for x in st.session_state.schedules
+                                       if x["sample_id"] == proc["sample_id"]
+                                       and x["when"] == "J7"), None)
+                        st.success(f"✅ J2 négative — J7 prévue le "
+                                   f"{j7_sch['due_date'][:10] if j7_sch else '?'}.")
+
+                    # ── Négatif J7 → archiver (fin de cycle) ──
+                    elif proc["when"] == "J7" and smp and not smp.get("archived"):
+                        smp["archived"] = True
+                        st.session_state.archived_samples.append(smp)
+                        save_archived_samples(st.session_state.archived_samples)
+                        save_prelevements(st.session_state.prelevements)
+                        st.success("✅ J7 négative — prélèvement archivé.")
 
                 st.session_state.current_process = None
                 st.rerun()
@@ -3079,16 +3106,7 @@ vp.addEventListener('wheel',e=>{{
         def _j2_done_for(sample_id):
             j2 = next((x for x in st.session_state.schedules
                     if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
-            if j2 is None or j2['status'] != 'done':
-                return False
-            # Si J2 positif et identification encore en attente → bloquer J7
-            j2_positive = any(
-                p for p in st.session_state.pending_identifications
-                if p.get('sample_id') == sample_id
-                and p.get('when') == 'J2'
-                and p.get('status') == 'pending'
-            )
-            return not j2_positive
+            return j2 is None or j2['status'] == 'done'
 
         pending_j7 = [s for s in st.session_state.schedules
                     if s["when"] == "J7" and s["status"] == "pending"
@@ -3096,6 +3114,7 @@ vp.addEventListener('wheel',e=>{{
                     and _j2_done_for(s["sample_id"])]
         overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
         upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+
         if not pending_j7:
             st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
         else:
