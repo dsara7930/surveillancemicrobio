@@ -2919,23 +2919,30 @@ vp.addEventListener('wheel',e=>{{
                     st.rerun()
 
     def _render_traitement_lecture(proc_id):
-        proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
+        proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
         if not proc: return
-        smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
-        pt_type  =smp.get('type','?')      if smp else '?'
-        pt_gelose=smp.get('gelose','?')    if smp else '?'
-        pt_oper  =smp.get('operateur','?') if smp else '?'
-        pt_date  =smp.get('date','?')      if smp else '?'
-        pt_room_p=smp.get('room_class','') if smp else ''
-        loc_crit =_get_location_criticality(smp) if smp else 1
-        lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-        classea_band=""
-        if smp and str(smp.get("room_class","")).strip().upper()=="A":
-            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
-            classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
+        smp       = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+        pt_oper   = smp.get('operateur', '?') if smp else '?'
+        pt_date   = smp.get('date', '?')      if smp else '?'
+        pt_room_p = smp.get('room_class', '') if smp else ''
+        loc_crit  = _get_location_criticality(smp) if smp else 1
+
+        classea_band = ""
+        if smp and str(smp.get("room_class", "")).strip().upper() == "A":
+            iso = smp.get("num_isolateur", "—") or "—"
+            pst = smp.get("poste", "—") or "—"
+            classea_band = (
+                f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
+                f"padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>"
+                f"🔬 Classe A · Isolateur : {iso} · {pst}</div>"
+            )
+
+        if classea_band:
+            st.markdown(classea_band, unsafe_allow_html=True)
+
         st.markdown("---")
-        
-        # ── Retour J2 (visible si on traite J7) ───────────────────────────
+
+        # ── Retour J2 (visible si on traite J7) ──────────────────────────────────
         if proc["when"] == "J7":
             st.markdown(
                 "<div style='background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;"
@@ -2945,26 +2952,19 @@ vp.addEventListener('wheel',e=>{{
                 "</div>",
                 unsafe_allow_html=True,
             )
-            if st.button("↩️ Revenir à la lecture J2",
-                         key=f"back_j2_{proc_id}"):
-                # Remettre J2 en pending
+            if st.button("↩️ Revenir à la lecture J2", key=f"back_j2_{proc_id}"):
                 _j2 = next(
                     (x for x in st.session_state.schedules
-                     if x["sample_id"] == proc["sample_id"] and x["when"] == "J2"),
-                    None,
-                )
+                    if x["sample_id"] == proc["sample_id"] and x["when"] == "J2"), None)
                 if _j2:
                     _j2["status"] = "pending"
-                # Remettre J7 en pending
                 proc["status"] = "pending"
                 save_schedules(st.session_state.schedules)
-                # Supprimer identifications liées
                 st.session_state.pending_identifications = [
                     x for x in st.session_state.pending_identifications
                     if x.get("sample_id") != proc["sample_id"]
                 ]
                 save_pending_identifications(st.session_state.pending_identifications)
-                # Désarchiver si archivé suite à J2 négatif
                 if smp and smp.get("archived"):
                     smp["archived"] = False
                     st.session_state.archived_samples = [
@@ -2978,117 +2978,68 @@ vp.addEventListener('wheel',e=>{{
                 st.rerun()
             st.markdown("---")
 
-        lc1,lc2=st.columns([2,2])
+        # ── Saisie résultat ───────────────────────────────────────────────────────
+        lc1, lc2 = st.columns([2, 2])
         with lc1:
-            res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
+            res = st.radio(
+                "Résultat",
+                ["✅ Négatif (0 colonie)", "🔴 Positif (colonies détectées)"],
+                index=0,
+                key=f"res_{proc_id}")
         with lc2:
             if "Positif" in res:
-                ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
+                ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
             else:
-                ncol=0
+                ncol = 0
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 2 — LECTURE J2
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_j2:
-        st.markdown("#### 📖 Lectures J2 en attente")
-        _active_sids = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
-        pending_j2   = [s for s in st.session_state.schedules
-                        if s["when"] == "J2" and s["status"] == "pending"
-                        and s.get("sample_id") in _active_sids]
-        overdue_j2   = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
+        remarque = st.text_area("📝 Remarque", height=60, key=f"remarque_{proc_id}")
 
-        if not pending_j2:
-            st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
-        else:
-            if overdue_j2:
-                st.markdown(
-                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                    f'padding:12px 16px;margin-bottom:12px">'
-                    f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible'
-                    f'</span></div>', unsafe_allow_html=True)
-            if upcoming_j2:
-                st.markdown(
-                    f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
-                    f'padding:10px 16px;margin-bottom:12px">'
-                    f'<span style="color:#16a34a;font-size:.8rem">'
-                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir'
-                    f'</span></div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-            for s in overdue_j2 + upcoming_j2:
-                _render_lecture_card(s, "j2_")
-                # ── Traitement inline : apparaît sous la carte cliquée ─────────
-                if st.session_state.get("current_process") == s['id']:
-                    st.markdown(
-                        "<div style='border-left:3px solid #3b82f6;margin-left:8px;"
-                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
-                        unsafe_allow_html=True)
-                    st.markdown(
-                        f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
-                        f"font-size:.8rem;font-weight:700;color:#1e40af'>"
-                        f"🔬 Traitement lecture J2 — {s['label']}</div>",
-                        unsafe_allow_html=True)
-                    _render_traitement_lecture(st.session_state.current_process)
-                    st.markdown("</div>", unsafe_allow_html=True)
+        btn1, btn2, btn3 = st.columns([2, 2, 1])
 
-        # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 3 — LECTURE J7
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_j7:
-        st.markdown("#### 📗 Lectures J7 en attente")
-        _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+        # ── Bouton VALIDER ────────────────────────────────────────────────────────
+        with btn1:
+            if st.button("💾 Valider la lecture", use_container_width=True,
+                        type="primary", key=f"valider_{proc_id}"):
+                proc["status"]    = "done"
+                proc["colonies"]  = ncol
+                proc["date_read"] = str(datetime.today().date())
+                proc["remarque"]  = remarque
+                save_schedules(st.session_state.schedules)
 
-        def _j2_done_for(sample_id):
-            j2 = next((x for x in st.session_state.schedules
-                        if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
+                if "Positif" in res and ncol > 0:
+                    # Créer une identification en attente
+                    label_smp = smp.get("label", "?") if smp else "?"
+                    st.session_state.pending_identifications.append({
+                        "id":        str(uuid.uuid4()),
+                        "sample_id": proc["sample_id"],
+                        "label":     label_smp,
+                        "when":      proc["when"],
+                        "colonies":  ncol,
+                        "date":      str(datetime.today().date()),
+                        "remarque":  remarque,
+                        "status":    "pending",
+                    })
+                    save_pending_identifications(st.session_state.pending_identifications)
+                    st.success(f"🔴 Positif enregistré — {ncol} UFC · identification en attente.")
+                else:
+                    # Négatif → archiver le prélèvement si J7 (fin de cycle)
+                    if proc["when"] == "J7" and smp and not smp.get("archived"):
+                        smp["archived"] = True
+                        st.session_state.archived_samples.append(smp)
+                        save_archived_samples(st.session_state.archived_samples)
+                        save_prelevements(st.session_state.prelevements)
+                    st.success("✅ Négatif enregistré.")
 
-        pending_j7  = [s for s in st.session_state.schedules
-                        if s["when"] == "J7" and s["status"] == "pending"
-                        and s.get("sample_id") in _active_sids_j7
-                        and _j2_done_for(s["sample_id"])]
-        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+                st.session_state.current_process = None
+                st.rerun()
 
-        if not pending_j7:
-            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
-        else:
-            if overdue_j7:
-                st.markdown(
-                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                    f'padding:12px 16px;margin-bottom:12px">'
-                    f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible'
-                    f'</span></div>', unsafe_allow_html=True)
-            if upcoming_j7:
-                st.markdown(
-                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
-                    f'padding:10px 16px;margin-bottom:12px">'
-                    f'<span style="color:#1d4ed8;font-size:.8rem">'
-                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
-                    f'</span></div>', unsafe_allow_html=True)
-
-            for s in overdue_j7 + upcoming_j7:
-                _render_lecture_card(s, "j7_")
-                # ── Traitement inline : apparaît sous la carte cliquée ─────────
-                if st.session_state.get("current_process") == s['id']:
-                    st.markdown(
-                        "<div style='border-left:3px solid #22c55e;margin-left:8px;"
-                        "padding-left:12px;margin-bottom:16px;margin-top:-4px'>",
-                        unsafe_allow_html=True)
-                    st.markdown(
-                        f"<div style='background:#f0fdf4;border:1px solid #86efac;"
-                        f"border-radius:8px;padding:8px 14px;margin-bottom:10px;"
-                        f"font-size:.8rem;font-weight:700;color:#166534'>"
-                        f"🔬 Traitement lecture J7 — {s['label']}</div>",
-                        unsafe_allow_html=True)
-                    _render_traitement_lecture(st.session_state.current_process)
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-       
+        # ── Bouton ANNULER ────────────────────────────────────────────────────────
+        with btn3:
+            if st.button("✕ Annuler", use_container_width=True, key=f"cancel_{proc_id}"):
+                st.session_state.current_process = None
+                st.rerun()
 
    # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
