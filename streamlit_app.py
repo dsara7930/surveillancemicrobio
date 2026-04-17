@@ -1022,6 +1022,11 @@ if "class_constraints_loaded" not in st.session_state:
     st.session_state["class_constraints_loaded"] = True
 
 # ── SIDEBAR ────────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="MicroSurveillance URC",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # 👈 clé ici
+)
 with st.sidebar:
     st.markdown(
         '<p style="font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;'
