@@ -2831,20 +2831,87 @@ vp.addEventListener('wheel',e=>{{
             {extra_info}
             </div>""", unsafe_allow_html=True)
 
-            bc1, bc2 = st.columns([3, 1])
+            # ── état rename ────────────────────────────────────────────────────
+            _rename_key = f"rename_mode_{s['id']}"
+            if _rename_key not in st.session_state:
+                st.session_state[_rename_key] = False
+    
+            if st.session_state[_rename_key]:
+                with st.container():
+                    st.markdown(
+                        "<div style='background:#fffbeb;border:1.5px solid #fde047;"
+                        "border-radius:8px;padding:10px 14px;margin-bottom:8px'>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**✏️ Renommer le point de prélèvement**")
+                    _all_pt_labels = [p["label"] for p in st.session_state.points]
+                    _new_lbl = st.text_input(
+                        "Nouveau nom",
+                        value=s["label"],
+                        key=f"rename_input_{s['id']}",
+                    )
+                    if _all_pt_labels:
+                        st.caption("Points disponibles : " + " · ".join(_all_pt_labels[:12]))
+                    _rc1, _rc2 = st.columns(2)
+                    with _rc1:
+                        if st.button("✅ Valider", key=f"rename_ok_{s['id']}",
+                                    use_container_width=True):
+                            _stripped = _new_lbl.strip()
+                            if _stripped and _stripped != s["label"]:
+                                if smp:
+                                    smp["label"] = _stripped
+                                    _new_pt = next(
+                                        (p for p in st.session_state.points
+                                        if p.get("label") == _stripped), None
+                                    )
+                                    if _new_pt:
+                                        smp["location_criticality"] = int(
+                                            _new_pt.get("location_criticality", 1))
+                                        smp["room_class"] = _new_pt.get("room_class",
+                                                                        smp.get("room_class", ""))
+                                        smp["type"]       = _new_pt.get("type",
+                                                                        smp.get("type", ""))
+                                        smp["gelose"]     = _new_pt.get("gelose",
+                                                                        smp.get("gelose", ""))
+                                    save_prelevements(st.session_state.prelevements)
+                                s["label"] = _stripped
+                                save_schedules(st.session_state.schedules)
+                                for _pi in st.session_state.pending_identifications:
+                                    if _pi.get("sample_id") == s.get("sample_id"):
+                                        _pi["label"] = _stripped
+                                save_pending_identifications(
+                                    st.session_state.pending_identifications)
+                            st.session_state[_rename_key] = False
+                            st.rerun()
+                    with _rc2:
+                        if st.button("✕ Annuler", key=f"rename_cancel_{s['id']}",
+                                    use_container_width=True):
+                            st.session_state[_rename_key] = False
+                            st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+    
+            bc1, bc2, bc3 = st.columns([3, 1, 1])
             with bc1:
                 if st.button(f"🔬 Traiter cette lecture ({s['when']})",
                             key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
                     st.session_state.current_process = s['id']
                     st.rerun()
             with bc2:
+                if st.button("✏️ Renommer", key=f"{tab_prefix}rename_{s['id']}",
+                            use_container_width=True, help="Changer le nom du point"):
+                    st.session_state[_rename_key] = not st.session_state[_rename_key]
+                    st.rerun()
+            with bc3:
                 if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
                             use_container_width=True):
                     sid = s.get('sample_id')
-                    st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
-                    st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']        != sid]
+                    st.session_state.schedules    = [x for x in st.session_state.schedules
+                                                    if x['sample_id'] != sid]
+                    st.session_state.prelevements = [x for x in st.session_state.prelevements
+                                                    if x['id'] != sid]
                     st.session_state.pending_identifications = [
-                        x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+                        x for x in st.session_state.pending_identifications
+                        if x.get('sample_id') != sid]
                     save_schedules(st.session_state.schedules)
                     save_prelevements(st.session_state.prelevements)
                     save_pending_identifications(st.session_state.pending_identifications)
@@ -2868,6 +2935,48 @@ vp.addEventListener('wheel',e=>{{
             classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
         st.markdown("---")
         
+        # ── Retour J2 (visible si on traite J7) ───────────────────────────
+        if proc["when"] == "J7":
+            st.markdown(
+                "<div style='background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;"
+                "padding:8px 14px;margin-bottom:8px;font-size:.78rem;color:#9a3412'>"
+                "💡 Vous traitez la lecture <b>J7</b>. "
+                "Si besoin, vous pouvez revenir à J2 pour tout reprendre depuis le début."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            if st.button("↩️ Revenir à la lecture J2",
+                         key=f"back_j2_{proc_id}"):
+                # Remettre J2 en pending
+                _j2 = next(
+                    (x for x in st.session_state.schedules
+                     if x["sample_id"] == proc["sample_id"] and x["when"] == "J2"),
+                    None,
+                )
+                if _j2:
+                    _j2["status"] = "pending"
+                # Remettre J7 en pending
+                proc["status"] = "pending"
+                save_schedules(st.session_state.schedules)
+                # Supprimer identifications liées
+                st.session_state.pending_identifications = [
+                    x for x in st.session_state.pending_identifications
+                    if x.get("sample_id") != proc["sample_id"]
+                ]
+                save_pending_identifications(st.session_state.pending_identifications)
+                # Désarchiver si archivé suite à J2 négatif
+                if smp and smp.get("archived"):
+                    smp["archived"] = False
+                    st.session_state.archived_samples = [
+                        x for x in st.session_state.archived_samples
+                        if x.get("id") != smp["id"]
+                    ]
+                    save_archived_samples(st.session_state.archived_samples)
+                    save_prelevements(st.session_state.prelevements)
+                st.session_state.current_process = None
+                st.success("↩️ Retour J2 — J2 et J7 remises en attente.")
+                st.rerun()
+            st.markdown("---")
 
         lc1,lc2=st.columns([2,2])
         with lc1:
@@ -3039,57 +3148,24 @@ vp.addEventListener('wheel',e=>{{
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
 
-    # ── Chargement criticité depuis Supabase (cache 5 min) ────────────────────
-    @st.cache_data(ttl=300)
-    def _load_locations_criticality():
-        """Retourne {id: crit, name: crit} depuis Supabase table 'locations'."""
-        try:
-            res = supabase.table("locations").select("id, name, criticality").execute()
-            mapping = {}
-            for row in (res.data or []):
-                crit = int(row.get("criticality", 1))
-                if row.get("id"):
-                    mapping[row["id"]] = crit
-                if row.get("name"):
-                    mapping[row["name"]] = crit
-            return mapping
-        except Exception:
-            return {}
-
-    if "locations_criticality_map" not in st.session_state:
-        st.session_state.locations_criticality_map = _load_locations_criticality()
-
     def _get_location_criticality(smp: dict) -> int:
-        """
-        Résolution de la criticité dans cet ordre :
-          1. Supabase / paramètres (locations_criticality_map, via id, room, lieu)
-          2. Paramètres session  (st.session_state.locations, si présent)
-          3. Champ stocké dans le prélèvement (location_criticality / criticality)
-          4. Défaut = 1
-        """
-        # 1. Map Supabase
-        loc_map: dict = st.session_state.get("locations_criticality_map", {})
-        for key in (smp.get("location_id"), smp.get("room"), smp.get("lieu")):
-            if key and key in loc_map:
-                return int(loc_map[key])
-
-        # 2. Paramètres session (liste d'objets lieux)
-        for loc in st.session_state.get("locations", []):
-            for key in (smp.get("location_id"), smp.get("room"), smp.get("lieu")):
-                if key and (loc.get("id") == key or loc.get("name") == key):
-                    try:
-                        return int(loc.get("criticality", 1))
-                    except (ValueError, TypeError):
-                        pass
-
-        # 3. Valeur stockée dans le prélèvement
+        label = smp.get("label", "")
+        if label:
+            pt = next(
+                (p for p in st.session_state.points if p.get("label") == label),
+                None,
+            )
+            if pt:
+                try:
+                    return int(pt.get("location_criticality", 1))
+                except (ValueError, TypeError):
+                    pass
         raw = smp.get("location_criticality") or smp.get("criticality")
         if raw is not None:
             try:
                 return int(raw)
             except (ValueError, TypeError):
                 pass
-
         return 1
 
     with tab_ident:
@@ -3293,8 +3369,21 @@ vp.addEventListener('wheel',e=>{{
                 germs_list_key = f"germs_list_{_key}"
                 _lc_override_key = f"lc_override_{_key}"
 
-                # ── Initialise la criticité override depuis Supabase (une seule fois) ──
-                st.session_state[_lc_override_key] = _get_location_criticality(smp) if smp else 1
+                # Toujours recalculer depuis les Points courants (temps réel)
+                _fresh_lc = 1
+                if smp:
+                    _label_smp = smp.get("label", "")
+                    _pt_fr = next(
+                        (p for p in st.session_state.points
+                         if p.get("label") == _label_smp),
+                        None,
+                    )
+                    _fresh_lc = (
+                        int(_pt_fr.get("location_criticality", 1))
+                        if _pt_fr
+                        else _get_location_criticality(smp)
+                    )
+                st.session_state[_lc_override_key] = _fresh_lc
 
                 # loc_crit = valeur courante (override ou Supabase)
                 loc_crit = st.session_state[_lc_override_key]
@@ -3427,159 +3516,219 @@ vp.addEventListener('wheel',e=>{{
                             date_id = st.date_input("Date identification", value=datetime.today(),
                                                     key=f"date_id_{_key}")
 
-                    idc1, idc2, idc3 = st.columns([2, 2, 1])
+                        _when_set = set(pg["when_list"])
+                        _has_j7   = "J7" in _when_set
+                        _back_lbl = (
+                            "↩️ Corriger J7" if _when_set == {"J7"}
+                            else "↩️ Corriger J2" if _when_set == {"J2"}
+                            else "↩️ Corriger lecture"
+                        )
 
-                    with idc1:
-                        if st.button("🔍 Analyser & Enregistrer", use_container_width=True,
-                                     key=f"submit_id_{_key}"):
-                            valid_entries = [
-                                g for g in st.session_state[germs_list_key]
-                                if g["germ"] and g["germ"] != "— Sélectionner un germe —"
-                            ]
-                            if not valid_entries:
-                                st.error("Veuillez sélectionner au moins un germe.")
-                            else:
-                                scored_entries = []
-                                for ve in valid_entries:
-                                    match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
-                                    if match and score_fuzzy > 0.4:
-                                        gs = _get_germ_score(match)
-                                        scored_entries.append({
-                                            "germ_saisi": ve["germ"],
-                                            "germ_match": match["name"],
-                                            "match_score": f"{int(score_fuzzy * 100)}%",
-                                            "ufc": ve["ufc"],
-                                            "germ_score": gs,
-                                            "match_obj": match
-                                        })
+                        idc1, idc2, idc3, idc4 = st.columns([2, 1.5, 1.5, 0.6])
 
-                                if not scored_entries:
-                                    st.warning("⚠️ Aucune correspondance trouvée pour les germes saisis.")
+                        with idc1:
+                            if st.button("🔍 Analyser & Enregistrer",
+                                        use_container_width=True,
+                                        key=f"submit_id_{_key}"):
+                                valid_entries = [
+                                    g for g in st.session_state[germs_list_key]
+                                    if g["germ"] and g["germ"] != "— Sélectionner un germe —"
+                                ]
+                                if not valid_entries:
+                                    st.error("Veuillez sélectionner au moins un germe.")
                                 else:
-                                    worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
-
-                                    # ── Criticité depuis la session (inclut override manuel) ──
-                                    loc_crit = st.session_state[_lc_override_key]
-
-                                    total_sc = loc_crit * worst_entry["germ_score"]
-                                    status, status_lbl, status_col = _evaluate_score(total_sc)
-                                    ufc_total = sum(e["ufc"] for e in scored_entries)
-
-                                    triggered_by = None
-                                    if status in ("alert", "action"):
-                                        triggered_by = (
-                                            f"lieu {loc_crit} × germe {worst_entry['germ_score']}"
-                                            f" ({worst_entry['germ_match']})"
-                                            if loc_crit > 1
-                                            else f"germe {worst_entry['germ_match']}"
-                                                 f" (score {worst_entry['germ_score']})"
-                                        )
-
-                                    germs_detail = [
-                                        {
-                                            "name": e["germ_match"],
-                                            "germ_saisi": e["germ_saisi"],
-                                            "match_score": e["match_score"],
-                                            "ufc": e["ufc"],
-                                            "germ_score": e["germ_score"],
-                                            "is_worst": e["germ_match"] == worst_entry["germ_match"]
-                                        }
-                                        for e in scored_entries
-                                    ]
-
-                                    st.session_state.surveillance.append({
-                                        "date": str(date_id),
-                                        "prelevement": _label,
-                                        "sample_id": _sid,
-                                        "germ_saisi": worst_entry["germ_saisi"],
-                                        "germ_match": worst_entry["germ_match"],
-                                        "match_score": worst_entry["match_score"],
-                                        "ufc": worst_entry["ufc"],
-                                        "ufc_total": ufc_total,
-                                        "germ_score": worst_entry["germ_score"],
-                                        "germs_detail": germs_detail,
-                                        "multi_germ": len(scored_entries) > 1,
-                                        "location_criticality": loc_crit,
-                                        "total_score": total_sc,
-                                        "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                        "room_class": pt_class,
-                                        "alert_threshold": "Score ≥ 24",
-                                        "action_threshold": "Score > 36",
-                                        "triggered_by": triggered_by,
-                                        "status": status,
-                                        "operateur": pt_oper,
-                                        "remarque": remarque,
-                                        "readings": _when_str
-                                    })
-                                    save_surveillance(st.session_state.surveillance)
-
-                                    for _ri in real_indices:
-                                        st.session_state.pending_identifications[_ri]['status'] = 'done'
-
-                                    if smp and not smp.get('archived'):
-                                        smp['archived'] = True
-                                        st.session_state.archived_samples.append(smp)
-                                        save_archived_samples(st.session_state.archived_samples)
-                                        save_prelevements(st.session_state.prelevements)
-
-                                    del st.session_state[germs_list_key]
-                                    del st.session_state[_lc_override_key]  # reset override après save
-
-                                    if status in ("alert", "action"):
-                                        st.session_state["_show_mesures_popup"] = {
-                                            "status": status,
-                                            "germ": worst_entry["germ_match"],
-                                            "ufc": worst_entry["ufc"],
-                                            "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                            "label": _label,
-                                            "room_class": pt_class,
-                                            "triggered_by": triggered_by,
-                                            "germ_score": worst_entry["germ_score"],
-                                            "loc_criticality": loc_crit,
-                                            "total_score": total_sc,
-                                            "th_germe": {"alert": "Score ≥ 24", "action": "Score > 36"},
-                                            "germs_detail": germs_detail
-                                        }
+                                    scored_entries = []
+                                    for ve in valid_entries:
+                                        match, score_fuzzy = find_germ_match(ve["germ"],
+                                                                            st.session_state.germs)
+                                        if match and score_fuzzy > 0.4:
+                                            gs = _get_germ_score(match)
+                                            scored_entries.append({
+                                                "germ_saisi":  ve["germ"],
+                                                "germ_match":  match["name"],
+                                                "match_score": f"{int(score_fuzzy * 100)}%",
+                                                "ufc":         ve["ufc"],
+                                                "germ_score":  gs,
+                                                "match_obj":   match,
+                                            })
+                                    if not scored_entries:
+                                        st.warning("⚠️ Aucune correspondance trouvée.")
                                     else:
-                                        germs_summary = ", ".join(
-                                            f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
-                                        st.success(
-                                            f"✅ {germs_summary} — **Conforme** (score {total_sc} = "
-                                            f"lieu {loc_crit} × germe le + critique {worst_entry['germ_score']})"
-                                            f" | UFC total : **{ufc_total}**")
+                                        worst_entry = max(scored_entries,
+                                                        key=lambda x: x["germ_score"])
+                                        loc_crit = st.session_state[_lc_override_key]
+                                        total_sc = loc_crit * worst_entry["germ_score"]
+                                        status, status_lbl, status_col = _evaluate_score(total_sc)
+                                        ufc_total = sum(e["ufc"] for e in scored_entries)
+                                        triggered_by = None
+                                        if status in ("alert", "action"):
+                                            triggered_by = (
+                                                f"lieu {loc_crit} × germe "
+                                                f"{worst_entry['germ_score']} "
+                                                f"({worst_entry['germ_match']})"
+                                                if loc_crit > 1
+                                                else f"germe {worst_entry['germ_match']} "
+                                                    f"(score {worst_entry['germ_score']})"
+                                            )
+                                        germs_detail = [
+                                            {
+                                                "name":       e["germ_match"],
+                                                "germ_saisi": e["germ_saisi"],
+                                                "match_score":e["match_score"],
+                                                "ufc":        e["ufc"],
+                                                "germ_score": e["germ_score"],
+                                                "is_worst":   e["germ_match"] == worst_entry["germ_match"],
+                                            }
+                                            for e in scored_entries
+                                        ]
+                                        st.session_state.surveillance.append({
+                                            "date":                 str(date_id),
+                                            "prelevement":          _label,
+                                            "sample_id":            _sid,
+                                            "germ_saisi":           worst_entry["germ_saisi"],
+                                            "germ_match":           worst_entry["germ_match"],
+                                            "match_score":          worst_entry["match_score"],
+                                            "ufc":                  worst_entry["ufc"],
+                                            "ufc_total":            ufc_total,
+                                            "germ_score":           worst_entry["germ_score"],
+                                            "germs_detail":         germs_detail,
+                                            "multi_germ":           len(scored_entries) > 1,
+                                            "location_criticality": loc_crit,
+                                            "total_score":          total_sc,
+                                            "risk":                 worst_entry["match_obj"].get(
+                                                                        "risk", worst_entry["germ_score"]),
+                                            "room_class":           pt_class,
+                                            "alert_threshold":      "Score ≥ 24",
+                                            "action_threshold":     "Score > 36",
+                                            "triggered_by":         triggered_by,
+                                            "status":               status,
+                                            "operateur":            pt_oper,
+                                            "remarque":             remarque,
+                                            "readings":             _when_str,
+                                        })
+                                        save_surveillance(st.session_state.surveillance)
+                                        for _ri in real_indices:
+                                            st.session_state.pending_identifications[_ri]["status"] = "done"
+                                        if smp and not smp.get("archived"):
+                                            smp["archived"] = True
+                                            st.session_state.archived_samples.append(smp)
+                                            save_archived_samples(st.session_state.archived_samples)
+                                            save_prelevements(st.session_state.prelevements)
+                                        del st.session_state[germs_list_key]
+                                        del st.session_state[_lc_override_key]
+                                        if status in ("alert", "action"):
+                                            st.session_state["_show_mesures_popup"] = {
+                                                "status":        status,
+                                                "germ":          worst_entry["germ_match"],
+                                                "ufc":           worst_entry["ufc"],
+                                                "risk":          worst_entry["match_obj"].get(
+                                                                    "risk", worst_entry["germ_score"]),
+                                                "label":         _label,
+                                                "room_class":    pt_class,
+                                                "triggered_by":  triggered_by,
+                                                "germ_score":    worst_entry["germ_score"],
+                                                "loc_criticality": loc_crit,
+                                                "total_score":   total_sc,
+                                                "th_germe":      {"alert": "Score ≥ 24",
+                                                                "action": "Score > 36"},
+                                                "germs_detail":  germs_detail,
+                                            }
+                                        else:
+                                            germs_summary = ", ".join(
+                                                f"{e['name']} ({e['ufc']} UFC)"
+                                                for e in germs_detail)
+                                            st.success(
+                                                f"✅ {germs_summary} — **Conforme** "
+                                                f"(score {total_sc} = lieu {loc_crit} × "
+                                                f"germe le + critique {worst_entry['germ_score']})"
+                                                f" | UFC total : **{ufc_total}**")
+                                        st.rerun()
 
+                        with idc2:
+                            if st.button(_back_lbl, use_container_width=True,
+                                        key=f"cancel_id_{_key}"):
+                                for _e in _entries:
+                                    sch = next(
+                                        (x for x in st.session_state.schedules
+                                        if x["sample_id"] == _sid
+                                        and x["when"] == _e["when"]
+                                        and x["status"] == "done"),
+                                        None,
+                                    )
+                                    if sch:
+                                        sch["status"] = "pending"
+                                save_schedules(st.session_state.schedules)
+                                for _ri in sorted(real_indices, reverse=True):
+                                    st.session_state.pending_identifications.pop(_ri)
+                                save_pending_identifications(
+                                    st.session_state.pending_identifications)
+                                if germs_list_key in st.session_state:
+                                    del st.session_state[germs_list_key]
+                                if _lc_override_key in st.session_state:
+                                    del st.session_state[_lc_override_key]
+                                st.rerun()
+
+                        with idc3:
+                            # Visible si identification vient de J7 (ou J2+J7)
+                            # Permet de remonter complètement à J2
+                            if _has_j7:
+                                if st.button("↩️ Revenir à J2",
+                                            use_container_width=True,
+                                            key=f"back_j2_id_{_key}"):
+                                    _j2_back = next(
+                                        (x for x in st.session_state.schedules
+                                        if x["sample_id"] == _sid and x["when"] == "J2"),
+                                        None,
+                                    )
+                                    if _j2_back:
+                                        _j2_back["status"] = "pending"
+                                    _j7_back = next(
+                                        (x for x in st.session_state.schedules
+                                        if x["sample_id"] == _sid and x["when"] == "J7"),
+                                        None,
+                                    )
+                                    if _j7_back:
+                                        _j7_back["status"] = "pending"
+                                    save_schedules(st.session_state.schedules)
+                                    st.session_state.pending_identifications = [
+                                        x for x in st.session_state.pending_identifications
+                                        if x.get("sample_id") != _sid
+                                    ]
+                                    save_pending_identifications(
+                                        st.session_state.pending_identifications)
+                                    _smp_b = next(
+                                        (p for p in st.session_state.prelevements
+                                        if p["id"] == _sid),
+                                        None,
+                                    )
+                                    if _smp_b and _smp_b.get("archived"):
+                                        _smp_b["archived"] = False
+                                        st.session_state.archived_samples = [
+                                            x for x in st.session_state.archived_samples
+                                            if x.get("id") != _sid
+                                        ]
+                                        save_archived_samples(
+                                            st.session_state.archived_samples)
+                                        save_prelevements(st.session_state.prelevements)
+                                    if germs_list_key in st.session_state:
+                                        del st.session_state[germs_list_key]
+                                    if _lc_override_key in st.session_state:
+                                        del st.session_state[_lc_override_key]
+                                    st.success("↩️ J2 et J7 remises en attente.")
                                     st.rerun()
 
-                    with idc2:
-                        if st.button("↩️ Corriger la lecture", use_container_width=True,
-                                     key=f"cancel_id_{_key}"):
-                            for _e in _entries:
-                                sch = next(
-                                    (x for x in st.session_state.schedules
-                                     if x['sample_id'] == _sid and x['when'] == _e['when']
-                                     and x['status'] == 'done'), None)
-                                if sch:
-                                    sch['status'] = 'pending'
-                            save_schedules(st.session_state.schedules)
-                            for _ri in sorted(real_indices, reverse=True):
-                                st.session_state.pending_identifications.pop(_ri)
-                            save_pending_identifications(st.session_state.pending_identifications)
-                            if germs_list_key in st.session_state:
-                                del st.session_state[germs_list_key]
-                            if _lc_override_key in st.session_state:
-                                del st.session_state[_lc_override_key]  # reset override si annulation
-                            st.rerun()
-
-                    with idc3:
-                        if st.button("🗑️", use_container_width=True, key=f"del_id_{_key}"):
-                            for _ri in sorted(real_indices, reverse=True):
-                                st.session_state.pending_identifications.pop(_ri)
-                            save_pending_identifications(st.session_state.pending_identifications)
-                            if germs_list_key in st.session_state:
-                                del st.session_state[germs_list_key]
-                            if _lc_override_key in st.session_state:
-                                del st.session_state[_lc_override_key]  # reset override si suppression
-                            st.rerun()
+                        with idc4:
+                            if st.button("🗑️", use_container_width=True,
+                                        key=f"del_id_{_key}"):
+                                for _ri in sorted(real_indices, reverse=True):
+                                    st.session_state.pending_identifications.pop(_ri)
+                                save_pending_identifications(
+                                    st.session_state.pending_identifications)
+                                if germs_list_key in st.session_state:
+                                    del st.session_state[germs_list_key]
+                                if _lc_override_key in st.session_state:
+                                    del st.session_state[_lc_override_key]
+                                st.rerun()
 
         # ── Derniers résultats ────────────────────────────────────────────────
         if st.session_state.surveillance:
