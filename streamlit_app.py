@@ -2987,59 +2987,6 @@ vp.addEventListener('wheel',e=>{{
             else:
                 ncol=0
 
-        # ── Module gélose (proposé dans les deux cas) ─────────────────────────
-        with st.expander(
-            "📷 Aide au comptage par webcam (optionnel — colonies ET vérification négative)",
-            expanded=False):
-            st.markdown(
-                "<div style='background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;"
-                "padding:8px 12px;font-size:.75rem;color:#92400e;margin-bottom:8px'>"
-                "⚠️ Module d'aide indicative. Le résultat saisi ci-dessus fait foi. "
-                "En cas de gélose négative, utilisez ce module pour confirmer l'absence de colonie.</div>",
-                unsafe_allow_html=True)
-            st.components.v1.html(GELOSE_MODULE_HTML, height=660, scrolling=False)
-
-        vc1,vc2=st.columns(2)
-        with vc1:
-            if st.button("✅ Valider la lecture", use_container_width=True, key=f"submit_proc_{proc_id}"):
-                proc['status']='done'
-                save_schedules(st.session_state.schedules)
-                if "Négatif" in res:
-                    j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7' and x['status']=='pending'), None)
-                    if proc['when']=='J7' or (proc['when']=='J2' and not j7_sch):
-                        if smp:
-                            smp['archived']=True
-                            st.session_state.archived_samples.append(smp)
-                            save_archived_samples(st.session_state.archived_samples)
-                            save_prelevements(st.session_state.prelevements)
-                        st.success("✅ Lecture négative — prélèvement archivé.")
-                    else:
-                        st.success(f"✅ J2 négative — en attente J7 ({j7_sch['due_date'][:10] if j7_sch else '?'}).")
-                    st.session_state.surveillance.append({
-                        "date":str(today),"prelevement":proc['label'],"sample_id":proc.get('sample_id',''),
-                        "germ_saisi":"","germ_match":"Négatif","match_score":"—","ufc":0,"germ_score":0,
-                        "location_criticality":loc_crit,"total_score":0,"risk":0,
-                        "room_class":smp.get('room_class','') if smp else '',
-                        "alert_threshold":"Score ≥ 24","action_threshold":"Score > 36",
-                        "triggered_by":None,"status":"ok","operateur":pt_oper,
-                        "remarque":f"Lecture {proc['when']} négative"})
-                    save_surveillance(st.session_state.surveillance)
-                else:
-                    st.session_state.pending_identifications.append({
-                        "sample_id":proc['sample_id'],"label":proc['label'],
-                        "when":proc['when'],"colonies":int(ncol),"date":str(today),"status":"pending"})
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    if proc['when']=='J2':
-                        j7_sch=next((x for x in st.session_state.schedules if x['sample_id']==proc['sample_id'] and x['when']=='J7'), None)
-                        if j7_sch: j7_sch['status']='skipped'; save_schedules(st.session_state.schedules)
-                        st.success(f"🔴 J2 positive ({ncol} UFC) — identification requise.")
-                    else:
-                        st.success(f"🔴 J7 positive ({ncol} UFC) — identification requise.")
-                st.session_state.current_process=None; st.rerun()
-        with vc2:
-            if st.button("↩️ Annuler / Retour", use_container_width=True, key=f"cancel_proc_{proc_id}"):
-                st.session_state.current_process=None; st.rerun()
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
     # ══════════════════════════════════════════════════════════════════════════
@@ -3087,8 +3034,7 @@ vp.addEventListener('wheel',e=>{{
                     _render_traitement_lecture(st.session_state.current_process)
                     st.markdown("</div>", unsafe_allow_html=True)
 
-        
-    # ══════════════════════════════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
     with tab_j7:
@@ -3383,10 +3329,8 @@ vp.addEventListener('wheel',e=>{{
                         if _pt_fr
                         else _get_location_criticality(smp)
                     )
-                st.session_state[_lc_override_key] = _fresh_lc
-
-                # loc_crit = valeur courante (override ou Supabase)
-                loc_crit = st.session_state[_lc_override_key]
+                
+                loc_crit = _fresh_lc
 
                 real_indices = [
                     st.session_state.pending_identifications.index(e)
@@ -3398,29 +3342,15 @@ vp.addEventListener('wheel',e=>{{
 
                 with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
 
-                    # ── Bandeau criticité + selectbox de surcharge ────────────
-                    _bc1, _bc2 = st.columns([4, 1])
-                    with _bc2:
-                        _lc_index = max(0, min(int(loc_crit or 1) - 1, len(LOC_CRIT_OPTS) - 1))
-                        _new_lc_label = st.selectbox(
-                            "✏️ Criticité lieu",
-                            LOC_CRIT_OPTS,
-                            index=_lc_index,
-                            key=f"lc_sel_{_key}",
-                            help="Modifier manuellement la criticité du lieu pour ce calcul")
-                        loc_crit = int(_new_lc_label[0])
-                        st.session_state[_lc_override_key] = loc_crit
-
                     _lc_col = LOC_CRIT_COLORS.get(str(loc_crit), "#94a3b8")
                     _lc_lbl = LOC_CRIT_LABELS.get(str(loc_crit), "?")
 
-                    with _bc1:
-                        st.markdown(
-                            f"<div style='background:{_lc_col}11;border:1px solid {_lc_col}44;border-radius:8px;"
-                            f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{_lc_col}'>"
-                            f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_lc_lbl}"
-                            f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
-                            unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:{_lc_col}11;border:1px solid {_lc_col}44;border-radius:8px;"
+                        f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{_lc_col}'>"
+                        f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_lc_lbl}"
+                        f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
+                        unsafe_allow_html=True)
 
                     if len(_entries) > 1:
                         _ufc_detail = "  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
@@ -3556,7 +3486,7 @@ vp.addEventListener('wheel',e=>{{
                                     else:
                                         worst_entry = max(scored_entries,
                                                         key=lambda x: x["germ_score"])
-                                        loc_crit = st.session_state[_lc_override_key]
+                                        loc_crit = _fresh_lc
                                         total_sc = loc_crit * worst_entry["germ_score"]
                                         status, status_lbl, status_col = _evaluate_score(total_sc)
                                         ufc_total = sum(e["ufc"] for e in scored_entries)
