@@ -3892,6 +3892,7 @@ if active == "planning":
                 week_monday + timedelta(days=i)
                 for i in range(5)
                 if (week_monday + timedelta(days=i)) not in holidays_set
+                and (week_monday + timedelta(days=i)).month == month  #
             ]
             if not wd_week:
                 continue
@@ -3918,7 +3919,7 @@ if active == "planning":
                     default_by_class = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
                     alloc       = default_by_class.get(rc[:1] if rc else '', 2)
                     max_per_day = 1
-                elif '/ jour' in freq_unit:
+                elif 'mois' in freq_unit.lower().replace(' ', ''):
                     alloc       = int(freq_val) * nb_wd
                     max_per_day = int(freq_val)
                 elif '/ semaine' in freq_unit:
