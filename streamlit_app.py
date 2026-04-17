@@ -3892,7 +3892,7 @@ if active == "planning":
                 week_monday + timedelta(days=i)
                 for i in range(5)
                 if (week_monday + timedelta(days=i)) not in holidays_set
-                and (week_monday + timedelta(days=i)).month == month  #
+                and (week_monday + timedelta(days=i)).month == month  # ← ici seulement
             ]
             if not wd_week:
                 continue
@@ -3989,9 +3989,8 @@ if active == "planning":
             week_monday + timedelta(days=i)
             for i in range(5)
             if (week_monday + timedelta(days=i)) not in holidays_set
-            and (week_monday + timedelta(days=i)).month == month  # ← AJOUT
+            # pas de filtre month ici
         ]
-        
         for day in wd_week:
             skipped_labels = planning_skips.get(day.isoformat(), [])
             if not skipped_labels:
