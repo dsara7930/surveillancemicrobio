@@ -12,6 +12,7 @@ import qrcode.image.pil
 from io import BytesIO
 from datetime import date, datetime, timedelta
 import streamlit.components.v1 as components
+import uuid
 
 # ── Gestion accès protégé ──────────────────────────────────────────────────────
 if "access_mode" not in st.session_state:
