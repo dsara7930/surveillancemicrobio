@@ -2935,16 +2935,8 @@ vp.addEventListener('wheel',e=>{{
             iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
             classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
         st.markdown("---")
-        
 
-        lc1,lc2=st.columns([2,2])
-        with lc1:
-            res=st.radio("Résultat",["✅ Négatif (0 colonie)","🔴 Positif (colonies détectées)"],index=0,key=f"res_{proc_id}")
-        with lc2:
-            if "Positif" in res:
-                ncol=st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
-            else:
-                ncol=0
+        # ── SUPPRIMÉ : le bloc lc1/lc2 en double qui était ici ──────────────────
 
         # ── Retour J2 (visible si on traite J7) ──────────────────────────────────
         if proc["when"] == "J7":
@@ -3022,7 +3014,6 @@ vp.addEventListener('wheel',e=>{{
                     save_pending_identifications(st.session_state.pending_identifications)
                     st.success(f"🔴 Positif — {ncol} UFC · identification en attente.")
                 else:
-                    # Négatif J7 → archiver le prélèvement (fin de cycle)
                     if proc["when"] == "J7" and smp and not smp.get("archived"):
                         smp["archived"] = True
                         st.session_state.archived_samples.append(smp)
@@ -3037,7 +3028,6 @@ vp.addEventListener('wheel',e=>{{
             if st.button("✕ Annuler", use_container_width=True, key=f"cancel_{proc_id}"):
                 st.session_state.current_process = None
                 st.rerun()
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
     # ══════════════════════════════════════════════════════════════════════════
