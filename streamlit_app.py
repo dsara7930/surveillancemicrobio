@@ -2072,7 +2072,6 @@ renderList();
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE — réécrit complet
 # Nouveau prélèvement unifié (manuel + scan QR en toggle)
-# Module gélose positive (OpenCV webcam) intégré dans _render_traitement_lecture
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "surveillance":
@@ -2567,20 +2566,39 @@ vp.addEventListener('wheel',e=>{{
                             with st.container():
                                 st.markdown("<div style='background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:12px'>", unsafe_allow_html=True)
                                 st.markdown(f"**✏️ Modifier — {samp['label']}**")
-                                
-                                # ── Nouveau : modification du point de prélèvement ──────────
-                                pt_names = sorted([p['name'] for p in st.session_state.get('points_prelevement', [])])
-                                if pt_names:
-                                    current_label = samp.get("label", "")
-                                    pt_options = pt_names if current_label in pt_names else [current_label] + pt_names
-                                    new_label = st.selectbox(
-                                        "📍 Point de prélèvement",
-                                        pt_options,
-                                        index=pt_options.index(current_label) if current_label in pt_options else 0,
-                                        key=f"edit_label_{samp['id']}")
+
+                                # ── Point de prélèvement — liste depuis st.session_state.points ──
+                                _pt_labels = [p['label'] for p in st.session_state.points]
+                                _cur_label = samp.get("label", "")
+                                # Si le label actuel n'est plus dans la liste, on l'ajoute en tête
+                                _pt_options = _pt_labels if _cur_label in _pt_labels else [_cur_label] + _pt_labels
+                                _pt_idx = _pt_options.index(_cur_label) if _cur_label in _pt_options else 0
+                                new_label = st.selectbox(
+                                    "📍 Point de prélèvement",
+                                    _pt_options,
+                                    index=_pt_idx,
+                                    key=f"edit_label_{samp['id']}")
+
+                                # ── Si le point change, on met à jour automatiquement room_class et criticité ──
+                                _matched_pt = next((p for p in st.session_state.points if p['label'] == new_label), None)
+                                if _matched_pt:
+                                    _auto_room  = _matched_pt.get('room_class', samp.get('room_class', ''))
+                                    _auto_lc    = _matched_pt.get('location_criticality', samp.get('location_criticality', 1))
+                                    _auto_gelose= _matched_pt.get('gelose', samp.get('gelose', ''))
                                 else:
-                                    new_label = st.text_input("📍 Point de prélèvement", value=samp.get("label", ""), key=f"edit_label_{samp['id']}")
-                                # ────────────────────────────────────────────────────────────
+                                    _auto_room   = samp.get('room_class', '')
+                                    _auto_lc     = samp.get('location_criticality', 1)
+                                    _auto_gelose = samp.get('gelose', '')
+
+                                if new_label != _cur_label:
+                                    st.markdown(
+                                        f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
+                                        f"padding:7px 12px;font-size:.75rem;color:#166534;margin-bottom:6px'>"
+                                        f"↪️ Classe <strong>{_auto_room or '—'}</strong> · "
+                                        f"Criticité <strong>Nv.{_auto_lc}</strong> · "
+                                        f"Gélose <strong>{_auto_gelose or '—'}</strong> repris automatiquement</div>",
+                                        unsafe_allow_html=True)
+                                # ─────────────────────────────────────────────────────────────────────
 
                                 e_col1, e_col2 = st.columns(2)
                                 with e_col1:
@@ -2597,28 +2615,32 @@ vp.addEventListener('wheel',e=>{{
                                     except: current_date = datetime.today().date()
                                     new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
                                 with e_col2:
-                                    new_gelose      = st.text_input("Gélose", value=samp.get("gelose",""), key=f"edit_gelose_{samp['id']}")
+                                    new_gelose      = st.text_input("Gélose", value=_auto_gelose, key=f"edit_gelose_{samp['id']}")
                                     new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
                                     new_isolateur=""; new_poste="Poste 1"
-                                    if str(samp.get("room_class","")).strip().upper()=="A":
+                                    if str(_auto_room).strip().upper()=="A":
                                         new_isolateur = st.text_input("Isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
                                         new_poste = st.radio("Poste",["Poste 1","Poste 2","Commun"],
                                             index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1")) if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
                                             horizontal=True, key=f"edit_poste_{samp['id']}")
+
                                 new_j2=next_working_day_offset(new_date,2); new_j7=next_working_day_offset(new_date,5)
                                 if new_date!=current_date:
                                     st.markdown(f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
+
                                 btn_c1,btn_c2=st.columns(2)
                                 with btn_c1:
                                     if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
-                                        st.session_state.prelevements[idx]["label"]=new_label          # ← nouveau
-                                        st.session_state.prelevements[idx]["operateur"]=new_oper
-                                        st.session_state.prelevements[idx]["date"]=str(new_date)
-                                        st.session_state.prelevements[idx]["gelose"]=new_gelose
-                                        st.session_state.prelevements[idx]["commentaire"]=new_commentaire
-                                        if str(samp.get("room_class","")).strip().upper()=="A":
-                                            st.session_state.prelevements[idx]["num_isolateur"]=new_isolateur
-                                            st.session_state.prelevements[idx]["poste"]=new_poste
+                                        st.session_state.prelevements[idx]["label"]                = new_label
+                                        st.session_state.prelevements[idx]["operateur"]            = new_oper
+                                        st.session_state.prelevements[idx]["date"]                 = str(new_date)
+                                        st.session_state.prelevements[idx]["gelose"]               = new_gelose
+                                        st.session_state.prelevements[idx]["commentaire"]          = new_commentaire
+                                        st.session_state.prelevements[idx]["room_class"]           = _auto_room   # ← sync
+                                        st.session_state.prelevements[idx]["location_criticality"] = _auto_lc     # ← sync
+                                        if str(_auto_room).strip().upper()=="A":
+                                            st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
+                                            st.session_state.prelevements[idx]["poste"]         = new_poste
                                         if new_date!=current_date:
                                             for sch in st.session_state.schedules:
                                                 if sch["sample_id"]==samp["id"]:
@@ -2744,428 +2766,7 @@ vp.addEventListener('wheel',e=>{{
                         _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
                     st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HELPERS PARTAGÉS J2/J7
-    # ══════════════════════════════════════════════════════════════════════════
-
-    # ── Module gélose positive (OpenCV webcam) ────────────────────────────────
-    GELOSE_MODULE_HTML = """
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
-.wrap{padding:.75rem;max-width:680px}
-.step-bar{display:flex;gap:6px;margin-bottom:.75rem}
-.step{flex:1;padding:6px;border-radius:6px;font-size:11px;font-weight:600;text-align:center;background:#f1f5f9;color:#94a3b8;border:1px solid #e2e8f0}
-.step.active{background:#eff6ff;color:#1e40af;border-color:#93c5fd}
-.step.done{background:#f0fdf4;color:#166534;border-color:#86efac}
-.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:.75rem 1rem;margin-bottom:.75rem}
-.card-lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;font-weight:600}
-.cam-box{background:#0a0a0a;border-radius:8px;overflow:hidden;position:relative;aspect-ratio:4/3;max-height:260px}
-video{width:100%;height:100%;object-fit:cover;display:block}
-.cam-guide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-.cam-circle{width:200px;height:200px;border-radius:50%;border:2px solid rgba(255,255,255,.55);box-shadow:0 0 0 1000px rgba(0,0,0,.38)}
-.cam-hint{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:rgba(255,255,255,.8);font-weight:600}
-.btn-row{display:flex;gap:6px;margin-top:.5rem;flex-wrap:wrap}
-button{padding:7px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#1e293b;transition:opacity .15s}
-button:hover{background:#f8fafc}
-button:disabled{opacity:.4;cursor:default}
-.btn-blue{background:#185FA5;color:#fff;border-color:#185FA5}
-.btn-blue:hover{opacity:.85;background:#185FA5}
-canvas{display:block;width:100%}
-.slider-row{display:flex;align-items:center;gap:8px;margin:.4rem 0}
-.slider-row label{font-size:11px;color:#64748b;min-width:130px}
-.slider-row input[type=range]{flex:1}
-.slider-row span{font-size:12px;font-weight:600;min-width:36px;text-align:right}
-.ufc-big{font-size:38px;font-weight:700;color:#0f172a;line-height:1}
-.char-grid{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.5rem}
-.char-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;color:#475569}
-.char-btn.sel{background:#eff6ff;color:#1e40af;border-color:#93c5fd}
-.hint-list{display:flex;flex-direction:column;gap:5px}
-.hint-item{background:#f8fafc;border-radius:6px;padding:7px 10px;border-left:3px solid #888}
-.hint-item.r3{border-left-color:#E24B4A}
-.hint-item.r2{border-left-color:#EF9F27}
-.hint-item.r1{border-left-color:#639922}
-.hint-name{font-size:12px;font-weight:600;color:#0f172a}
-.hint-desc{font-size:11px;color:#64748b;margin-top:2px}
-.hint-prob{font-size:10px;font-weight:600;margin-top:3px}
-.hint-prob.r3{color:#A32D2D}.hint-prob.r2{color:#854F0B}.hint-prob.r1{color:#3B6D11}
-.disclaim{background:#FAEEDA;border:1px solid #FAC775;border-radius:6px;padding:8px 10px;font-size:10px;color:#633806;line-height:1.5;margin-top:.5rem}
-.confirm-row{display:flex;align-items:center;gap:8px;margin-top:.75rem;flex-wrap:wrap}
-.confirm-row label{font-size:12px;color:#64748b}
-.confirm-row input{width:80px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;font-weight:700}
-.debug-row{font-size:10px;color:#94a3b8;margin-top:4px}
-</style>
-<div class="wrap">
-<div class="step-bar">
-  <div class="step active" id="s1">1 · Capture</div>
-  <div class="step" id="s2">2 · Analyse</div>
-  <div class="step" id="s3">3 · Orientation</div>
-</div>
-
-<div class="card" id="card-cam">
-  <div class="card-lbl">Placez la gélose sous la webcam — centrez dans le cercle</div>
-  <div class="cam-box">
-    <video id="vid" autoplay muted playsinline></video>
-    <div class="cam-guide"><div class="cam-circle"></div></div>
-    <div class="cam-hint" id="cam-hint">Caméra non démarrée</div>
-  </div>
-  <div class="btn-row">
-    <button class="btn-blue" onclick="startCam()">Démarrer la caméra</button>
-    <button id="btn-snap" onclick="snap()" disabled>Capturer</button>
-  </div>
-</div>
-
-<div class="card" id="card-analysis" style="display:none">
-  <div class="card-lbl">Colonies détectées (cercles bleus) — ajustez si nécessaire</div>
-  <div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:.5rem">
-    <canvas id="cv-out"></canvas>
-  </div>
-  <div class="slider-row"><label>Contraste seuil</label><input type="range" min="2" max="80" value="25" step="1" id="sl-t" oninput="reanalyze()"><span id="sv-t">25</span></div>
-  <div class="slider-row"><label>Taille min (px radius)</label><input type="range" min="2" max="30" value="5" step="1" id="sl-mn" oninput="reanalyze()"><span id="sv-mn">5</span></div>
-  <div class="slider-row"><label>Taille max (px radius)</label><input type="range" min="15" max="120" value="55" step="1" id="sl-mx" oninput="reanalyze()"><span id="sv-mx">55</span></div>
-  <div class="slider-row"><label>Rondeur min (0–1)</label><input type="range" min="0.3" max="1.0" value="0.62" step="0.02" id="sl-circ" oninput="reanalyze()"><span id="sv-circ">0.62</span></div>
-  <div class="slider-row"><label>Ratio aspect min</label><input type="range" min="0.3" max="1.0" value="0.55" step="0.05" id="sl-asp" oninput="reanalyze()"><span id="sv-asp">0.55</span></div>
-  <div style="margin:.5rem 0"><span class="ufc-big" id="ufc-count">—</span> <span style="font-size:13px;color:#64748b">colonies détectées</span></div>
-  <div class="debug-row" id="debug-info"></div>
-  <div class="btn-row">
-    <button class="btn-blue" onclick="goStep3()">Utiliser ce comptage</button>
-    <button onclick="resetCam()">Reprendre</button>
-  </div>
-</div>
-
-<div class="card" id="card-hints" style="display:none">
-  <div class="card-lbl">Caractéristiques observées — sélectionnez ce qui correspond</div>
-  <div class="char-grid" id="char-btns"></div>
-  <div id="hint-results" style="display:none;margin-bottom:.5rem">
-    <div style="font-size:10px;color:#94a3b8;margin-bottom:5px;font-weight:600">HYPOTHÈSES INDICATIVES (confirmation microbiologie requise)</div>
-    <div class="hint-list" id="hint-list"></div>
-    <div class="disclaim">Information indicative uniquement. L'identification définitive est réalisée par la microbiologie via l'onglet "Identifications en attente".</div>
-  </div>
-  <div class="confirm-row">
-    <label>UFC à transmettre :</label>
-    <input type="number" id="ufc-final" min="0" value="0">
-    <button class="btn-blue" onclick="transmit()">Transmettre</button>
-    <button onclick="resetAll()">Nouvelle analyse</button>
-  </div>
-</div>
-
-<div class="card" id="card-done" style="display:none">
-  <div style="text-align:center;padding:.5rem 0">
-    <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:4px">Transmis vers identifications en attente</div>
-    <div style="font-size:12px;color:#64748b" id="done-txt"></div>
-    <div style="margin-top:.75rem"><button onclick="resetAll()">Nouvelle analyse</button></div>
-  </div>
-</div>
-</div>
-
-<script>
-const GERMS=[
-  {n:'Staphylococcus aureus',c:['jaune','doré','orangé','convexe','opaque','1-2mm'],r:3,d:'Colonie jaune-dorée, convexe, opaque, 1-2mm'},
-  {n:'Staphylococcus epidermidis',c:['blanc','gris','petite','convexe'],r:2,d:'Colonie blanche-grisâtre, petite, convexe'},
-  {n:'Micrococcus luteus',c:['jaune','citron','vif','lisse','1-3mm'],r:1,d:'Colonie jaune citron, circulaire, lisse'},
-  {n:'Bacillus sp.',c:['grande','rugueuse','cireuse','mate','irrégulière','crème'],r:2,d:'Grande colonie mate, rugueuse, bords irréguliers'},
-  {n:'Aspergillus sp.',c:['filamenteuse','verte','noire','poudreuse','moisissure'],r:3,d:'Colonie filamenteuse, verte à noire, poudreuse'},
-  {n:'Candida sp.',c:['levure','crème','brillante','lisse','2-4mm'],r:2,d:'Colonie crème, brillante, lisse'},
-  {n:'Pseudomonas aeruginosa',c:['verte','bleu-vert','fluorescente','plate','irrégulière'],r:3,d:'Colonie verte-bleutée, plate, bords irréguliers'},
-  {n:'Enterococcus sp.',c:['grise','petite','alpha','0.5-1mm'],r:2,d:'Petite colonie grise à blanche, 0.5-1mm'},
-];
-const CHARS=[
-  {id:'jaune',l:'Jaune / doré'},{id:'blanc',l:'Blanc / crème'},{id:'verte',l:'Vert'},
-  {id:'gris',l:'Gris'},{id:'orange',l:'Orange'},{id:'noir',l:'Noir'},
-  {id:'convexe',l:'Convexe'},{id:'plate',l:'Plate'},{id:'rugueuse',l:'Rugueuse'},
-  {id:'lisse',l:'Lisse'},{id:'brillante',l:'Brillante'},{id:'mate',l:'Mate'},
-  {id:'petite',l:'Petite (<1mm)'},{id:'grande',l:'Grande (>3mm)'},{id:'irrégulière',l:'Bords irréguliers'},
-  {id:'filamenteuse',l:'Filamenteuse'},{id:'poudreuse',l:'Poudreuse'},{id:'levure',l:'Levure'},
-];
-let sel=new Set(),stream=null,imgData=null,ufcVal=0;
-
-function step(n){
-  ['s1','s2','s3'].forEach((id,i)=>{
-    const el=document.getElementById(id);
-    el.className='step'+(i+1<n?' done':i+1===n?' active':'');
-  });
-}
-
-function startCam(){
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})
-    .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
-      document.getElementById('cam-hint').textContent='Caméra active — centrez la gélose';
-      document.getElementById('btn-snap').disabled=false;})
-    .catch(()=>{
-      navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280}}})
-        .then(s=>{stream=s;document.getElementById('vid').srcObject=s;
-          document.getElementById('cam-hint').textContent='Caméra active';
-          document.getElementById('btn-snap').disabled=false;})
-        .catch(e=>{document.getElementById('cam-hint').textContent='Erreur : '+e.message;});
-    });
-}
-
-function snap(){
-  const v=document.getElementById('vid'),c=document.createElement('canvas');
-  c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
-  imgData=c.toDataURL('image/jpeg',.95);
-  if(stream)stream.getTracks().forEach(t=>t.stop());
-  document.getElementById('card-cam').style.display='none';
-  document.getElementById('card-analysis').style.display='block';
-  step(2);setTimeout(reanalyze,80);
-}
-
-function resetCam(){
-  imgData=null;
-  document.getElementById('card-analysis').style.display='none';
-  document.getElementById('card-cam').style.display='block';
-  step(1);document.getElementById('btn-snap').disabled=true;
-  document.getElementById('cam-hint').textContent='Caméra non démarrée';
-  startCam();
-}
-
-function reanalyze(){
-  if(!imgData)return;
-  const t=parseInt(document.getElementById('sl-t').value);
-  const mn=parseInt(document.getElementById('sl-mn').value);
-  const mx=parseInt(document.getElementById('sl-mx').value);
-  const circ=parseFloat(document.getElementById('sl-circ').value);
-  const asp=parseFloat(document.getElementById('sl-asp').value);
-  document.getElementById('sv-t').textContent=t;
-  document.getElementById('sv-mn').textContent=mn;
-  document.getElementById('sv-mx').textContent=mx;
-  document.getElementById('sv-circ').textContent=circ.toFixed(2);
-  document.getElementById('sv-asp').textContent=asp.toFixed(2);
-  const img=new Image();
-  img.onload=()=>analyze(img,t,mn,mx,circ,asp);
-  img.src=imgData;
-}
-
-function analyze(img, thresh, minR, maxR, minCirc, minAsp){
-
-  const out = document.getElementById('cv-out');
-  out.width = img.width;
-  out.height = img.height;
-  const ctx = out.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, img.width, img.height);
-  const d = imageData.data;
-  const w = img.width, h = img.height;
-  const n = w * h;
-
-  // ─────────────────────────────────────────────
-  // 1. NIVEAUX DE GRIS + NORMALISATION CONTRASTE
-  // ─────────────────────────────────────────────
-  const lum = new Float32Array(n);
-  let min = 255, max = 0;
-
-  for (let i = 0; i < n; i++) {
-    const val = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
-    lum[i] = val;
-    if (val < min) min = val;
-    if (val > max) max = val;
-  }
-
-  const scale = 255 / (max - min + 1);
-  for (let i = 0; i < n; i++) {
-    lum[i] = (lum[i] - min) * scale;
-  }
-
-  // ─────────────────────────────────────────────
-  // 2. MOYENNE LOCALE (robuste à la lumière)
-  // ─────────────────────────────────────────────
-  function getLocalMean(x, y, size=3){
-    let sum = 0, count = 0;
-    for(let dy=-size; dy<=size; dy++){
-      for(let dx=-size; dx<=size; dx++){
-        const nx = x+dx, ny = y+dy;
-        if(nx>=0 && ny>=0 && nx<w && ny<h){
-          sum += lum[ny*w + nx];
-          count++;
-        }
-      }
-    }
-    return sum / count;
-  }
-
-  // ─────────────────────────────────────────────
-  // 3. MASQUE CONTRASTE LOCAL
-  // ─────────────────────────────────────────────
-  const bright = new Uint8Array(n);
-
-  for(let y=0; y<h; y++){
-    for(let x=0; x<w; x++){
-      const i = y*w + x;
-      const localMean = getLocalMean(x, y, 3);
-      bright[i] = (Math.abs(lum[i] - localMean) > thresh * 0.8) ? 1 : 0;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 4. NETTOYAGE BRUIT (morpho simple)
-  // ─────────────────────────────────────────────
-  const clean = new Uint8Array(n);
-
-  for(let y=1; y<h-1; y++){
-    for(let x=1; x<w-1; x++){
-      let count = 0;
-      for(let dy=-1; dy<=1; dy++){
-        for(let dx=-1; dx<=1; dx++){
-          if(bright[(y+dy)*w + (x+dx)]) count++;
-        }
-      }
-      clean[y*w + x] = count >= 4 ? 1 : 0;
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 5. DETECTION BLOBS (BFS amélioré)
-  // ─────────────────────────────────────────────
-  const vis = new Uint8Array(n);
-  const blobs = [];
-
-  let rejected_small=0, rejected_big=0, rejected_shape=0;
-
-  for(let y=1; y<h-1; y++){
-    for(let x=1; x<w-1; x++){
-      const idx = y*w + x;
-      if(!clean[idx] || vis[idx]) continue;
-
-      const q = [idx];
-      vis[idx] = 1;
-
-      let sx=0, sy=0, cnt=0, qi=0;
-      let x0=x, x1=x, y0=y, y1=y;
-
-      while(qi < q.length){
-        const ci = q[qi++];
-        const cx = ci % w;
-        const cy = (ci / w) | 0;
-
-        sx += cx;
-        sy += cy;
-        cnt++;
-
-        if(cx<x0)x0=cx; if(cx>x1)x1=cx;
-        if(cy<y0)y0=cy; if(cy>y1)y1=cy;
-
-        const nb = [ci-1, ci+1, ci-w, ci+w];
-        for(let k=0;k<4;k++){
-          const ni = nb[k];
-          if(ni>=0 && ni<n && clean[ni] && !vis[ni]){
-            vis[ni]=1;
-            q.push(ni);
-          }
-        }
-      }
-
-      const r = Math.sqrt(cnt / Math.PI);
-
-      if(r < minR){ rejected_small++; continue; }
-      if(r > maxR){ rejected_big++; continue; }
-
-      const bW = x1-x0+1;
-      const bH = y1-y0+1;
-
-      const aspect = Math.min(bW,bH) / Math.max(bW,bH);
-      const fill = cnt / (bW*bH);
-      const roundness = fill * aspect;
-
-      // seuils plus tolérants
-      if(roundness < minCirc*0.75 || aspect < minAsp*0.7){
-        rejected_shape++;
-        continue;
-      }
-
-      blobs.push({
-        cx: Math.round(sx/cnt),
-        cy: Math.round(sy/cnt),
-        r: Math.round(r)
-      });
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  // 6. AFFICHAGE
-  // ─────────────────────────────────────────────
-  ctx.drawImage(img, 0, 0);
-
-  blobs.forEach((b,i)=>{
-    ctx.strokeStyle='#185FA5';
-    ctx.lineWidth=2;
-    ctx.fillStyle='rgba(24,95,165,0.15)';
-
-    ctx.beginPath();
-    ctx.arc(b.cx, b.cy, b.r+2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle='#185FA5';
-    ctx.font='bold 10px sans-serif';
-    ctx.fillText(i+1, b.cx-4, b.cy+4);
-  });
-
-  // ─────────────────────────────────────────────
-  // 7. RESULTATS
-  // ─────────────────────────────────────────────
-  ufcVal = blobs.length;
-
-  document.getElementById('ufc-count').textContent = blobs.length;
-  document.getElementById('ufc-final').value = blobs.length;
-
-  document.getElementById('debug-info').textContent =
-    `Colonies: ${blobs.length} | Rejetés → petits:${rejected_small}, gros:${rejected_big}, forme:${rejected_shape}`;
-}
-
-function goStep3(){
-  document.getElementById('card-analysis').style.display='none';
-  document.getElementById('card-hints').style.display='block';
-  step(3);buildChars();
-}
-
-function buildChars(){
-  const wrap=document.getElementById('char-btns');wrap.innerHTML='';
-  CHARS.forEach(c=>{
-    const b=document.createElement('button');
-    b.textContent=c.l;b.className='char-btn';b.dataset.id=c.id;
-    b.onclick=()=>{
-      if(sel.has(c.id)){sel.delete(c.id);b.classList.remove('sel');}
-      else{sel.add(c.id);b.classList.add('sel');}
-      updateHints();
-    };wrap.appendChild(b);
-  });
-}
-
-function updateHints(){
-  if(!sel.size){document.getElementById('hint-results').style.display='none';return;}
-  const sc=GERMS.map(g=>{let s=0;sel.forEach(c=>{if(g.c.some(gc=>gc.includes(c)||c.includes(gc)))s++;});return{...g,s};})
-    .filter(g=>g.s>0).sort((a,b)=>b.s-a.s).slice(0,3);
-  const mx=sc[0]?.s||1;
-  const rn={1:'Risque faible',2:'Risque modéré',3:'Risque élevé'};
-  const rc={1:'r1',2:'r2',3:'r3'};
-  document.getElementById('hint-list').innerHTML=sc.map(g=>`
-    <div class="hint-item ${rc[g.r]}">
-      <div class="hint-name">${g.n}</div>
-      <div class="hint-desc">${g.d}</div>
-      <div class="hint-prob ${rc[g.r]}">${rn[g.r]} · correspondance ${Math.round(g.s/mx*100)}%</div>
-    </div>`).join('');
-  document.getElementById('hint-results').style.display='block';
-}
-
-function transmit(){
-  const ufc=parseInt(document.getElementById('ufc-final').value)||0;
-  document.getElementById('card-hints').style.display='none';
-  document.getElementById('card-done').style.display='block';
-  document.getElementById('done-txt').textContent=ufc+' UFC — en attente de confirmation microbiologie';
-}
-
-function resetAll(){
-  imgData=null;sel.clear();ufcVal=0;
-  ['card-analysis','card-hints','card-done'].forEach(id=>document.getElementById(id).style.display='none');
-  document.getElementById('card-cam').style.display='block';
-  document.getElementById('hint-results').style.display='none';
-  document.getElementById('btn-snap').disabled=true;
-  document.getElementById('cam-hint').textContent='Caméra non démarrée';
-  step(1);
-}
-</script>
-"""
-
+   
     # ── APRÈS — remplacez TOUTE la fonction _render_lecture_card par ceci ──
     def _render_lecture_card(s, tab_prefix=""):
         sched_date  = datetime.fromisoformat(s["due_date"]).date()
