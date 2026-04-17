@@ -3925,7 +3925,7 @@ if active == "planning":
                 elif '/ semaine' in freq_unit:
                     alloc       = int(freq_val)
                     max_per_day = 1
-                elif '/ mois' in freq_unit:
+                elif 'mois' in (freq_unit or '').lower():
                     alloc       = 1 if _active_week_for_monthly(freq_val, week_monday) else 0
                     max_per_day = 1
                 else:
@@ -3989,7 +3989,9 @@ if active == "planning":
             week_monday + timedelta(days=i)
             for i in range(5)
             if (week_monday + timedelta(days=i)) not in holidays_set
+            and (week_monday + timedelta(days=i)).month == month  # ← AJOUT
         ]
+        
         for day in wd_week:
             skipped_labels = planning_skips.get(day.isoformat(), [])
             if not skipped_labels:
