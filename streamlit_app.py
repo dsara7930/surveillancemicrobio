@@ -2999,30 +2999,20 @@ if active == "surveillance":
 # Algorithme : max prélèvements/classe/semaine → répartition mensuelle
 #              jamais 2× le même point le même jour (sauf freq > 1/jour)
 # ═══════════════════════════════════════════════════════════════════════════════
+if active == "planning":
+    st.markdown("### 📅 Planning des prélèvements & lectures")
 
+    _today_dt     = datetime.today().date()
+    MOIS_FR       = ["","Janvier","Février","Mars","Avril","Mai","Juin",
+                     "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    JOURS_FR_LONG = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
-    # ════════════════════════════════════════════════════════════════
-    # ONGLETS
-    # ════════════════════════════════════════════════════════════════
-    plan_tab_charge, plan_tab_export = st.tabs([
-        "📊 Charge hebdo & Planning mensuel",
-        "📥 Export Excel",
-    ])
-
-    if active == "planning":
-        st.markdown("### 📅 Planning des prélèvements & lectures")
-
-        _today_dt     = datetime.today().date()
-        MOIS_FR       = ["","Janvier","Février","Mars","Avril","Mai","Juin",
-                        "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
-        JOURS_FR_LONG = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
-
-    # ── Initialisation planning_skips ────────────────────────────────────
+    # ── Initialisation planning_skips ─────────────────────────────────────────
     if "planning_skips" not in st.session_state:
         _raw_skips = _supa_get('planning_skips')
         st.session_state["planning_skips"] = json.loads(_raw_skips) if _raw_skips else {}
 
-    # ── Initialisation planning_overrides ────────────────────────────────
+    # ── Initialisation planning_overrides ─────────────────────────────────────
     if "planning_overrides_loaded" not in st.session_state:
         for k, v in st.session_state.get("planning_overrides", {}).items():
             if k not in st.session_state:
@@ -3032,7 +3022,7 @@ if active == "surveillance":
                     pass
         st.session_state["planning_overrides_loaded"] = True
 
-    # ── Helpers fréquence ────────────────────────────────────────────────
+    # ── Helpers fréquence ──────────────────────────────────────────────────────
     def _frc_default(rc):
         rc = (rc or '').strip().upper()
         if 'A' in rc: return 20
@@ -3085,9 +3075,7 @@ if active == "surveillance":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    # ── Jours ouvrés entre deux dates (bornes incluses) ──────────────────
     def _nb_jours_ouvres_entre(d1, d2, holidays_set):
-        """Nombre de jours ouvrés (lun–ven, hors fériés) entre d1 et d2 inclus."""
         count = 0
         cur = d1
         while cur <= d2:
@@ -3096,15 +3084,7 @@ if active == "surveillance":
             cur += timedelta(days=1)
         return count
 
-    # ── Auto-skip : marque comme non-fait si > 48h ouvrées sans réalisation
     def _auto_skip_overdue(monthly_plan, planning_skips, holidays_set, prelevements):
-        """
-        Pour chaque tâche planifiée dans le passé :
-        - Si fréquence >= 1/jour → annuler sans redistribuer (skip direct)
-        - Sinon, si > 48h ouvrées écoulées depuis la date prévue
-          et pas réalisée et pas déjà skippée → auto-skip
-        Retourne (skips_modifiés, changed: bool)
-        """
         import copy
         skips   = copy.deepcopy(planning_skips)
         changed = False
@@ -3122,12 +3102,11 @@ if active == "surveillance":
             jours_ecoules = _nb_jours_ouvres_entre(day, today, holidays_set)
             dk = day.isoformat()
             for t in tasks:
-                lbl = t["label"]
+                lbl             = t["label"]
                 already_skipped = lbl in skips.get(dk, [])
                 already_done    = (lbl, day) in done_set
                 if already_skipped or already_done:
                     continue
-                # fréquence >= 1/jour → annuler sans redistribuer
                 freq_unit = t.get("_freq_unit", "/ semaine")
                 if "/ jour" in freq_unit:
                     skips.setdefault(dk, [])
@@ -3135,7 +3114,6 @@ if active == "surveillance":
                         skips[dk].append(lbl)
                         changed = True
                     continue
-                # sinon : auto-skip si > 48h ouvrées
                 if jours_ecoules > 2:
                     skips.setdefault(dk, [])
                     if lbl not in skips[dk]:
@@ -3143,7 +3121,6 @@ if active == "surveillance":
                         changed = True
         return skips, changed
 
-    # ── Planning mensuel ─────────────────────────────────────────────────
     def _compute_monthly_planning(year, month, holidays_set):
         import calendar as _cm
         import random as _rnd
@@ -3157,7 +3134,6 @@ if active == "surveillance":
             mondays.append(cur)
             cur += timedelta(weeks=1)
 
-        # Tous les jours ouvrés du mois
         all_wd = [
             first + timedelta(days=i)
             for i in range(n_days)
@@ -3166,24 +3142,6 @@ if active == "surveillance":
         ]
 
         planning = {d: [] for d in all_wd}
-
-        def _active_week_for_monthly(freq_mois_val, week_monday):
-            semaines = []
-            c2 = first - timedelta(days=first.weekday())
-            while c2 <= last:
-                semaines.append(c2)
-                c2 += timedelta(weeks=1)
-            nb_sem = len(semaines)
-            try:
-                idx = semaines.index(week_monday)
-            except ValueError:
-                return False
-            n = max(1, min(int(freq_mois_val), nb_sem))
-            if n >= nb_sem:
-                return True
-            step    = nb_sem / n
-            actives = {int(i * step) for i in range(n)}
-            return idx in actives
 
         for pt in st.session_state.points:
             rc        = (pt.get('room_class') or '').strip()
@@ -3196,30 +3154,28 @@ if active == "surveillance":
 
             nb_wd = len(all_wd)
 
-            # ── Calcul du nombre total d'occurrences sur le mois ─────────
             if freq_val <= 0:
-                default_by_class = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
+                default_by_class  = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
                 total_occurrences = default_by_class.get(rc[:1] if rc else '', 2)
-                max_per_day = 1
-                is_daily = False
+                max_per_day       = 1
+                is_daily          = False
             elif '/ jour' in freq_unit:
-                # >= 1/jour : placer chaque jour ouvré, N fois par jour
                 total_occurrences = int(freq_val) * nb_wd
-                max_per_day = int(freq_val)
-                is_daily = True
+                max_per_day       = int(freq_val)
+                is_daily          = True
             elif '/ semaine' in freq_unit:
-                nb_semaines = len(mondays)
+                nb_semaines       = len(mondays)
                 total_occurrences = int(freq_val) * nb_semaines
-                max_per_day = 1
-                is_daily = False
+                max_per_day       = 1
+                is_daily          = False
             elif 'mois' in (freq_unit or '').lower():
                 total_occurrences = int(freq_val)
-                max_per_day = 1
-                is_daily = False
+                max_per_day       = 1
+                is_daily          = False
             else:
                 total_occurrences = int(freq_val)
-                max_per_day = 1
-                is_daily = False
+                max_per_day       = 1
+                is_daily          = False
 
             if total_occurrences <= 0:
                 continue
@@ -3234,18 +3190,16 @@ if active == "surveillance":
             }
 
             if is_daily:
-                # Placer sur chaque jour ouvré, max_per_day fois
                 for d in all_wd:
                     for _ in range(max_per_day):
                         planning[d].append(dict(task_base))
             else:
-                # Répartir équitablement sur les jours ouvrés du mois
-                rng = _rnd.Random(year * 10000 + month * 100 + hash(pt['label']) % 100)
-                day_counts  = {d: 0 for d in all_wd}
-                day_labels  = {d: {} for d in all_wd}
-                remaining   = total_occurrences
+                rng          = _rnd.Random(year * 10000 + month * 100 + hash(pt['label']) % 100)
+                day_counts   = {d: 0 for d in all_wd}
+                day_labels   = {d: {} for d in all_wd}
+                remaining    = total_occurrences
                 max_attempts = remaining * nb_wd * 4 + 50
-                attempts    = 0
+                attempts     = 0
                 while remaining > 0 and attempts < max_attempts:
                     attempts += 1
                     candidates = [
@@ -3260,21 +3214,14 @@ if active == "surveillance":
                     day_labels[best][pt['label']] = day_labels[best].get(pt['label'], 0) + 1
                     remaining -= 1
 
-        # Trier chaque jour par risque décroissant puis label
         for d in planning:
             planning[d].sort(key=lambda x: (-x['risk'], x['label']))
 
         return planning
 
-    # ── Redistribution des skips ─────────────────────────────────────────
     def _redistribute_skips(monthly_plan, planning_skips, holidays_set):
-        """
-        Redistribue les tâches skippées vers les prochains jours ouvrés
-        du même mois, sauf si fréquence >= 1/jour (annulation directe).
-        """
         import copy
-        plan  = copy.deepcopy(monthly_plan)
-        today = _today_dt
+        plan            = copy.deepcopy(monthly_plan)
         all_days_sorted = sorted(plan.keys())
 
         for day in all_days_sorted:
@@ -3284,11 +3231,10 @@ if active == "surveillance":
             tasks_to_move = [
                 t for t in plan.get(day, [])
                 if t["label"] in skipped_labels
-                and "/ jour" not in t.get("_freq_unit", "")  # pas de redistrib si daily
+                and "/ jour" not in t.get("_freq_unit", "")
             ]
             plan[day] = [t for t in plan.get(day, []) if t["label"] not in skipped_labels]
 
-            # Jours futurs disponibles dans le mois
             remaining_days = [d for d in all_days_sorted if d > day]
             if not remaining_days:
                 continue
@@ -3319,10 +3265,9 @@ if active == "surveillance":
         from io import BytesIO
 
         A4_W, A4_H = A4
-        N_COLS     = 4
-        W_ETQ      = 5.2  * rl_cm
-        H_ETQ      = 2.95 * rl_cm
-        MARGIN_SHEET = 0
+        N_COLS      = 4
+        W_ETQ       = 5.2  * rl_cm
+        H_ETQ       = 2.95 * rl_cm
 
         buf = BytesIO()
 
@@ -3332,39 +3277,33 @@ if active == "surveillance":
         }.items()}
 
         s_titre   = ParagraphStyle("et_t",  fontName="Helvetica-Bold",
-                                fontSize=7.5, leading=9, spaceAfter=2,
-                                textColor=rlc.HexColor("#0f172a"))
+                                   fontSize=7.5, leading=9, spaceAfter=2,
+                                   textColor=rlc.HexColor("#0f172a"))
         s_lbl     = ParagraphStyle("et_l",  fontName="Helvetica",
-                                fontSize=5.5, leading=7,
-                                textColor=rlc.HexColor("#64748b"))
+                                   fontSize=5.5, leading=7,
+                                   textColor=rlc.HexColor("#64748b"))
         s_date    = ParagraphStyle("et_d",  fontName="Helvetica-Bold",
-                                fontSize=9, leading=10,
-                                textColor=rlc.HexColor("#1e40af"))
+                                   fontSize=9, leading=10,
+                                   textColor=rlc.HexColor("#1e40af"))
         s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
-                                fontSize=5, leading=6,
-                                textColor=rlc.HexColor("#94a3b8"),
-                                alignment=TA_RIGHT)
+                                   fontSize=5, leading=6,
+                                   textColor=rlc.HexColor("#94a3b8"),
+                                   alignment=TA_RIGHT)
         s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
-                                fontSize=6, leading=7,
-                                textColor=rlc.HexColor("#854d0e"),
-                                spaceAfter=2)
+                                   fontSize=6, leading=7,
+                                   textColor=rlc.HexColor("#854d0e"),
+                                   spaceAfter=2)
         s_val     = ParagraphStyle("et_v",  fontName="Helvetica-Bold",
-                                fontSize=7.5, leading=9,
-                                textColor=rlc.HexColor("#0f172a"))
+                                   fontSize=7.5, leading=9,
+                                   textColor=rlc.HexColor("#0f172a"))
         s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
-                                fontSize=11, leading=14,
-                                textColor=rlc.HexColor("#1a4e66"))
+                                   fontSize=11, leading=14,
+                                   textColor=rlc.HexColor("#1a4e66"))
 
         if isinstance(date_obj_or_list, list):
             days_data = date_obj_or_list
-            doc_title = (
-                f"Étiquettes semaine — "
-                f"{days_data[0][0].strftime('%d/%m')} → "
-                f"{days_data[-1][0].strftime('%d/%m/%Y')}"
-            )
         else:
             days_data = [(date_obj_or_list, tasks)]
-            doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
 
         doc = BaseDocTemplate(
             buf, pagesize=A4,
@@ -3391,7 +3330,7 @@ if active == "surveillance":
             qr_flowable = None
             if _pt_data:
                 try:
-                    _qr_buf = BytesIO(_make_qr_bytes(_pt_data["id"]))
+                    _qr_buf     = BytesIO(_make_qr_bytes(_pt_data["id"]))
                     qr_flowable = RLImage(_qr_buf, width=2.0 * rl_cm, height=2.0 * rl_cm)
                 except Exception:
                     qr_flowable = None
@@ -3493,7 +3432,7 @@ if active == "surveillance":
 
         for (d_obj, day_tasks) in days_data:
             n_prelevements = len(day_tasks)
-            sep_label = (
+            sep_label      = (
                 f"{d_obj.strftime('%A %d/%m/%Y').capitalize()} "
                 f"— {n_prelevements} prélèvement{'s' if n_prelevements > 1 else ''}"
             )
@@ -3524,14 +3463,17 @@ if active == "surveillance":
         buf.seek(0)
         return buf.getvalue()
 
-    # ════════════════════════════════════════════════════════════════
-    # ONGLETS
-    # ════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLETS — déclaration unique
+    # ════════════════════════════════════════════════════════════════════════
     plan_tab_charge, plan_tab_export = st.tabs([
         "📊 Charge hebdo & Planning mensuel",
         "📥 Export Excel",
     ])
 
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 1 — Charge hebdo & Planning mensuel
+    # ════════════════════════════════════════════════════════════════════════
     with plan_tab_charge:
         if not st.session_state.get("points"):
             _raw_points = _supa_get("points")
@@ -3541,7 +3483,7 @@ if active == "surveillance":
                 except Exception:
                     st.session_state.points = []
 
-        # ── Sélecteurs Année / Mois ──────────────────────────────────
+        # ── Sélecteurs Année / Mois ───────────────────────────────────────
         col_y, col_m = st.columns(2)
         with col_y:
             _ch_year = st.number_input(
@@ -3561,7 +3503,7 @@ if active == "surveillance":
 
         _ch_holidays = get_holidays_cached(_ch_year)
 
-        # ── Calcul des lundis du mois ────────────────────────────────
+        # ── Calcul des lundis du mois ─────────────────────────────────────
         import calendar as _cal_pm
         _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
         _pm_start    = date_type(_ch_year, _ch_month, 1)
@@ -3572,7 +3514,7 @@ if active == "surveillance":
             pm_mondays.append(cur_pm)
             cur_pm += timedelta(weeks=1)
 
-        # ── Normalisation des clés des points ────────────────────────
+        # ── Normalisation des clés des points ─────────────────────────────
         for _pt in st.session_state.points:
             if not _pt.get("room_class"):
                 _pt["room_class"] = _pt.get("class", "")
@@ -3583,7 +3525,7 @@ if active == "surveillance":
 
         st.divider()
 
-        # ── Planning mensuel ─────────────────────────────────────────
+        # ── Planning mensuel ──────────────────────────────────────────────
         st.markdown("#### 📅 Planning mensuel automatique")
         st.caption(
             "Répartition basée sur la fréquence de chaque point. "
@@ -3592,9 +3534,12 @@ if active == "surveillance":
         )
 
         monthly_plan = _compute_monthly_planning(_ch_year, _ch_month, _ch_holidays)
-        monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
+        monthly_plan = {
+            (k.date() if hasattr(k, 'date') else k): v
+            for k, v in monthly_plan.items()
+        }
 
-        # ── Auto-skip des tâches en retard > 48h ouvrées ─────────────
+        # ── Auto-skip des tâches en retard > 48h ouvrées ─────────────────
         _skips_updated, _skips_changed = _auto_skip_overdue(
             monthly_plan,
             st.session_state["planning_skips"],
@@ -3605,7 +3550,7 @@ if active == "surveillance":
             st.session_state["planning_skips"] = _skips_updated
             _supa_upsert('planning_skips', json.dumps(_skips_updated))
 
-        # ── Redistribution globale des skips sur le mois ─────────────
+        # ── Redistribution globale des skips sur le mois ─────────────────
         monthly_plan = _redistribute_skips(
             monthly_plan,
             st.session_state["planning_skips"],
@@ -3615,7 +3560,7 @@ if active == "surveillance":
         if "pm_selected_day" not in st.session_state:
             st.session_state["pm_selected_day"] = None
 
-        # ── Rendu calendrier semaine par semaine ─────────────────────
+        # ── Rendu calendrier semaine par semaine ──────────────────────────
         for week_monday in pm_mondays:
             wd_week = [
                 week_monday + timedelta(days=i)
@@ -3652,9 +3597,9 @@ if active == "surveillance":
                                 out.append(t2)
                         return out
 
-                    days_D  = [(d, filt(t, "D"))                for d, t in week_days if filt(t, "D")]
-                    days_14 = [(d, filt(t, "A", "Iso 14/07169")) for d, t in week_days if filt(t, "A")]
-                    days_16 = [(d, filt(t, "A", "Iso 16/0724"))  for d, t in week_days if filt(t, "A")]
+                    days_D  = [(d, filt(t, "D"))                  for d, t in week_days if filt(t, "D")]
+                    days_14 = [(d, filt(t, "A", "Iso 14/07169"))  for d, t in week_days if filt(t, "A")]
+                    days_16 = [(d, filt(t, "A", "Iso 16/0724"))   for d, t in week_days if filt(t, "A")]
 
                     if days_D:
                         st.session_state[f"pdf_D_{week_monday}"]  = _generate_pdf_etiquettes(days_D, days_D)
@@ -3675,7 +3620,7 @@ if active == "surveillance":
                         key=f"dl_{suffix}_{week_monday}",
                     )
 
-            # ── Grille des jours ─────────────────────────────────────
+            # ── Grille des jours ──────────────────────────────────────────
             cols = st.columns(len(wd_week))
             for i, wd in enumerate(wd_week):
                 tasks       = monthly_plan.get(wd, [])
@@ -3700,10 +3645,10 @@ if active == "surveillance":
                         st.rerun()
 
                     for t in tasks:
-                        _dn = t["label"] in done_labels
-                        _sk = t["label"] in skipped
-                        _ic = "💨" if t.get("type") == "Air" else "🧴"
-                        _col = "#22c55e" if _dn else "#94a3b8" if _sk else "#1e40af"
+                        _dn     = t["label"] in done_labels
+                        _sk     = t["label"] in skipped
+                        _ic     = "💨" if t.get("type") == "Air" else "🧴"
+                        _col    = "#22c55e" if _dn else "#94a3b8" if _sk else "#1e40af"
                         _strike = "line-through" if _sk else "none"
                         st.markdown(
                             f"<div style='font-size:.72rem;color:{_col};"
@@ -3716,7 +3661,10 @@ if active == "surveillance":
                         with st.popover(f"⬜ {len(non_faits)} Non faits"):
                             selections = []
                             for ti, t in enumerate(non_faits):
-                                key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
+                                key = (
+                                    f"skip_{wd.isoformat()}_{ti}_"
+                                    f"{t['label'][:20].replace(' ', '_').replace('/', '_')}"
+                                )
                                 checked = st.checkbox(t["label"], key=key)
                                 if checked:
                                     selections.append(t["label"])
@@ -3736,7 +3684,7 @@ if active == "surveillance":
 
             st.divider()
 
-        # ── Panel détail jour ────────────────────────────────────────
+        # ── Panel détail jour ─────────────────────────────────────────────
         sel = st.session_state.get("pm_selected_day")
 
         if sel:
@@ -3885,9 +3833,9 @@ if active == "surveillance":
                             f"{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}"
                         )
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # ONGLET : EXPORT EXCEL
-    # ═════════════════════════════════════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 2 — Export Excel
+    # ════════════════════════════════════════════════════════════════════════
     with plan_tab_export:
         st.markdown("#### 📥 Exporter le planning en Excel")
 
@@ -3907,8 +3855,10 @@ if active == "surveillance":
 
         exp_scope = st.selectbox(
             "Période",
-            ["Semaine en cours", "Semaine choisie", "Mois en cours", "4 semaines à venir", "Tout le planning"],
-            key="exp_scope")
+            ["Semaine en cours", "Semaine choisie", "Mois en cours",
+             "4 semaines à venir", "Tout le planning"],
+            key="exp_scope",
+        )
 
         if exp_scope == "Semaine choisie":
             _today_ref   = _today_dt
@@ -3916,28 +3866,29 @@ if active == "surveillance":
             _week_opts   = [_cur_monday + timedelta(weeks=i) for i in range(-4, 13)]
             _week_labels = []
             for _wm in _week_opts:
-                _we = _wm + timedelta(days=4)
+                _we     = _wm + timedelta(days=4)
                 _marker = " ← semaine en cours" if _wm == _cur_monday else ""
                 _week_labels.append(
-                    f"Sem. {_wm.isocalendar()[1]} — {_wm.strftime('%d/%m/%Y')} → {_we.strftime('%d/%m/%Y')}{_marker}")
+                    f"Sem. {_wm.isocalendar()[1]} — "
+                    f"{_wm.strftime('%d/%m/%Y')} → {_we.strftime('%d/%m/%Y')}{_marker}"
+                )
             _sel_week_idx = st.selectbox(
                 "Choisir la semaine",
                 range(len(_week_labels)),
                 format_func=lambda i: _week_labels[i],
                 index=4,
-                key="exp_chosen_week")
+                key="exp_chosen_week",
+            )
             _chosen_monday = _week_opts[_sel_week_idx]
         else:
             _chosen_monday = None
 
-        
-        only_working = st.checkbox(
-            "Inclure uniquement les jours ouvrés", value=True)
+        only_working = st.checkbox("Inclure uniquement les jours ouvrés", value=True)
 
         if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
             import io as _io
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-            from openpyxl.utils import get_column_letter
+            from openpyxl.utils  import get_column_letter
 
             wb = openpyxl.Workbook()
 
@@ -3979,12 +3930,13 @@ if active == "surveillance":
 
             elif exp_scope == "Mois en cours":
                 import calendar as cal_module
-                first = exp_today.replace(day=1)
-                last  = exp_today.replace(
+                first     = exp_today.replace(day=1)
+                last      = exp_today.replace(
                     day=cal_module.monthrange(exp_today.year, exp_today.month)[1])
                 exp_dates = [
                     first + timedelta(days=i)
-                    for i in range((last - first).days + 1)]
+                    for i in range((last - first).days + 1)
+                ]
 
             elif exp_scope == "4 semaines à venir":
                 ws_e      = exp_today - timedelta(days=exp_today.weekday())
@@ -4006,14 +3958,13 @@ if active == "surveillance":
                     [min(all_d) + timedelta(days=i)
                      for i in range((max(all_d) - min(all_d)).days + 1)]
                     if all_d
-                    else [exp_today + timedelta(days=i) for i in range(7)])
+                    else [exp_today + timedelta(days=i) for i in range(7)]
+                )
 
             if only_working:
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
-            # ══════════════════════════════════════════════════════════════
-            # FEUILLE 1 — VUE MATRICIELLE
-            # ══════════════════════════════════════════════════════════════
+            # ── Feuille 1 — Vue matricielle ───────────────────────────────
             ws_matrix = wb.active
             ws_matrix.title = "Planning Semaine"
             ws_matrix.sheet_view.showGridLines = False
@@ -4026,50 +3977,54 @@ if active == "surveillance":
                     weeks_map[ws_key] = []
                 weeks_map[ws_key].append(d)
 
-            JOURS_XL     = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-            pts_all      = st.session_state.points
-            n_weeks      = len(weeks_map)
-            FIXED_COLS   = 3
+            JOURS_XL      = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+            pts_all       = st.session_state.points
+            n_weeks       = len(weeks_map)
+            FIXED_COLS    = 3
             DAYS_PER_WEEK = 5
-            total_cols   = FIXED_COLS + DAYS_PER_WEEK * n_weeks
+            total_cols    = FIXED_COLS + DAYS_PER_WEEK * n_weeks
 
-            # ── Ligne 1 : titre ───────────────────────────────────────────
+            # Ligne 1 — titre
             ws_matrix.merge_cells(start_row=1, start_column=1,
-                                  end_row=1, end_column=total_cols)
+                                   end_row=1,   end_column=total_cols)
             ws_matrix.cell(1, 1).value     = "PLANNING MICROBIOLOGIQUE — MicroSurveillance URC"
             ws_matrix.cell(1, 1).font      = Font(name="Arial", size=13, bold=True, color=C_WHITE)
             ws_matrix.cell(1, 1).fill      = fill(C_BLUE)
             ws_matrix.cell(1, 1).alignment = al_c()
             ws_matrix.row_dimensions[1].height = 28
 
-            # ── Ligne 2 : légende ─────────────────────────────────────────
+            # Ligne 2 — légende
             ws_matrix.merge_cells(start_row=2, start_column=1,
-                                  end_row=2, end_column=total_cols)
+                                   end_row=2,   end_column=total_cols)
             ws_matrix.cell(2, 1).value = (
                 f"Généré le {exp_today.strftime('%d/%m/%Y')} — "
                 f"{'Jours ouvrés uniquement' if only_working else 'Tous les jours'} — "
-                f"X = prélèvement prévu · X 1/X 2 = poste spécifique · ✓ = réalisé")
+                f"X = prélèvement prévu · X 1/X 2 = poste spécifique · ✓ = réalisé"
+            )
             ws_matrix.cell(2, 1).font      = Font(name="Arial", size=8, color="475569")
             ws_matrix.cell(2, 1).fill      = fill(C_BLUE_L)
             ws_matrix.cell(2, 1).alignment = al_c()
             ws_matrix.row_dimensions[2].height = 16
 
-            # ── Ligne 3 : en-têtes semaines ───────────────────────────────
+            # Ligne 3 — en-têtes semaines
             ws_matrix.row_dimensions[3].height = 20
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 col_start = FIXED_COLS + 1 + wi * DAYS_PER_WEEK
                 col_end   = col_start + DAYS_PER_WEEK - 1
                 ws_matrix.merge_cells(start_row=3, start_column=col_start,
-                                      end_row=3,   end_column=col_end)
+                                       end_row=3,   end_column=col_end)
                 we_key = ws_key + timedelta(days=4)
                 c = ws_matrix.cell(3, col_start)
-                c.value     = f"Sem. {ws_key.isocalendar()[1]}  {ws_key.strftime('%d/%m')} → {we_key.strftime('%d/%m/%Y')}"
+                c.value     = (
+                    f"Sem. {ws_key.isocalendar()[1]}  "
+                    f"{ws_key.strftime('%d/%m')} → {we_key.strftime('%d/%m/%Y')}"
+                )
                 c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
                 c.fill      = fill(C_GREY_HDR)
                 c.alignment = al_c()
                 c.border    = border_medium()
 
-            # ── Ligne 4 : en-têtes colonnes fixes ─────────────────────────
+            # Ligne 4 — en-têtes colonnes fixes
             ws_matrix.row_dimensions[4].height = 34
             fixed_headers = ["Point de prélèvement", "Lieu", "Type"]
             fixed_widths  = [32, 9, 10]
@@ -4082,7 +4037,7 @@ if active == "surveillance":
                 c.border    = border_all()
                 ws_matrix.column_dimensions[get_column_letter(ci)].width = w
 
-            # ── Ligne 4 : en-têtes jours ──────────────────────────────────
+            # Ligne 4 — en-têtes jours
             for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                 day_date_map = {d.weekday(): d for d in ws_days}
                 for di in range(DAYS_PER_WEEK):
@@ -4149,7 +4104,7 @@ if active == "surveillance":
                 c = ws_matrix.cell(data_row, 2)
                 c.value     = lieu_lbl
                 c.font      = Font(name="Arial", size=9, bold=True,
-                                color=RISK_FC.get(rv, C_TEXT))
+                                   color=RISK_FC.get(rv, C_TEXT))
                 c.fill      = fill(RISK_BG.get(rv, row_bg))
                 c.alignment = al_c()
                 c.border    = border_all()
@@ -4162,7 +4117,7 @@ if active == "surveillance":
                 c.alignment = al_c()
                 c.border    = border_all()
 
-                # ── Fréquence journalière du point (calculée une seule fois) ──
+                # Fréquence journalière
                 _freq_raw_xl  = pt.get('frequency')
                 _freq_unit_xl = pt.get('frequency_unit', '/ semaine')
                 try:
@@ -4171,10 +4126,9 @@ if active == "surveillance":
                     _freq_val_xl = 0.0
                 _is_multi_day = ('/ jour' in _freq_unit_xl and _freq_val_xl > 1)
 
-                # compteur de poste — réinitialisé par point
                 poste_counter = 0
 
-                # ── Colonnes jours ────────────────────────────────────────
+                # Colonnes jours
                 for wi, (ws_key, ws_days) in enumerate(weeks_map.items()):
                     day_date_map = {d.weekday(): d for d in ws_days}
 
@@ -4183,7 +4137,6 @@ if active == "surveillance":
                         d_for_col = day_date_map.get(di)
                         c         = ws_matrix.cell(data_row, col)
 
-                        # Colonne sans date (week-end absent dans la sélection)
                         if not d_for_col:
                             c.value     = ""
                             c.fill      = fill("F1F5F9")
@@ -4191,7 +4144,6 @@ if active == "surveillance":
                             c.border    = border_all()
                             continue
 
-                        # ── 1. Calculer is_planned et is_done ─────────────
                         tasks_day  = monthly_plan.get(d_for_col, [])
                         is_planned = any(t.get("label") == pt["label"] for t in tasks_day)
                         is_done    = any(
@@ -4199,16 +4151,15 @@ if active == "surveillance":
                             and not p.get("archived", False)
                             and p.get("date")
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
-                            for p in st.session_state.prelevements)
+                            for p in st.session_state.prelevements
+                        )
 
-                        # ── 2. Remplir la cellule ──────────────────────────
                         if is_done or is_planned:
-
                             if _is_multi_day:
-                                # Passages multiples : X 1  X 2 … ou ✓ 1  ✓ 2 …
                                 n_passages = max(
                                     sum(1 for t in tasks_day if t.get('label') == pt['label']),
-                                    int(_freq_val_xl))
+                                    int(_freq_val_xl),
+                                )
                                 if is_done:
                                     c.value = "  ".join(f"✓ {i+1}" for i in range(n_passages))
                                     c.font  = Font(name="Arial", size=10, bold=True, color=C_GREEN)
@@ -4219,7 +4170,6 @@ if active == "surveillance":
                                     c.fill  = fill("DBEAFE")
 
                             elif is_class_a and poste_type == "specifique":
-                                # Classe A poste spécifique → numéroté 1 / 2
                                 poste_num     = (poste_counter % 2) + 1
                                 poste_counter += 1
                                 if is_done:
@@ -4232,7 +4182,6 @@ if active == "surveillance":
                                     c.fill  = fill("DBEAFE")
 
                             else:
-                                # Cas standard : simple X ou ✓
                                 if is_done:
                                     c.value = "✓"
                                     c.font  = Font(name="Arial", size=11, bold=True, color=C_GREEN)
@@ -4241,9 +4190,7 @@ if active == "surveillance":
                                     c.value = "X"
                                     c.font  = Font(name="Arial", size=10, bold=True, color=C_BLUE2)
                                     c.fill  = fill("DBEAFE")
-
                         else:
-                            # Rien de planifié ce jour pour ce point
                             c.value = ""
                             c.fill  = fill("FFFFFF" if pt_idx % 2 == 0 else "F8FAFC")
 
@@ -4255,7 +4202,7 @@ if active == "surveillance":
             # ── Ligne totaux par jour ─────────────────────────────────────
             ws_matrix.row_dimensions[data_row].height = 20
             ws_matrix.merge_cells(start_row=data_row, start_column=1,
-                                  end_row=data_row, end_column=FIXED_COLS)
+                                   end_row=data_row,   end_column=FIXED_COLS)
             c = ws_matrix.cell(data_row, 1)
             c.value     = "TOTAL prélèvements planifiés"
             c.font      = Font(name="Arial", size=9, bold=True, color=C_WHITE)
@@ -4288,12 +4235,15 @@ if active == "surveillance":
             fname = f"planning_URC_{exp_today.strftime('%Y%m%d')}.xlsx"
             st.download_button(
                 "⬇️ Télécharger le planning Excel",
-                data=buf.getvalue(), file_name=fname,
+                data=buf.getvalue(),
+                file_name=fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True)
+                use_container_width=True,
+            )
             st.success(
                 f"✅ Fichier **{fname}** généré avec succès — "
-                f"Onglet : **Planning Semaine** (matriciel)")
+                f"Onglet : **Planning Semaine** (matriciel)"
+            )
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : HISTORIQUE
 # ═══════════════════════════════════════════════════════════════════════════════
