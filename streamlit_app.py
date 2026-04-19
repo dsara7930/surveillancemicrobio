@@ -1,3 +1,12 @@
+A exécuté une commande, fichier créé
+A exécuté une commande, fichier créé
+
+Résumé des changements
+
+Script
+
+Créer app.py avec les deux modifications
+python
 import streamlit as st
 import json
 import csv
@@ -150,29 +159,6 @@ hr{border-color:#e2e8f0!important}
 [data-testid="stSelectbox"] div,[data-testid="stSelectbox"] span{font-size:1rem!important}
 [data-testid="stRadio"] label,[data-testid="stRadio"] span{font-size:1rem!important}
 [data-testid="stDateInput"] input{font-size:1rem!important}
-/* ── Cacher le bouton FAQ dans la nav ──────────────────────────────────── */
-[data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:has(div p) {
-    display: block;
-}
-/* ── Bouton champignon FAQ ───────────────────────────────────────────────── */
-@keyframes mush-bounce {
-    0%,100%{ transform:translateY(0) rotate(0deg) scale(1); }
-    25%     { transform:translateY(-7px) rotate(-6deg) scale(1.05); }
-    50%     { transform:translateY(-10px) rotate(0deg) scale(1.08); }
-    75%     { transform:translateY(-7px) rotate(6deg) scale(1.05); }
-}
-@keyframes mush-glow {
-    0%,100%{ box-shadow:0 0 0 0 rgba(124,58,237,0); }
-    50%    { box-shadow:0 0 22px 6px rgba(124,58,237,.45); }
-}
-@keyframes mush-dance {
-    0%  { transform:rotate(-14deg) scale(1); }
-    20% { transform:rotate(14deg) scale(1.12); }
-    40% { transform:rotate(-9deg) scale(1); }
-    60% { transform:rotate(9deg) scale(1.08); }
-    80% { transform:rotate(-4deg) scale(1); }
-    100%{ transform:rotate(0deg) scale(1); }
-}
 </style>""", unsafe_allow_html=True)
 
 # ── CONSTANTES ─────────────────────────────────────────────────────────────────
@@ -392,10 +378,6 @@ DEFAULT_ORIGIN_MEASURES = [
     {"id":"m052","text":"Renforcer la formation du personnel (hygiène des mains)","scope":"Peau / Muqueuse","risk":[3,4,5],"type":"action"},
     {"id":"m053","text":"Vérifier l'absence de lésion cutanée chez le personnel","scope":"Peau / Muqueuse","risk":[4,5],"type":"action"},
     {"id":"m054","text":"Enquête sur le personnel intervenant dans la zone","scope":"Peau / Muqueuse","risk":[4,5],"type":"action"},
-    {"id":"m055","text":"Vérifier les procédures d'habillage et port des EPI","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
-    {"id":"m056","text":"Contrôler la technique de friction hydro-alcoolique","scope":"Peau / Muqueuse","risk":"all","type":"alert"},
-    {"id":"m057","text":"Renforcer la formation du personnel (hygiène des mains)","scope":"Peau / Muqueuse","risk":[3,4,5],"type":"action"},
-    {"id":"m058","text":"Vérifier l'absence de lésion cutanée ou infection fongique","scope":"Peau / Muqueuse","risk":[4,5],"type":"action"},
     {"id":"m060","text":"Vérifier les procédures de lavage des mains","scope":"Flore fécale","risk":"all","type":"alert"},
     {"id":"m061","text":"Contrôler la chaîne de décontamination des équipements","scope":"Flore fécale","risk":"all","type":"alert"},
     {"id":"m062","text":"Recherche de source de contamination fécale","scope":"Flore fécale","risk":[3,4,5],"type":"action"},
@@ -844,6 +826,7 @@ def load_planning_skips():
 
 def save_planning_skips(skips):
     _supa_upsert('planning_skips', json.dumps(skips, ensure_ascii=False))
+
 # ── Helpers scoring ────────────────────────────────────────────────────────────
 def _get_location_criticality(sample):
     if "location_criticality" in sample:
@@ -876,6 +859,31 @@ def _evaluate_score(total):
 
 def _loc_crit_label(n):
     return {1: "Limité", 2: "Modéré", 3: "Important", 4: "Critique"}.get(n, str(n))
+
+# ── HELPER : valider une lecture comme NÉGATIVE ────────────────────────────────
+def _valider_negatif(proc_id):
+    """Valide une lecture (J2 ou J7) comme négative et archive si J7."""
+    proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
+    if not proc:
+        return
+    smp = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+
+    proc["status"]    = "done"
+    proc["colonies"]  = 0
+    proc["date_read"] = str(datetime.today().date())
+
+    if proc["when"] == "J2":
+        # J2 négative → J7 reste en attente, pas d'archivage
+        pass
+    elif proc["when"] == "J7" and smp and not smp.get("archived"):
+        # J7 négative → archiver (fin de cycle)
+        smp["archived"] = True
+        st.session_state.archived_samples.append(smp)
+        save_archived_samples(st.session_state.archived_samples)
+        save_prelevements(st.session_state.prelevements)
+
+    save_schedules(st.session_state.schedules)
+
 
 # ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
 def check_access_protege(onglet_nom: str) -> bool:
@@ -1027,7 +1035,7 @@ if "class_constraints_loaded" not in st.session_state:
 st.set_page_config(
     page_title="MicroSurveillance URC",
     layout="wide",
-    initial_sidebar_state="collapsed"  # 👈 clé ici
+    initial_sidebar_state="collapsed"
 )
 with st.sidebar:
     st.markdown(
@@ -1036,7 +1044,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     tabs_cfg = [
-        ("accueil",      "🏠", "Accueil"),         
+        ("accueil",      "🏠", "Accueil"),
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
@@ -1091,8 +1099,7 @@ with st.sidebar:
     st.divider()
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    # ── 🍄 Champignon + bouton FAQ en 2 colonnes ──────────────────────────
-    col_gif, col_btn = st.columns([1, 2])
+    col_gif, col_btn = st.sidebar.columns([1, 2])
     with col_gif:
         st.components.v1.html("""
 <div style="display:flex;justify-content:center;align-items:center;padding-top:4px">
@@ -1228,218 +1235,6 @@ if active == "faq":
         "Vous ne trouvez pas votre réponse ? Contactez votre pharmacien référent.</div>",
         unsafe_allow_html=True)
 
-# ── RENDER FAQ TAB (appelé dans parametres) ────────────────────────────────────
-def render_faq_tab(can_edit: bool):
-    faq_items = st.session_state.get("faq_items", [])
-
-    st.markdown("### ❓ Gestion de la FAQ")
-    st.markdown("""
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
-    padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
-    ℹ️ Les questions et réponses définies ici apparaissent dans la fenêtre
-    d'aide accessible via le <strong>🍄 champignon</strong> en bas de la sidebar.
-    Le formatage <strong>Markdown</strong> est supporté dans les réponses.
-    </div>""", unsafe_allow_html=True)
-
-    cats_count = {}
-    for f in faq_items:
-        c = f.get("category", "Général")
-        cats_count[c] = cats_count.get(c, 0) + 1
-    stat_cols = st.columns(min(len(cats_count) + 1, 5))
-    with stat_cols[0]:
-        st.metric("Total Q&R", len(faq_items))
-    for i, (cat, cnt) in enumerate(list(cats_count.items())[:4], 1):
-        with stat_cols[i]:
-            st.metric(cat[:14], cnt)
-
-    st.divider()
-
-    edit_idx = st.session_state.get("_faq_edit_idx")
-
-    if can_edit and st.session_state.get("_faq_show_form", False):
-        is_edit  = edit_idx is not None
-        existing = faq_items[edit_idx] if is_edit else {}
-        form_bg  = "#eff6ff" if is_edit else "#f0fdf4"
-        form_bdr = "#93c5fd" if is_edit else "#86efac"
-        form_ttl = "✏️ Modifier la question" if is_edit else "➕ Nouvelle question"
-        st.markdown(
-            f"<div style='background:{form_bg};border:1.5px solid {form_bdr};"
-            f"border-radius:12px;padding:18px;margin-bottom:16px'>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(f"#### {form_ttl}")
-        fc1, fc2 = st.columns([3, 1])
-        with fc1:
-            faq_q = st.text_input(
-                "Question *", value=existing.get("question", ""),
-                placeholder="Ex: Comment ajouter un point de prélèvement ?",
-                key="faq_form_q",
-            )
-        with fc2:
-            cur_cat = existing.get("category", "Général")
-            faq_c = st.selectbox(
-                "Catégorie", FAQ_CATEGORIES,
-                index=FAQ_CATEGORIES.index(cur_cat) if cur_cat in FAQ_CATEGORIES else 0,
-                key="faq_form_c",
-            )
-        faq_a = st.text_area(
-            "Réponse * (Markdown supporté)", value=existing.get("answer", ""),
-            height=160,
-            placeholder="Décrivez la réponse. **Gras**, *italique*, listes...",
-            key="faq_form_a",
-        )
-        if faq_a.strip():
-            with st.expander("👁️ Aperçu du rendu", expanded=False):
-                st.markdown(faq_a)
-        fb1, fb2 = st.columns(2)
-        with fb1:
-            if st.button(
-                "✔️ Mettre à jour" if is_edit else "✅ Ajouter",
-                use_container_width=True, type="primary", key="faq_form_submit",
-            ):
-                if not faq_q.strip():
-                    st.error("La question est obligatoire.")
-                elif not faq_a.strip():
-                    st.error("La réponse est obligatoire.")
-                else:
-                    if is_edit:
-                        faq_items[edit_idx].update(
-                            question=faq_q.strip(), answer=faq_a.strip(), category=faq_c
-                        )
-                    else:
-                        faq_items.append({
-                            "id":       f"faq_{int(datetime.now().timestamp())}",
-                            "category": faq_c,
-                            "question": faq_q.strip(),
-                            "answer":   faq_a.strip(),
-                            "order":    len(faq_items),
-                        })
-                    save_faq(faq_items, supa=True)
-                    st.session_state["faq_items"]      = faq_items
-                    st.session_state["_faq_show_form"] = False
-                    st.session_state["_faq_edit_idx"]  = None
-                    st.success("✅ FAQ mise à jour !")
-                    st.rerun()
-        with fb2:
-            if st.button("✕ Annuler", use_container_width=True, key="faq_form_cancel"):
-                st.session_state["_faq_show_form"] = False
-                st.session_state["_faq_edit_idx"]  = None
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    elif can_edit and not st.session_state.get("_faq_show_form", False):
-        if st.button("➕ Ajouter une question", key="faq_add_btn", use_container_width=True):
-            st.session_state["_faq_show_form"] = True
-            st.session_state["_faq_edit_idx"]  = None
-            st.rerun()
-
-    if not faq_items:
-        st.markdown(
-            "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-            "border-radius:12px;padding:32px;text-align:center;margin-top:12px'>"
-            "<div style='font-size:2.5rem;margin-bottom:8px'>❓</div>"
-            "<div style='font-weight:700;color:#475569'>Aucune question définie</div>"
-            "<div style='font-size:.8rem;color:#94a3b8;margin-top:4px'>"
-            "Cliquez sur ➕ Ajouter une question ci-dessus</div></div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        all_cats_f = ["Toutes"] + sorted(
-            set(f.get("category", "Général") for f in faq_items))
-        sel_f = st.selectbox(
-            "Filtrer", all_cats_f, key="faq_tab_cat", label_visibility="collapsed"
-        )
-        st.markdown(
-            "<div style='display:grid;grid-template-columns:2.2fr 1fr 1fr;"
-            "gap:4px;background:#1e40af;border-radius:10px 10px 0 0;"
-            "padding:10px 14px;margin-top:8px'>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff'>Question</div>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Catégorie</div>"
-            "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Actions</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-        CAT_COL = {
-            "Général":            "#2563eb",
-            "Score & Seuils":     "#7c3aed",
-            "Prélèvements":       "#0891b2",
-            "Paramètres":         "#059669",
-            "Données":            "#d97706",
-            "Mesures correctives":"#dc2626",
-        }
-        displayed = [
-            (i, f) for i, f in enumerate(faq_items)
-            if sel_f == "Toutes" or f.get("category") == sel_f
-        ]
-        for dp, (ri, item) in enumerate(displayed):
-            cc      = CAT_COL.get(item.get("category", "Général"), "#475569")
-            row_bg  = "#f8fafc" if dp % 2 == 0 else "#ffffff"
-            is_last = dp == len(displayed) - 1
-            r_bdr   = "border-radius:0 0 10px 10px" if is_last else ""
-            rc1, rc2 = st.columns([7, 1])
-            with rc1:
-                st.markdown(
-                    f"<div style='display:grid;grid-template-columns:2.2fr 1fr;"
-                    f"gap:4px;background:{row_bg};border:1px solid #e2e8f0;"
-                    f"border-top:none;padding:10px 14px;align-items:center;{r_bdr}'>"
-                    f"<div style='font-size:.83rem;font-weight:600;color:#0f172a'>"
-                    f"{item['question']}</div>"
-                    f"<div style='text-align:center'>"
-                    f"<span style='background:{cc}14;color:{cc};border:1px solid {cc}44;"
-                    f"border-radius:12px;padding:2px 10px;font-size:.65rem;font-weight:700'>"
-                    f"{item.get('category','Général')}</span></div></div>",
-                    unsafe_allow_html=True,
-                )
-            with rc2:
-                a1, a2, a3, a4 = st.columns(4)
-                with a1:
-                    if can_edit and ri > 0:
-                        if st.button("↑", key=f"faq_up_{ri}", help="Monter"):
-                            faq_items[ri], faq_items[ri-1] = faq_items[ri-1], faq_items[ri]
-                            for k, f in enumerate(faq_items): f["order"] = k
-                            save_faq(faq_items, supa=True)
-                            st.session_state["faq_items"] = faq_items
-                            st.rerun()
-                with a2:
-                    if can_edit and ri < len(faq_items) - 1:
-                        if st.button("↓", key=f"faq_dn_{ri}", help="Descendre"):
-                            faq_items[ri], faq_items[ri+1] = faq_items[ri+1], faq_items[ri]
-                            for k, f in enumerate(faq_items): f["order"] = k
-                            save_faq(faq_items, supa=True)
-                            st.session_state["faq_items"] = faq_items
-                            st.rerun()
-                with a3:
-                    if can_edit:
-                        if st.button("✏️", key=f"faq_ed_{ri}"):
-                            st.session_state["_faq_edit_idx"]  = ri
-                            st.session_state["_faq_show_form"] = True
-                            st.rerun()
-                with a4:
-                    if can_edit:
-                        if st.button("🗑️", key=f"faq_dl_{ri}"):
-                            faq_items.pop(ri)
-                            for k, f in enumerate(faq_items): f["order"] = k
-                            save_faq(faq_items, supa=True)
-                            st.session_state["faq_items"] = faq_items
-                            st.rerun()
-        st.markdown(
-            f"<div style='background:#1e293b;border-radius:0 0 10px 10px;"
-            f"padding:8px 14px'><div style='font-size:.75rem;color:#94a3b8'>"
-            f"{len(faq_items)} question(s) · {len(displayed)} affichée(s)"
-            f"</div></div>",
-            unsafe_allow_html=True,
-        )
-
-    st.divider()
-
-    if can_edit:
-        st.markdown("#### ↩️ Réinitialiser la FAQ")
-        st.caption("Recharge les 10 questions prédéfinies et efface vos personnalisations.")
-        if st.button("↩️ Remettre les questions par défaut", key="faq_reset"):
-            st.session_state["faq_items"] = [dict(f) for f in DEFAULT_FAQ]
-            save_faq(st.session_state["faq_items"], supa=True)
-            st.success("✅ FAQ réinitialisée.")
-            st.rerun()
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : ACCUEIL
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1486,21 +1281,20 @@ if active == "accueil":
     col1, col2 = st.columns(2)
     with col1:
         if st.button("📅 Accéder au Planning", use_container_width=True):
-            st.session_state.active_tab = "planning"   # ← corrigé
+            st.session_state.active_tab = "planning"
             st.rerun()
     with col2:
         if st.button("🔍 Accéder aux Prélèvements", use_container_width=True):
-            st.session_state.active_tab = "surveillance"  # ← corrigé
+            st.session_state.active_tab = "surveillance"
             st.rerun()
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : LOGIGRAMME — COMPLET
-# Criticité germe = Pathogénicité × Résistance × Dissémination 
+# TAB : LOGIGRAMME
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "logigramme":
     can_edit = check_access_protege("Logigramme")
 
-    # ── Constantes ─────────────────────────────────────────────────────────────
     PATHO_OPTS = [
         "1 — Non pathogène",
         "2 — Pathogène opportuniste",
@@ -1532,7 +1326,6 @@ if active == "logigramme":
         return "Critique"
 
     def _infer_resistance(surfa, apa):
-        """Migration : déduit la résistance depuis surfa/apa existants."""
         s = (surfa or "").lower()
         a = (apa  or "").lower()
         if "risque" in s and "risque" in a:
@@ -1544,11 +1337,9 @@ if active == "logigramme":
     def _germ_score(g):
         if all(k in g for k in ("pathogenicity", "resistance", "dissemination")):
             return int(g["pathogenicity"]) * int(g["resistance"]) * int(g["dissemination"])
-        # Migration ancien modèle
         old = g.get("risk", 1)
         return {1: 1, 2: 2, 3: 6, 4: 12, 5: 18}.get(old, old)
 
-    # ── Bandeau récapitulatif ───────────────────────────────────────────────────
     _synced        = st.session_state.get("germs_synced_count", 0)
     _total_default = len(DEFAULT_GERMS)
     _total_germs   = len(st.session_state.germs)
@@ -1604,7 +1395,6 @@ if active == "logigramme":
     if not can_edit:
         st.info("👁️ Mode lecture seule — connectez-vous pour modifier les germes.")
 
-    # ── Formulaire ajout / modification ────────────────────────────────────────
     def germ_form(existing=None, idx=None):
         is_edit = existing is not None
         with st.container():
@@ -1616,7 +1406,6 @@ if active == "logigramme":
 
             c1, c2, c3 = st.columns(3)
 
-            # ── Col 1 : taxonomie ────────────────────────────────────────────
             with c1:
                 st.markdown(
                     "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
@@ -1655,15 +1444,12 @@ if active == "logigramme":
                     index=cats.index(cur_cat) if cur_cat in cats else 0,
                     disabled=not can_edit)
 
-
-            # ── Col 2 : critères de criticité ────────────────────────────────
             with c2:
                 st.markdown(
                     "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
                     "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
                     "🔬 Critères de criticité</div>", unsafe_allow_html=True)
 
-                # Pathogénicité
                 cur_patho = int(existing.get("pathogenicity", 1)) if is_edit else 1
                 patho_lbl = st.selectbox(
                     "🧬 Pathogénicité *", PATHO_OPTS,
@@ -1671,7 +1457,6 @@ if active == "logigramme":
                     key="form_patho", disabled=not can_edit)
                 patho_num = int(patho_lbl[0])
 
-                # Résistance aux désinfectants
                 if is_edit:
                     cur_resist = int(existing.get(
                         "resistance",
@@ -1684,7 +1469,6 @@ if active == "logigramme":
                     key="form_resist", disabled=not can_edit)
                 resist_num = int(resist_lbl[0])
 
-                # Mode de dissémination
                 cur_dissem = int(existing.get("dissemination", 1)) if is_edit else 1
                 dissem_lbl = st.selectbox(
                     "💨 Mode de dissémination *", DISSEM_OPTS,
@@ -1692,7 +1476,6 @@ if active == "logigramme":
                     key="form_dissem", disabled=not can_edit)
                 dissem_num = int(dissem_lbl[0])
 
-                # ── Score calculé ────────────────────────────────────────────              
                 risk_num = patho_num * resist_num * dissem_num
                 rc = _risk_color(risk_num)
                 rl = _risk_label(risk_num)
@@ -1731,14 +1514,12 @@ if active == "logigramme":
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-            # col 3 Notes
-                       
             with c3:
                 st.markdown(
                     "<div style='font-size:.72rem;font-weight:800;color:#1e40af;"
                     "letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px'>"
                     "Information supplémentaire</div>", unsafe_allow_html=True)
-                                
+
                 new_notes = st.text_area(
                     "📝 Notes",
                     value=existing.get("notes", "") or "" if is_edit else "",
@@ -1749,9 +1530,6 @@ if active == "logigramme":
                     value=existing.get("comment", "") or "" if is_edit else "",
                     height=70, disabled=not can_edit)
 
-                                    
-                                           
-            # ── Boutons ──────────────────────────────────────────────────────
             st.markdown("</div>", unsafe_allow_html=True)
             cb1, cb2 = st.columns(2)
             with cb1:
@@ -1803,7 +1581,6 @@ if active == "logigramme":
 
     st.divider()
 
-    # ── Logigramme interactif HTML/D3 ─────────────────────────────────────────
     germs_json         = json.dumps(st.session_state.germs, ensure_ascii=False)
     default_names_json = json.dumps(sorted(DEFAULT_GERM_NAMES), ensure_ascii=False)
 
@@ -1843,8 +1620,6 @@ svg{{min-width:900px;width:100%;height:100%}}
 .score-cell .val{{font-size:1.2rem;font-weight:900}}
 .score-total{{background:#1e293b;border-radius:8px;padding:8px;text-align:center;margin-top:6px}}
 .alert-row{{padding:5px 10px;border-radius:6px;font-size:.68rem;font-weight:700;margin-top:5px}}
-.sens{{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:6px;border:1px solid #e2e8f0;font-size:.72rem;margin-top:3px}}
-.ok{{color:#22c55e;font-weight:700}}.warn{{color:#f97316;font-weight:700}}.crit{{color:#ef4444;font-weight:700}}
 .notes-box{{margin-top:6px;padding:7px 10px;border-radius:6px;background:rgba(37,99,235,.04);border:1px solid rgba(37,99,235,.18);font-size:.72rem;color:#0f172a;line-height:1.5}}
 </style></head><body>
 <div class="app">
@@ -1990,8 +1765,6 @@ function selectGerm(g){{
 function showInfo(g){{
   const panel=document.getElementById('infoPanel');panel.classList.add('visible');
   const score=germScore(g);const col=riskColor(score);
-  function sens(v){{if(!v)return['ok','✓'];const l=v.toLowerCase();if(l.includes('modéré'))return['warn','⚠'];if(l.includes('risque'))return['crit','✗'];return['ok','✓'];}}
-  
   const alertRow=score>24?`<div class="alert-row" style="background:#fef2f2;color:#991b1b">🚨 Action (score germe seul &gt; 24)</div>`
     :score>=16?`<div class="alert-row" style="background:#fffbeb;color:#92400e">⚠️ Alerte probable selon criticité du lieu</div>`
     :`<div class="alert-row" style="background:#f0fdf4;color:#166534">✅ Conforme à score germe seul</div>`;
@@ -2028,7 +1801,6 @@ function showInfo(g){{
       <div style="font-size:.6rem;color:#94a3b8">${{g.pathogenicity||'?'}} × ${{g.resistance||'?'}} × ${{g.dissemination||'?'}}</div>
     </div>
     ${{alertRow}}
-    
     ${{nh}}${{ch}}`;
 }}
 renderTree();
@@ -2037,7 +1809,6 @@ renderList();
 
     st.components.v1.html(tree_html, height=1200, scrolling=False)
 
-    # ── Liste de gestion ───────────────────────────────────────────────────────
     st.markdown("### ✏️ Gérer les germes")
     search_edit = st.text_input(
         "Filtrer", placeholder="Rechercher un germe...", label_visibility="collapsed")
@@ -2077,15 +1848,14 @@ renderList();
                     st.session_state.germs.pop(real_idx)
                     save_germs(st.session_state.germs)
                     st.rerun()
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : SURVEILLANCE — réécrit complet
-# Nouveau prélèvement unifié (manuel + scan QR en toggle)
+# TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
-    # ── Calcul indicateurs ────────────────────────────────────────────────────
     _active_sids_surv = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
     _j2_red    = sum(1 for s in st.session_state.schedules
                      if s["when"]=="J2" and s["status"]=="pending"
@@ -2099,17 +1869,12 @@ if active == "surveillance":
                      if s["when"]=="J7" and s["status"]=="pending"
                      and s.get("sample_id") in _active_sids_surv
                      and datetime.fromisoformat(s["due_date"]).date() > today)
-    _j7_orange = sum(1 for s in st.session_state.schedules
-                     if s["when"]=="J7" and s["status"]=="pending"
-                     and s.get("sample_id") in _active_sids_surv
-                     and datetime.fromisoformat(s["due_date"]).date() > today)
     _id_red    = sum(1 for p in st.session_state.pending_identifications
                      if p.get("status") == "pending")
     _dot_j2 = " 🔴" if _j2_red > 0 else (" 🟠" if _j2_orange > 0 else "")
-    _dot_j7 = " 🔴" if _j7_red > 0 else (" 🟠" if _j7_orange > 0 else "")
+    _dot_j7 = " 🔴" if _j7_red > 0 else ""
     _dot_id = " 🔴" if _id_red > 0 else ""
 
-    # ── Sous-onglets (scan QR supprimé — intégré dans Nouveau prélèvement) ────
     tab_nouveau, tab_j2, tab_j7, tab_ident = st.tabs([
         "🧪 Nouveau prélèvement",
         f"📖 Lecture J2{_dot_j2}",
@@ -2121,16 +1886,12 @@ if active == "surveillance":
     # HELPERS GLOBAUX
     # ══════════════════════════════════════════════════════════════════════════
     def _fix_qr_input(text: str) -> str:
-    
-    
-        # 1. Réparer le double-encodage UTF-8/Latin-1 (é → Ã©, è → Ã¨, etc.)
         def _fix_encoding(s):
             try:
                 return s.encode('latin-1').decode('utf-8')
             except (UnicodeDecodeError, UnicodeEncodeError):
                 return s
 
-        # 2. Correction AZERTY caractère par caractère
         def _fix_azerty(s):
             AZERTY_MAP = {
                 'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
@@ -2142,9 +1903,9 @@ if active == "surveillance":
             }
             return "".join(AZERTY_MAP.get(c, c) for c in s)
 
-        text = _fix_encoding(text)          # étape 1 toujours
+        text = _fix_encoding(text)
         if not text.startswith("{"):
-            text = _fix_azerty(text)        # étape 2 si toujours pas de JSON
+            text = _fix_azerty(text)
         return text
 
     if "prelev_mode" not in st.session_state:
@@ -2153,11 +1914,9 @@ if active == "surveillance":
         st.session_state["qr_counter"] = 0
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 1 — NOUVEAU PRÉLÈVEMENT UNIFIÉ
+    # ONGLET 1 — NOUVEAU PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
     with tab_nouveau:
-
-        # ── Toggle Manuel / Scan ──────────────────────────────────────────────
         tog1, tog2 = st.columns(2)
         with tog1:
             if st.button("✏️  Saisie manuelle", use_container_width=True,
@@ -2174,9 +1933,6 @@ if active == "surveillance":
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # ══════════════════════════════════════════════════════════════════════
-        # MODE MANUEL
-        # ══════════════════════════════════════════════════════════════════════
         if st.session_state["prelev_mode"] == "manuel":
 
             if not st.session_state.points:
@@ -2223,9 +1979,6 @@ if active == "surveillance":
                           <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
                         </div>
                       </div>
-                      <div style="background:#f8fafc;border-radius:6px;padding:7px 10px;margin-top:6px;font-size:.68rem;color:#475569;border:1px solid #e2e8f0">
-                        <strong>Grille seuils :</strong> score = criticité lieu ({pt_loc_crit}) × score germe &nbsp;·&nbsp; ⚠️ Alerte 24–36 &nbsp;·&nbsp; 🚨 Action &gt; 36
-                      </div>
                     </div>""", unsafe_allow_html=True)
 
                 with p_col2:
@@ -2246,7 +1999,6 @@ if active == "surveillance":
                     </div>""", unsafe_allow_html=True)
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
-                # ── Classe A ──────────────────────────────────────────────────
                 p_isolateur = ""
                 p_poste     = "Poste 1"
                 if str(pt_room).strip().upper() == "A":
@@ -2261,7 +2013,6 @@ if active == "surveillance":
                         p_poste = st.radio("Poste", ["Poste 1","Poste 2","Commun"], horizontal=True, key="new_prelev_poste")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                # ── Localisation sur plan ─────────────────────────────────────
                 plans_available = st.session_state.get("plans", [])
                 st.markdown(
                     "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:10px 0 6px'>"
@@ -2286,169 +2037,23 @@ if active == "surveillance":
 
                         COLS = list("ABCDEFGHIJ")
                         ROWS = list(range(1, 11))
-                        GRID_N = 10  # 10×10 = 100 zones
 
                         img_b64 = sel_plan["image_b64"]
                         if not img_b64.startswith("data:"):
                             img_b64 = "data:image/png;base64," + img_b64
 
-                        # ── Sélecteurs colonne / ligne ────────────────────
                         z_col1, z_col2 = st.columns(2)
                         with z_col1:
                             sel_col = st.selectbox(
-                                "Colonne (A→J)",
-                                COLS,
+                                "Colonne (A→J)", COLS,
                                 index=COLS.index(_cur_zone[0]) if _cur_zone and _cur_zone[0] in COLS else 0,
                                 key=f"zone_col_{_cur_label}")
                         with z_col2:
                             sel_row = st.selectbox(
-                                "Ligne (1→10)",
-                                ROWS,
+                                "Ligne (1→10)", ROWS,
                                 index=ROWS.index(int(_cur_zone[1:])) if _cur_zone and _cur_zone[1:].isdigit() else 0,
                                 key=f"zone_row_{_cur_label}")
                         new_zone = f"{sel_col}{sel_row}"
-
-                        # ── Visualisation grille ──────────────────────────
-                        zone_html = f"""
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{background:#0f172a;overflow:hidden}}
-.toolbar{{background:#1e293b;padding:6px 10px;display:flex;align-items:center;
-          gap:8px;border-bottom:1px solid #334155;flex-shrink:0}}
-.toolbar button{{background:#334155;color:#e2e8f0;border:none;border-radius:6px;
-                 padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}}
-.toolbar button:hover{{background:#475569}}
-.toolbar span{{font-size:11px;color:#94a3b8;margin:0 4px}}
-.viewport{{width:100%;height:calc(100vh - 36px);overflow:auto;
-           background:#0f172a;cursor:grab;user-select:none}}
-.viewport:active{{cursor:grabbing}}
-.canvas{{position:relative;display:inline-block;transform-origin:top left}}
-img{{display:block;width:600px;border-radius:6px;pointer-events:none}}
-.grid{{position:absolute;inset:0;display:grid;
-       grid-template-columns:repeat(10,1fr);
-       grid-template-rows:repeat(10,1fr)}}
-.cell{{border:1px solid rgba(255,255,255,.2);position:relative;
-       display:flex;align-items:center;justify-content:center}}
-.cell .lbl{{font-size:8px;font-weight:800;color:rgba(255,255,255,.0);pointer-events:none}}
-.cell:hover .lbl{{color:rgba(255,255,255,.9)}}
-.cell.selected{{background:rgba(37,99,235,.65)!important;
-               border-color:#fff!important}}
-.cell.selected .lbl{{color:#fff!important}}
-/* col/row labels */
-.col-labels{{display:flex;padding-left:0;margin-bottom:2px}}
-.col-lbl{{width:60px;text-align:center;font-size:9px;color:#64748b;font-weight:700}}
-.row-lbl{{position:absolute;left:-20px;font-size:9px;color:#64748b;
-          font-weight:700;transform:translateY(-50%)}}
-</style>
-<div class="toolbar">
-  <button onclick="zoom(-0.2)">−</button>
-  <span id="zlbl">100%</span>
-  <button onclick="zoom(0.2)">+</button>
-  <button onclick="setZ(1)">⊡ Reset</button>
-  <button onclick="setZ(2)">🔍 ×2</button>
-  <span style="margin-left:auto;color:#60a5fa;font-weight:700" id="sel_lbl">
-    Zone sélectionnée : {new_zone}
-  </span>
-</div>
-<div class="viewport" id="vp">
-  <div style="padding:20px 0 4px 22px">
-    <!-- col labels -->
-    <div style="display:flex;padding-left:0;margin-bottom:2px;margin-left:0">
-      {''.join(f'<div style="width:60px;text-align:center;font-size:9px;color:#64748b;font-weight:700">{c}</div>' for c in "ABCDEFGHIJ")}
-    </div>
-    <div style="display:flex">
-      <!-- row labels -->
-      <div style="display:flex;flex-direction:column">
-        {''.join(f'<div style="height:60px;width:20px;display:flex;align-items:center;justify-content:flex-end;padding-right:3px;font-size:9px;color:#64748b;font-weight:700">{r}</div>' for r in range(1,11))}
-      </div>
-      <div class="canvas" id="cv">
-        <img src="{img_b64}" id="img" style="width:600px">
-        <div class="grid" id="g"></div>
-      </div>
-    </div>
-  </div>
-</div>
-<script>
-let scale=1;
-const SEL="{new_zone}";
-const COLS="ABCDEFGHIJ".split("");
-const cv=document.getElementById('cv');
-const g=document.getElementById('g');
-
-// Build grid
-for(let r=0;r<10;r++){{
-  for(let c=0;c<10;c++){{
-    const id=COLS[c]+(r+1);
-    const el=document.createElement('div');
-    el.className='cell'+(id===SEL?' selected':'');
-    el.style.cursor='default';
-    const lbl=document.createElement('div');
-    lbl.className='lbl';
-    lbl.textContent=id;
-    el.appendChild(lbl);
-    g.appendChild(el);
-  }}
-}}
-
-// Sync img + grid size
-const img=document.getElementById('img');
-function syncGrid(){{
-  g.style.width=img.offsetWidth+'px';
-  g.style.height=img.offsetHeight+'px';
-  // row labels height
-  const rows=document.querySelectorAll('.row-lbl-el');
-  rows.forEach((el,i)=>el.style.top=(img.offsetHeight/10*(i+0.5))+'px');
-}}
-img.onload=syncGrid;
-if(img.complete)syncGrid();
-
-function zoom(d){{setZ(Math.min(3,Math.max(0.4,scale+d)));}}
-function setZ(v){{
-  scale=v;
-  cv.style.transform='scale('+scale+')';
-  cv.style.transformOrigin='top left';
-  cv.style.marginBottom=(img.offsetHeight*(scale-1))+'px';
-  cv.style.marginRight=(img.offsetWidth*(scale-1))+'px';
-  document.getElementById('zlbl').textContent=Math.round(scale*100)+'%';
-}}
-
-// Drag to scroll
-const vp=document.getElementById('vp');
-let dragging=false,sx=0,sy=0,sl=0,st=0;
-vp.addEventListener('mousedown',e=>{{
-  dragging=true;sx=e.clientX;sy=e.clientY;sl=vp.scrollLeft;st=vp.scrollTop;
-}});
-vp.addEventListener('mousemove',e=>{{
-  if(!dragging)return;
-  vp.scrollLeft=sl-(e.clientX-sx);
-  vp.scrollTop=st-(e.clientY-sy);
-}});
-vp.addEventListener('mouseup',()=>dragging=false);
-vp.addEventListener('mouseleave',()=>dragging=false);
-
-// Wheel zoom
-vp.addEventListener('wheel',e=>{{
-  e.preventDefault();
-  zoom(e.deltaY<0?0.15:-0.15);
-}},{{passive:false}});
-</script>"""
-                        st.components.v1.html(zone_html, height=420, scrolling=False)
-
-                        if _cur_zone:
-                            st.markdown(
-                                f"<div style='background:#f0fdf4;border:1.5px solid #86efac;"
-                                f"border-radius:8px;padding:8px 14px;font-size:.8rem;"
-                                f"color:#166534;font-weight:700;margin-top:6px'>"
-                                f"📌 Zone enregistrée : <b>{_cur_zone}</b>"
-                                f"{' → sélection : ' + new_zone if new_zone != _cur_zone else ''}"
-                                f"</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(
-                                f"<div style='background:#fffbeb;border:1px solid #fcd34d;"
-                                f"border-radius:8px;padding:8px 14px;font-size:.78rem;"
-                                f"color:#92400e;margin-top:6px'>"
-                                f"🔲 Zone sélectionnée : <b>{new_zone}</b> — cliquez Enregistrer</div>",
-                                unsafe_allow_html=True)
 
                         _bc1, _bc2 = st.columns(2)
                         with _bc1:
@@ -2462,7 +2067,6 @@ vp.addEventListener('wheel',e=>{{
                                     "zone_col":   ord(new_zone[0]) - ord('A'),
                                     "zone_row":   int(new_zone[1:]) - 1,
                                 }
-                                # Charger depuis Supabase avant de modifier
                                 _raw_mp_save = _supa_get('map_points')
                                 if _raw_mp_save:
                                     try:
@@ -2472,7 +2076,6 @@ vp.addEventListener('wheel',e=>{{
                                 else:
                                     _full_list = list(st.session_state.get("map_points", []))
 
-                                # Mettre à jour ou ajouter
                                 _found = False
                                 for _mp in _full_list:
                                     if _mp.get("label") == _cur_label:
@@ -2484,7 +2087,7 @@ vp.addEventListener('wheel',e=>{{
 
                                 st.session_state["map_points"] = _full_list
                                 _supa_upsert('map_points', json.dumps(_full_list, ensure_ascii=False))
-                                st.success(f"📌 Zone {new_zone} enregistrée pour {_cur_label} ({len(_full_list)} point(s) total)")
+                                st.success(f"📌 Zone {new_zone} enregistrée pour {_cur_label}")
                                 st.rerun()
                         with _bc2:
                             if st.button("🗑️ Effacer", key=f"zone_clear_{_cur_label}",
@@ -2495,17 +2098,14 @@ vp.addEventListener('wheel',e=>{{
                                 _supa_upsert('map_points',
                                              json.dumps(st.session_state.map_points, ensure_ascii=False))
                                 st.rerun()
-                # ── Bouton enregistrer ────────────────────────────────────────
+
                 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    # Récupérer la zone depuis map_points
                     _cur_label_save = selected_point.get("label", "")
                     _mp_for_zone = next(
                         (mp for mp in st.session_state.get("map_points", [])
-                        if mp.get("label") == _cur_label_save),
-                        None
-                    )
+                        if mp.get("label") == _cur_label_save), None)
                     _zone_for_save = _mp_for_zone.get("zone") if _mp_for_zone else None
 
                     sample = {
@@ -2522,7 +2122,7 @@ vp.addEventListener('wheel',e=>{{
                         "poste": p_poste if str(pt_room).strip().upper() == "A" else "",
                         "commentaire": p_commentaire if p_commentaire else "",
                         "created_via": "manuel",
-                        "zone": _zone_for_save,  # ← ajout ici
+                        "zone": _zone_for_save,
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
@@ -2531,7 +2131,6 @@ vp.addEventListener('wheel',e=>{{
                     save_schedules(st.session_state.schedules)
                     st.success(f"✅ **{sample['label']}** enregistré !\nJ2 → {j2_date_calc.strftime('%d/%m/%Y')} | J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
-                # ── Liste prélèvements en cours ───────────────────────────────
                 st.divider()
                 st.markdown("#### 📋 Prélèvements en cours")
                 actifs = [s for s in st.session_state.prelevements if not s.get("archived")]
@@ -2548,125 +2147,28 @@ vp.addEventListener('wheel',e=>{{
                             room_badge = f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;margin-left:4px'>Cl.{room_cl}</span>" if room_cl else ""
                             via_badge  = "<span style='background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>" if samp.get("created_via")=="qr_scan" else ""
                             _comment_html = f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>💬 {samp['commentaire']}</div>" if samp.get('commentaire') else ""
-                            _classea_html = ""
-                            if str(samp.get("room_class","")).strip().upper()=="A":
-                                iso=samp.get("num_isolateur","—") or "—"; pst=samp.get("poste","—") or "—"
-                                _classea_html = f"<div style='font-size:.68rem;color:#854d0e;margin-top:2px'>🔬 {iso} · {pst}</div>"
                             st.markdown(
                                 f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 16px;margin-bottom:6px'>"
                                 f"<span style='font-weight:700'>{samp['label']}</span>{room_badge}{via_badge} "
                                 f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} · <span style='color:{lc_col_r};font-weight:600'>Nv.{loc_c}</span> · {samp.get('date','—')} · {samp.get('operateur','—')}</span>"
-                                f"{_classea_html}{_comment_html}</div>", unsafe_allow_html=True)
+                                f"{_comment_html}</div>", unsafe_allow_html=True)
                         with col_edit:
-                            if st.button("✏️", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True, help="Modifier"):
+                            if st.button("✏️", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
                                 st.session_state["edit_prelev_id"] = samp["id"]; st.rerun()
                         with col_del:
-                            if st.button("🗑️", key=f"del_prelev_btn_{samp['id']}", use_container_width=True, help="Supprimer"):
+                            if st.button("🗑️", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
                                 sid = samp["id"]
                                 st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id')!=sid]
                                 st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']!=sid]
                                 st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id')!=sid]
-                                save_schedules(st.session_state.schedules); save_prelevements(st.session_state.prelevements); save_pending_identifications(st.session_state.pending_identifications)
-                                if st.session_state.get("edit_prelev_id")==sid: st.session_state["edit_prelev_id"]=None
-                                st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé."); st.rerun()
+                                save_schedules(st.session_state.schedules)
+                                save_prelevements(st.session_state.prelevements)
+                                save_pending_identifications(st.session_state.pending_identifications)
+                                st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
+                                st.rerun()
 
-                        if st.session_state.get("edit_prelev_id")==samp["id"]:
-                            with st.container():
-                                st.markdown("<div style='background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:16px;margin-bottom:12px'>", unsafe_allow_html=True)
-                                st.markdown(f"**✏️ Modifier — {samp['label']}**")
-
-                                # ── Point de prélèvement — liste depuis st.session_state.points ──
-                                _pt_labels = [p['label'] for p in st.session_state.points]
-                                _cur_label = samp.get("label", "")
-                                # Si le label actuel n'est plus dans la liste, on l'ajoute en tête
-                                _pt_options = _pt_labels if _cur_label in _pt_labels else [_cur_label] + _pt_labels
-                                _pt_idx = _pt_options.index(_cur_label) if _cur_label in _pt_options else 0
-                                new_label = st.selectbox(
-                                    "📍 Point de prélèvement",
-                                    _pt_options,
-                                    index=_pt_idx,
-                                    key=f"edit_label_{samp['id']}")
-
-                                # ── Si le point change, on met à jour automatiquement room_class et criticité ──
-                                _matched_pt = next((p for p in st.session_state.points if p['label'] == new_label), None)
-                                if _matched_pt:
-                                    _auto_room  = _matched_pt.get('room_class', samp.get('room_class', ''))
-                                    _auto_lc    = _matched_pt.get('location_criticality', samp.get('location_criticality', 1))
-                                    _auto_gelose= _matched_pt.get('gelose', samp.get('gelose', ''))
-                                else:
-                                    _auto_room   = samp.get('room_class', '')
-                                    _auto_lc     = samp.get('location_criticality', 1)
-                                    _auto_gelose = samp.get('gelose', '')
-
-                                if new_label != _cur_label:
-                                    st.markdown(
-                                        f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;"
-                                        f"padding:7px 12px;font-size:.75rem;color:#166534;margin-bottom:6px'>"
-                                        f"↪️ Classe <strong>{_auto_room or '—'}</strong> · "
-                                        f"Criticité <strong>Nv.{_auto_lc}</strong> · "
-                                        f"Gélose <strong>{_auto_gelose or '—'}</strong> repris automatiquement</div>",
-                                        unsafe_allow_html=True)
-                                # ─────────────────────────────────────────────────────────────────────
-
-                                e_col1, e_col2 = st.columns(2)
-                                with e_col1:
-                                    oper_list_e = [o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
-                                    current_oper = samp.get("operateur","")
-                                    if oper_list_e:
-                                        oper_options = ["— Sélectionner —"]+oper_list_e
-                                        oper_idx = oper_options.index(current_oper) if current_oper in oper_options else 0
-                                        new_oper = st.selectbox("Opérateur", oper_options, index=oper_idx, key=f"edit_oper_{samp['id']}")
-                                        new_oper = new_oper if new_oper!="— Sélectionner —" else ""
-                                    else:
-                                        new_oper = st.text_input("Opérateur", value=current_oper, key=f"edit_oper_{samp['id']}")
-                                    try: current_date = datetime.fromisoformat(samp["date"]).date()
-                                    except: current_date = datetime.today().date()
-                                    new_date = st.date_input("Date prélèvement", value=current_date, key=f"edit_date_{samp['id']}")
-                                with e_col2:
-                                    new_gelose      = st.text_input("Gélose", value=_auto_gelose, key=f"edit_gelose_{samp['id']}")
-                                    new_commentaire = st.text_area("💬 Commentaire", value=samp.get("commentaire",""), height=70, key=f"edit_comment_{samp['id']}")
-                                    new_isolateur=""; new_poste="Poste 1"
-                                    if str(_auto_room).strip().upper()=="A":
-                                        new_isolateur = st.text_input("Isolateur", value=samp.get("num_isolateur",""), key=f"edit_iso_{samp['id']}")
-                                        new_poste = st.radio("Poste",["Poste 1","Poste 2","Commun"],
-                                            index=["Poste 1","Poste 2","Commun"].index(samp.get("poste","Poste 1")) if samp.get("poste") in ["Poste 1","Poste 2","Commun"] else 0,
-                                            horizontal=True, key=f"edit_poste_{samp['id']}")
-
-                                new_j2=next_working_day_offset(new_date,2); new_j7=next_working_day_offset(new_date,5)
-                                if new_date!=current_date:
-                                    st.markdown(f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px;font-size:.75rem;color:#854d0e;margin-top:4px'>⚠️ Dates recalculées — J2 : <strong>{new_j2.strftime('%d/%m/%Y')}</strong> · J7 : <strong>{new_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
-
-                                btn_c1,btn_c2=st.columns(2)
-                                with btn_c1:
-                                    if st.button("💾 Sauvegarder", key=f"save_edit_{samp['id']}", use_container_width=True, type="primary"):
-                                        st.session_state.prelevements[idx]["label"]                = new_label
-                                        st.session_state.prelevements[idx]["operateur"]            = new_oper
-                                        st.session_state.prelevements[idx]["date"]                 = str(new_date)
-                                        st.session_state.prelevements[idx]["gelose"]               = new_gelose
-                                        st.session_state.prelevements[idx]["commentaire"]          = new_commentaire
-                                        st.session_state.prelevements[idx]["room_class"]           = _auto_room   # ← sync
-                                        st.session_state.prelevements[idx]["location_criticality"] = _auto_lc     # ← sync
-                                        if str(_auto_room).strip().upper()=="A":
-                                            st.session_state.prelevements[idx]["num_isolateur"] = new_isolateur
-                                            st.session_state.prelevements[idx]["poste"]         = new_poste
-                                        if new_date!=current_date:
-                                            for sch in st.session_state.schedules:
-                                                if sch["sample_id"]==samp["id"]:
-                                                    if sch["when"]=="J2": sch["due_date"]=new_j2.isoformat()
-                                                    elif sch["when"]=="J7": sch["due_date"]=new_j7.isoformat()
-                                            save_schedules(st.session_state.schedules)
-                                        save_prelevements(st.session_state.prelevements)
-                                        st.session_state["edit_prelev_id"]=None
-                                        st.success("✅ Prélèvement mis à jour !"); st.rerun()
-                                with btn_c2:
-                                    if st.button("✕ Annuler", key=f"cancel_edit_{samp['id']}", use_container_width=True):
-                                        st.session_state["edit_prelev_id"]=None; st.rerun()
-                                st.markdown("</div>", unsafe_allow_html=True)
-
-        # ══════════════════════════════════════════════════════════════════════
-        # MODE SCAN QR
-        # ══════════════════════════════════════════════════════════════════════
         else:
+            # MODE SCAN QR
             st.markdown("""
             <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:14px;padding:14px 18px;margin-bottom:14px">
             <div style="font-weight:700;color:#1e40af;font-size:.9rem;margin-bottom:6px">🔳 Comment scanner</div>
@@ -2679,8 +2181,7 @@ vp.addEventListener('wheel',e=>{{
             qr_raw_input = st.text_input(
                 "Zone de scan", key=f"qr_scan_input_{st.session_state['qr_counter']}",
                 placeholder="Cliquez ici puis scannez l'étiquette QR...",
-                label_visibility="collapsed",
-                help="Si des caractères spéciaux apparaissent, configurez la douchette en layout EN-US.")
+                label_visibility="collapsed")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
             if qr_raw:
@@ -2689,13 +2190,8 @@ vp.addEventListener('wheel',e=>{{
                     st.caption("🔄 Correction automatique appliquée.")
                 qr_raw = qr_fixed
 
-
-            _scanned_data = None
-            qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-
             _scanned_data = None
             if qr_raw:
-                # Chercher le point dont l'id correspond
                 _found = next((p for p in st.session_state.points if str(p["id"]) == qr_raw), None)
                 if _found:
                     _scanned_data = _found
@@ -2714,12 +2210,7 @@ vp.addEventListener('wheel',e=>{{
                 st.markdown(
                     f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
                     f"<div style='font-size:1rem;font-weight:700;color:#166534;margin-bottom:10px'>✅ Point reconnu — {_lbl}</div>"
-                    f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
-                    f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div><div style='font-size:.85rem;font-weight:700'>{'💨' if _type=='Air' else '🧴'} {_type}</div></div>"
-                    f"<div style='background:#dbeafe;border-radius:8px;padding:8px;text-align:center;border:1px solid #93c5fd'><div style='font-size:.58rem;color:#1e40af;text-transform:uppercase'>Classe</div><div style='font-size:.85rem;font-weight:800;color:#1e40af'>{_rc or '—'}</div></div>"
-                    f"<div style='background:{lc_col_s}11;border-radius:8px;padding:8px;text-align:center;border:1px solid {lc_col_s}44'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Criticité</div><div style='font-size:.85rem;font-weight:700;color:{lc_col_s}'>Nv.{_lc}</div></div>"
-                    f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Gélose</div><div style='font-size:.85rem;font-weight:700;color:#1d4ed8'>🧫 {_gel[:14]}</div></div>"
-                    f"</div></div>", unsafe_allow_html=True)
+                    f"</div>", unsafe_allow_html=True)
 
                 sf1,sf2=st.columns(2)
                 with sf1:
@@ -2733,14 +2224,11 @@ vp.addEventListener('wheel',e=>{{
                 with sf2:
                     scan_isolateur=""; scan_poste="Poste 1"
                     if _is_classea:
-                        st.markdown("<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px'><div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>🔬 Classe A</div>", unsafe_allow_html=True)
                         scan_isolateur=st.radio("Isolateur",["Iso 16/0724","Iso 14/07169"],horizontal=True,key="scan_iso_sel")
                         scan_poste=st.radio("Poste",["Poste 1","Poste 2","Commun"],horizontal=True,key="scan_poste_sel")
-                        st.markdown("</div>", unsafe_allow_html=True)
                     scan_comment=st.text_area("💬 Commentaire",placeholder="Remarques...",height=80,key="scan_comment")
 
                 _scan_j2=next_working_day_offset(scan_date,2); _scan_j7=next_working_day_offset(scan_date,5)
-                st.markdown(f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 14px;font-size:.72rem;color:#166534;margin-bottom:10px'>📅 J2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong> &nbsp;·&nbsp; 📅 J7 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
 
                 sbc1,sbc2=st.columns([3,1])
                 with sbc1:
@@ -2755,28 +2243,16 @@ vp.addEventListener('wheel',e=>{{
                             for _when,_due in [("J2",_scan_j2),("J7",_scan_j7)]:
                                 st.session_state.schedules.append({"id":f"sch_{_pid}_{_when}","sample_id":_pid,"label":_lbl,"due_date":_due.isoformat(),"when":_when,"status":"pending"})
                             save_schedules(st.session_state.schedules)
-                            iso_info=f" · {scan_isolateur} · {scan_poste}" if _is_classea else ""
-                            st.success(f"✅ **{_lbl}** enregistré{iso_info}\nJ2 → {_scan_j2.strftime('%d/%m/%Y')} · J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                            st.success(f"✅ **{_lbl}** enregistré")
                             st.session_state["qr_counter"]+=1; st.rerun()
                 with sbc2:
                     if st.button("✕ Annuler",use_container_width=True,key="scan_cancel_btn"):
                         st.session_state["qr_counter"]+=1; st.rerun()
 
-            _scan_recent=[p for p in st.session_state.prelevements if p.get("created_via")=="qr_scan" and not p.get("archived")]
-            if _scan_recent:
-                st.divider()
-                st.markdown(f"<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>", unsafe_allow_html=True)
-                for _sp in reversed(_scan_recent[-5:]):
-                    lc_s=int(_sp.get("location_criticality",1)); lcs_col={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(lc_s),"#94a3b8")
-                    _iso_badge=""
-                    if _sp.get('room_class','').strip().upper()=='A':
-                        iso=_sp.get('num_isolateur','—') or '—'; pst=_sp.get('poste','—') or '—'
-                        _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
-                    st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
-
-   
-    # ── APRÈS — remplacez TOUTE la fonction _render_lecture_card par ceci ──
-    def _render_lecture_card(s, tab_prefix=""):
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER : rendu d'une carte de lecture
+    # ══════════════════════════════════════════════════════════════════════════
+    def _render_lecture_card(s, tab_prefix="", show_checkbox=False):
         sched_date  = datetime.fromisoformat(s["due_date"]).date()
         is_late     = sched_date <= today
         border_col  = "#ef4444" if is_late else "#3b82f6"
@@ -2787,167 +2263,83 @@ vp.addEventListener('wheel',e=>{{
         pt_type     = smp.get('type','?')        if smp else '?'
         pt_gelose   = smp.get('gelose','?')      if smp else '?'
         pt_oper     = smp.get('operateur','?')   if smp else '?'
-        pt_date_p   = smp.get('date','—')        if smp else '—'   # ← date prélèvement
-        pt_comment  = smp.get('commentaire','')  if smp else ''     # ← commentaire
+        pt_date_p   = smp.get('date','—')        if smp else '—'
+        pt_comment  = smp.get('commentaire','')  if smp else ''
         comment_short = (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
 
-        extra_info = ""
-        if smp and str(smp.get("room_class","")).strip().upper() == "A":
-            iso = smp.get("num_isolateur","—") or "—"
-            pst = smp.get("poste","—") or "—"
-            extra_info = (
-                f"<div style='background:#fef9c3;border-radius:6px;padding:6px 8px;"
-                f"border:1px solid #fde047;font-size:.7rem;color:#854d0e;"
-                f"font-weight:600;margin-top:6px'>🔬 Classe A · Isolateur : {iso} · {pst}</div>")
-
         with st.container():
-            st.markdown(f"""
-            <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
-                        padding:14px 16px;margin-bottom:8px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                <div>
-                <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
-                <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
-                            padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
-                <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
+            # Case à cocher si mode batch
+            if show_checkbox:
+                chk_key = f"batch_chk_{tab_prefix}_{s['id']}"
+                st.checkbox(f"**{s['label']}** — {s['when']} — échéance {s['due_date'][:10]}", key=chk_key)
+            else:
+                st.markdown(f"""
+                <div style="background:{bg_col};border:1.5px solid {border_col};border-radius:10px;
+                            padding:14px 16px;margin-bottom:8px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                    <div>
+                    <span style="font-weight:700;font-size:.9rem;color:#0f172a">{s['label']}</span>
+                    <span style="background:{border_col};color:#fff;font-size:.6rem;font-weight:700;
+                                padding:2px 8px;border-radius:10px;margin-left:8px">{s['when']}</span>
+                    <span style="color:{badge_col};font-size:.65rem;font-weight:600;margin-left:6px">{status_txt}</span>
+                    </div>
+                    <span style="font-size:.75rem;color:#475569">📅 Échéance : {s['due_date'][:10]}</span>
                 </div>
-                <span style="font-size:.75rem;color:#475569">📅 Échéance : {s['due_date'][:10]}</span>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
-                <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Type</div>
+                    <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_type}</div>
+                    </div>
+                    <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;border:1px solid #86efac">
+                    <div style="font-size:.55rem;color:#166534;text-transform:uppercase">Date prélèv.</div>
+                    <div style="font-size:.75rem;font-weight:700;color:#166534">📅 {pt_date_p}</div>
+                    </div>
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                    <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
+                    </div>
+                    <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
+                    <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
+                    <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
+                    </div>
+                    <div style="background:#fffbeb;border-radius:6px;padding:6px 8px;border:1px solid #fde047">
+                    <div style="font-size:.55rem;color:#92400e;text-transform:uppercase">Commentaire</div>
+                    <div style="font-size:.72rem;font-weight:600;color:#78350f"
+                        title="{pt_comment}">💬 {comment_short}</div>
+                    </div>
                 </div>
-                <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;border:1px solid #86efac">
-                <div style="font-size:.55rem;color:#166534;text-transform:uppercase">Date prélèv.</div>
-                <div style="font-size:.75rem;font-weight:700;color:#166534">📅 {pt_date_p}</div>
-                </div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                <div style="font-size:.75rem;font-weight:600;color:#1d4ed8">🧫 {pt_gelose}</div>
-                </div>
-                <div style="background:#fff;border-radius:6px;padding:6px 8px;border:1px solid #e2e8f0">
-                <div style="font-size:.55rem;color:#64748b;text-transform:uppercase">Opérateur</div>
-                <div style="font-size:.75rem;font-weight:600;color:#0f172a">{pt_oper}</div>
-                </div>
-                <div style="background:#fffbeb;border-radius:6px;padding:6px 8px;border:1px solid #fde047">
-                <div style="font-size:.55rem;color:#92400e;text-transform:uppercase">Commentaire</div>
-                <div style="font-size:.72rem;font-weight:600;color:#78350f" title="{pt_comment}">
-                    💬 {comment_short}</div>
-                </div>
-            </div>
-            {extra_info}
-            </div>""", unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
-            # ── état rename ────────────────────────────────────────────────────
-            _rename_key = f"rename_mode_{s['id']}"
-            if _rename_key not in st.session_state:
-                st.session_state[_rename_key] = False
-    
-            if st.session_state[_rename_key]:
-                with st.container():
-                    st.markdown(
-                        "<div style='background:#fffbeb;border:1.5px solid #fde047;"
-                        "border-radius:8px;padding:10px 14px;margin-bottom:8px'>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown("**✏️ Renommer le point de prélèvement**")
-                    _all_pt_labels = [p["label"] for p in st.session_state.points]
-                    _new_lbl = st.text_input(
-                        "Nouveau nom",
-                        value=s["label"],
-                        key=f"rename_input_{s['id']}",
-                    )
-                    if _all_pt_labels:
-                        st.caption("Points disponibles : " + " · ".join(_all_pt_labels[:12]))
-                    _rc1, _rc2 = st.columns(2)
-                    with _rc1:
-                        if st.button("✅ Valider", key=f"rename_ok_{s['id']}",
-                                    use_container_width=True):
-                            _stripped = _new_lbl.strip()
-                            if _stripped and _stripped != s["label"]:
-                                if smp:
-                                    smp["label"] = _stripped
-                                    _new_pt = next(
-                                        (p for p in st.session_state.points
-                                        if p.get("label") == _stripped), None
-                                    )
-                                    if _new_pt:
-                                        smp["location_criticality"] = int(
-                                            _new_pt.get("location_criticality", 1))
-                                        smp["room_class"] = _new_pt.get("room_class",
-                                                                        smp.get("room_class", ""))
-                                        smp["type"]       = _new_pt.get("type",
-                                                                        smp.get("type", ""))
-                                        smp["gelose"]     = _new_pt.get("gelose",
-                                                                        smp.get("gelose", ""))
-                                    save_prelevements(st.session_state.prelevements)
-                                s["label"] = _stripped
-                                save_schedules(st.session_state.schedules)
-                                for _pi in st.session_state.pending_identifications:
-                                    if _pi.get("sample_id") == s.get("sample_id"):
-                                        _pi["label"] = _stripped
-                                save_pending_identifications(
-                                    st.session_state.pending_identifications)
-                            st.session_state[_rename_key] = False
-                            st.rerun()
-                    with _rc2:
-                        if st.button("✕ Annuler", key=f"rename_cancel_{s['id']}",
-                                    use_container_width=True):
-                            st.session_state[_rename_key] = False
-                            st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
-    
-            bc1, bc2 = st.columns([3, 1])
-            with bc1:
-                if st.button(f"🔬 Traiter cette lecture ({s['when']})",
-                            key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
-                    st.session_state.current_process = s['id']
-                    st.rerun()
-            
-            with bc2:
-                if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
-                            use_container_width=True):
-                    sid = s.get('sample_id')
-                    st.session_state.schedules    = [x for x in st.session_state.schedules
-                                                    if x['sample_id'] != sid]
-                    st.session_state.prelevements = [x for x in st.session_state.prelevements
-                                                    if x['id'] != sid]
-                    st.session_state.pending_identifications = [
-                        x for x in st.session_state.pending_identifications
-                        if x.get('sample_id') != sid]
-                    save_schedules(st.session_state.schedules)
-                    save_prelevements(st.session_state.prelevements)
-                    save_pending_identifications(st.session_state.pending_identifications)
-                    st.success("Prélèvement, lectures et identifications supprimés.")
-                    st.rerun()
+                bc1, bc2 = st.columns([3, 1])
+                with bc1:
+                    if st.button(f"🔬 Traiter cette lecture ({s['when']})",
+                                key=f"{tab_prefix}proc_{s['id']}", use_container_width=True):
+                        st.session_state.current_process = s['id']
+                        st.rerun()
+                with bc2:
+                    if st.button("🗑️ Supprimer", key=f"{tab_prefix}del_sch_{s['id']}",
+                                use_container_width=True):
+                        sid = s.get('sample_id')
+                        st.session_state.schedules    = [x for x in st.session_state.schedules    if x['sample_id'] != sid]
+                        st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+                        st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
+                        save_schedules(st.session_state.schedules)
+                        save_prelevements(st.session_state.prelevements)
+                        save_pending_identifications(st.session_state.pending_identifications)
+                        st.success("Prélèvement supprimé.")
+                        st.rerun()
 
     def _render_traitement_lecture(proc_id):
         proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
         if not proc: return
         smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
-        pt_type  =smp.get('type','?')      if smp else '?'
-        pt_gelose=smp.get('gelose','?')    if smp else '?'
-        pt_oper  =smp.get('operateur','?') if smp else '?'
-        pt_date  =smp.get('date','?')      if smp else '?'
-        pt_room_p=smp.get('room_class','') if smp else ''
         loc_crit =_get_location_criticality(smp) if smp else 1
-        lc_col_p ={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_crit),"#94a3b8")
-        classea_band=""
-        if smp and str(smp.get("room_class","")).strip().upper()=="A":
-            iso=smp.get("num_isolateur","—") or "—"; pst=smp.get("poste","—") or "—"
-            classea_band=f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:.75rem;font-weight:700;color:#854d0e'>🔬 Classe A · Isolateur : {iso} · {pst}</div>"
-        st.markdown("---")
 
-        # ── SUPPRIMÉ : le bloc lc1/lc2 en double qui était ici ──────────────────
-
-        # ── Retour J2 (visible si on traite J7) ──────────────────────────────────
         if proc["when"] == "J7":
             st.markdown(
                 "<div style='background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;"
                 "padding:8px 14px;margin-bottom:8px;font-size:.78rem;color:#9a3412'>"
-                "💡 Vous traitez la lecture <b>J7</b>. "
-                "Si besoin, vous pouvez revenir à J2 pour tout reprendre depuis le début."
+                "💡 Vous traitez la lecture <b>J7</b>."
                 "</div>", unsafe_allow_html=True)
             if st.button("↩️ Revenir à la lecture J2", key=f"back_j2_{proc_id}"):
                 _j2 = next((x for x in st.session_state.schedules
@@ -2963,10 +2355,7 @@ vp.addEventListener('wheel',e=>{{
                 save_pending_identifications(st.session_state.pending_identifications)
                 if smp and smp.get("archived"):
                     smp["archived"] = False
-                    st.session_state.archived_samples = [
-                        x for x in st.session_state.archived_samples
-                        if x.get("id") != smp["id"]
-                    ]
+                    st.session_state.archived_samples = [x for x in st.session_state.archived_samples if x.get("id") != smp["id"]]
                     save_archived_samples(st.session_state.archived_samples)
                     save_prelevements(st.session_state.prelevements)
                 st.session_state.current_process = None
@@ -2974,7 +2363,6 @@ vp.addEventListener('wheel',e=>{{
                 st.rerun()
             st.markdown("---")
 
-        # ── Saisie résultat ───────────────────────────────────────────────────────
         lc1, lc2 = st.columns([2, 2])
         with lc1:
             res = st.radio(
@@ -2983,18 +2371,14 @@ vp.addEventListener('wheel',e=>{{
                 index=0, key=f"res_{proc_id}")
         with lc2:
             if "Positif" in res:
-                ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1,
-                                    key=f"ncol_{proc_id}")
+                ncol = st.number_input("Nombre de colonies (UFC)", min_value=1, value=1, key=f"ncol_{proc_id}")
             else:
                 ncol = 0
-
-        
 
         btn1, _, btn3 = st.columns([3, 1, 1])
 
         with btn1:
-            if st.button("💾 Valider la lecture", use_container_width=True,
-                        type="primary", key=f"valider_{proc_id}"):
+            if st.button("💾 Valider la lecture", use_container_width=True, type="primary", key=f"valider_{proc_id}"):
                 proc["status"]    = "done"
                 proc["colonies"]  = ncol
                 proc["date_read"] = str(datetime.today().date())
@@ -3013,17 +2397,14 @@ vp.addEventListener('wheel',e=>{{
                     })
                     save_pending_identifications(st.session_state.pending_identifications)
 
-                    # ── J2 positif → skipper J7, NE PAS archiver ──
                     if proc["when"] == "J2":
                         _j7 = next((x for x in st.session_state.schedules
-                                    if x["sample_id"] == proc["sample_id"]
-                                    and x["when"] == "J7"), None)
+                                    if x["sample_id"] == proc["sample_id"] and x["when"] == "J7"), None)
                         if _j7:
                             _j7["status"] = "skipped"
                             save_schedules(st.session_state.schedules)
                         st.success(f"🔴 J2 positive — {ncol} UFC · identification en attente.")
 
-                    # ── J7 positif → archiver ──
                     elif proc["when"] == "J7" and smp and not smp.get("archived"):
                         smp["archived"] = True
                         st.session_state.archived_samples.append(smp)
@@ -3032,15 +2413,11 @@ vp.addEventListener('wheel',e=>{{
                         st.success(f"🔴 J7 positive — {ncol} UFC · identification en attente.")
 
                 else:
-                    # ── Négatif J2 → rien à archiver, J7 reste en attente ──
                     if proc["when"] == "J2":
                         j7_sch = next((x for x in st.session_state.schedules
-                                       if x["sample_id"] == proc["sample_id"]
-                                       and x["when"] == "J7"), None)
-                        st.success(f"✅ J2 négative — J7 prévue le "
-                                   f"{j7_sch['due_date'][:10] if j7_sch else '?'}.")
+                                       if x["sample_id"] == proc["sample_id"] and x["when"] == "J7"), None)
+                        st.success(f"✅ J2 négative — J7 prévue le {j7_sch['due_date'][:10] if j7_sch else '?'}.")
 
-                    # ── Négatif J7 → archiver (fin de cycle) ──
                     elif proc["when"] == "J7" and smp and not smp.get("archived"):
                         smp["archived"] = True
                         st.session_state.archived_samples.append(smp)
@@ -3055,6 +2432,88 @@ vp.addEventListener('wheel',e=>{{
             if st.button("✕ Annuler", use_container_width=True, key=f"cancel_{proc_id}"):
                 st.session_state.current_process = None
                 st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER : section batch négatif
+    # ══════════════════════════════════════════════════════════════════════════
+    def _render_batch_negatif_section(pending_list, tab_key):
+        """
+        Affiche une section permettant de sélectionner plusieurs lectures
+        et de les valider toutes comme négatives en un clic.
+        """
+        if not pending_list:
+            return
+
+        batch_mode_key = f"batch_mode_{tab_key}"
+        if batch_mode_key not in st.session_state:
+            st.session_state[batch_mode_key] = False
+
+        col_a, col_b = st.columns([2, 3])
+        with col_a:
+            btn_label = "✕ Fermer sélection" if st.session_state[batch_mode_key] else "☑️ Sélection multiple — tout négatif"
+            if st.button(btn_label, key=f"toggle_batch_{tab_key}", use_container_width=True):
+                st.session_state[batch_mode_key] = not st.session_state[batch_mode_key]
+                st.rerun()
+
+        if not st.session_state[batch_mode_key]:
+            return
+
+        st.markdown(
+            "<div style='background:#f0fdf4;border:2px solid #22c55e;border-radius:12px;"
+            "padding:16px 18px;margin:8px 0 12px 0'>",
+            unsafe_allow_html=True)
+        st.markdown(
+            "<div style='font-size:.85rem;font-weight:800;color:#166534;margin-bottom:10px'>"
+            "☑️ Sélectionnez les lectures à valider comme <strong>négatives</strong></div>",
+            unsafe_allow_html=True)
+
+        # Cases à cocher pour chaque lecture
+        sel_all_key = f"sel_all_{tab_key}"
+        if st.checkbox("✅ Tout sélectionner", key=sel_all_key):
+            for s in pending_list:
+                st.session_state[f"batch_chk_{tab_key}_{s['id']}"] = True
+
+        for s in pending_list:
+            sched_date = datetime.fromisoformat(s["due_date"]).date()
+            is_late    = sched_date <= today
+            date_badge = "🔴 EN RETARD" if is_late else f"📅 {s['due_date'][:10]}"
+            chk_key    = f"batch_chk_{tab_key}_{s['id']}"
+            st.checkbox(
+                f"**{s['label']}** — {s['when']} — {date_badge}",
+                key=chk_key)
+
+        selected_ids = [
+            s['id'] for s in pending_list
+            if st.session_state.get(f"batch_chk_{tab_key}_{s['id']}", False)
+        ]
+
+        n_sel = len(selected_ids)
+        st.markdown(
+            f"<div style='font-size:.78rem;color:#475569;margin:8px 0'>"
+            f"{n_sel} / {len(pending_list)} lecture(s) sélectionnée(s)</div>",
+            unsafe_allow_html=True)
+
+        if n_sel > 0:
+            if st.button(
+                f"✅ Valider {n_sel} lecture{'s' if n_sel > 1 else ''} comme négative{'s' if n_sel > 1 else ''}",
+                key=f"batch_confirm_{tab_key}",
+                type="primary",
+                use_container_width=True,
+            ):
+                nb_done = 0
+                for sch_id in selected_ids:
+                    _valider_negatif(sch_id)
+                    nb_done += 1
+                    # Nettoyer la case à cocher
+                    st.session_state.pop(f"batch_chk_{tab_key}_{sch_id}", None)
+
+                st.session_state[batch_mode_key] = False
+                st.session_state.pop(sel_all_key, None)
+                st.success(f"✅ {nb_done} lecture{'s' if nb_done > 1 else ''} validée{'s' if nb_done > 1 else ''} comme négative{'s' if nb_done > 1 else ''} !")
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
     # ══════════════════════════════════════════════════════════════════════════
@@ -3075,28 +2534,33 @@ vp.addEventListener('wheel',e=>{{
                     f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
                     f'padding:12px 16px;margin-bottom:12px">'
                     f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard — à traiter dès que possible'
-                    f'</span></div>', unsafe_allow_html=True)
+                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard</span></div>',
+                    unsafe_allow_html=True)
             if upcoming_j2:
                 st.markdown(
                     f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
                     f'padding:10px 16px;margin-bottom:12px">'
                     f'<span style="color:#16a34a;font-size:.8rem">'
-                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir'
-                    f'</span></div>', unsafe_allow_html=True)
+                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>',
+                    unsafe_allow_html=True)
 
-            for s in overdue_j2 + upcoming_j2:
-                _render_lecture_card(s, "j2_")
-                if st.session_state.get("current_process") == s['id']:
-                    # ── Vérifier que c'est bien un schedule J2 ──
-                    _cp = next((x for x in st.session_state.schedules
-                                if x['id'] == st.session_state.current_process), None)
-                    if _cp and _cp.get("when") == "J2":
-                        st.markdown(...)
-                        _render_traitement_lecture(st.session_state.current_process)
-                        st.markdown("</div>", unsafe_allow_html=True)
+            # ── SECTION BATCH NÉGATIF ──────────────────────────────────────
+            _render_batch_negatif_section(pending_j2, "j2")
 
-        # ══════════════════════════════════════════════════════════════════════════
+            st.divider()
+
+            # ── Cartes individuelles (hors mode batch) ─────────────────────
+            batch_active_j2 = st.session_state.get("batch_mode_j2", False)
+            if not batch_active_j2:
+                for s in overdue_j2 + upcoming_j2:
+                    _render_lecture_card(s, "j2_")
+                    if st.session_state.get("current_process") == s['id']:
+                        _cp = next((x for x in st.session_state.schedules
+                                    if x['id'] == st.session_state.current_process), None)
+                        if _cp and _cp.get("when") == "J2":
+                            _render_traitement_lecture(st.session_state.current_process)
+
+    # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
     with tab_j7:
@@ -3123,39 +2587,39 @@ vp.addEventListener('wheel',e=>{{
                     f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
                     f'padding:12px 16px;margin-bottom:12px">'
                     f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard — à traiter dès que possible'
-                    f'</span></div>', unsafe_allow_html=True)
+                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
+                    unsafe_allow_html=True)
             if upcoming_j7:
                 st.markdown(
                     f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
                     f'padding:10px 16px;margin-bottom:12px">'
                     f'<span style="color:#1d4ed8;font-size:.8rem">'
-                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir'
-                    f'</span></div>', unsafe_allow_html=True)
-            for s in overdue_j7 + upcoming_j7:
-                _render_lecture_card(s, "j7_")
-                if st.session_state.get("current_process") == s['id']:
-                    # ── Vérifier que c'est bien un schedule J7 ──
-                    _cp = next((x for x in st.session_state.schedules
-                                if x['id'] == st.session_state.current_process), None)
-                    if _cp and _cp.get("when") == "J7":
-                        st.markdown(...)
-                        _render_traitement_lecture(st.session_state.current_process)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
+                    unsafe_allow_html=True)
 
-       
+            # ── SECTION BATCH NÉGATIF ──────────────────────────────────────
+            _render_batch_negatif_section(pending_j7, "j7")
 
-   # ══════════════════════════════════════════════════════════════════════════
+            st.divider()
+
+            # ── Cartes individuelles (hors mode batch) ─────────────────────
+            batch_active_j7 = st.session_state.get("batch_mode_j7", False)
+            if not batch_active_j7:
+                for s in overdue_j7 + upcoming_j7:
+                    _render_lecture_card(s, "j7_")
+                    if st.session_state.get("current_process") == s['id']:
+                        _cp = next((x for x in st.session_state.schedules
+                                    if x['id'] == st.session_state.current_process), None)
+                        if _cp and _cp.get("when") == "J7":
+                            _render_traitement_lecture(st.session_state.current_process)
+
+    # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
-
     def _get_location_criticality(smp: dict) -> int:
         label = smp.get("label", "")
         if label:
-            pt = next(
-                (p for p in st.session_state.points if p.get("label") == label),
-                None,
-            )
+            pt = next((p for p in st.session_state.points if p.get("label") == label), None)
             if pt:
                 try:
                     return int(pt.get("location_criticality", 1))
@@ -3204,13 +2668,11 @@ vp.addEventListener('wheel',e=>{{
                     <span style="font-size:2rem;line-height:1">{_ic}</span>
                     <div style="flex:1">
                     <div style="font-size:1.05rem;font-weight:900;color:{_hd_col}">{_txt} — {pop_data['label']}</div>
-                    <div style="font-size:.78rem;color:#475569;margin-top:4px;line-height:1.8"><strong>{pop_data['ufc']} UFC</strong> &nbsp;·&nbsp; Germe : <em>{pop_data['germ']}</em> &nbsp;·&nbsp; Lieu Nv.{_loc_c} ({_loc_crit_label(int(_loc_c)) if str(_loc_c).isdigit() else _loc_c})</div>
+                    <div style="font-size:.78rem;color:#475569;margin-top:4px;line-height:1.8"><strong>{pop_data['ufc']} UFC</strong> &nbsp;·&nbsp; Germe : <em>{pop_data['germ']}</em> &nbsp;·&nbsp; Lieu Nv.{_loc_c}</div>
                     </div>
                     <div style="background:#fff;border:2px solid {_border}55;border-radius:12px;padding:12px 18px;text-align:center;min-width:130px">
                     <div style="font-size:.58rem;color:#475569;text-transform:uppercase;font-weight:700">Score total</div>
                     <div style="font-size:2.2rem;font-weight:900;color:{_border};line-height:1.1">{_total}</div>
-                    <div style="font-size:.6rem;color:#64748b;margin-top:2px">Lieu {_loc_c} × Germe {_germ_sc}</div>
-                    <div style="font-size:.62rem;font-weight:700;color:{_hd_col};margin-top:4px">{'Seuil action (> 36)' if _is_action else 'Seuil alerte (24–36)'}</div>
                     </div>
                 </div>
                 </div>
@@ -3224,18 +2686,11 @@ vp.addEventListener('wheel',e=>{{
                     _tl = type_labels.get(_m["type"], _m["type"])
                     st.markdown(
                         f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};"
-                        f"border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:7px;display:flex;"
-                        f"align-items:center;justify-content:space-between;gap:12px'>"
-                        f"<div style='font-size:.83rem;color:#0f172a;line-height:1.5;flex:1'>"
-                        f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
-                        f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;"
-                        f"padding:3px 9px;font-size:.65rem;font-weight:800;white-space:nowrap;flex-shrink:0'>{_tl}</span></div>",
+                        f"border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:7px'>"
+                        f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>",
                         unsafe_allow_html=True)
             else:
-                st.markdown(
-                    "<div style='font-size:.8rem;color:#94a3b8;font-style:italic;padding:6px 0 10px'>"
-                    "Aucune mesure corrective configurée — ajoutez-en dans <strong>Paramètres → Mesures correctives</strong>.</div>",
-                    unsafe_allow_html=True)
+                st.markdown("<div style='font-size:.8rem;color:#94a3b8;font-style:italic'>Aucune mesure corrective configurée.</div>", unsafe_allow_html=True)
 
             st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
 
@@ -3247,82 +2702,23 @@ vp.addEventListener('wheel',e=>{{
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
             with _b2:
-                if st.button("🖨️ Imprimer / noter", use_container_width=True,
-                             key=f"alert_print_{key_suffix}"):
+                if st.button("🖨️ Imprimer / noter", use_container_width=True, key=f"alert_print_{key_suffix}"):
                     st.session_state["_last_mesures_popup"] = pop_data
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
             with _b3:
-                if st.button("✕ Ignorer", use_container_width=True,
-                             key=f"alert_dismiss_{key_suffix}"):
+                if st.button("✕ Ignorer", use_container_width=True, key=f"alert_dismiss_{key_suffix}"):
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
 
-        # ── Popup mesures actif ────────────────────────────────────────────────
         if st.session_state.get("_show_mesures_popup"):
             _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
 
-        # ── Récapitulatif dernière alerte ──────────────────────────────────────
-        if not st.session_state.get("_show_mesures_popup") and st.session_state.get("_last_mesures_popup"):
-            _last = st.session_state["_last_mesures_popup"]
-            _is_action = _last["status"] == "action"
-            _sc = "#ef4444" if _is_action else "#f59e0b"
-            _ic = "🚨" if _is_action else "⚠️"
-            _txt = "ACTION REQUISE" if _is_action else "ALERTE"
-
-            with st.expander(
-                f"{_ic} Récapitulatif — {_txt} · {_last['label']} · Score {_last.get('total_score', '—')}",
-                expanded=False
-            ):
-                def _match_last(m):
-                    if _last["status"] == "alert" and m.get("type") not in ("alert", "both"):
-                        return False
-                    if _last["status"] == "action" and m.get("type") not in ("action", "both"):
-                        return False
-                    mr = m.get("risk", "all")
-                    if mr != "all":
-                        gr = _last.get("risk", 1)
-                        if isinstance(mr, list):
-                            return gr in mr
-                        return mr == gr
-                    return True
-
-                _mes_last = [m for m in st.session_state.origin_measures if _match_last(m)]
-                type_colors_l = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
-                type_labels_l = {"action": "🚨 Action", "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
-                st.markdown(
-                    f"<div style='font-size:.8rem;color:{_sc};font-weight:700;margin-bottom:8px'>"
-                    f"📋 {_last.get('germ', '—')} · Lieu Nv.{_last.get('loc_criticality', '—')} "
-                    f"× Germe {_last.get('germ_score', '—')} = Score {_last.get('total_score', '—')}</div>",
-                    unsafe_allow_html=True)
-
-                if _mes_last:
-                    for _m in _mes_last:
-                        _tc = type_colors_l.get(_m["type"], "#94a3b8")
-                        _tl = type_labels_l.get(_m["type"], _m["type"])
-                        st.markdown(
-                            f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};"
-                            f"border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;display:flex;"
-                            f"align-items:center;justify-content:space-between;gap:10px'>"
-                            f"<div style='font-size:.8rem;color:#0f172a;flex:1'>"
-                            f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>"
-                            f"<span style='background:{_tc}18;color:{_tc};border:1.5px solid {_tc}66;border-radius:6px;"
-                            f"padding:2px 8px;font-size:.63rem;font-weight:800;white-space:nowrap'>{_tl}</span></div>",
-                            unsafe_allow_html=True)
-                else:
-                    st.caption("Aucune mesure corrective configurée.")
-
-                if st.button("✕ Effacer ce récapitulatif", key="dismiss_last_mesures"):
-                    st.session_state["_last_mesures_popup"] = None
-                    st.rerun()
-
-       # ── Liste des identifications en attente ──────────────────────────────
         st.markdown("#### 🔴 Identifications en attente")
 
         def _j7_done_or_absent(sample_id):
-            j7 = next(
-                (x for x in st.session_state.schedules
-                 if x['sample_id'] == sample_id and x['when'] == 'J7'), None)
+            j7 = next((x for x in st.session_state.schedules
+                     if x['sample_id'] == sample_id and x['when'] == 'J7'), None)
             return j7 is None or j7['status'] in ('done', 'skipped')
 
         _all_pending = [
@@ -3349,11 +2745,10 @@ vp.addEventListener('wheel',e=>{{
             st.success("✅ Aucune identification en attente.")
         else:
             germ_names = sorted([g['name'] for g in st.session_state.germs])
-            # Coller ces 3 lignes juste AVANT la boucle "for pg in pending_ids_grouped:"
             LOC_CRIT_OPTS   = ["1 — Limité", "2 — Modéré", "3 — Important", "4 — Critique"]
             LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
             LOC_CRIT_LABELS = {"1": "Limité", "2": "Modéré", "3": "Important", "4": "Critique"}
-            
+
             for pg in pending_ids_grouped:
                 _sid = pg["sample_id"]
                 _entries = pg["entries"]
@@ -3370,21 +2765,12 @@ vp.addEventListener('wheel',e=>{{
                 germs_list_key = f"germs_list_{_key}"
                 _lc_override_key = f"lc_override_{_key}"
 
-                # Toujours recalculer depuis les Points courants (temps réel)
                 _fresh_lc = 1
                 if smp:
                     _label_smp = smp.get("label", "")
-                    _pt_fr = next(
-                        (p for p in st.session_state.points
-                         if p.get("label") == _label_smp),
-                        None,
-                    )
-                    _fresh_lc = (
-                        int(_pt_fr.get("location_criticality", 1))
-                        if _pt_fr
-                        else _get_location_criticality(smp)
-                    )
-                
+                    _pt_fr = next((p for p in st.session_state.points if p.get("label") == _label_smp), None)
+                    _fresh_lc = (int(_pt_fr.get("location_criticality", 1)) if _pt_fr else _get_location_criticality(smp))
+
                 loc_crit = _fresh_lc
 
                 real_indices = [
@@ -3396,30 +2782,16 @@ vp.addEventListener('wheel',e=>{{
                     st.session_state[germs_list_key] = [{"germ": "— Sélectionner un germe —", "ufc": 0}]
 
                 with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
-
                     _lc_col = LOC_CRIT_COLORS.get(str(loc_crit), "#94a3b8")
                     _lc_lbl = LOC_CRIT_LABELS.get(str(loc_crit), "?")
 
                     st.markdown(
                         f"<div style='background:{_lc_col}11;border:1px solid {_lc_col}44;border-radius:8px;"
                         f"padding:8px 12px;margin-bottom:10px;font-size:.75rem;font-weight:700;color:{_lc_col}'>"
-                        f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_lc_lbl}"
-                        f" &nbsp;·&nbsp; Score final = {loc_crit} × score germe le plus critique</div>",
+                        f"🏷️ Criticité du lieu : Niveau {loc_crit} — {_lc_lbl}</div>",
                         unsafe_allow_html=True)
 
-                    if len(_entries) > 1:
-                        _ufc_detail = "  ·  ".join(f"{e['when']} : {e['colonies']} UFC" for e in _entries)
-                        st.markdown(
-                            f"<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
-                            f"padding:8px 12px;margin-bottom:8px;font-size:.75rem;color:#854d0e;font-weight:600'>"
-                            f"⚠️ Lectures J2 <em>et</em> J7 positives — une seule identification requise"
-                            f" · {_ufc_detail}</div>",
-                            unsafe_allow_html=True)
-
-                    st.markdown(
-                        "<div style='font-size:.8rem;font-weight:700;color:#475569;margin-bottom:6px'>"
-                        "🧫 Germes identifiés</div>",
-                        unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:.8rem;font-weight:700;color:#475569;margin-bottom:6px'>🧫 Germes identifiés</div>", unsafe_allow_html=True)
 
                     germs_to_remove = []
                     current_germs = st.session_state[germs_list_key]
@@ -3443,7 +2815,7 @@ vp.addEventListener('wheel',e=>{{
                         with cols[2]:
                             st.markdown("<div style='margin-top:22px'>", unsafe_allow_html=True)
                             if gi > 0:
-                                if st.button("🗑️", key=f"del_germ_{_key}_{gi}", help="Supprimer ce germe"):
+                                if st.button("🗑️", key=f"del_germ_{_key}_{gi}"):
                                     germs_to_remove.append(gi)
                             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -3474,47 +2846,20 @@ vp.addEventListener('wheel',e=>{{
                             worst = max(scored_germs, key=lambda x: x["score"])
                             ts_prev = loc_crit * worst["score"]
                             st_prev, _, sc_prev = _evaluate_score(ts_prev)
-                            ufc_total_prev = sum(s["ufc"] for s in scored_germs)
-                            preview_rows = "".join(
-                                f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
-                                f"<td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td>"
-                                f"<td style='padding:2px 8px;text-align:center;font-weight:700;"
-                                f"color:{'#ef4444' if s['name'] == worst['name'] else '#64748b'}'>"
-                                f"{s['score']}{'  👑' if s['name'] == worst['name'] else ''}</td></tr>"
-                                for s in scored_germs)
-                            st.markdown(f"""<div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;border-radius:8px;padding:10px 14px;margin-top:8px">
-                            <div style="font-size:.6rem;color:#475569;text-transform:uppercase;font-weight:700;margin-bottom:6px">Aperçu score — germe le plus critique 👑</div>
-                            <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
-                                <tr style="border-bottom:1px solid #e2e8f0"><th style="padding:2px 8px;text-align:left;color:#94a3b8">Germe</th><th style="padding:2px 8px;text-align:center;color:#94a3b8">UFC</th><th style="padding:2px 8px;text-align:center;color:#94a3b8">Score germe</th></tr>
-                                {preview_rows}
-                                <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4"><td style="padding:4px 8px;font-weight:800;color:#166534">Σ UFC TOTAL</td><td style="padding:4px 8px;text-align:center;font-weight:900;color:#166534;font-size:.85rem">{ufc_total_prev}</td><td style="padding:4px 8px;text-align:center;font-size:.65rem;color:#64748b">somme des germes</td></tr>
-                            </table>
-                            <div style="display:flex;align-items:center;gap:12px">
-                                <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
-                                <div style="font-size:.72rem;color:#475569">Lieu {loc_crit} × Germe le + critique {worst['score']}<br><span style="font-weight:700;color:{sc_prev}">{'🚨 ACTION' if st_prev == 'action' else '⚠️ ALERTE' if st_prev == 'alert' else '✅ Conforme'}</span></div>
-                            </div></div>""", unsafe_allow_html=True)
 
                         ic1, ic2 = st.columns([3, 1])
                         with ic1:
                             remarque = st.text_area("Remarque", height=68, key=f"rem_id_{_key}")
                         with ic2:
-                            date_id = st.date_input("Date identification", value=datetime.today(),
-                                                    key=f"date_id_{_key}")
+                            date_id = st.date_input("Date identification", value=datetime.today(), key=f"date_id_{_key}")
 
                         _when_set = set(pg["when_list"])
                         _has_j7   = "J7" in _when_set
-                        _back_lbl = (
-                            "↩️ Corriger J7" if _when_set == {"J7"}
-                            else "↩️ Corriger J2" if _when_set == {"J2"}
-                            else "↩️ Corriger lecture"
-                        )
 
                         idc1, idc2, idc3, idc4 = st.columns([2, 1.5, 1.5, 0.6])
 
                         with idc1:
-                            if st.button("🔍 Analyser & Enregistrer",
-                                        use_container_width=True,
-                                        key=f"submit_id_{_key}"):
+                            if st.button("🔍 Analyser & Enregistrer", use_container_width=True, key=f"submit_id_{_key}"):
                                 valid_entries = [
                                     g for g in st.session_state[germs_list_key]
                                     if g["germ"] and g["germ"] != "— Sélectionner un germe —"
@@ -3524,8 +2869,7 @@ vp.addEventListener('wheel',e=>{{
                                 else:
                                     scored_entries = []
                                     for ve in valid_entries:
-                                        match, score_fuzzy = find_germ_match(ve["germ"],
-                                                                            st.session_state.germs)
+                                        match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
                                         if match and score_fuzzy > 0.4:
                                             gs = _get_germ_score(match)
                                             scored_entries.append({
@@ -3539,57 +2883,32 @@ vp.addEventListener('wheel',e=>{{
                                     if not scored_entries:
                                         st.warning("⚠️ Aucune correspondance trouvée.")
                                     else:
-                                        worst_entry = max(scored_entries,
-                                                        key=lambda x: x["germ_score"])
-                                        loc_crit = _fresh_lc
+                                        worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
                                         total_sc = loc_crit * worst_entry["germ_score"]
                                         status, status_lbl, status_col = _evaluate_score(total_sc)
                                         ufc_total = sum(e["ufc"] for e in scored_entries)
                                         triggered_by = None
                                         if status in ("alert", "action"):
-                                            triggered_by = (
-                                                f"lieu {loc_crit} × germe "
-                                                f"{worst_entry['germ_score']} "
-                                                f"({worst_entry['germ_match']})"
-                                                if loc_crit > 1
-                                                else f"germe {worst_entry['germ_match']} "
-                                                    f"(score {worst_entry['germ_score']})"
-                                            )
+                                            triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_match']})"
                                         germs_detail = [
-                                            {
-                                                "name":       e["germ_match"],
-                                                "germ_saisi": e["germ_saisi"],
-                                                "match_score":e["match_score"],
-                                                "ufc":        e["ufc"],
-                                                "germ_score": e["germ_score"],
-                                                "is_worst":   e["germ_match"] == worst_entry["germ_match"],
-                                            }
+                                            {"name": e["germ_match"], "germ_saisi": e["germ_saisi"],
+                                             "match_score": e["match_score"], "ufc": e["ufc"],
+                                             "germ_score": e["germ_score"],
+                                             "is_worst": e["germ_match"] == worst_entry["germ_match"]}
                                             for e in scored_entries
                                         ]
                                         st.session_state.surveillance.append({
-                                            "date":                 str(date_id),
-                                            "prelevement":          _label,
-                                            "sample_id":            _sid,
-                                            "germ_saisi":           worst_entry["germ_saisi"],
-                                            "germ_match":           worst_entry["germ_match"],
-                                            "match_score":          worst_entry["match_score"],
-                                            "ufc":                  worst_entry["ufc"],
-                                            "ufc_total":            ufc_total,
-                                            "germ_score":           worst_entry["germ_score"],
-                                            "germs_detail":         germs_detail,
-                                            "multi_germ":           len(scored_entries) > 1,
-                                            "location_criticality": loc_crit,
-                                            "total_score":          total_sc,
-                                            "risk":                 worst_entry["match_obj"].get(
-                                                                        "risk", worst_entry["germ_score"]),
-                                            "room_class":           pt_class,
-                                            "alert_threshold":      "Score ≥ 24",
-                                            "action_threshold":     "Score > 36",
-                                            "triggered_by":         triggered_by,
-                                            "status":               status,
-                                            "operateur":            pt_oper,
-                                            "remarque":             remarque,
-                                            "readings":             _when_str,
+                                            "date": str(date_id), "prelevement": _label, "sample_id": _sid,
+                                            "germ_saisi": worst_entry["germ_saisi"], "germ_match": worst_entry["germ_match"],
+                                            "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
+                                            "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
+                                            "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
+                                            "location_criticality": loc_crit, "total_score": total_sc,
+                                            "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                            "room_class": pt_class, "alert_threshold": "Score ≥ 24",
+                                            "action_threshold": "Score > 36", "triggered_by": triggered_by,
+                                            "status": status, "operateur": pt_oper, "remarque": remarque,
+                                            "readings": _when_str,
                                         })
                                         save_surveillance(st.session_state.surveillance)
                                         for _ri in real_indices:
@@ -3600,122 +2919,62 @@ vp.addEventListener('wheel',e=>{{
                                             save_archived_samples(st.session_state.archived_samples)
                                             save_prelevements(st.session_state.prelevements)
                                         st.session_state.pop(germs_list_key, None)
-                                        st.session_state.pop(_lc_override_key, None)
                                         if status in ("alert", "action"):
                                             st.session_state["_show_mesures_popup"] = {
-                                                "status":        status,
-                                                "germ":          worst_entry["germ_match"],
-                                                "ufc":           worst_entry["ufc"],
-                                                "risk":          worst_entry["match_obj"].get(
-                                                                    "risk", worst_entry["germ_score"]),
-                                                "label":         _label,
-                                                "room_class":    pt_class,
-                                                "triggered_by":  triggered_by,
-                                                "germ_score":    worst_entry["germ_score"],
-                                                "loc_criticality": loc_crit,
-                                                "total_score":   total_sc,
-                                                "th_germe":      {"alert": "Score ≥ 24",
-                                                                "action": "Score > 36"},
-                                                "germs_detail":  germs_detail,
+                                                "status": status, "germ": worst_entry["germ_match"],
+                                                "ufc": worst_entry["ufc"],
+                                                "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                                "label": _label, "room_class": pt_class,
+                                                "triggered_by": triggered_by,
+                                                "germ_score": worst_entry["germ_score"],
+                                                "loc_criticality": loc_crit, "total_score": total_sc,
+                                                "germs_detail": germs_detail,
                                             }
                                         else:
-                                            germs_summary = ", ".join(
-                                                f"{e['name']} ({e['ufc']} UFC)"
-                                                for e in germs_detail)
-                                            st.success(
-                                                f"✅ {germs_summary} — **Conforme** "
-                                                f"(score {total_sc} = lieu {loc_crit} × "
-                                                f"germe le + critique {worst_entry['germ_score']})"
-                                                f" | UFC total : **{ufc_total}**")
+                                            germs_summary = ", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
+                                            st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc})")
                                         st.rerun()
 
                         with idc2:
-                            if st.button(_back_lbl, use_container_width=True,
-                                        key=f"cancel_id_{_key}"):
+                            _back_lbl = "↩️ Corriger J7" if _when_set == {"J7"} else "↩️ Corriger J2" if _when_set == {"J2"} else "↩️ Corriger lecture"
+                            if st.button(_back_lbl, use_container_width=True, key=f"cancel_id_{_key}"):
                                 for _e in _entries:
-                                    sch = next(
-                                        (x for x in st.session_state.schedules
-                                        if x["sample_id"] == _sid
-                                        and x["when"] == _e["when"]
-                                        and x["status"] == "done"),
-                                        None,
-                                    )
+                                    sch = next((x for x in st.session_state.schedules
+                                                if x["sample_id"] == _sid and x["when"] == _e["when"] and x["status"] == "done"), None)
                                     if sch:
                                         sch["status"] = "pending"
                                 save_schedules(st.session_state.schedules)
                                 for _ri in sorted(real_indices, reverse=True):
                                     st.session_state.pending_identifications.pop(_ri)
-                                save_pending_identifications(
-                                    st.session_state.pending_identifications)
+                                save_pending_identifications(st.session_state.pending_identifications)
                                 if germs_list_key in st.session_state:
                                     del st.session_state[germs_list_key]
-                                if _lc_override_key in st.session_state:
-                                    del st.session_state[_lc_override_key]
                                 st.rerun()
 
                         with idc3:
-                            # Visible si identification vient de J7 (ou J2+J7)
-                            # Permet de remonter complètement à J2
                             if _has_j7:
-                                if st.button("↩️ Revenir à J2",
-                                            use_container_width=True,
-                                            key=f"back_j2_id_{_key}"):
-                                    _j2_back = next(
-                                        (x for x in st.session_state.schedules
-                                        if x["sample_id"] == _sid and x["when"] == "J2"),
-                                        None,
-                                    )
-                                    if _j2_back:
-                                        _j2_back["status"] = "pending"
-                                    _j7_back = next(
-                                        (x for x in st.session_state.schedules
-                                        if x["sample_id"] == _sid and x["when"] == "J7"),
-                                        None,
-                                    )
-                                    if _j7_back:
-                                        _j7_back["status"] = "pending"
+                                if st.button("↩️ Revenir à J2", use_container_width=True, key=f"back_j2_id_{_key}"):
+                                    _j2_back = next((x for x in st.session_state.schedules if x["sample_id"] == _sid and x["when"] == "J2"), None)
+                                    if _j2_back: _j2_back["status"] = "pending"
+                                    _j7_back = next((x for x in st.session_state.schedules if x["sample_id"] == _sid and x["when"] == "J7"), None)
+                                    if _j7_back: _j7_back["status"] = "pending"
                                     save_schedules(st.session_state.schedules)
-                                    st.session_state.pending_identifications = [
-                                        x for x in st.session_state.pending_identifications
-                                        if x.get("sample_id") != _sid
-                                    ]
-                                    save_pending_identifications(
-                                        st.session_state.pending_identifications)
-                                    _smp_b = next(
-                                        (p for p in st.session_state.prelevements
-                                        if p["id"] == _sid),
-                                        None,
-                                    )
-                                    if _smp_b and _smp_b.get("archived"):
-                                        _smp_b["archived"] = False
-                                        st.session_state.archived_samples = [
-                                            x for x in st.session_state.archived_samples
-                                            if x.get("id") != _sid
-                                        ]
-                                        save_archived_samples(
-                                            st.session_state.archived_samples)
-                                        save_prelevements(st.session_state.prelevements)
+                                    st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get("sample_id") != _sid]
+                                    save_pending_identifications(st.session_state.pending_identifications)
                                     if germs_list_key in st.session_state:
                                         del st.session_state[germs_list_key]
-                                    if _lc_override_key in st.session_state:
-                                        del st.session_state[_lc_override_key]
                                     st.success("↩️ J2 et J7 remises en attente.")
                                     st.rerun()
 
                         with idc4:
-                            if st.button("🗑️", use_container_width=True,
-                                        key=f"del_id_{_key}"):
+                            if st.button("🗑️", use_container_width=True, key=f"del_id_{_key}"):
                                 for _ri in sorted(real_indices, reverse=True):
                                     st.session_state.pending_identifications.pop(_ri)
-                                save_pending_identifications(
-                                    st.session_state.pending_identifications)
+                                save_pending_identifications(st.session_state.pending_identifications)
                                 if germs_list_key in st.session_state:
                                     del st.session_state[germs_list_key]
-                                if _lc_override_key in st.session_state:
-                                    del st.session_state[_lc_override_key]
                                 st.rerun()
 
-        # ── Derniers résultats ────────────────────────────────────────────────
         if st.session_state.surveillance:
             st.divider()
             st.markdown("### 📋 Derniers résultats")
@@ -3732,27 +2991,15 @@ vp.addEventListener('wheel',e=>{{
                     f"Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>"
                     if total_score is not None else ""
                 )
-                trig = r.get("triggered_by")
-                trig_badge = (
-                    f"<span style='background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:4px;"
-                    f"padding:1px 6px;font-size:.6rem;font-weight:600;margin-left:4px'>⚡ {trig}</span>"
-                    if trig else ""
-                )
                 st.markdown(
                     f"<div style='background:#f8fafc;border-left:3px solid {sc};border-radius:8px;"
-                    f"padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px'>"
-                    f"<span style='font-size:1.1rem'>{ic}</span>"
-                    f"<div style='flex:1'>"
-                    f"<div style='font-size:.78rem;color:#1e293b;font-weight:600'>"
-                    f"{r['prelevement']} — <span style='font-style:italic'>{r['germ_match']}</span>"
-                    f"{score_badge}{trig_badge}</div>"
+                    f"padding:10px 14px;margin-bottom:6px'>"
+                    f"<span style='font-size:1.1rem'>{ic}</span> "
+                    f"<span style='font-size:.78rem;font-weight:600'>"
+                    f"{r['prelevement']} — <em>{r['germ_match']}</em>{score_badge}</span>"
                     f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
-                    f"{r['date']} · {ufc_display} · Lieu Nv.{r.get('location_criticality', '—')}"
-                    f" · {r.get('operateur') or 'N/A'}</div>"
-                    f"</div>"
-                    f"<div style='text-align:right'>"
-                    f"<span style='font-size:.75rem;color:{sc};font-weight:800'>{ufc_display}</span>"
-                    f"</div></div>",
+                    f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
+                    f"</div>",
                     unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3856,7 +3103,7 @@ if active == "planning":
         return buf.getvalue()
 
     # ── Planning mensuel ─────────────────────────────────────────────────
-    def _compute_monthly_planning(year, month, class_max_dict, holidays_set):
+    def _compute_monthly_planning(year, month, holidays_set):
         import calendar as _cm
         import random as _rnd
 
@@ -3894,7 +3141,7 @@ if active == "planning":
                 week_monday + timedelta(days=i)
                 for i in range(5)
                 if (week_monday + timedelta(days=i)) not in holidays_set
-                and (week_monday + timedelta(days=i)).month == month  # ← ici seulement
+                and (week_monday + timedelta(days=i)).month == month
             ]
             if not wd_week:
                 continue
@@ -3909,7 +3156,6 @@ if active == "planning":
 
             for pt in st.session_state.points:
                 rc        = (pt.get('room_class') or '').strip()
-                max_cls   = int(class_max_dict.get(rc, 0))
                 freq_raw  = pt.get('frequency')
                 freq_unit = pt.get('frequency_unit', '/ semaine')
                 try:
@@ -3917,11 +3163,13 @@ if active == "planning":
                 except (TypeError, ValueError):
                     freq_val = 0.0
 
+                # ── Calcul allocation uniquement depuis la fréquence ──────────
                 if freq_val <= 0:
+                    # Fréquence par défaut selon la classe
                     default_by_class = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
                     alloc       = default_by_class.get(rc[:1] if rc else '', 2)
                     max_per_day = 1
-                elif 'mois' in freq_unit.lower().replace(' ', ''):
+                elif '/ jour' in freq_unit:
                     alloc       = int(freq_val) * nb_wd
                     max_per_day = int(freq_val)
                 elif '/ semaine' in freq_unit:
@@ -3933,18 +3181,6 @@ if active == "planning":
                 else:
                     alloc       = int(freq_val)
                     max_per_day = 1
-
-                is_air = (pt.get('type') or '').strip().lower() in ('air', 'air ambiant')
-                if max_cls > 0 and not is_air:
-                    pts_cls   = [p for p in st.session_state.points
-                                 if (p.get('room_class') or '').strip() == rc
-                                 and (p.get('type') or '').strip().lower()
-                                 not in ('air', 'air ambiant')]
-                    freqs_cls = [max(0.01, _freq_en_semaine(p, nb_wd)) for p in pts_cls]
-                    tot_cls   = sum(freqs_cls) or 1
-                    my_f      = max(0.01, _freq_en_semaine(pt, nb_wd))
-                    alloc_cls = round(my_f / tot_cls * max_cls)
-                    alloc     = min(alloc, alloc_cls)
 
                 tasks.append({
                     'label':       pt['label'],
@@ -4277,18 +3513,7 @@ if active == "planning":
                 except Exception:
                     st.session_state.points = []
 
-        if not st.session_state.get("class_constraints_loaded"):
-            _raw_cc = _supa_get("class_constraints")
-            if _raw_cc:
-                try:
-                    _parsed_cc = json.loads(_raw_cc)
-                    st.session_state["_class_constraints_raw"] = _parsed_cc
-                    for _cls_k, _cls_v in _parsed_cc.items():
-                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
-                except Exception:
-                    pass
-            st.session_state["class_constraints_loaded"] = True
-       # ── Sélecteurs Année / Mois ──────────────────────────────────
+        # ── Sélecteurs Année / Mois ──────────────────────────────────
         col_y, col_m = st.columns(2)
         with col_y:
             _ch_year = st.number_input(
@@ -4319,110 +3544,31 @@ if active == "planning":
             pm_mondays.append(cur_pm)
             cur_pm += timedelta(weeks=1)
 
-        # ── Chargement contraintes Supabase ──────────────────────────
-        if "class_constraints_loaded" not in st.session_state:
-            _raw_cc = _supa_get("class_constraints")
-            if _raw_cc:
-                try:
-                    _parsed_cc = json.loads(_raw_cc)
-                    st.session_state["_class_constraints_raw"] = _parsed_cc
-                    for _cls_k, _cls_v in _parsed_cc.items():
-                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
-                except Exception:
-                    st.session_state["_class_constraints_raw"] = {}
-            else:
-                st.session_state["_class_constraints_raw"] = {}
-            st.session_state["class_constraints_loaded"] = True
-
-        all_classes = sorted({
-            (pt.get("room_class") or "").strip()
-            for pt in st.session_state.points
-            if (pt.get("room_class") or "").strip()
-        })
-        for _cls in all_classes:
-            _key = f"class_max_{_cls}"
-            if _key not in st.session_state:
-                _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
-                st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
-
-        class_max_dict = {
-            cls: int(st.session_state.get(f"class_max_{cls}", 0))
-            for cls in all_classes
-        }
         # ── Normalisation des clés des points ────────────────────────
         for _pt in st.session_state.points:
-            # room_class
             if not _pt.get("room_class"):
                 _pt["room_class"] = _pt.get("class", "")
-            # frequency
             if "frequency" not in _pt or _pt.get("frequency") is None:
                 _pt["frequency"] = _pt.get("freq", None)
-            # frequency_unit
             if "frequency_unit" not in _pt or not _pt.get("frequency_unit"):
                 _pt["frequency_unit"] = _pt.get("unit", "/ semaine")
-            if "room_class" not in _pt or not _pt.get("room_class"):
-                _pt["room_class"] = _pt.get("class", "")
-      
-        # ── Calcul des lundis du mois ────────────────────────────────
-        import calendar as _cal_pm
-        _, _pm_ndays = _cal_pm.monthrange(_ch_year, _ch_month)
-        _pm_start    = date_type(_ch_year, _ch_month, 1)
-        _pm_end      = date_type(_ch_year, _ch_month, _pm_ndays)
-        cur_pm       = _pm_start - timedelta(days=_pm_start.weekday())
-        pm_mondays   = []
-        while cur_pm <= _pm_end:
-            pm_mondays.append(cur_pm)
-            cur_pm += timedelta(weeks=1)
-
-        # ── Chargement contraintes Supabase ──────────────────────────
-        if "class_constraints_loaded" not in st.session_state:
-            _raw_cc = _supa_get("class_constraints")
-            if _raw_cc:
-                try:
-                    _parsed_cc = json.loads(_raw_cc)
-                    st.session_state["_class_constraints_raw"] = _parsed_cc
-                    for _cls_k, _cls_v in _parsed_cc.items():
-                        st.session_state[f"class_max_{_cls_k}"] = int(_cls_v)
-                except Exception:
-                    st.session_state["_class_constraints_raw"] = {}
-            else:
-                st.session_state["_class_constraints_raw"] = {}
-            st.session_state["class_constraints_loaded"] = True
-
-        all_classes = sorted({
-            (pt.get("room_class") or "").strip()
-            for pt in st.session_state.points
-            if (pt.get("room_class") or "").strip()
-        })
-        for _cls in all_classes:
-            _key = f"class_max_{_cls}"
-            if _key not in st.session_state:
-                _raw_cc2 = st.session_state.get("_class_constraints_raw", {})
-                st.session_state[_key] = int(_raw_cc2.get(_cls, 0))
-
-        class_max_dict = {
-            cls: int(st.session_state.get(f"class_max_{cls}", 0))
-            for cls in all_classes
-        }
 
         st.divider()
 
         # ── Planning mensuel ─────────────────────────────────────────
         st.markdown("#### 📅 Planning mensuel automatique")
         st.caption(
-            "Répartition basée sur les contraintes max/classe/semaine. "
-            "**0 = aucun prélèvement** pour la classe concernée. "
+            "Répartition basée sur la fréquence de chaque point. "
             "Un point n'apparaît jamais 2× le même jour sauf fréquence > 1/jour."
         )
 
         monthly_plan = _compute_monthly_planning(
-            _ch_year, _ch_month, class_max_dict, _ch_holidays
+            _ch_year, _ch_month, _ch_holidays
         )
 
         from datetime import date as date_type
         monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
-        
-        
+
         for _wm in pm_mondays:
             _has_skip = any(
                 (_wm + timedelta(days=i)).isoformat()
@@ -6154,7 +5300,6 @@ if active == "parametres":
 
     (subtab_mesures,
     subtab_points,
-    subtab_contraintes,
     subtab_plans,
     subtab_seuils,
     subtab_operateurs,
@@ -6163,7 +5308,6 @@ if active == "parametres":
     subtab_faq) = st.tabs([
         "📋 Mesures correctives",
         "📍 Points de prélèvement",
-        "🏷️ Contraintes classes",
         "🗺️ Plans",
         "⚖️ Seuils d'alerte",
         "👤 Opérateurs",
@@ -6199,100 +5343,7 @@ if active == "parametres":
         else:
             return freq                 # fallback : on suppose hebdomadaire
   
-# ══════════════════════════════════════════════════════════════════════════
-    # CONTRAINTES MAX / CLASSE / SEMAINE
-    # ══════════════════════════════════════════════════════════════════════════
-    with subtab_contraintes:
-        st.markdown("### 🏷️ Contraintes max prélèvements / classe / semaine")
-        st.caption(
-            "**0 = aucun prélèvement** pour cette classe. "
-            "**> 0** = total hebdomadaire plafonné et réparti proportionnellement "
-            "selon les fréquences individuelles.")
 
-        all_classes_p = sorted({
-            (pt.get('room_class') or '').strip()
-            for pt in st.session_state.points
-            if (pt.get('room_class') or '').strip()
-        })
-
-        if not all_classes_p:
-            st.info("Aucune classe définie sur les points de prélèvement.")
-        else:
-            rc_colors_p = {
-                "A": "#22c55e", "B": "#84cc16", "C": "#f59e0b",
-                "D": "#f97316", "E": "#ef4444",
-            }
-            cls_cols_p = st.columns(min(len(all_classes_p), 6))
-            for ci, cls in enumerate(all_classes_p):
-                rc_col_p  = rc_colors_p.get(cls[:1].upper(), "#6366f1")
-                pts_cls_p = [pt for pt in st.session_state.points
-                             if (pt.get('room_class') or '').strip() == cls]
-                with cls_cols_p[ci % len(cls_cols_p)]:
-                    st.markdown(
-                        f"<div style='background:{rc_col_p}15;border:1.5px solid {rc_col_p}55;"
-                        f"border-radius:8px;padding:8px;text-align:center;margin-bottom:4px'>"
-                        f"<div style='font-size:.9rem;font-weight:900;color:{rc_col_p}'>Classe {cls}</div>"
-                        f"<div style='font-size:.65rem;color:#64748b'>{len(pts_cls_p)} point(s)</div>"
-                        f"</div>",
-                        unsafe_allow_html=True)
-                    _key_p = f"class_max_{cls}"
-                    if _key_p not in st.session_state:
-                        _raw_cc_p = st.session_state.get("_class_constraints_raw", {})
-                        st.session_state[_key_p] = int(_raw_cc_p.get(cls, 0))
-                    st.number_input(
-                        f"Max/sem Cl.{cls}", min_value=0, max_value=500,
-                        step=1, key=_key_p,
-                        label_visibility="collapsed")
-                    _new_max_p = int(st.session_state.get(_key_p, 0))
-
-                    if _new_max_p > 0:
-                        pts_surf_p = [pt for pt in pts_cls_p
-                                      if (pt.get('type') or '').strip().lower()
-                                      not in ('air', 'air ambiant')]
-                        pts_air_p  = [pt for pt in pts_cls_p
-                                      if (pt.get('type') or '').strip().lower()
-                                      in ('air', 'air ambiant')]
-                        freqs_p2   = [max(0.01, _freq_en_semaine(pt, 5)) for pt in pts_surf_p]
-                        tot_p2     = sum(freqs_p2) or 1
-                        assigned_p = 0
-                        preview_p  = ""
-                        for ii, (pt, f) in enumerate(zip(pts_surf_p, freqs_p2)):
-                            a = round(f / tot_p2 * _new_max_p) if ii < len(pts_surf_p)-1 \
-                                else max(0, _new_max_p - assigned_p)
-                            assigned_p += a
-                            preview_p += (f"<div style='font-size:.6rem;color:#1e40af'>"
-                                          f"{pt['label'][:20]}: <b>{a}×/sem</b></div>")
-                        for pt_air in pts_air_p:
-                            f_air = _freq_en_semaine(pt_air, 5)
-                            preview_p += (f"<div style='font-size:.6rem;color:#0369a1'>"
-                                          f"💨 {pt_air['label'][:20]}: <b>{f_air:.0f}×/sem</b></div>")
-                        st.markdown(
-                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
-                            f"border-radius:6px;padding:6px 8px;margin-top:2px'>{preview_p}</div>",
-                            unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            "<div style='background:#fef2f2;border:1px solid #fca5a5;"
-                            "border-radius:6px;padding:6px 8px;margin-top:2px;text-align:center'>"
-                            "<div style='font-size:.62rem;font-weight:700;color:#991b1b'>🚫 Désactivé</div>"
-                            "</div>",
-                            unsafe_allow_html=True)
-
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-            sv_col_p, _ = st.columns([1, 3])
-            with sv_col_p:
-                if st.button("💾 Sauvegarder les contraintes",
-                             key="save_class_constraints_param",
-                             use_container_width=True, type="primary"):
-                    payload_p = {
-                        cls: int(st.session_state.get(f"class_max_{cls}", 0))
-                        for cls in all_classes_p
-                    }
-                    if _supa_upsert('class_constraints',
-                                    json.dumps(payload_p, ensure_ascii=False)):
-                        st.success("✅ Contraintes sauvegardées dans Supabase !")
-                    else:
-                        st.warning("⚠️ Supabase non connecté.")
     # ══════════════════════════════════════════════════════════════════════════
     # MESURES CORRECTIVES
     # ══════════════════════════════════════════════════════════════════════════
