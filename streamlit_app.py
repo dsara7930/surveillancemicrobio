@@ -3496,12 +3496,12 @@ if active == "planning":
     ])
 
     if active == "planning":
-    st.markdown("### 📅 Planning des prélèvements & lectures")
+        st.markdown("### 📅 Planning des prélèvements & lectures")
 
-    _today_dt     = datetime.today().date()
-    MOIS_FR       = ["","Janvier","Février","Mars","Avril","Mai","Juin",
-                     "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
-    JOURS_FR_LONG = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+        _today_dt     = datetime.today().date()
+        MOIS_FR       = ["","Janvier","Février","Mars","Avril","Mai","Juin",
+                        "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+        JOURS_FR_LONG = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
 
     # ── Initialisation planning_skips ────────────────────────────────────
     if "planning_skips" not in st.session_state:
