@@ -4675,7 +4675,7 @@ if active == "historique":
               <div style="font-size:.8rem;font-weight:700;color:#1e40af;margin-bottom:10px">
                 📊 Résultats par point de prélèvement
               </div>
-              <div style="width:100%;height:180px"><canvas id="ptChart"></canvas></div>
+              <div style="width:100%;height:320px"><canvas id="ptChart"></canvas></div>
             </div>
             <script>
             (function(){{
