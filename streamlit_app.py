@@ -3000,6 +3000,15 @@ if active == "surveillance":
 #              jamais 2× le même point le même jour (sauf freq > 1/jour)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
+    # ════════════════════════════════════════════════════════════════
+    # ONGLETS
+    # ════════════════════════════════════════════════════════════════
+    plan_tab_charge, plan_tab_export = st.tabs([
+        "📊 Charge hebdo & Planning mensuel",
+        "📥 Export Excel",
+    ])
+
     if active == "planning":
         st.markdown("### 📅 Planning des prélèvements & lectures")
 
@@ -3313,6 +3322,7 @@ if active == "surveillance":
         N_COLS     = 4
         W_ETQ      = 5.2  * rl_cm
         H_ETQ      = 2.95 * rl_cm
+        MARGIN_SHEET = 0
 
         buf = BytesIO()
 
