@@ -3075,7 +3075,7 @@ if active == "planning":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    def _compute_monthly_planning(year, month, holidays_set):
+    def _compute_monthly_planning(year, month, holidays_set, prelevements=None):
         import calendar as _cm
         import random as _rnd
 
@@ -3096,6 +3096,24 @@ if active == "planning":
         ]
 
         planning = {d: [] for d in all_wd}
+
+        if prelevements is None:
+            prelevements = []
+
+        # ── Index des prélèvements déjà réalisés ce mois (tous, programmés ou non) ──
+        _done_this_month = {}  # label -> {date: count}
+        for _p in prelevements:
+            if _p.get("archived", False) or not _p.get("date"):
+                continue
+            try:
+                _d = datetime.fromisoformat(_p["date"]).date()
+            except Exception:
+                continue
+            if _d.year != year or _d.month != month:
+                continue
+            _lbl = _p.get("label", "")
+            _done_this_month.setdefault(_lbl, {})
+            _done_this_month[_lbl][_d] = _done_this_month[_lbl].get(_d, 0) + 1
 
         for pt in st.session_state.points:
             rc        = (pt.get('room_class') or '').strip()
@@ -3131,6 +3149,10 @@ if active == "planning":
                 max_per_day       = 1
                 is_daily          = False
 
+            # ── Soustraire les occurrences déjà réalisées ce mois ────────
+            _already_done_count = sum(_done_this_month.get(pt['label'], {}).values())
+            total_occurrences   = max(0, total_occurrences - _already_done_count)
+
             if total_occurrences <= 0:
                 continue
 
@@ -3143,21 +3165,29 @@ if active == "planning":
                 '_freq_unit':  freq_unit,
             }
 
+            # Jours déjà réalisés ce mois pour ce point (à exclure du placement)
+            _done_dates_for_pt = set(_done_this_month.get(pt['label'], {}).keys())
+
             if is_daily:
+                # Pour le quotidien : placer uniquement sur les jours pas encore faits
                 for d in all_wd:
+                    if d in _done_dates_for_pt:
+                        continue  # déjà fait ce jour-là
                     for _ in range(max_per_day):
                         planning[d].append(dict(task_base))
             else:
                 rng          = _rnd.Random(year * 10000 + month * 100 + hash(pt['label']) % 100)
-                day_counts   = {d: 0 for d in all_wd}
-                day_labels   = {d: {} for d in all_wd}
+                # Exclure du pool les jours déjà réalisés
+                available_wd = [d for d in all_wd if d not in _done_dates_for_pt]
+                day_counts   = {d: 0 for d in available_wd}
+                day_labels   = {d: {} for d in available_wd}
                 remaining    = total_occurrences
-                max_attempts = remaining * nb_wd * 4 + 50
+                max_attempts = remaining * max(len(available_wd), 1) * 4 + 50
                 attempts     = 0
                 while remaining > 0 and attempts < max_attempts:
                     attempts += 1
                     candidates = [
-                        d for d in all_wd
+                        d for d in available_wd
                         if day_labels[d].get(pt['label'], 0) < max_per_day
                     ]
                     if not candidates:
@@ -3504,7 +3534,10 @@ if active == "planning":
             "Les tâches marquées non-faites sont redistribuées sur les jours ouvrés futurs du mois."
         )
 
-        monthly_plan = _compute_monthly_planning(_ch_year, _ch_month, _ch_holidays)
+        monthly_plan = _compute_monthly_planning(
+            _ch_year, _ch_month, _ch_holidays,
+            prelevements=st.session_state.get("prelevements", []),
+        )
         monthly_plan = {
             (k.date() if hasattr(k, 'date') else k): v
             for k, v in monthly_plan.items()
