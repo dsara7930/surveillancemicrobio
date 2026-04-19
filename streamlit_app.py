@@ -1856,14 +1856,18 @@ if active == "surveillance":
                      if s["when"]=="J2" and s["status"]=="pending"
                      and s.get("sample_id") in _active_sids_surv
                      and datetime.fromisoformat(s["due_date"]).date() > today)
+    _j7_orange = sum(1 for s in st.session_state.schedules
+                if s["when"]=="J7" and s["status"]=="pending"
+                and s.get("sample_id") in _active_sids_surv
+                and datetime.fromisoformat(s["due_date"]).date() > today)
     _j7_red    = sum(1 for s in st.session_state.schedules
-                     if s["when"]=="J7" and s["status"]=="pending"
-                     and s.get("sample_id") in _active_sids_surv
-                     and datetime.fromisoformat(s["due_date"]).date() > today)
+                if s["when"]=="J7" and s["status"]=="pending"
+                and s.get("sample_id") in _active_sids_surv
+                and datetime.fromisoformat(s["due_date"]).date() <= today)
     _id_red    = sum(1 for p in st.session_state.pending_identifications
                      if p.get("status") == "pending")
     _dot_j2 = " 🔴" if _j2_red > 0 else (" 🟠" if _j2_orange > 0 else "")
-    _dot_j7 = " 🔴" if _j7_red > 0 else ""
+    _dot_j7 = " 🔴" if _j7_red > 0 else (" 🟠" if _j7_orange > 0 else "")
     _dot_id = " 🔴" if _id_red > 0 else ""
 
     tab_nouveau, tab_j2, tab_j7, tab_ident = st.tabs([
