@@ -4850,7 +4850,7 @@ if active == "historique":
                 unsafe_allow_html=True)
             alertes_list=[]
             for r in surv_f:
-                germ=r.get("germ_match","") or ""
+                germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
                 st_r=r.get("status","ok")
                 ufc=int(r.get("ufc",0) or 0)
                 if germ in ("Négatif","—","") or ufc==0: continue
@@ -4926,7 +4926,7 @@ if active == "historique":
             germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
             total_pos=0
             for r in surv_f:
-                germ=r.get("germ_match","") or ""
+                germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
                 if germ in ("Négatif","—","") or int(r.get("ufc",0) or 0)==0: continue
                 total_pos+=1
                 germs_stats[germ]["count"]+=1
