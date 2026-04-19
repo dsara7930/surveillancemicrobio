@@ -3495,6 +3495,528 @@ if active == "planning":
         "📥 Export Excel",
     ])
 
+    if active == "planning":
+    st.markdown("### 📅 Planning des prélèvements & lectures")
+
+    _today_dt     = datetime.today().date()
+    MOIS_FR       = ["","Janvier","Février","Mars","Avril","Mai","Juin",
+                     "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+    JOURS_FR_LONG = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+
+    # ── Initialisation planning_skips ────────────────────────────────────
+    if "planning_skips" not in st.session_state:
+        _raw_skips = _supa_get('planning_skips')
+        st.session_state["planning_skips"] = json.loads(_raw_skips) if _raw_skips else {}
+
+    # ── Initialisation planning_overrides ────────────────────────────────
+    if "planning_overrides_loaded" not in st.session_state:
+        for k, v in st.session_state.get("planning_overrides", {}).items():
+            if k not in st.session_state:
+                try:
+                    st.session_state[k] = int(v)
+                except Exception:
+                    pass
+        st.session_state["planning_overrides_loaded"] = True
+
+    # ── Helpers fréquence ────────────────────────────────────────────────
+    def _frc_default(rc):
+        rc = (rc or '').strip().upper()
+        if 'A' in rc: return 20
+        if 'D' in rc: return 10
+        return 2
+
+    def _freq_en_semaine(pt, nb_jours_ouvres=5):
+        fr = pt.get('frequency')
+        u  = pt.get('frequency_unit', '/ semaine')
+        try:
+            fr = float(fr)
+        except Exception:
+            fr = 0.0
+        if fr <= 0:
+            return float(_frc_default((pt.get('room_class') or '').strip()))
+        if '/ jour'  in u: return fr * nb_jours_ouvres
+        if '/ mois'  in u: return fr / 4.33
+        return fr
+
+    def _semaines_du_mois(year, month):
+        import calendar as _c
+        _, n_days = _c.monthrange(year, month)
+        first = date_type(year, month, 1)
+        last  = date_type(year, month, n_days)
+        cur   = first - timedelta(days=first.weekday())
+        ms    = []
+        while cur <= last:
+            ms.append(cur)
+            cur += timedelta(weeks=1)
+        return ms
+
+    def get_week_start(d):
+        return d - timedelta(days=d.weekday())
+
+    def fmt_week(ws):
+        we = ws + timedelta(days=6)
+        return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
+
+    def _make_qr_bytes(point_id) -> bytes:
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=4,
+            border=2,
+        )
+        qr.add_data(str(point_id))
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    # ── Jours ouvrés entre deux dates (bornes incluses) ──────────────────
+    def _nb_jours_ouvres_entre(d1, d2, holidays_set):
+        """Nombre de jours ouvrés (lun–ven, hors fériés) entre d1 et d2 inclus."""
+        count = 0
+        cur = d1
+        while cur <= d2:
+            if cur.weekday() < 5 and cur not in holidays_set:
+                count += 1
+            cur += timedelta(days=1)
+        return count
+
+    # ── Auto-skip : marque comme non-fait si > 48h ouvrées sans réalisation
+    def _auto_skip_overdue(monthly_plan, planning_skips, holidays_set, prelevements):
+        """
+        Pour chaque tâche planifiée dans le passé :
+        - Si fréquence >= 1/jour → annuler sans redistribuer (skip direct)
+        - Sinon, si > 48h ouvrées écoulées depuis la date prévue
+          et pas réalisée et pas déjà skippée → auto-skip
+        Retourne (skips_modifiés, changed: bool)
+        """
+        import copy
+        skips   = copy.deepcopy(planning_skips)
+        changed = False
+        today   = _today_dt
+
+        done_set = {
+            (p.get("label"), datetime.fromisoformat(p["date"]).date())
+            for p in prelevements
+            if p.get("date") and not p.get("archived", False)
+        }
+
+        for day, tasks in monthly_plan.items():
+            if day >= today:
+                continue
+            jours_ecoules = _nb_jours_ouvres_entre(day, today, holidays_set)
+            dk = day.isoformat()
+            for t in tasks:
+                lbl = t["label"]
+                already_skipped = lbl in skips.get(dk, [])
+                already_done    = (lbl, day) in done_set
+                if already_skipped or already_done:
+                    continue
+                # fréquence >= 1/jour → annuler sans redistribuer
+                freq_unit = t.get("_freq_unit", "/ semaine")
+                if "/ jour" in freq_unit:
+                    skips.setdefault(dk, [])
+                    if lbl not in skips[dk]:
+                        skips[dk].append(lbl)
+                        changed = True
+                    continue
+                # sinon : auto-skip si > 48h ouvrées
+                if jours_ecoules > 2:
+                    skips.setdefault(dk, [])
+                    if lbl not in skips[dk]:
+                        skips[dk].append(lbl)
+                        changed = True
+        return skips, changed
+
+    # ── Planning mensuel ─────────────────────────────────────────────────
+    def _compute_monthly_planning(year, month, holidays_set):
+        import calendar as _cm
+        import random as _rnd
+
+        _, n_days = _cm.monthrange(year, month)
+        first = date_type(year, month, 1)
+        last  = date_type(year, month, n_days)
+        cur   = first - timedelta(days=first.weekday())
+        mondays = []
+        while cur <= last:
+            mondays.append(cur)
+            cur += timedelta(weeks=1)
+
+        # Tous les jours ouvrés du mois
+        all_wd = [
+            first + timedelta(days=i)
+            for i in range(n_days)
+            if (first + timedelta(days=i)).weekday() < 5
+            and (first + timedelta(days=i)) not in holidays_set
+        ]
+
+        planning = {d: [] for d in all_wd}
+
+        def _active_week_for_monthly(freq_mois_val, week_monday):
+            semaines = []
+            c2 = first - timedelta(days=first.weekday())
+            while c2 <= last:
+                semaines.append(c2)
+                c2 += timedelta(weeks=1)
+            nb_sem = len(semaines)
+            try:
+                idx = semaines.index(week_monday)
+            except ValueError:
+                return False
+            n = max(1, min(int(freq_mois_val), nb_sem))
+            if n >= nb_sem:
+                return True
+            step    = nb_sem / n
+            actives = {int(i * step) for i in range(n)}
+            return idx in actives
+
+        for pt in st.session_state.points:
+            rc        = (pt.get('room_class') or '').strip()
+            freq_raw  = pt.get('frequency')
+            freq_unit = pt.get('frequency_unit', '/ semaine')
+            try:
+                freq_val = float(freq_raw) if freq_raw else 0.0
+            except (TypeError, ValueError):
+                freq_val = 0.0
+
+            nb_wd = len(all_wd)
+
+            # ── Calcul du nombre total d'occurrences sur le mois ─────────
+            if freq_val <= 0:
+                default_by_class = {'A': 20, 'B': 10, 'C': 4, 'D': 2}
+                total_occurrences = default_by_class.get(rc[:1] if rc else '', 2)
+                max_per_day = 1
+                is_daily = False
+            elif '/ jour' in freq_unit:
+                # >= 1/jour : placer chaque jour ouvré, N fois par jour
+                total_occurrences = int(freq_val) * nb_wd
+                max_per_day = int(freq_val)
+                is_daily = True
+            elif '/ semaine' in freq_unit:
+                nb_semaines = len(mondays)
+                total_occurrences = int(freq_val) * nb_semaines
+                max_per_day = 1
+                is_daily = False
+            elif 'mois' in (freq_unit or '').lower():
+                total_occurrences = int(freq_val)
+                max_per_day = 1
+                is_daily = False
+            else:
+                total_occurrences = int(freq_val)
+                max_per_day = 1
+                is_daily = False
+
+            if total_occurrences <= 0:
+                continue
+
+            task_base = {
+                'label':       pt['label'],
+                'type':        pt.get('type', '—'),
+                'risk':        int(pt.get('risk_level', 1)),
+                'room_class':  rc,
+                'max_per_day': max(1, max_per_day),
+                '_freq_unit':  freq_unit,
+            }
+
+            if is_daily:
+                # Placer sur chaque jour ouvré, max_per_day fois
+                for d in all_wd:
+                    for _ in range(max_per_day):
+                        planning[d].append(dict(task_base))
+            else:
+                # Répartir équitablement sur les jours ouvrés du mois
+                rng = _rnd.Random(year * 10000 + month * 100 + hash(pt['label']) % 100)
+                day_counts  = {d: 0 for d in all_wd}
+                day_labels  = {d: {} for d in all_wd}
+                remaining   = total_occurrences
+                max_attempts = remaining * nb_wd * 4 + 50
+                attempts    = 0
+                while remaining > 0 and attempts < max_attempts:
+                    attempts += 1
+                    candidates = [
+                        d for d in all_wd
+                        if day_labels[d].get(pt['label'], 0) < max_per_day
+                    ]
+                    if not candidates:
+                        break
+                    best = min(candidates, key=lambda d: (day_counts[d], rng.random()))
+                    planning[best].append(dict(task_base))
+                    day_counts[best] += 1
+                    day_labels[best][pt['label']] = day_labels[best].get(pt['label'], 0) + 1
+                    remaining -= 1
+
+        # Trier chaque jour par risque décroissant puis label
+        for d in planning:
+            planning[d].sort(key=lambda x: (-x['risk'], x['label']))
+
+        return planning
+
+    # ── Redistribution des skips ─────────────────────────────────────────
+    def _redistribute_skips(monthly_plan, planning_skips, holidays_set):
+        """
+        Redistribue les tâches skippées vers les prochains jours ouvrés
+        du même mois, sauf si fréquence >= 1/jour (annulation directe).
+        """
+        import copy
+        plan  = copy.deepcopy(monthly_plan)
+        today = _today_dt
+        all_days_sorted = sorted(plan.keys())
+
+        for day in all_days_sorted:
+            skipped_labels = planning_skips.get(day.isoformat(), [])
+            if not skipped_labels:
+                continue
+            tasks_to_move = [
+                t for t in plan.get(day, [])
+                if t["label"] in skipped_labels
+                and "/ jour" not in t.get("_freq_unit", "")  # pas de redistrib si daily
+            ]
+            plan[day] = [t for t in plan.get(day, []) if t["label"] not in skipped_labels]
+
+            # Jours futurs disponibles dans le mois
+            remaining_days = [d for d in all_days_sorted if d > day]
+            if not remaining_days:
+                continue
+
+            for task in tasks_to_move:
+                candidates = [
+                    d for d in remaining_days
+                    if not any(t["label"] == task["label"] for t in plan.get(d, []))
+                ]
+                if not candidates:
+                    candidates = remaining_days
+                best = min(candidates, key=lambda d: len(plan.get(d, [])))
+                plan.setdefault(best, []).append(task)
+
+        return plan
+
+    def _generate_pdf_etiquettes(tasks, date_obj_or_list):
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units     import cm as rl_cm
+        from reportlab.lib           import colors as rlc
+        from reportlab.platypus      import (
+            Table, TableStyle, Paragraph, HRFlowable,
+            BaseDocTemplate, Frame, PageTemplate, Image as RLImage,
+            Spacer,
+        )
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.enums  import TA_RIGHT
+        from io import BytesIO
+
+        A4_W, A4_H = A4
+        N_COLS     = 4
+        W_ETQ      = 5.2  * rl_cm
+        H_ETQ      = 2.95 * rl_cm
+
+        buf = BytesIO()
+
+        RISK_RL = {k: rlc.HexColor(v) for k, v in {
+            "1": "#22c55e", "2": "#84cc16",
+            "3": "#f59e0b", "4": "#f97316", "5": "#ef4444",
+        }.items()}
+
+        s_titre   = ParagraphStyle("et_t",  fontName="Helvetica-Bold",
+                                fontSize=7.5, leading=9, spaceAfter=2,
+                                textColor=rlc.HexColor("#0f172a"))
+        s_lbl     = ParagraphStyle("et_l",  fontName="Helvetica",
+                                fontSize=5.5, leading=7,
+                                textColor=rlc.HexColor("#64748b"))
+        s_date    = ParagraphStyle("et_d",  fontName="Helvetica-Bold",
+                                fontSize=9, leading=10,
+                                textColor=rlc.HexColor("#1e40af"))
+        s_logo    = ParagraphStyle("et_lo", fontName="Helvetica",
+                                fontSize=5, leading=6,
+                                textColor=rlc.HexColor("#94a3b8"),
+                                alignment=TA_RIGHT)
+        s_classea = ParagraphStyle("et_ca", fontName="Helvetica-Bold",
+                                fontSize=6, leading=7,
+                                textColor=rlc.HexColor("#854d0e"),
+                                spaceAfter=2)
+        s_val     = ParagraphStyle("et_v",  fontName="Helvetica-Bold",
+                                fontSize=7.5, leading=9,
+                                textColor=rlc.HexColor("#0f172a"))
+        s_day_sep = ParagraphStyle("et_ds", fontName="Helvetica-Bold",
+                                fontSize=11, leading=14,
+                                textColor=rlc.HexColor("#1a4e66"))
+
+        if isinstance(date_obj_or_list, list):
+            days_data = date_obj_or_list
+            doc_title = (
+                f"Étiquettes semaine — "
+                f"{days_data[0][0].strftime('%d/%m')} → "
+                f"{days_data[-1][0].strftime('%d/%m/%Y')}"
+            )
+        else:
+            days_data = [(date_obj_or_list, tasks)]
+            doc_title = f"Étiquettes {date_obj_or_list.strftime('%d/%m/%Y')}"
+
+        doc = BaseDocTemplate(
+            buf, pagesize=A4,
+            leftMargin=0, rightMargin=0, topMargin=0, bottomMargin=0,
+        )
+        frame = Frame(
+            x1=0, y1=0, width=A4_W, height=A4_H,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        doc.addPageTemplates([PageTemplate(id="full", frames=[frame])])
+
+        def _build_cell(task, d_obj):
+            rv      = str(task.get("risk", ""))
+            rc_etiq = RISK_RL.get(rv, rlc.HexColor("#6366f1"))
+            lv      = task.get("label", "—")
+            dv      = d_obj.strftime("%d/%m/%Y")
+            W_QR    = 2.0 * rl_cm
+            W_INNER = W_ETQ - 0.55 * rl_cm
+            W_TEXT  = W_INNER - W_QR
+
+            _pt_data = next(
+                (p for p in st.session_state.points if p.get("label") == lv), None
+            )
+            qr_flowable = None
+            if _pt_data:
+                try:
+                    _qr_buf = BytesIO(_make_qr_bytes(_pt_data["id"]))
+                    qr_flowable = RLImage(_qr_buf, width=2.0 * rl_cm, height=2.0 * rl_cm)
+                except Exception:
+                    qr_flowable = None
+
+            classea_rows = []
+            if task.get("room_class", "").strip().upper() == "A":
+                iso_display = task.get("_isolateur")
+                if not iso_display and _pt_data:
+                    iso_display = _pt_data.get("num_isolateur", "—") or "—"
+                if not iso_display:
+                    iso_display = "—"
+                pst       = (_pt_data.get("poste", "") or "") if _pt_data else ""
+                label_iso = iso_display + (f" · {pst}" if pst else "")
+                classea_rows = [[Paragraph(label_iso, s_classea)]]
+
+            try:
+                left_tbl = Table(
+                    [
+                        [Paragraph(lv, s_titre)],
+                        [HRFlowable(width=W_TEXT, thickness=0.6, color=rc_etiq, spaceAfter=2)],
+                        *classea_rows,
+                        [Paragraph("📅 Date", s_lbl)],
+                        [Paragraph(dv, s_date)],
+                        [Paragraph("👤 Préleveur :", s_lbl)],
+                        [Paragraph("", s_val)],
+                        [Paragraph("URC — MicroSurveillance", s_logo)],
+                    ],
+                    colWidths=[W_TEXT],
+                )
+                left_tbl.setStyle(TableStyle([
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                    ("TOPPADDING",    (0, -1), (0, -1), 4),
+                ]))
+            except Exception:
+                left_tbl = Table([[Paragraph(lv, s_titre)]], colWidths=[W_TEXT])
+
+            try:
+                if qr_flowable:
+                    inner = Table([[left_tbl, qr_flowable]], colWidths=[W_TEXT, W_QR])
+                    inner.setStyle(TableStyle([
+                        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                        ("ALIGN",         (1, 0), (1, 0),   "CENTER"),
+                    ]))
+                else:
+                    inner = left_tbl
+            except Exception:
+                inner = left_tbl
+
+            outer = Table([[inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+            outer.setStyle(TableStyle([
+                ("LINEBEFORE",    (0, 0), (0, 0), 1.2, rc_etiq),
+                ("LINEABOVE",     (0, 0), (0, 0), 1.2, rc_etiq),
+                ("LINEAFTER",     (0, 0), (0, 0), 5.5, rc_etiq),
+                ("LEFTPADDING",   (0, 0), (0, 0), 11),
+                ("RIGHTPADDING",  (0, 0), (0, 0), 11),
+                ("TOPPADDING",    (0, 0), (0, 0), 11),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 11),
+                ("VALIGN",        (0, 0), (0, 0), "TOP"),
+                ("BACKGROUND",    (0, 0), (0, 0), rlc.white),
+            ]))
+            return outer
+
+        def _build_sep_cell(label):
+            sep_inner = Table(
+                [[Paragraph(label, s_day_sep)]],
+                colWidths=[W_ETQ - 0.55 * rl_cm],
+            )
+            sep_inner.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            outer = Table([[sep_inner]], colWidths=[W_ETQ], rowHeights=[H_ETQ])
+            outer.setStyle(TableStyle([
+                ("LINEBEFORE",    (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
+                ("LINEABOVE",     (0, 0), (0, 0), 1.2, rlc.HexColor("#1a4e66")),
+                ("LINEAFTER",     (0, 0), (0, 0), 5.5, rlc.HexColor("#1a4e66")),
+                ("LEFTPADDING",   (0, 0), (0, 0), 11),
+                ("RIGHTPADDING",  (0, 0), (0, 0), 11),
+                ("TOPPADDING",    (0, 0), (0, 0), 11),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 11),
+                ("VALIGN",        (0, 0), (0, 0), "MIDDLE"),
+                ("BACKGROUND",    (0, 0), (0, 0), rlc.HexColor("#e0f2fe")),
+            ]))
+            return outer
+
+        story           = []
+        all_rows        = []
+        all_row_heights = []
+
+        for (d_obj, day_tasks) in days_data:
+            n_prelevements = len(day_tasks)
+            sep_label = (
+                f"{d_obj.strftime('%A %d/%m/%Y').capitalize()} "
+                f"— {n_prelevements} prélèvement{'s' if n_prelevements > 1 else ''}"
+            )
+            cells_day = [_build_sep_cell(sep_label)] + [_build_cell(t, d_obj) for t in day_tasks]
+            for i in range(0, len(cells_day), N_COLS):
+                chunk = cells_day[i:i + N_COLS]
+                while len(chunk) < N_COLS:
+                    chunk.append("")
+                all_rows.append(chunk)
+                all_row_heights.append(H_ETQ)
+
+        if all_rows:
+            full_tbl = Table(
+                all_rows,
+                colWidths=[W_ETQ] * N_COLS,
+                rowHeights=all_row_heights,
+            )
+            full_tbl.setStyle(TableStyle([
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LINEBELOW",     (0, -1), (-1, -1), 1.2, rlc.HexColor("#94a3b8")),
+            ]))
+            story.append(full_tbl)
+
+        doc.build(story)
+        buf.seek(0)
+        return buf.getvalue()
+
+    # ════════════════════════════════════════════════════════════════
+    # ONGLETS
+    # ════════════════════════════════════════════════════════════════
+    plan_tab_charge, plan_tab_export = st.tabs([
+        "📊 Charge hebdo & Planning mensuel",
+        "📥 Export Excel",
+    ])
+
     with plan_tab_charge:
         if not st.session_state.get("points"):
             _raw_points = _supa_get("points")
@@ -3550,29 +4072,30 @@ if active == "planning":
         st.markdown("#### 📅 Planning mensuel automatique")
         st.caption(
             "Répartition basée sur la fréquence de chaque point. "
-            "Un point n'apparaît jamais 2× le même jour sauf fréquence > 1/jour."
+            "Un point n'apparaît jamais 2× le même jour sauf fréquence ≥ 1/jour. "
+            "Les tâches non réalisées depuis > 48h ouvrées sont automatiquement reportées."
         )
 
-        monthly_plan = _compute_monthly_planning(
-            _ch_year, _ch_month, _ch_holidays
-        )
-
-        from datetime import date as date_type
+        monthly_plan = _compute_monthly_planning(_ch_year, _ch_month, _ch_holidays)
         monthly_plan = {(k.date() if hasattr(k, 'date') else k): v for k, v in monthly_plan.items()}
 
-        for _wm in pm_mondays:
-            _has_skip = any(
-                (_wm + timedelta(days=i)).isoformat()
-                in st.session_state["planning_skips"]
-                for i in range(5)
-            )
-            if _has_skip:
-                monthly_plan = _redistribute_skips(
-                    monthly_plan,
-                    st.session_state["planning_skips"],
-                    _wm,
-                    _ch_holidays,
-                )
+        # ── Auto-skip des tâches en retard > 48h ouvrées ─────────────
+        _skips_updated, _skips_changed = _auto_skip_overdue(
+            monthly_plan,
+            st.session_state["planning_skips"],
+            _ch_holidays,
+            st.session_state.get("prelevements", []),
+        )
+        if _skips_changed:
+            st.session_state["planning_skips"] = _skips_updated
+            _supa_upsert('planning_skips', json.dumps(_skips_updated))
+
+        # ── Redistribution globale des skips sur le mois ─────────────
+        monthly_plan = _redistribute_skips(
+            monthly_plan,
+            st.session_state["planning_skips"],
+            _ch_holidays,
+        )
 
         if "pm_selected_day" not in st.session_state:
             st.session_state["pm_selected_day"] = None
@@ -3614,7 +4137,7 @@ if active == "planning":
                                 out.append(t2)
                         return out
 
-                    days_D  = [(d, filt(t, "D"))               for d, t in week_days if filt(t, "D")]
+                    days_D  = [(d, filt(t, "D"))                for d, t in week_days if filt(t, "D")]
                     days_14 = [(d, filt(t, "A", "Iso 14/07169")) for d, t in week_days if filt(t, "A")]
                     days_16 = [(d, filt(t, "A", "Iso 16/0724"))  for d, t in week_days if filt(t, "A")]
 
@@ -3626,7 +4149,6 @@ if active == "planning":
                         st.session_state[f"pdf_16_{week_monday}"] = _generate_pdf_etiquettes(days_16, days_16)
                     st.rerun()
 
-            # Boutons de téléchargement si PDF générés
             for suffix, label in [("D", "Classe D"), ("14", "Iso 14"), ("16", "Iso 16")]:
                 key_pdf = f"pdf_{suffix}_{week_monday}"
                 if key_pdf in st.session_state:
@@ -3662,7 +4184,6 @@ if active == "planning":
                         st.session_state["pm_selected_day"] = wd
                         st.rerun()
 
-                    # ── Affichage des tâches dans la case ──
                     for t in tasks:
                         _dn = t["label"] in done_labels
                         _sk = t["label"] in skipped
@@ -3678,8 +4199,6 @@ if active == "planning":
 
                     if non_faits:
                         with st.popover(f"⬜ {len(non_faits)} Non faits"):
-                            
-                            # Cases à cocher sans rerun
                             selections = []
                             for ti, t in enumerate(non_faits):
                                 key = f"skip_{wd.isoformat()}_{ti}_{t['label'][:20].replace(' ', '_').replace('/', '_')}"
@@ -3687,7 +4206,6 @@ if active == "planning":
                                 if checked:
                                     selections.append(t["label"])
 
-                            # Bouton enregistrer — visible seulement si au moins une sélection
                             if st.button("💾 Enregistrer", key=f"save_skips_{wd}"):
                                 _skips = st.session_state["planning_skips"]
                                 dk     = wd.isoformat()
@@ -3696,33 +4214,14 @@ if active == "planning":
                                     if label not in _skips[dk]:
                                         _skips[dk].append(label)
                                 st.session_state["planning_skips"] = _skips
-                                
-                                # ── Debug ──
-                                result = _supa_upsert('planning_skips', json.dumps(_skips))
-                                st.write("✅ Upsert réussi :", result)
-                                st.write("📦 Données envoyées :", _skips)
-                                
-                                # ── Vérification relecture immédiate ──
-                                relu = _supa_get('planning_skips')
-                                st.write("🔁 Relu depuis Supabase :", relu)
-                                
-                                st.stop()  # ← Ne pas rerun pour voir les logs
-                                    
-                                # Sauvegarde Supabase bloquante avant rerun
-                                supa = get_supabase_client()
-                                if supa:
-                                    supa.table('app_state').upsert(
-                                        {'key': 'planning_skips',
-                                        'value': json.dumps(_skips)},
-                                        on_conflict='key'
-                                    ).execute()
+                                _supa_upsert('planning_skips', json.dumps(_skips))
                                 st.rerun()
                     else:
                         st.button("✅", disabled=True, key=f"done_{wd}")
 
             st.divider()
 
-# ── Panel détail jour ────────────────────────────────────────
+        # ── Panel détail jour ────────────────────────────────────────
         sel = st.session_state.get("pm_selected_day")
 
         if sel:
@@ -3754,7 +4253,6 @@ if active == "planning":
                     "4": "#f97316", "5": "#ef4444",
                 }
 
-                # ── Sélection étiquettes ─────────────────────────────
                 st.markdown(
                     "<div style='background:#eff6ff;border:1px solid #bfdbfe;"
                     "border-radius:8px;padding:8px 14px;margin-bottom:8px'>"
@@ -3769,18 +4267,14 @@ if active == "planning":
                                  key=f"etiq_all_{sel.isoformat()}",
                                  use_container_width=True):
                         for _ti, _t in enumerate(tasks):
-                            st.session_state[
-                                f"etiq_chk_{sel.isoformat()}_{_ti}"
-                            ] = True
+                            st.session_state[f"etiq_chk_{sel.isoformat()}_{_ti}"] = True
                         st.rerun()
                 with col_sn:
                     if st.button("⬜ Tout désélectionner",
                                  key=f"etiq_none_{sel.isoformat()}",
                                  use_container_width=True):
                         for _ti, _t in enumerate(tasks):
-                            st.session_state[
-                                f"etiq_chk_{sel.isoformat()}_{_ti}"
-                            ] = False
+                            st.session_state[f"etiq_chk_{sel.isoformat()}_{_ti}"] = False
                         st.rerun()
                 with col_sk:
                     if st.button("🚫 Tout reporter",
@@ -3796,8 +4290,7 @@ if active == "planning":
                         st.success("Tous les prélèvements reportés.")
                         st.rerun()
 
-                # ── Grille des tâches ────────────────────────────────
-                _chk_cols      = st.columns(3)
+                _chk_cols       = st.columns(3)
                 _selected_tasks = []
 
                 for _ti, _t in enumerate(tasks):
@@ -3838,7 +4331,6 @@ if active == "planning":
                     unsafe_allow_html=True,
                 )
 
-                # ── Génération PDF ───────────────────────────────────
                 if _n_sel_etiq > 0:
                     if st.button(
                         f"📄 Générer {_n_sel_etiq} "
@@ -3856,10 +4348,7 @@ if active == "planning":
                             }
                             st.rerun()
                         except ImportError:
-                            st.error(
-                                "❌ **ReportLab** non installé.\n\n"
-                                "Ajoutez `reportlab` dans **requirements.txt**."
-                            )
+                            st.error("❌ **ReportLab** non installé.")
                         except Exception as _e:
                             st.error(f"Erreur génération PDF : {_e}")
                             import traceback
