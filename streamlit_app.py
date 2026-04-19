@@ -3075,52 +3075,6 @@ if active == "planning":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    def _nb_jours_ouvres_entre(d1, d2, holidays_set):
-        count = 0
-        cur = d1
-        while cur <= d2:
-            if cur.weekday() < 5 and cur not in holidays_set:
-                count += 1
-            cur += timedelta(days=1)
-        return count
-
-    def _auto_skip_overdue(monthly_plan, planning_skips, holidays_set, prelevements):
-        import copy
-        skips   = copy.deepcopy(planning_skips)
-        changed = False
-        today   = _today_dt
-
-        done_set = {
-            (p.get("label"), datetime.fromisoformat(p["date"]).date())
-            for p in prelevements
-            if p.get("date") and not p.get("archived", False)
-        }
-
-        for day, tasks in monthly_plan.items():
-            if day >= today:
-                continue
-            jours_ecoules = _nb_jours_ouvres_entre(day, today, holidays_set)
-            dk = day.isoformat()
-            for t in tasks:
-                lbl             = t["label"]
-                already_skipped = lbl in skips.get(dk, [])
-                already_done    = (lbl, day) in done_set
-                if already_skipped or already_done:
-                    continue
-                freq_unit = t.get("_freq_unit", "/ semaine")
-                if "/ jour" in freq_unit:
-                    skips.setdefault(dk, [])
-                    if lbl not in skips[dk]:
-                        skips[dk].append(lbl)
-                        changed = True
-                    continue
-                if jours_ecoules > 2:
-                    skips.setdefault(dk, [])
-                    if lbl not in skips[dk]:
-                        skips[dk].append(lbl)
-                        changed = True
-        return skips, changed
-
     def _compute_monthly_planning(year, month, holidays_set):
         import calendar as _cm
         import random as _rnd
@@ -3220,32 +3174,49 @@ if active == "planning":
         return planning
 
     def _redistribute_skips(monthly_plan, planning_skips, holidays_set):
+        """
+        Redistribue les tâches marquées non-faites (skippées) vers les jours
+        ouvrés FUTURS du mois (strictement après aujourd'hui).
+        Les tâches fréquence >= 1/jour sont simplement supprimées (pas redistribuées).
+        """
         import copy
         plan            = copy.deepcopy(monthly_plan)
+        today           = _today_dt
         all_days_sorted = sorted(plan.keys())
+
+        # Jours ouvrés futurs disponibles dans le mois (après aujourd'hui)
+        future_days = [d for d in all_days_sorted if d > today]
 
         for day in all_days_sorted:
             skipped_labels = planning_skips.get(day.isoformat(), [])
             if not skipped_labels:
                 continue
+
+            # Séparer les tâches à redistribuer (non-daily) de celles à supprimer (daily)
             tasks_to_move = [
                 t for t in plan.get(day, [])
                 if t["label"] in skipped_labels
                 and "/ jour" not in t.get("_freq_unit", "")
             ]
-            plan[day] = [t for t in plan.get(day, []) if t["label"] not in skipped_labels]
+            # Retirer toutes les tâches skippées du jour original
+            plan[day] = [
+                t for t in plan.get(day, [])
+                if t["label"] not in skipped_labels
+            ]
 
-            remaining_days = [d for d in all_days_sorted if d > day]
-            if not remaining_days:
-                continue
-
+            # Redistribuer uniquement vers les jours futurs (> aujourd'hui)
             for task in tasks_to_move:
+                # Préférer un jour futur où ce point n'est pas encore planifié
                 candidates = [
-                    d for d in remaining_days
+                    d for d in future_days
                     if not any(t["label"] == task["label"] for t in plan.get(d, []))
                 ]
+                # Sinon, n'importe quel jour futur (charge minimale)
                 if not candidates:
-                    candidates = remaining_days
+                    candidates = future_days
+                # Si aucun jour futur disponible dans le mois → tâche perdue (fin de mois)
+                if not candidates:
+                    continue
                 best = min(candidates, key=lambda d: len(plan.get(d, [])))
                 plan.setdefault(best, []).append(task)
 
@@ -3530,7 +3501,7 @@ if active == "planning":
         st.caption(
             "Répartition basée sur la fréquence de chaque point. "
             "Un point n'apparaît jamais 2× le même jour sauf fréquence ≥ 1/jour. "
-            "Les tâches non réalisées depuis > 48h ouvrées sont automatiquement reportées."
+            "Les tâches marquées non-faites sont redistribuées sur les jours ouvrés futurs du mois."
         )
 
         monthly_plan = _compute_monthly_planning(_ch_year, _ch_month, _ch_holidays)
@@ -3539,18 +3510,7 @@ if active == "planning":
             for k, v in monthly_plan.items()
         }
 
-        # ── Auto-skip des tâches en retard > 48h ouvrées ─────────────────
-        _skips_updated, _skips_changed = _auto_skip_overdue(
-            monthly_plan,
-            st.session_state["planning_skips"],
-            _ch_holidays,
-            st.session_state.get("prelevements", []),
-        )
-        if _skips_changed:
-            st.session_state["planning_skips"] = _skips_updated
-            _supa_upsert('planning_skips', json.dumps(_skips_updated))
-
-        # ── Redistribution globale des skips sur le mois ─────────────────
+        # ── Redistribution des skips vers les jours ouvrés futurs ────────
         monthly_plan = _redistribute_skips(
             monthly_plan,
             st.session_state["planning_skips"],
