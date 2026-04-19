@@ -1,12 +1,3 @@
-A exécuté une commande, fichier créé
-A exécuté une commande, fichier créé
-
-Résumé des changements
-
-Script
-
-Créer app.py avec les deux modifications
-python
 import streamlit as st
 import json
 import csv
