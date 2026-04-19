@@ -2243,7 +2243,26 @@ if active == "surveillance":
                 with sbc2:
                     if st.button("✕ Annuler",use_container_width=True,key="scan_cancel_btn"):
                         st.session_state["qr_counter"]+=1; st.rerun()
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER : tri des lectures
+    # ══════════════════════════════════════════════════════════════════════════
+    def _sort_schedules(schedule_list, sort_key):
+        """
+        Trie une liste de lectures selon le critère choisi.
+        sort_key : "label" | "operateur" | "date_prelevement" | "echeance"
+        """
+        def _get_smp(s):
+            return next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), {})
 
+        if sort_key == "label":
+            return sorted(schedule_list, key=lambda s: s.get("label", "").lower())
+        elif sort_key == "operateur":
+            return sorted(schedule_list, key=lambda s: _get_smp(s).get("operateur", "").lower())
+        elif sort_key == "date_prelevement":
+            return sorted(schedule_list, key=lambda s: _get_smp(s).get("date", "9999-12-31"))
+        elif sort_key == "echeance":
+            return sorted(schedule_list, key=lambda s: s.get("due_date", "9999-12-31"))
+        return schedule_list
     # ══════════════════════════════════════════════════════════════════════════
     # HELPER : rendu d'une carte de lecture
     # ══════════════════════════════════════════════════════════════════════════
@@ -2547,14 +2566,27 @@ if active == "surveillance":
             # ── Cartes individuelles (hors mode batch) ─────────────────────
             batch_active_j2 = st.session_state.get("batch_mode_j2", False)
             if not batch_active_j2:
-                for s in overdue_j2 + upcoming_j2:
+                sort_col_j2, _ = st.columns([2, 3])
+                with sort_col_j2:
+                    sort_j2 = st.selectbox(
+                        "🔃 Trier par",
+                        options=["echeance", "label", "operateur", "date_prelevement"],
+                        format_func=lambda x: {
+                            "echeance":         "📅 Échéance",
+                            "label":            "📍 Lieu de prélèvement (A→Z)",
+                            "operateur":        "👤 Opérateur (A→Z)",
+                            "date_prelevement": "🗓️ Date de prélèvement",
+                        }[x],
+                        key="sort_j2",
+                    )
+                sorted_j2 = _sort_schedules(overdue_j2 + upcoming_j2, sort_j2)
+                for s in sorted_j2:
                     _render_lecture_card(s, "j2_")
                     if st.session_state.get("current_process") == s['id']:
                         _cp = next((x for x in st.session_state.schedules
                                     if x['id'] == st.session_state.current_process), None)
                         if _cp and _cp.get("when") == "J2":
                             _render_traitement_lecture(st.session_state.current_process)
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
@@ -2600,14 +2632,27 @@ if active == "surveillance":
             # ── Cartes individuelles (hors mode batch) ─────────────────────
             batch_active_j7 = st.session_state.get("batch_mode_j7", False)
             if not batch_active_j7:
-                for s in overdue_j7 + upcoming_j7:
+                sort_col_j7, _ = st.columns([2, 3])
+                with sort_col_j7:
+                    sort_j7 = st.selectbox(
+                        "🔃 Trier par",
+                        options=["echeance", "label", "operateur", "date_prelevement"],
+                        format_func=lambda x: {
+                            "echeance":         "📅 Échéance",
+                            "label":            "📍 Lieu de prélèvement (A→Z)",
+                            "operateur":        "👤 Opérateur (A→Z)",
+                            "date_prelevement": "🗓️ Date de prélèvement",
+                        }[x],
+                        key="sort_j7",
+                    )
+                sorted_j7 = _sort_schedules(overdue_j7 + upcoming_j7, sort_j7)
+                for s in sorted_j7:
                     _render_lecture_card(s, "j7_")
                     if st.session_state.get("current_process") == s['id']:
                         _cp = next((x for x in st.session_state.schedules
                                     if x['id'] == st.session_state.current_process), None)
                         if _cp and _cp.get("when") == "J7":
                             _render_traitement_lecture(st.session_state.current_process)
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
