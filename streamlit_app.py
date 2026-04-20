@@ -2268,8 +2268,10 @@ if active == "surveillance":
                     📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
 
+                    # 🔧 Recréation des colonnes dans la boucle
+                    col1, col2 = st.columns(2)
 
-                    with sf2:
+                    with col2:
                         scan_isolateur = ""
                         scan_poste     = "Poste 1"
 
