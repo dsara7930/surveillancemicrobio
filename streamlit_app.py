@@ -2093,7 +2093,7 @@ if active == "surveillance":
                     with iso_col:
                        p_isolateur = st.radio(
                         "Isolateur",
-                        ["— Sélectionner —", "Iso 16/0724", "Iso 14/07169"],
+                        ["Iso 16/0724", "Iso 14/07169"],
                         index=None,
                         horizontal=True,
                         key="new_prelev_isolateur"
@@ -2101,7 +2101,7 @@ if active == "surveillance":
                     with poste_col:
                         p_poste = st.radio(
                         "Poste",
-                        ["— Sélectionner —", "Poste 1", "Poste 2", "Commun"],
+                        ["Poste 1", "Poste 2", "Commun"],
                         index=None,
                         horizontal=True,
                         key="new_prelev_poste"
@@ -2283,14 +2283,14 @@ if active == "surveillance":
                     if _is_classea:
                         scan_isolateur = st.radio(
                             "Isolateur",
-                            ["— Sélectionner —", "Iso 16/0724", "Iso 14/07169"],
+                            ["Iso 16/0724", "Iso 14/07169"],
                             index=None,
                             horizontal=True,
                             key="scan_iso_sel"
                         )
                         scan_poste = st.radio(
                             "Poste",
-                            ["— Sélectionner —", "Poste 1", "Poste 2", "Commun"],
+                            ["Poste 1", "Poste 2", "Commun"],
                             index=None,
                             horizontal=True,
                             key="scan_poste_sel"
