@@ -4675,7 +4675,7 @@ if active == "historique":
             components.html(html, height=520, scrolling=False)
         with hist_tab_plan:
             render_heatmap_prelevements()
-   # ══════════════════════════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_pts:
@@ -4687,6 +4687,8 @@ if active == "historique":
                 "alertes":0,"actions":0,
                 "germes":defaultdict(int),
                 "ufc_j2_list":[],"ufc_j7_list":[],
+                "remarques":[],
+                "commentaires":[],
             })
             for r in surv_f:
                 pt     = r.get("prelevement","—")
@@ -4706,6 +4708,19 @@ if active == "historique":
                 if ufc_j2 > 0: pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
                 if ufc_j7 > 0: pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
+                # Remarque d'identification
+                rem = (r.get("remarque","") or "").strip()
+                if rem:
+                    pts_stats[pt]["remarques"].append(f"{r.get('date','?')} — {rem}")
+
+                # Commentaire du prélèvement (via sample_id → prelevements)
+                _sid_r = r.get("sample_id","")
+                if _sid_r:
+                    _smp_r = next((p for p in st.session_state.prelevements if p.get("id") == _sid_r), None)
+                    cmt = (_smp_r.get("commentaire","") or "").strip() if _smp_r else ""
+                    if cmt:
+                        pts_stats[pt]["commentaires"].append(f"{r.get('date','?')} — {cmt}")
+
             sorted_pts   = sorted(pts_stats.items(), key=lambda x: -x[1]["positives"])
             chart_labels = [p[:22]+"…" if len(p)>22 else p for p,_ in sorted_pts]
             chart_data   = {
@@ -4717,32 +4732,32 @@ if active == "historique":
             <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
                         padding:16px;margin-bottom:18px">
-              <div style="font-size:.8rem;font-weight:700;color:#1e40af;margin-bottom:10px">
+            <div style="font-size:.8rem;font-weight:700;color:#1e40af;margin-bottom:10px">
                 📊 Résultats par point de prélèvement
-              </div>
-              <div style="width:100%;height:420px"><canvas id="ptChart"></canvas></div>
+            </div>
+            <div style="width:100%;height:420px"><canvas id="ptChart"></canvas></div>
             </div>
             <script>
             (function(){{
-              const d = {_json_pts.dumps(chart_data)};
-              new Chart(document.getElementById('ptChart'), {{
+            const d = {_json_pts.dumps(chart_data)};
+            new Chart(document.getElementById('ptChart'), {{
                 type:'bar',
                 data:{{
-                  labels:d.labels,
-                  datasets:[
+                labels:d.labels,
+                datasets:[
                     {{label:'✅ Négatifs',data:d.neg,backgroundColor:'#22c55e88',borderColor:'#22c55e',borderWidth:1}},
                     {{label:'🦠 Positifs',data:d.pos,backgroundColor:'#ef444488',borderColor:'#ef4444',borderWidth:1}}
-                  ]
+                ]
                 }},
                 options:{{
-                  responsive:true,maintainAspectRatio:false,
-                  plugins:{{legend:{{position:'top',labels:{{font:{{size:11}}}}}}}},
-                  scales:{{
+                responsive:true,maintainAspectRatio:false,
+                plugins:{{legend:{{position:'top',labels:{{font:{{size:11}}}}}}}},
+                scales:{{
                     x:{{stacked:true,ticks:{{font:{{size:10}},maxRotation:45}}}},
                     y:{{stacked:true,beginAtZero:true,ticks:{{stepSize:1,font:{{size:10}}}}}}
-                  }}
                 }}
-              }});
+                }}
+            }});
             }})();
             </script>"""
             st.components.v1.html(chart_html, height=500)
@@ -4762,6 +4777,7 @@ if active == "historique":
                     "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
                     "</div>",
                     unsafe_allow_html=True)
+
                 for ri,(pt_name,pt_data) in enumerate(sorted_pts):
                     t     = pt_data["total"]
                     pos   = pt_data["positives"]
@@ -4776,6 +4792,8 @@ if active == "historique":
                     moy_j2  = str(round(sum(j2_list)/len(j2_list))) if j2_list else "—"
                     moy_j7  = str(round(sum(j7_list)/len(j7_list))) if j7_list else "—"
                     row_bg  = "#f8fafc" if ri%2==0 else "#ffffff"
+
+                    # ── Ligne principale ──────────────────────────────────────────
                     st.markdown(
                         "<div style='display:grid;"
                         "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
@@ -4793,6 +4811,33 @@ if active == "historique":
                         "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+germes_str+"</div>"
                         "</div>",
                         unsafe_allow_html=True)
+
+                    # ── Remarques d'identification (violet) ───────────────────────
+                    rems = pt_data["remarques"]
+                    if rems:
+                        items_html = "".join(f"<li style='margin-bottom:3px'>{r}</li>" for r in rems)
+                        st.markdown(
+                            "<div style='background:#faf5ff;border:1px solid #e2e8f0;border-top:none;"
+                            "border-left:3px solid #7c3aed;"
+                            "padding:7px 16px 7px 28px;font-size:.73rem;color:#334155;line-height:1.6'>"
+                            "<span style='font-weight:700;color:#7c3aed'>🔬 Remarques d'identification</span>"
+                            "<ul style='margin:3px 0 2px 14px;padding:0'>" + items_html + "</ul>"
+                            "</div>",
+                            unsafe_allow_html=True)
+
+                    # ── Commentaires de prélèvement (bleu) ────────────────────────
+                    cmts = pt_data["commentaires"]
+                    if cmts:
+                        items_html = "".join(f"<li style='margin-bottom:3px'>{c}</li>" for c in cmts)
+                        st.markdown(
+                            "<div style='background:#eff6ff;border:1px solid #e2e8f0;border-top:none;"
+                            "border-left:3px solid #0369a1;"
+                            "padding:7px 16px 7px 28px;font-size:.73rem;color:#334155;line-height:1.6'>"
+                            "<span style='font-weight:700;color:#0369a1'>💬 Commentaires de prélèvement</span>"
+                            "<ul style='margin:3px 0 2px 14px;padding:0'>" + items_html + "</ul>"
+                            "</div>",
+                            unsafe_allow_html=True)
+
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                     "<div style='font-size:.78rem;color:#94a3b8'>"
@@ -4829,57 +4874,57 @@ if active == "historique":
                         except: seuil_action=100
                 if evol_dates:
                     evol_data={"dates":evol_dates,"j2":evol_j2,"j7":evol_j7,
-                               "alerte":seuil_alerte,"action":seuil_action}
+                            "alerte":seuil_alerte,"action":seuil_action}
                     evol_html = f"""
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
                     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
                                 padding:16px;margin-bottom:8px">
-                      <div style="font-size:.78rem;font-weight:700;color:#334155;margin-bottom:10px">
+                    <div style="font-size:.78rem;font-weight:700;color:#334155;margin-bottom:10px">
                         📍 {selected_pt} — UFC/m³ au fil du temps
-                      </div>
-                      <div style="width:100%;height:220px"><canvas id="evolChart"></canvas></div>
+                    </div>
+                    <div style="width:100%;height:220px"><canvas id="evolChart"></canvas></div>
                     </div>
                     <script>
                     (function(){{
-                      const d={_json_pts.dumps(evol_data)};
-                      const thr={{id:'thr',afterDraw(chart){{
+                    const d={_json_pts.dumps(evol_data)};
+                    const thr={{id:'thr',afterDraw(chart){{
                         const {{ctx,chartArea:{{left,right}},scales:{{y}}}}=chart;
                         if(!y)return;
                         function dl(val,color,lbl){{
-                          const yp=y.getPixelForValue(val);
-                          ctx.save();ctx.beginPath();ctx.setLineDash([6,4]);
-                          ctx.strokeStyle=color;ctx.lineWidth=1.5;
-                          ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();
-                          ctx.setLineDash([]);ctx.fillStyle=color;
-                          ctx.font='bold 10px sans-serif';
-                          ctx.fillText(lbl,right-56,yp-4);ctx.restore();
+                        const yp=y.getPixelForValue(val);
+                        ctx.save();ctx.beginPath();ctx.setLineDash([6,4]);
+                        ctx.strokeStyle=color;ctx.lineWidth=1.5;
+                        ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();
+                        ctx.setLineDash([]);ctx.fillStyle=color;
+                        ctx.font='bold 10px sans-serif';
+                        ctx.fillText(lbl,right-56,yp-4);ctx.restore();
                         }}
                         dl(d.alerte,'#f59e0b','⚠ Alerte');
                         dl(d.action,'#ef4444','🚨 Action');
-                      }}}};
-                      new Chart(document.getElementById('evolChart'),{{
+                    }}}};
+                    new Chart(document.getElementById('evolChart'),{{
                         type:'line',plugins:[thr],
                         data:{{labels:d.dates,datasets:[
-                          {{label:'🔵 J2',data:d.j2,borderColor:'#0ea5e9',
+                        {{label:'🔵 J2',data:d.j2,borderColor:'#0ea5e9',
                             backgroundColor:'#0ea5e922',borderWidth:2,pointRadius:4,tension:0.3,fill:false}},
-                          {{label:'🟣 J7',data:d.j7,borderColor:'#8b5cf6',
+                        {{label:'🟣 J7',data:d.j7,borderColor:'#8b5cf6',
                             backgroundColor:'#8b5cf622',borderWidth:2,pointRadius:4,tension:0.3,fill:false}}
                         ]}},
                         options:{{responsive:true,maintainAspectRatio:false,
-                          interaction:{{mode:'index',intersect:false}},
-                          plugins:{{legend:{{position:'top',labels:{{font:{{size:11}},boxWidth:14}}}},
+                        interaction:{{mode:'index',intersect:false}},
+                        plugins:{{legend:{{position:'top',labels:{{font:{{size:11}},boxWidth:14}}}},
                             tooltip:{{callbacks:{{footer:items=>{{
-                              const v=items[0]?.parsed?.y??0;
-                              return v>=d.action?'🚨 ACTION':v>=d.alerte?'⚠️ ALERTE':'✅ Conforme';
+                            const v=items[0]?.parsed?.y??0;
+                            return v>=d.action?'🚨 ACTION':v>=d.alerte?'⚠️ ALERTE':'✅ Conforme';
                             }}}}}}}},
-                          scales:{{
+                        scales:{{
                             x:{{ticks:{{font:{{size:10}},maxRotation:45}}}},
                             y:{{beginAtZero:true,
-                              title:{{display:true,text:'UFC/m³',font:{{size:10}}}},
-                              ticks:{{font:{{size:10}}}}}}
-                          }}
+                            title:{{display:true,text:'UFC/m³',font:{{size:10}}}},
+                            ticks:{{font:{{size:10}}}}}}
                         }}
-                      }});
+                        }}
+                    }});
                     }})();
                     </script>"""
                     st.components.v1.html(evol_html, height=290)
