@@ -1833,25 +1833,41 @@ renderList();
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
+    # ── Helper : nombre de jours calendaires depuis le prélèvement ─────────────
+    def _days_since_sample(s):
+        smp = next((p for p in st.session_state.prelevements
+                    if p['id'] == s['sample_id']), None)
+        if not smp or not smp.get('date'):
+            return 999
+        return (today - date.fromisoformat(smp['date'])).days
+
     _active_sids_surv = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+
+    # J2 : en retard si due_date <= today
     _j2_red    = sum(1 for s in st.session_state.schedules
-                     if s["when"]=="J2" and s["status"]=="pending"
+                     if s["when"] == "J2" and s["status"] == "pending"
                      and s.get("sample_id") in _active_sids_surv
                      and datetime.fromisoformat(s["due_date"]).date() <= today)
     _j2_orange = sum(1 for s in st.session_state.schedules
-                     if s["when"]=="J2" and s["status"]=="pending"
+                     if s["when"] == "J2" and s["status"] == "pending"
                      and s.get("sample_id") in _active_sids_surv
                      and datetime.fromisoformat(s["due_date"]).date() > today)
-    _j7_orange = sum(1 for s in st.session_state.schedules
-                if s["when"]=="J7" and s["status"]=="pending"
-                and s.get("sample_id") in _active_sids_surv
-                and datetime.fromisoformat(s["due_date"]).date() > today)
+
+    # J7 : en retard seulement si due_date <= today ET >= 7 jours calendaires écoulés
     _j7_red    = sum(1 for s in st.session_state.schedules
-                if s["when"]=="J7" and s["status"]=="pending"
-                and s.get("sample_id") in _active_sids_surv
-                and datetime.fromisoformat(s["due_date"]).date() <= today)
+                     if s["when"] == "J7" and s["status"] == "pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and datetime.fromisoformat(s["due_date"]).date() <= today
+                     and _days_since_sample(s) >= 7)
+    _j7_orange = sum(1 for s in st.session_state.schedules
+                     if s["when"] == "J7" and s["status"] == "pending"
+                     and s.get("sample_id") in _active_sids_surv
+                     and (datetime.fromisoformat(s["due_date"]).date() > today
+                          or _days_since_sample(s) < 7))
+
     _id_red    = sum(1 for p in st.session_state.pending_identifications
                      if p.get("status") == "pending")
+
     _dot_j2 = " 🔴" if _j2_red > 0 else (" 🟠" if _j2_orange > 0 else "")
     _dot_j7 = " 🔴" if _j7_red > 0 else (" 🟠" if _j7_orange > 0 else "")
     _dot_id = " 🔴" if _id_red > 0 else ""
@@ -1900,15 +1916,12 @@ if active == "surveillance":
         if not raw:
             return None, None
 
-        # Correction encodage systematique
         raw = _fix_encoding(raw)
 
-        # Cas ID brut (pas de JSON)
         if not raw.startswith("{"):
             corrected = _fix_azerty(raw)
             return corrected, None
 
-        # Cas JSON — Tentative 1 : JSON standard
         try:
             data = json.loads(raw)
             pid = str(data.get("id", "")).strip()
@@ -1916,16 +1929,14 @@ if active == "surveillance":
         except json.JSONDecodeError:
             pass
 
-        # Tentative 2 : JSON apres correction AZERTY
         corrected = _fix_azerty(raw)
         try:
             data = json.loads(corrected)
             pid = str(data.get("id", "")).strip()
-            return (pid, None) if pid else (None, "JSON corrige (AZERTY) mais champ 'id' absent.")
+            return (pid, None) if pid else (None, "JSON corrigé (AZERTY) mais champ 'id' absent.")
         except json.JSONDecodeError:
             pass
 
-        # Tentative 3 : regex en dernier recours
         m = re.search(r'"id"\s*:\s*"([^"]+)"', raw)
         if m:
             return m.group(1), None
@@ -1951,20 +1962,20 @@ if active == "surveillance":
         tog1, tog2 = st.columns(2)
         with tog1:
             if st.button("✏️  Saisie manuelle", use_container_width=True,
-                        type="primary" if st.session_state["prelev_mode"]=="manuel" else "secondary",
+                        type="primary" if st.session_state["prelev_mode"] == "manuel" else "secondary",
                         key="tog_manuel"):
                 st.session_state["prelev_mode"] = "manuel"
                 st.rerun()
         with tog2:
             if st.button("📷  Scan QR code", use_container_width=True,
-                        type="primary" if st.session_state["prelev_mode"]=="scan" else "secondary",
+                        type="primary" if st.session_state["prelev_mode"] == "scan" else "secondary",
                         key="tog_scan"):
                 st.session_state["prelev_mode"] = "scan"
                 st.rerun()
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # MODE MANUEL
+        # ── MODE MANUEL ────────────────────────────────────────────────────────
         if st.session_state["prelev_mode"] == "manuel":
 
             if not st.session_state.points:
@@ -1988,7 +1999,7 @@ if active == "surveillance":
                     pt_gelose   = selected_point.get('gelose', '—')
                     pt_room     = selected_point.get('room_class', '—')
                     type_icon   = "💨" if pt_type == "Air" else "🧴"
-                    lc_col      = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(pt_loc_crit),"#94a3b8")
+                    lc_col      = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(pt_loc_crit), "#94a3b8")
                     lc_lbl      = _loc_crit_label(pt_loc_crit)
                     st.markdown(f"""
                     <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
@@ -2014,7 +2025,7 @@ if active == "surveillance":
                     </div>""", unsafe_allow_html=True)
 
                 with p_col2:
-                    oper_list = [o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
+                    oper_list = [o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '') for o in st.session_state.operators]
                     if oper_list:
                         oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list, key="new_prelev_oper_sel")
                         p_oper   = oper_sel if oper_sel != "— Sélectionner —" else ""
@@ -2022,12 +2033,17 @@ if active == "surveillance":
                         st.info("Aucun opérateur — ajoutez-en dans Paramètres")
                         p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom", key="new_prelev_oper_manual")
                     p_date = st.date_input("Date prélèvement", value=datetime.today(), key="new_prelev_date")
+
+                    # ── Calcul des échéances ───────────────────────────────────
+                    # J2 : 2 jours ouvrés après la date de prélèvement
+                    # J7 : 7 jours calendaires stricts après la date de prélèvement
                     j2_date_calc = next_working_day_offset(p_date, 2)
-                    j7_date_calc = next_working_day_offset(p_date, 5)
+                    j7_date_calc = p_date + timedelta(days=7)
+
                     st.markdown(f"""
                     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
                     📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
-                    📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
+                    📅 J7 (7 jours calendaires) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
@@ -2040,32 +2056,39 @@ if active == "surveillance":
                         unsafe_allow_html=True)
                     iso_col, poste_col = st.columns(2)
                     with iso_col:
-                        p_isolateur = st.radio("Isolateur", ["Iso 16/0724","Iso 14/07169"], horizontal=True, key="new_prelev_isolateur")
+                        p_isolateur = st.radio("Isolateur", ["Iso 16/0724", "Iso 14/07169"], horizontal=True, key="new_prelev_isolateur")
                     with poste_col:
-                        p_poste = st.radio("Poste", ["Poste 1","Poste 2","Commun"], horizontal=True, key="new_prelev_poste")
+                        p_poste = st.radio("Poste", ["Poste 1", "Poste 2", "Commun"], horizontal=True, key="new_prelev_poste")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                     sample = {
-                        "id": pid,
-                        "label": selected_point['label'],
-                        "type": selected_point.get('type'),
-                        "gelose": selected_point.get('gelose', '—'),
-                        "room_class": selected_point.get('room_class', ''),
+                        "id":                   pid,
+                        "label":                selected_point['label'],
+                        "type":                 selected_point.get('type'),
+                        "gelose":               selected_point.get('gelose', '—'),
+                        "room_class":           selected_point.get('room_class', ''),
                         "location_criticality": pt_loc_crit,
-                        "operateur": p_oper if p_oper else "Non renseigné",
-                        "date": str(p_date) if p_date else str(today),
-                        "archived": False,
-                        "num_isolateur": p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                        "poste": p_poste if str(pt_room).strip().upper() == "A" else "",
-                        "commentaire": p_commentaire if p_commentaire else "",
-                        "created_via": "manuel",
+                        "operateur":            p_oper if p_oper else "Non renseigné",
+                        "date":                 str(p_date) if p_date else str(today),
+                        "archived":             False,
+                        "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                        "poste":                p_poste if str(pt_room).strip().upper() == "A" else "",
+                        "commentaire":          p_commentaire if p_commentaire else "",
+                        "created_via":          "manuel",
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
-                    for when, due in [("J2",j2_date_calc),("J7",j7_date_calc)]:
-                        st.session_state.schedules.append({"id":f"sch_{pid}_{when}","sample_id":pid,"label":sample['label'],"due_date":due.isoformat(),"when":when,"status":"pending"})
+                    for when, due in [("J2", j2_date_calc), ("J7", j7_date_calc)]:
+                        st.session_state.schedules.append({
+                            "id":        f"sch_{pid}_{when}",
+                            "sample_id": pid,
+                            "label":     sample['label'],
+                            "due_date":  due.isoformat(),
+                            "when":      when,
+                            "status":    "pending",
+                        })
                     save_schedules(st.session_state.schedules)
                     st.success(f"✅ **{sample['label']}** enregistré !\nJ2 → {j2_date_calc.strftime('%d/%m/%Y')} | J7 → {j7_date_calc.strftime('%d/%m/%Y')}")
 
@@ -2076,14 +2099,15 @@ if active == "surveillance":
                     if not actifs:
                         st.info("Aucun prélèvement en cours.")
                     for idx, samp in enumerate(st.session_state.prelevements):
-                        if samp.get("archived"): continue
-                        col_info, col_edit, col_del = st.columns([5,1,1])
+                        if samp.get("archived"):
+                            continue
+                        col_info, col_edit, col_del = st.columns([5, 1, 1])
                         with col_info:
-                            loc_c    = int(samp.get("location_criticality",1))
-                            lc_col_r = {"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(loc_c),"#94a3b8")
-                            room_cl  = samp.get('room_class','') or ''
+                            loc_c    = int(samp.get("location_criticality", 1))
+                            lc_col_r = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(loc_c), "#94a3b8")
+                            room_cl  = samp.get('room_class', '') or ''
                             room_badge = f"<span style='background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:800;margin-left:4px'>Cl.{room_cl}</span>" if room_cl else ""
-                            via_badge  = "<span style='background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>" if samp.get("created_via")=="qr_scan" else ""
+                            via_badge  = "<span style='background:#ede9fe;color:#5b21b6;border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>" if samp.get("created_via") == "qr_scan" else ""
                             _comment_html = f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>💬 {samp['commentaire']}</div>" if samp.get('commentaire') else ""
                             st.markdown(
                                 f"<div style='background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 16px;margin-bottom:6px'>"
@@ -2092,20 +2116,21 @@ if active == "surveillance":
                                 f"{_comment_html}</div>", unsafe_allow_html=True)
                         with col_edit:
                             if st.button("✏️", key=f"edit_prelev_btn_{samp['id']}", use_container_width=True):
-                                st.session_state["edit_prelev_id"] = samp["id"]; st.rerun()
+                                st.session_state["edit_prelev_id"] = samp["id"]
+                                st.rerun()
                         with col_del:
                             if st.button("🗑️", key=f"del_prelev_btn_{samp['id']}", use_container_width=True):
                                 sid = samp["id"]
-                                st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id')!=sid]
-                                st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id']!=sid]
-                                st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id')!=sid]
+                                st.session_state.schedules    = [x for x in st.session_state.schedules    if x.get('sample_id') != sid]
+                                st.session_state.prelevements = [x for x in st.session_state.prelevements if x['id'] != sid]
+                                st.session_state.pending_identifications = [x for x in st.session_state.pending_identifications if x.get('sample_id') != sid]
                                 save_schedules(st.session_state.schedules)
                                 save_prelevements(st.session_state.prelevements)
                                 save_pending_identifications(st.session_state.pending_identifications)
                                 st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                                 st.rerun()
 
-        # MODE SCAN QR
+        # ── MODE SCAN QR ───────────────────────────────────────────────────────
         else:
             st.markdown("""
             <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
@@ -2124,7 +2149,6 @@ if active == "surveillance":
                 label_visibility="collapsed")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-
             _scanned_data = None
 
             if qr_raw:
@@ -2176,7 +2200,7 @@ if active == "surveillance":
                 sf1, sf2 = st.columns(2)
                 with sf1:
                     oper_list_s = [
-                        o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                        o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '')
                         for o in st.session_state.operators
                     ]
                     if oper_list_s:
@@ -2189,13 +2213,16 @@ if active == "surveillance":
                         scan_oper = st.text_input(
                             "👤 Opérateur *", placeholder="Nom", key="scan_oper_manual")
                     scan_date = st.date_input("📅 Date", value=datetime.today(), key="scan_date")
-                    _scan_j2  = next_working_day_offset(scan_date, 2)
-                    _scan_j7  = next_working_day_offset(scan_date, 5)
+
+                    # ── Calcul des échéances ───────────────────────────────────
+                    _scan_j2 = next_working_day_offset(scan_date, 2)
+                    _scan_j7 = scan_date + timedelta(days=7)
+
                     st.markdown(f"""
                     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
                                 padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                    📅 J2 : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
-                    📅 J7 : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
+                    📅 J2 (2 jours ouvrés) : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
+                    📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
 
                 with sf2:
@@ -2225,19 +2252,19 @@ if active == "surveillance":
                         else:
                             _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                             _sample_scan = {
-                                "id":                  _pid,
-                                "label":               _lbl,
-                                "type":                _type,
-                                "gelose":              _gel,
-                                "room_class":          _rc,
+                                "id":                   _pid,
+                                "label":                _lbl,
+                                "type":                 _type,
+                                "gelose":               _gel,
+                                "room_class":           _rc,
                                 "location_criticality": _lc,
-                                "operateur":           scan_oper,
-                                "date":                str(scan_date),
-                                "archived":            False,
-                                "num_isolateur":       scan_isolateur if _is_classea else "",
-                                "poste":               scan_poste     if _is_classea else "",
-                                "commentaire":         scan_comment or "",
-                                "created_via":         "qr_scan",
+                                "operateur":            scan_oper,
+                                "date":                 str(scan_date),
+                                "archived":             False,
+                                "num_isolateur":        scan_isolateur if _is_classea else "",
+                                "poste":                scan_poste     if _is_classea else "",
+                                "commentaire":          scan_comment or "",
+                                "created_via":          "qr_scan",
                             }
                             st.session_state.prelevements.append(_sample_scan)
                             save_prelevements(st.session_state.prelevements)
@@ -2283,17 +2310,30 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     def _render_lecture_card(s, tab_prefix="", show_checkbox=False):
         sched_date  = datetime.fromisoformat(s["due_date"]).date()
-        is_late     = sched_date <= today
-        border_col  = "#ef4444" if is_late else "#3b82f6"
-        bg_col      = "#fef2f2" if is_late else "#eff6ff"
-        badge_col   = "#dc2626" if is_late else "#1d4ed8"
-        status_txt  = "EN RETARD" if is_late else f"dans {(sched_date - today).days}j"
-        smp         = next((p for p in st.session_state.prelevements if p['id']==s['sample_id']), None)
-        pt_type     = smp.get('type','?')        if smp else '?'
-        pt_gelose   = smp.get('gelose','?')      if smp else '?'
-        pt_oper     = smp.get('operateur','?')   if smp else '?'
-        pt_date_p   = smp.get('date','—')        if smp else '—'
-        pt_comment  = smp.get('commentaire','')  if smp else ''
+        days_since  = _days_since_sample(s)
+        min_days    = 7 if s["when"] == "J7" else 0
+
+        # Pour J7 : en retard seulement si due_date dépassée ET 7 jours écoulés
+        is_late = sched_date <= today and days_since >= min_days
+
+        border_col = "#ef4444" if is_late else "#3b82f6"
+        bg_col     = "#fef2f2" if is_late else "#eff6ff"
+        badge_col  = "#dc2626" if is_late else "#1d4ed8"
+
+        if is_late:
+            status_txt = "EN RETARD"
+        elif s["when"] == "J7" and days_since < 7:
+            remaining_days = 7 - days_since
+            status_txt = f"disponible dans {remaining_days}j"
+        else:
+            status_txt = f"dans {(sched_date - today).days}j"
+
+        smp          = next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), None)
+        pt_type      = smp.get('type', '?')       if smp else '?'
+        pt_gelose    = smp.get('gelose', '?')     if smp else '?'
+        pt_oper      = smp.get('operateur', '?')  if smp else '?'
+        pt_date_p    = smp.get('date', '—')       if smp else '—'
+        pt_comment   = smp.get('commentaire', '') if smp else ''
         comment_short = (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
 
         with st.container():
@@ -2362,7 +2402,8 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     def _render_traitement_lecture(proc_id):
         proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
-        if not proc: return
+        if not proc:
+            return
         smp      = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
         loc_crit = _get_location_criticality(smp) if smp else 1
 
@@ -2517,7 +2558,7 @@ if active == "surveillance":
 
         if n_sel > 0:
             if st.button(
-                f"✅ Valider {n_sel} lecture{'s' if n_sel>1 else ''} comme négative{'s' if n_sel>1 else ''}",
+                f"✅ Valider {n_sel} lecture{'s' if n_sel > 1 else ''} comme négative{'s' if n_sel > 1 else ''}",
                 key=f"batch_confirm_{tab_key}",
                 type="primary",
                 use_container_width=True,
@@ -2527,9 +2568,8 @@ if active == "surveillance":
                     st.session_state.pop(f"batch_chk_{tab_key}_{sch_id}", None)
                 st.session_state[batch_mode_key] = False
                 st.session_state.pop(f"sel_all_{tab_key}", None)
-                st.success(f"✅ {n_sel} lecture{'s' if n_sel>1 else ''} validée{'s' if n_sel>1 else ''} comme négative{'s' if n_sel>1 else ''} !")
+                st.success(f"✅ {n_sel} lecture{'s' if n_sel > 1 else ''} validée{'s' if n_sel > 1 else ''} comme négative{'s' if n_sel > 1 else ''} !")
                 st.rerun()
-
 
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — LECTURE J2
@@ -2562,7 +2602,6 @@ if active == "surveillance":
                     unsafe_allow_html=True)
 
             _render_batch_negatif_section(pending_j2, "j2")
-
             st.divider()
 
             batch_active_j2 = st.session_state.get("batch_mode_j2", False)
@@ -2580,7 +2619,7 @@ if active == "surveillance":
                     key="sort_j2",
                 )
             with filter_col_j2:
-                all_labels_j2 = sorted({s.get("label","—") for s in overdue_j2 + upcoming_j2})
+                all_labels_j2 = sorted({s.get("label", "—") for s in overdue_j2 + upcoming_j2})
                 filter_j2 = st.multiselect(
                     "🔍 Filtrer par point",
                     options=all_labels_j2,
@@ -2589,7 +2628,7 @@ if active == "surveillance":
                     placeholder="Tous les points…",
                 )
             filtered_j2 = [s for s in overdue_j2 + upcoming_j2
-                            if not filter_j2 or s.get("label") in filter_j2]
+                           if not filter_j2 or s.get("label") in filter_j2]
             sorted_j2 = _sort_schedules(filtered_j2, sort_j2)
 
             for s in sorted_j2:
@@ -2611,7 +2650,6 @@ if active == "surveillance":
 
             _render_batch_confirm(pending_j2, "j2")
 
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 3 — LECTURE J7
     # ══════════════════════════════════════════════════════════════════════════
@@ -2621,17 +2659,27 @@ if active == "surveillance":
 
         def _j2_done_for(sample_id):
             j2 = next((x for x in st.session_state.schedules
-                    if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+                       if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
             return j2 is None or j2['status'] == 'done'
 
-        pending_j7 = [s for s in st.session_state.schedules
-                    if s["when"] == "J7" and s["status"] == "pending"
-                    and s.get("sample_id") in _active_sids_j7
-                    and _j2_done_for(s["sample_id"])]
-        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+        # Toutes les J7 pending dont la J2 est traitée
+        all_pending_j7 = [s for s in st.session_state.schedules
+                          if s["when"] == "J7" and s["status"] == "pending"
+                          and s.get("sample_id") in _active_sids_j7
+                          and _j2_done_for(s["sample_id"])]
 
-        if not pending_j7:
+        # En retard : due_date dépassée ET 7 jours calendaires écoulés depuis prélèvement
+        overdue_j7  = [s for s in all_pending_j7
+                       if datetime.fromisoformat(s["due_date"]).date() <= today
+                       and _days_since_sample(s) >= 7]
+
+        # À venir : due_date future OU moins de 7 jours depuis prélèvement
+        upcoming_j7 = [s for s in all_pending_j7 if s not in overdue_j7]
+
+        # pending_j7 = union pour le batch (toutes, mais on ne peut traiter que les mûres)
+        pending_j7 = all_pending_j7
+
+        if not all_pending_j7:
             st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
         else:
             if overdue_j7:
@@ -2642,15 +2690,25 @@ if active == "surveillance":
                     f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
                     unsafe_allow_html=True)
             if upcoming_j7:
-                st.markdown(
-                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
-                    f'padding:10px 16px;margin-bottom:12px">'
-                    f'<span style="color:#1d4ed8;font-size:.8rem">'
-                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
-                    unsafe_allow_html=True)
+                # Distinguer celles qui sont vraiment "à venir" vs "pas encore mûres"
+                not_ready   = [s for s in upcoming_j7 if _days_since_sample(s) < 7]
+                truly_ahead = [s for s in upcoming_j7 if _days_since_sample(s) >= 7]
+                if not_ready:
+                    st.markdown(
+                        f'<div style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:8px">'
+                        f'<span style="color:#92400e;font-size:.8rem">'
+                        f'⏳ {len(not_ready)} lecture(s) J7 pas encore disponible(s) (< 7 jours)</span></div>',
+                        unsafe_allow_html=True)
+                if truly_ahead:
+                    st.markdown(
+                        f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:12px">'
+                        f'<span style="color:#1d4ed8;font-size:.8rem">'
+                        f'📆 {len(truly_ahead)} lecture(s) J7 à venir</span></div>',
+                        unsafe_allow_html=True)
 
             _render_batch_negatif_section(pending_j7, "j7")
-
             st.divider()
 
             batch_active_j7 = st.session_state.get("batch_mode_j7", False)
@@ -2668,7 +2726,7 @@ if active == "surveillance":
                     key="sort_j7",
                 )
             with filter_col_j7:
-                all_labels_j7 = sorted({s.get("label","—") for s in overdue_j7 + upcoming_j7})
+                all_labels_j7 = sorted({s.get("label", "—") for s in all_pending_j7})
                 filter_j7 = st.multiselect(
                     "🔍 Filtrer par point",
                     options=all_labels_j7,
@@ -2677,7 +2735,7 @@ if active == "surveillance":
                     placeholder="Tous les points…",
                 )
             filtered_j7 = [s for s in overdue_j7 + upcoming_j7
-                            if not filter_j7 or s.get("label") in filter_j7]
+                           if not filter_j7 or s.get("label") in filter_j7]
             sorted_j7 = _sort_schedules(filtered_j7, sort_j7)
 
             for s in sorted_j7:
