@@ -1833,6 +1833,41 @@ renderList();
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
 
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # FIX GLOBAL DES DATES (J2 / J7)
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    updated = False
+
+    for s in st.session_state.schedules:
+        smp = next((p for p in st.session_state.prelevements
+                    if p['id'] == s['sample_id']), None)
+
+        if not smp or not smp.get("date"):
+            continue
+
+        p_date = date.fromisoformat(smp["date"])
+
+        # 🔁 Recalcul J2 (jours ouvrés)
+        if s["when"] == "J2":
+            new_due = next_working_day_offset(p_date, 2).isoformat()
+
+            if s.get("due_date") != new_due:
+                s["due_date"] = new_due
+                updated = True
+
+        # 🔁 Recalcul J7 (jours calendaires STRICTS)
+        elif s["when"] == "J7":
+            new_due = (p_date + timedelta(days=7)).isoformat()
+
+            if s.get("due_date") != new_due:
+                s["due_date"] = new_due
+                updated = True
+
+    # 💾 Sauvegarde uniquement si modifié
+    if updated:
+        save_schedules(st.session_state.schedules)
+
     # ── Helper : nombre de jours calendaires depuis le prélèvement ─────────────
     def _days_since_sample(s):
         smp = next((p for p in st.session_state.prelevements
