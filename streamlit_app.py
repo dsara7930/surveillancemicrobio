@@ -1918,65 +1918,40 @@ if active == "surveillance":
     # HELPERS QR
     # ══════════════════════════════════════════════════════════════════════════
 
-    def _fix_encoding(s: str) -> str:
-        try:
-            return s.encode('latin-1').decode('utf-8')
-        except (UnicodeDecodeError, UnicodeEncodeError):
-            return s
-
-    _AZERTY_MAP = {
-        'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
-        'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
-        'M': ':', ';': 'm',
-        '&': '1', 'e\u0301': '2', '"': '3', "'": '4',
-        '(': '5', '-': '6', 'e\u0300': '7', '_': '8',
-        'c\u0327': '9', 'a\u0300': '0',
-    }
-
-    def _fix_azerty(s: str) -> str:
-        return "".join(_AZERTY_MAP.get(c, c) for c in s)
-
-    def _parse_qr_to_point_id(raw: str):
-        """
-        Gère :
-        - "12"
-        - {"id":"12"}
-        - "p12_1772635202"  ← ancien format
-        """
-        import json
-        import re
-
-        if not raw:
-            return None, None
-
-        raw = raw.strip()
-
-        # ── CAS JSON ─────────────────────────────────────
-        if raw.startswith("{"):
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPERS GLOBAUX
+    # ══════════════════════════════════════════════════════════════════════════
+    def _fix_qr_input(text: str) -> str:
+    
+    
+        # 1. Réparer le double-encodage UTF-8/Latin-1 (é → Ã©, è → Ã¨, etc.)
+        def _fix_encoding(s):
             try:
-                data = json.loads(raw)
-                pid = str(data.get("id", "")).strip()
-                return (pid, None) if pid else (None, "JSON sans id")
-            except:
-                return None, "QR JSON invalide"
+                return s.encode('latin-1').decode('utf-8')
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                return s
 
-        # ── CAS ancien format : p12_XXXX ─────────────────
-        m = re.match(r"p(\d+)_", raw)
-        if m:
-            return m.group(1), None
+        # 2. Correction AZERTY caractère par caractère
+        def _fix_azerty(s):
+            AZERTY_MAP = {
+                'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
+                'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
+                'M': ':', ';': 'm',
+                '&': '1', 'é': '2', '"': '3', "'": '4',
+                '(': '5', '-': '6', 'è': '7', '_': '8',
+                'ç': '9', 'à': '0',
+            }
+            return "".join(AZERTY_MAP.get(c, c) for c in s)
 
-        # ── CAS ID simple ────────────────────────────────
-        return raw, None
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # ETAT SESSION QR
-    # ══════════════════════════════════════════════════════════════════════════
+        text = _fix_encoding(text)          # étape 1 toujours
+        if not text.startswith("{"):
+            text = _fix_azerty(text)        # étape 2 si toujours pas de JSON
+        return text
 
     if "prelev_mode" not in st.session_state:
         st.session_state["prelev_mode"] = "manuel"
     if "qr_counter" not in st.session_state:
         st.session_state["qr_counter"] = 0
-
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 1 — NOUVEAU PRELEVEMENT
     # ══════════════════════════════════════════════════════════════════════════
@@ -2169,11 +2144,12 @@ if active == "surveillance":
                                 st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                                 st.rerun()
 
-        # ── MODE SCAN QR ───────────────────────────────────────────────────────
+         # ══════════════════════════════════════════════════════════════════════
+        # MODE SCAN QR
+        # ══════════════════════════════════════════════════════════════════════
         else:
             st.markdown("""
-            <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
-                        border-radius:14px;padding:14px 18px;margin-bottom:14px">
+            <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:14px;padding:14px 18px;margin-bottom:14px">
             <div style="font-weight:700;color:#1e40af;font-size:.9rem;margin-bottom:6px">🔳 Comment scanner</div>
             <div style="font-size:.8rem;color:#1e293b;line-height:1.8">
                 <strong>1.</strong> Imprimez les étiquettes depuis <em>Planning → Planning mensuel</em> 🖨️<br>
@@ -2182,42 +2158,30 @@ if active == "surveillance":
             </div></div>""", unsafe_allow_html=True)
 
             qr_raw_input = st.text_input(
-                "Zone de scan",
-                key=f"qr_scan_input_{st.session_state['qr_counter']}",
+                "Zone de scan", key=f"qr_scan_input_{st.session_state['qr_counter']}",
                 placeholder="Cliquez ici puis scannez l'étiquette QR...",
-                label_visibility="collapsed")
+                label_visibility="collapsed",
+                help="Si des caractères spéciaux apparaissent, configurez la douchette en layout EN-US.")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-            _scanned_data = None
-
             if qr_raw:
-                point_id_from_qr, parse_error = _parse_qr_to_point_id(qr_raw)
+                qr_fixed = _fix_qr_input(qr_raw)
+                if qr_fixed != qr_raw:
+                    st.caption("🔄 Correction automatique appliquée.")
+                qr_raw = qr_fixed
 
-                if parse_error:
-                    st.markdown(
-                        f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;"
-                        f"padding:12px 16px;margin-top:8px'>"
-                        f"<div style='font-weight:700;color:#991b1b'>❌ QR illisible</div>"
-                        f"<div style='font-size:.8rem;color:#7f1d1d;margin-top:4px'>{parse_error}</div>"
-                        f"</div>", unsafe_allow_html=True)
 
-                elif point_id_from_qr:
-                    _found = next(
-                        (p for p in st.session_state.points if str(p["id"]) == str(point_id_from_qr)),
-                        None)
-                    if _found:
-                        _scanned_data = _found
-                        if point_id_from_qr != qr_raw:
-                            st.caption("🔄 Correction automatique appliquée (encodage / AZERTY).")
-                    else:
-                        st.markdown(
-                            f"<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;"
-                            f"padding:12px 16px;margin-top:8px'>"
-                            f"<div style='font-weight:700;color:#92400e'>⚠️ Point introuvable</div>"
-                            f"<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
-                            f"ID lu : <code>{point_id_from_qr}</code> — vérifiez que l'étiquette "
-                            f"correspond à un point de prélèvement actif.</div>"
-                            f"</div>", unsafe_allow_html=True)
+            _scanned_data = None
+            qr_raw = qr_raw_input.strip() if qr_raw_input else ""
+
+            _scanned_data = None
+            if qr_raw:
+                # Chercher le point dont l'id correspond
+                _found = next((p for p in st.session_state.points if str(p["id"]) == qr_raw), None)
+                if _found:
+                    _scanned_data = _found
+                else:
+                    st.markdown("<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#92400e'>⚠️ Numéro non reconnu</div></div>", unsafe_allow_html=True)
 
             if _scanned_data:
                 _lbl  = _scanned_data.get("label", "")
@@ -2226,32 +2190,70 @@ if active == "surveillance":
                 _lc   = int(_scanned_data.get("location_criticality", 1))
                 _gel  = _scanned_data.get("gelose", "")
                 _is_classea = _rc.strip().upper() == "A"
+                lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
 
                 st.markdown(
-                    f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
-                    f"border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
-                    f"<div style='font-size:1rem;font-weight:700;color:#166534;margin-bottom:4px'>"
-                    f"✅ Point reconnu — {_lbl}</div>"
-                    f"<div style='font-size:.78rem;color:#166534'>Type : {_type} · "
-                    f"Classe : {_rc or '—'} · Gélose : {_gel or '—'}</div>"
-                    f"</div>", unsafe_allow_html=True)
+                    f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
+                    f"<div style='font-size:1rem;font-weight:700;color:#166534;margin-bottom:10px'>✅ Point reconnu — {_lbl}</div>"
+                    f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>"
+                    f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Type</div><div style='font-size:.85rem;font-weight:700'>{'💨' if _type=='Air' else '🧴'} {_type}</div></div>"
+                    f"<div style='background:#dbeafe;border-radius:8px;padding:8px;text-align:center;border:1px solid #93c5fd'><div style='font-size:.58rem;color:#1e40af;text-transform:uppercase'>Classe</div><div style='font-size:.85rem;font-weight:800;color:#1e40af'>{_rc or '—'}</div></div>"
+                    f"<div style='background:{lc_col_s}11;border-radius:8px;padding:8px;text-align:center;border:1px solid {lc_col_s}44'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Criticité</div><div style='font-size:.85rem;font-weight:700;color:{lc_col_s}'>Nv.{_lc}</div></div>"
+                    f"<div style='background:#fff;border-radius:8px;padding:8px;text-align:center;border:1px solid #86efac'><div style='font-size:.58rem;color:#64748b;text-transform:uppercase'>Gélose</div><div style='font-size:.85rem;font-weight:700;color:#1d4ed8'>🧫 {_gel[:14]}</div></div>"
+                    f"</div></div>", unsafe_allow_html=True)
 
-                sf1, sf2 = st.columns(2)
+                sf1,sf2=st.columns(2)
                 with sf1:
-                    oper_list_s = [
-                        o['nom'] + (' — ' + o.get('profession', '') if o.get('profession') else '')
-                        for o in st.session_state.operators
-                    ]
+                    oper_list_s=[o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
                     if oper_list_s:
-                        scan_oper = st.selectbox(
-                            "👤 Opérateur *",
-                            ["— Sélectionner —"] + oper_list_s,
-                            key="scan_oper_sel")
-                        scan_oper = scan_oper if scan_oper != "— Sélectionner —" else ""
+                        scan_oper=st.selectbox("👤 Opérateur *",["— Sélectionner —"]+oper_list_s,key="scan_oper_sel")
+                        scan_oper=scan_oper if scan_oper!="— Sélectionner —" else ""
                     else:
-                        scan_oper = st.text_input(
-                            "👤 Opérateur *", placeholder="Nom", key="scan_oper_manual")
-                    scan_date = st.date_input("📅 Date", value=datetime.today(), key="scan_date")
+                        scan_oper=st.text_input("👤 Opérateur *",placeholder="Nom",key="scan_oper_manual")
+                    scan_date=st.date_input("📅 Date",value=datetime.today(),key="scan_date")
+                with sf2:
+                    scan_isolateur=""; scan_poste="Poste 1"
+                    if _is_classea:
+                        st.markdown("<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px'><div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>🔬 Classe A</div>", unsafe_allow_html=True)
+                        scan_isolateur=st.radio("Isolateur",["Iso 16/0724","Iso 14/07169"],horizontal=True,key="scan_iso_sel")
+                        scan_poste=st.radio("Poste",["Poste 1","Poste 2","Commun"],horizontal=True,key="scan_poste_sel")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    scan_comment=st.text_area("💬 Commentaire",placeholder="Remarques...",height=80,key="scan_comment")
+
+                _scan_j2=next_working_day_offset(scan_date,2); _scan_j7=next_working_day_offset(scan_date,5)
+                st.markdown(f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 14px;font-size:.72rem;color:#166534;margin-bottom:10px'>📅 J2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong> &nbsp;·&nbsp; 📅 J7 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
+
+                sbc1,sbc2=st.columns([3,1])
+                with sbc1:
+                    if st.button(f"💾 Enregistrer — {_lbl}",use_container_width=True,type="primary",key="scan_save_btn"):
+                        if not scan_oper:
+                            st.error("⚠️ Veuillez sélectionner un opérateur.")
+                        else:
+                            _pid=f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                            _sample_scan={"id":_pid,"label":_lbl,"type":_type,"gelose":_gel,"room_class":_rc,"location_criticality":_lc,"operateur":scan_oper,"date":str(scan_date),"archived":False,"num_isolateur":scan_isolateur if _is_classea else "","poste":scan_poste if _is_classea else "","commentaire":scan_comment or "","created_via":"qr_scan"}
+                            st.session_state.prelevements.append(_sample_scan)
+                            save_prelevements(st.session_state.prelevements)
+                            for _when,_due in [("J2",_scan_j2),("J7",_scan_j7)]:
+                                st.session_state.schedules.append({"id":f"sch_{_pid}_{_when}","sample_id":_pid,"label":_lbl,"due_date":_due.isoformat(),"when":_when,"status":"pending"})
+                            save_schedules(st.session_state.schedules)
+                            iso_info=f" · {scan_isolateur} · {scan_poste}" if _is_classea else ""
+                            st.success(f"✅ **{_lbl}** enregistré{iso_info}\nJ2 → {_scan_j2.strftime('%d/%m/%Y')} · J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                            st.session_state["qr_counter"]+=1; st.rerun()
+                with sbc2:
+                    if st.button("✕ Annuler",use_container_width=True,key="scan_cancel_btn"):
+                        st.session_state["qr_counter"]+=1; st.rerun()
+
+            _scan_recent=[p for p in st.session_state.prelevements if p.get("created_via")=="qr_scan" and not p.get("archived")]
+            if _scan_recent:
+                st.divider()
+                st.markdown(f"<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>🔳 {len(_scan_recent)} prélèvement(s) créé(s) par scan QR (en cours)</div>", unsafe_allow_html=True)
+                for _sp in reversed(_scan_recent[-5:]):
+                    lc_s=int(_sp.get("location_criticality",1)); lcs_col={"1":"#22c55e","2":"#f59e0b","3":"#ef4444"}.get(str(lc_s),"#94a3b8")
+                    _iso_badge=""
+                    if _sp.get('room_class','').strip().upper()=='A':
+                        iso=_sp.get('num_isolateur','—') or '—'; pst=_sp.get('poste','—') or '—'
+                        _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
+                    st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
 
                     # ── Calcul des échéances ───────────────────────────────────
                     _scan_j2 = next_working_day_offset(scan_date, 2)
