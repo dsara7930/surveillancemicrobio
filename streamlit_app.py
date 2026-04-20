@@ -2485,92 +2485,92 @@ if active == "surveillance":
             _render_batch_confirm(pending_j2, "j2")
 
 
-        # ══════════════════════════════════════════════════════════════════════════
-        # ONGLET 3 — LECTURE J7
-        # ══════════════════════════════════════════════════════════════════════════
-        with tab_j7:
-            st.markdown("#### 📗 Lectures J7 en attente")
-            _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+    # ══════════════════════════════════════════════════════════════════════════
+    # ONGLET 3 — LECTURE J7
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_j7:
+        st.markdown("#### 📗 Lectures J7 en attente")
+        _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
 
-            def _j2_done_for(sample_id):
-                j2 = next((x for x in st.session_state.schedules
-                        if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
-                return j2 is None or j2['status'] == 'done'
+        def _j2_done_for(sample_id):
+            j2 = next((x for x in st.session_state.schedules
+                    if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+            return j2 is None or j2['status'] == 'done'
 
-            pending_j7 = [s for s in st.session_state.schedules
-                        if s["when"] == "J7" and s["status"] == "pending"
-                        and s.get("sample_id") in _active_sids_j7
-                        and _j2_done_for(s["sample_id"])]
-            overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
-            upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
+        pending_j7 = [s for s in st.session_state.schedules
+                    if s["when"] == "J7" and s["status"] == "pending"
+                    and s.get("sample_id") in _active_sids_j7
+                    and _j2_done_for(s["sample_id"])]
+        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
+        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
 
-            if not pending_j7:
-                st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
-            else:
-                if overdue_j7:
-                    st.markdown(
-                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                        f'padding:12px 16px;margin-bottom:12px">'
-                        f'<span style="color:#dc2626;font-weight:700">'
-                        f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
-                        unsafe_allow_html=True)
-                if upcoming_j7:
-                    st.markdown(
-                        f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
-                        f'padding:10px 16px;margin-bottom:12px">'
-                        f'<span style="color:#1d4ed8;font-size:.8rem">'
-                        f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
-                        unsafe_allow_html=True)
+        if not pending_j7:
+            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
+        else:
+            if overdue_j7:
+                st.markdown(
+                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                    f'padding:12px 16px;margin-bottom:12px">'
+                    f'<span style="color:#dc2626;font-weight:700">'
+                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
+                    unsafe_allow_html=True)
+            if upcoming_j7:
+                st.markdown(
+                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                    f'padding:10px 16px;margin-bottom:12px">'
+                    f'<span style="color:#1d4ed8;font-size:.8rem">'
+                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
+                    unsafe_allow_html=True)
 
-                _render_batch_negatif_section(pending_j7, "j7")
+            _render_batch_negatif_section(pending_j7, "j7")
 
-                st.divider()
+            st.divider()
 
-                batch_active_j7 = st.session_state.get("batch_mode_j7", False)
-                sort_col_j7, filter_col_j7 = st.columns(2)
-                with sort_col_j7:
-                    sort_j7 = st.selectbox(
-                        "🔃 Trier par",
-                        options=["echeance", "label", "operateur", "date_prelevement"],
-                        format_func=lambda x: {
-                            "echeance":         "📅 Échéance",
-                            "label":            "📍 Lieu (A→Z)",
-                            "operateur":        "👤 Opérateur (A→Z)",
-                            "date_prelevement": "🗓️ Date prélèvement",
-                        }[x],
-                        key="sort_j7",
-                    )
-                with filter_col_j7:
-                    all_labels_j7 = sorted({s.get("label","—") for s in overdue_j7 + upcoming_j7})
-                    filter_j7 = st.multiselect(
-                        "🔍 Filtrer par point",
-                        options=all_labels_j7,
-                        default=[],
-                        key="filter_j7",
-                        placeholder="Tous les points…",
-                    )
-                filtered_j7 = [s for s in overdue_j7 + upcoming_j7
-                                if not filter_j7 or s.get("label") in filter_j7]
-                sorted_j7 = _sort_schedules(filtered_j7, sort_j7)
+            batch_active_j7 = st.session_state.get("batch_mode_j7", False)
+            sort_col_j7, filter_col_j7 = st.columns(2)
+            with sort_col_j7:
+                sort_j7 = st.selectbox(
+                    "🔃 Trier par",
+                    options=["echeance", "label", "operateur", "date_prelevement"],
+                    format_func=lambda x: {
+                        "echeance":         "📅 Échéance",
+                        "label":            "📍 Lieu (A→Z)",
+                        "operateur":        "👤 Opérateur (A→Z)",
+                        "date_prelevement": "🗓️ Date prélèvement",
+                    }[x],
+                    key="sort_j7",
+                )
+            with filter_col_j7:
+                all_labels_j7 = sorted({s.get("label","—") for s in overdue_j7 + upcoming_j7})
+                filter_j7 = st.multiselect(
+                    "🔍 Filtrer par point",
+                    options=all_labels_j7,
+                    default=[],
+                    key="filter_j7",
+                    placeholder="Tous les points…",
+                )
+            filtered_j7 = [s for s in overdue_j7 + upcoming_j7
+                            if not filter_j7 or s.get("label") in filter_j7]
+            sorted_j7 = _sort_schedules(filtered_j7, sort_j7)
 
-                for s in sorted_j7:
-                    if batch_active_j7:
-                        chk_col, card_col = st.columns([0.35, 9.65])
-                        with chk_col:
-                            st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
-                            st.checkbox("", key=f"batch_chk_j7_{s['id']}")
-                            st.markdown("</div>", unsafe_allow_html=True)
-                        with card_col:
-                            _render_lecture_card(s, "j7_")
-                    else:
+            for s in sorted_j7:
+                if batch_active_j7:
+                    chk_col, card_col = st.columns([0.35, 9.65])
+                    with chk_col:
+                        st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
+                        st.checkbox("", key=f"batch_chk_j7_{s['id']}")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    with card_col:
                         _render_lecture_card(s, "j7_")
-                        if st.session_state.get("current_process") == s['id']:
-                            _cp = next((x for x in st.session_state.schedules
-                                        if x['id'] == st.session_state.current_process), None)
-                            if _cp and _cp.get("when") == "J7":
-                                _render_traitement_lecture(st.session_state.current_process)
+                else:
+                    _render_lecture_card(s, "j7_")
+                    if st.session_state.get("current_process") == s['id']:
+                        _cp = next((x for x in st.session_state.schedules
+                                    if x['id'] == st.session_state.current_process), None)
+                        if _cp and _cp.get("when") == "J7":
+                            _render_traitement_lecture(st.session_state.current_process)
 
-                _render_batch_confirm(pending_j7, "j7")
+            _render_batch_confirm(pending_j7, "j7")
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
