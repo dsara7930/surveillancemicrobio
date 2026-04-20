@@ -2255,94 +2255,94 @@ if active == "surveillance":
                         _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
                     st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
 
-                # ── Calcul des échéances ───────────────────────────────────
-                _sp_date = datetime.strptime(_sp["date"], "%Y-%m-%d").date()
+                    # ── Calcul des échéances ───────────────────────────────────
+                    _sp_date = datetime.strptime(_sp["date"], "%Y-%m-%d").date()
 
-                _scan_j2 = next_working_day_offset(_sp_date, 2)
-                _scan_j7 = _sp_date + timedelta(days=7)
+                    _scan_j2 = next_working_day_offset(_sp_date, 2)
+                    _scan_j7 = _sp_date + timedelta(days=7)
 
-                st.markdown(f"""
-                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
-                            padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                📅 J2 (2 jours ouvrés) : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
-                📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
-                </div>""", unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
+                                padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+                    📅 J2 (2 jours ouvrés) : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
+                    📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
+                    </div>""", unsafe_allow_html=True)
 
 
-                with sf2:
-                    scan_isolateur = ""
-                    scan_poste     = "Poste 1"
-                    if _is_classea:
-                        scan_isolateur = st.radio(
-                            "Isolateur",
-                            ["Iso 16/0724", "Iso 14/07169"],
-                            index=None,
-                            horizontal=True,
-                            key="scan_iso_sel"
-                        )
-                        scan_poste = st.radio(
-                            "Poste",
-                            ["Poste 1", "Poste 2", "Commun"],
-                            index=None,
-                            horizontal=True,
-                            key="scan_poste_sel"
-                        )
-                    scan_comment = st.text_area(
-                        "💬 Commentaire", placeholder="Remarques...",
-                        height=80, key="scan_comment")
+                    with sf2:
+                        scan_isolateur = ""
+                        scan_poste     = "Poste 1"
+                        if _is_classea:
+                            scan_isolateur = st.radio(
+                                "Isolateur",
+                                ["Iso 16/0724", "Iso 14/07169"],
+                                index=None,
+                                horizontal=True,
+                                key="scan_iso_sel"
+                            )
+                            scan_poste = st.radio(
+                                "Poste",
+                                ["Poste 1", "Poste 2", "Commun"],
+                                index=None,
+                                horizontal=True,
+                                key="scan_poste_sel"
+                            )
+                        scan_comment = st.text_area(
+                            "💬 Commentaire", placeholder="Remarques...",
+                            height=80, key="scan_comment")
 
-                sbc1, sbc2 = st.columns([3, 1])
-                with sbc1:
-                    if st.button(
-                        f"💾 Enregistrer — {_lbl}",
-                        use_container_width=True, type="primary", key="scan_save_btn"
-                    ):
-                        if not scan_oper:
-                            st.error("⚠️ Veuillez sélectionner un opérateur.")
-                        else:
-                            if scan_isolateur == "— Sélectionner —":
-                                scan_isolateur = ""
+                    sbc1, sbc2 = st.columns([3, 1])
+                    with sbc1:
+                        if st.button(
+                            f"💾 Enregistrer — {_lbl}",
+                            use_container_width=True, type="primary", key="scan_save_btn"
+                        ):
+                            if not scan_oper:
+                                st.error("⚠️ Veuillez sélectionner un opérateur.")
+                            else:
+                                if scan_isolateur == "— Sélectionner —":
+                                    scan_isolateur = ""
 
-                            if scan_poste == "— Sélectionner —":
-                                scan_poste = ""
-                            _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                            _sample_scan = {
-                                "id":                   _pid,
-                                "label":                _lbl,
-                                "type":                 _type,
-                                "gelose":               _gel,
-                                "room_class":           _rc,
-                                "location_criticality": _lc,
-                                "operateur":            scan_oper,
-                                "date":                 str(scan_date),
-                                "archived":             False,
-                                "num_isolateur":        scan_isolateur if _is_classea else "",
-                                "poste":                scan_poste     if _is_classea else "",
-                                "commentaire":          scan_comment or "",
-                                "created_via":          "qr_scan",
-                            }
-                            st.session_state.prelevements.append(_sample_scan)
-                            save_prelevements(st.session_state.prelevements)
-                            for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
-                                st.session_state.schedules.append({
-                                    "id":        f"sch_{_pid}_{_when}",
-                                    "sample_id": _pid,
-                                    "label":     _lbl,
-                                    "due_date":  _due.isoformat(),
-                                    "when":      _when,
-                                    "status":    "pending",
-                                })
-                            save_schedules(st.session_state.schedules)
-                            st.success(
-                                f"✅ **{_lbl}** enregistré · "
-                                f"J2 → {_scan_j2.strftime('%d/%m/%Y')} | "
-                                f"J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                                if scan_poste == "— Sélectionner —":
+                                    scan_poste = ""
+                                _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                                _sample_scan = {
+                                    "id":                   _pid,
+                                    "label":                _lbl,
+                                    "type":                 _type,
+                                    "gelose":               _gel,
+                                    "room_class":           _rc,
+                                    "location_criticality": _lc,
+                                    "operateur":            scan_oper,
+                                    "date":                 str(scan_date),
+                                    "archived":             False,
+                                    "num_isolateur":        scan_isolateur if _is_classea else "",
+                                    "poste":                scan_poste     if _is_classea else "",
+                                    "commentaire":          scan_comment or "",
+                                    "created_via":          "qr_scan",
+                                }
+                                st.session_state.prelevements.append(_sample_scan)
+                                save_prelevements(st.session_state.prelevements)
+                                for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
+                                    st.session_state.schedules.append({
+                                        "id":        f"sch_{_pid}_{_when}",
+                                        "sample_id": _pid,
+                                        "label":     _lbl,
+                                        "due_date":  _due.isoformat(),
+                                        "when":      _when,
+                                        "status":    "pending",
+                                    })
+                                save_schedules(st.session_state.schedules)
+                                st.success(
+                                    f"✅ **{_lbl}** enregistré · "
+                                    f"J2 → {_scan_j2.strftime('%d/%m/%Y')} | "
+                                    f"J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                                st.session_state["qr_counter"] += 1
+                                st.rerun()
+                    with sbc2:
+                        if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
                             st.session_state["qr_counter"] += 1
                             st.rerun()
-                with sbc2:
-                    if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
-                        st.session_state["qr_counter"] += 1
-                        st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # HELPER : tri des lectures
