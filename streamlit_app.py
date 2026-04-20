@@ -2338,125 +2338,107 @@ if active == "surveillance":
                 st.session_state.current_process = None
                 st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # HELPER : section batch négatif
-    # ══════════════════════════════════════════════════════════════════════════
-    def _render_batch_negatif_section(pending_list, tab_key):
-        """
-        Affiche une section permettant de sélectionner plusieurs lectures
-        et de les valider toutes comme négatives en un clic.
-        """
-        if not pending_list:
-            return
+        # ══════════════════════════════════════════════════════════════════════════
+        # HELPER : batch négatif — header uniquement
+        # ══════════════════════════════════════════════════════════════════════════
+        def _render_batch_negatif_section(pending_list, tab_key):
+            if not pending_list:
+                return
 
-        batch_mode_key = f"batch_mode_{tab_key}"
-        if batch_mode_key not in st.session_state:
-            st.session_state[batch_mode_key] = False
-
-        col_a, col_b = st.columns([2, 3])
-        with col_a:
-            btn_label = "✕ Fermer sélection" if st.session_state[batch_mode_key] else "☑️ Sélection multiple — tout négatif"
-            if st.button(btn_label, key=f"toggle_batch_{tab_key}", use_container_width=True):
-                st.session_state[batch_mode_key] = not st.session_state[batch_mode_key]
-                st.rerun()
-
-        if not st.session_state[batch_mode_key]:
-            return
-
-        st.markdown(
-            "<div style='background:#f0fdf4;border:2px solid #22c55e;border-radius:12px;"
-            "padding:16px 18px;margin:8px 0 12px 0'>",
-            unsafe_allow_html=True)
-        st.markdown(
-            "<div style='font-size:.85rem;font-weight:800;color:#166534;margin-bottom:10px'>"
-            "☑️ Sélectionnez les lectures à valider comme <strong>négatives</strong></div>",
-            unsafe_allow_html=True)
-
-        # Cases à cocher pour chaque lecture
-        sel_all_key = f"sel_all_{tab_key}"
-        if st.checkbox("✅ Tout sélectionner", key=sel_all_key):
-            for s in pending_list:
-                st.session_state[f"batch_chk_{tab_key}_{s['id']}"] = True
-
-        for s in pending_list:
-            sched_date = datetime.fromisoformat(s["due_date"]).date()
-            is_late    = sched_date <= today
-            date_badge = "🔴 EN RETARD" if is_late else f"📅 {s['due_date'][:10]}"
-            chk_key    = f"batch_chk_{tab_key}_{s['id']}"
-            st.checkbox(
-                f"**{s['label']}** — {s['when']} — {date_badge}",
-                key=chk_key)
-
-        selected_ids = [
-            s['id'] for s in pending_list
-            if st.session_state.get(f"batch_chk_{tab_key}_{s['id']}", False)
-        ]
-
-        n_sel = len(selected_ids)
-        st.markdown(
-            f"<div style='font-size:.78rem;color:#475569;margin:8px 0'>"
-            f"{n_sel} / {len(pending_list)} lecture(s) sélectionnée(s)</div>",
-            unsafe_allow_html=True)
-
-        if n_sel > 0:
-            if st.button(
-                f"✅ Valider {n_sel} lecture{'s' if n_sel > 1 else ''} comme négative{'s' if n_sel > 1 else ''}",
-                key=f"batch_confirm_{tab_key}",
-                type="primary",
-                use_container_width=True,
-            ):
-                nb_done = 0
-                for sch_id in selected_ids:
-                    _valider_negatif(sch_id)
-                    nb_done += 1
-                    # Nettoyer la case à cocher
-                    st.session_state.pop(f"batch_chk_{tab_key}_{sch_id}", None)
-
+            batch_mode_key = f"batch_mode_{tab_key}"
+            if batch_mode_key not in st.session_state:
                 st.session_state[batch_mode_key] = False
-                st.session_state.pop(sel_all_key, None)
-                st.success(f"✅ {nb_done} lecture{'s' if nb_done > 1 else ''} validée{'s' if nb_done > 1 else ''} comme négative{'s' if nb_done > 1 else ''} !")
-                st.rerun()
 
-        st.markdown("</div>", unsafe_allow_html=True)
+            col_a, col_b = st.columns([2, 3])
+            with col_a:
+                btn_label = "✕ Fermer sélection" if st.session_state[batch_mode_key] else "☑️ Sélection multiple — tout négatif"
+                if st.button(btn_label, key=f"toggle_batch_{tab_key}", use_container_width=True):
+                    st.session_state[batch_mode_key] = not st.session_state[batch_mode_key]
+                    # Nettoyer les cases à l'ouverture/fermeture
+                    for s in pending_list:
+                        st.session_state.pop(f"batch_chk_{tab_key}_{s['id']}", None)
+                    st.session_state.pop(f"sel_all_{tab_key}", None)
+                    st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 2 — LECTURE J2
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_j2:
-        st.markdown("#### 📖 Lectures J2 en attente")
-        _active_sids = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
-        pending_j2   = [s for s in st.session_state.schedules
-                        if s["when"] == "J2" and s["status"] == "pending"
-                        and s.get("sample_id") in _active_sids]
-        overdue_j2   = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
+            if not st.session_state[batch_mode_key]:
+                return
 
-        if not pending_j2:
-            st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
-        else:
-            if overdue_j2:
-                st.markdown(
-                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                    f'padding:12px 16px;margin-bottom:12px">'
-                    f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j2)} lecture(s) J2 en retard</span></div>',
-                    unsafe_allow_html=True)
-            if upcoming_j2:
-                st.markdown(
-                    f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
-                    f'padding:10px 16px;margin-bottom:12px">'
-                    f'<span style="color:#16a34a;font-size:.8rem">'
-                    f'📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>',
-                    unsafe_allow_html=True)
+            # Tout sélectionner
+            sel_all_key = f"sel_all_{tab_key}"
+            with col_b:
+                if st.checkbox("✅ Tout sélectionner", key=sel_all_key):
+                    for s in pending_list:
+                        st.session_state[f"batch_chk_{tab_key}_{s['id']}"] = True
 
-            # ── SECTION BATCH NÉGATIF ──────────────────────────────────────
-            _render_batch_negatif_section(pending_j2, "j2")
 
-            st.divider()
+        def _render_batch_confirm(pending_list, tab_key):
+            """Bouton de confirmation — à appeler après la boucle de cartes."""
+            batch_mode_key = f"batch_mode_{tab_key}"
+            if not st.session_state.get(batch_mode_key):
+                return
 
-            # ── Cartes individuelles (hors mode batch) ─────────────────────
-            batch_active_j2 = st.session_state.get("batch_mode_j2", False)
-            if not batch_active_j2:
+            selected_ids = [
+                s['id'] for s in pending_list
+                if st.session_state.get(f"batch_chk_{tab_key}_{s['id']}", False)
+            ]
+            n_sel = len(selected_ids)
+
+            st.markdown(
+                f"<div style='font-size:.78rem;color:#475569;margin:6px 0'>"
+                f"{n_sel} / {len(pending_list)} lecture(s) sélectionnée(s)</div>",
+                unsafe_allow_html=True)
+
+            if n_sel > 0:
+                if st.button(
+                    f"✅ Valider {n_sel} lecture{'s' if n_sel>1 else ''} comme négative{'s' if n_sel>1 else ''}",
+                    key=f"batch_confirm_{tab_key}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    for sch_id in selected_ids:
+                        _valider_negatif(sch_id)
+                        st.session_state.pop(f"batch_chk_{tab_key}_{sch_id}", None)
+                    st.session_state[batch_mode_key] = False
+                    st.session_state.pop(f"sel_all_{tab_key}", None)
+                    st.success(f"✅ {n_sel} lecture{'s' if n_sel>1 else ''} validée{'s' if n_sel>1 else ''} comme négative{'s' if n_sel>1 else ''} !")
+                    st.rerun()
+
+
+        # ══════════════════════════════════════════════════════════════════════════
+        # ONGLET 2 — LECTURE J2
+        # ══════════════════════════════════════════════════════════════════════════
+        with tab_j2:
+            st.markdown("#### 📖 Lectures J2 en attente")
+            _active_sids = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+            pending_j2   = [s for s in st.session_state.schedules
+                            if s["when"] == "J2" and s["status"] == "pending"
+                            and s.get("sample_id") in _active_sids]
+            overdue_j2   = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() <= today]
+            upcoming_j2  = [s for s in pending_j2 if datetime.fromisoformat(s["due_date"]).date() > today]
+
+            if not pending_j2:
+                st.success("✅ Aucune lecture J2 en attente — tout est à jour !")
+            else:
+                if overdue_j2:
+                    st.markdown(
+                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                        f'padding:12px 16px;margin-bottom:12px">'
+                        f'<span style="color:#dc2626;font-weight:700">'
+                        f'🔔 {len(overdue_j2)} lecture(s) J2 en retard</span></div>',
+                        unsafe_allow_html=True)
+                if upcoming_j2:
+                    st.markdown(
+                        f'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:12px">'
+                        f'<span style="color:#16a34a;font-size:.8rem">'
+                        f'📆 {len(upcoming_j2)} lecture(s) J2 à venir</span></div>',
+                        unsafe_allow_html=True)
+
+                _render_batch_negatif_section(pending_j2, "j2")
+
+                st.divider()
+
+                batch_active_j2 = st.session_state.get("batch_mode_j2", False)
                 sort_col_j2, filter_col_j2 = st.columns(2)
                 with sort_col_j2:
                     sort_j2 = st.selectbox(
@@ -2482,58 +2464,69 @@ if active == "surveillance":
                 filtered_j2 = [s for s in overdue_j2 + upcoming_j2
                                 if not filter_j2 or s.get("label") in filter_j2]
                 sorted_j2 = _sort_schedules(filtered_j2, sort_j2)
+
                 for s in sorted_j2:
-                    _render_lecture_card(s, "j2_")
-                    if st.session_state.get("current_process") == s['id']:
-                        _cp = next((x for x in st.session_state.schedules
-                                    if x['id'] == st.session_state.current_process), None)
-                        if _cp and _cp.get("when") == "J2":
-                            _render_traitement_lecture(st.session_state.current_process)
-    # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 3 — LECTURE J7
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_j7:
-        st.markdown("#### 📗 Lectures J7 en attente")
-        _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
+                    if batch_active_j2:
+                        chk_col, card_col = st.columns([0.35, 9.65])
+                        with chk_col:
+                            st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
+                            st.checkbox("", key=f"batch_chk_j2_{s['id']}")
+                            st.markdown("</div>", unsafe_allow_html=True)
+                        with card_col:
+                            _render_lecture_card(s, "j2_")
+                    else:
+                        _render_lecture_card(s, "j2_")
+                        if st.session_state.get("current_process") == s['id']:
+                            _cp = next((x for x in st.session_state.schedules
+                                        if x['id'] == st.session_state.current_process), None)
+                            if _cp and _cp.get("when") == "J2":
+                                _render_traitement_lecture(st.session_state.current_process)
 
-        def _j2_done_for(sample_id):
-            j2 = next((x for x in st.session_state.schedules
-                    if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
-            return j2 is None or j2['status'] == 'done'
+                _render_batch_confirm(pending_j2, "j2")
 
-        pending_j7 = [s for s in st.session_state.schedules
-                    if s["when"] == "J7" and s["status"] == "pending"
-                    and s.get("sample_id") in _active_sids_j7
-                    and _j2_done_for(s["sample_id"])]
-        overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
-        upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
 
-        if not pending_j7:
-            st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
-        else:
-            if overdue_j7:
-                st.markdown(
-                    f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
-                    f'padding:12px 16px;margin-bottom:12px">'
-                    f'<span style="color:#dc2626;font-weight:700">'
-                    f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
-                    unsafe_allow_html=True)
-            if upcoming_j7:
-                st.markdown(
-                    f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
-                    f'padding:10px 16px;margin-bottom:12px">'
-                    f'<span style="color:#1d4ed8;font-size:.8rem">'
-                    f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
-                    unsafe_allow_html=True)
+        # ══════════════════════════════════════════════════════════════════════════
+        # ONGLET 3 — LECTURE J7
+        # ══════════════════════════════════════════════════════════════════════════
+        with tab_j7:
+            st.markdown("#### 📗 Lectures J7 en attente")
+            _active_sids_j7 = {p['id'] for p in st.session_state.prelevements if not p.get("archived")}
 
-            # ── SECTION BATCH NÉGATIF ──────────────────────────────────────
-            _render_batch_negatif_section(pending_j7, "j7")
+            def _j2_done_for(sample_id):
+                j2 = next((x for x in st.session_state.schedules
+                        if x['sample_id'] == sample_id and x['when'] == 'J2'), None)
+                return j2 is None or j2['status'] == 'done'
 
-            st.divider()
+            pending_j7 = [s for s in st.session_state.schedules
+                        if s["when"] == "J7" and s["status"] == "pending"
+                        and s.get("sample_id") in _active_sids_j7
+                        and _j2_done_for(s["sample_id"])]
+            overdue_j7  = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() <= today]
+            upcoming_j7 = [s for s in pending_j7 if datetime.fromisoformat(s["due_date"]).date() > today]
 
-            # ── Cartes individuelles (hors mode batch) ─────────────────────
-            batch_active_j7 = st.session_state.get("batch_mode_j7", False)
-            if not batch_active_j7:
+            if not pending_j7:
+                st.success("✅ Aucune lecture J7 en attente — tout est à jour !")
+            else:
+                if overdue_j7:
+                    st.markdown(
+                        f'<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;'
+                        f'padding:12px 16px;margin-bottom:12px">'
+                        f'<span style="color:#dc2626;font-weight:700">'
+                        f'🔔 {len(overdue_j7)} lecture(s) J7 en retard</span></div>',
+                        unsafe_allow_html=True)
+                if upcoming_j7:
+                    st.markdown(
+                        f'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;'
+                        f'padding:10px 16px;margin-bottom:12px">'
+                        f'<span style="color:#1d4ed8;font-size:.8rem">'
+                        f'📆 {len(upcoming_j7)} lecture(s) J7 à venir</span></div>',
+                        unsafe_allow_html=True)
+
+                _render_batch_negatif_section(pending_j7, "j7")
+
+                st.divider()
+
+                batch_active_j7 = st.session_state.get("batch_mode_j7", False)
                 sort_col_j7, filter_col_j7 = st.columns(2)
                 with sort_col_j7:
                     sort_j7 = st.selectbox(
@@ -2559,13 +2552,25 @@ if active == "surveillance":
                 filtered_j7 = [s for s in overdue_j7 + upcoming_j7
                                 if not filter_j7 or s.get("label") in filter_j7]
                 sorted_j7 = _sort_schedules(filtered_j7, sort_j7)
+
                 for s in sorted_j7:
-                    _render_lecture_card(s, "j7_")
-                    if st.session_state.get("current_process") == s['id']:
-                        _cp = next((x for x in st.session_state.schedules
-                                    if x['id'] == st.session_state.current_process), None)
-                        if _cp and _cp.get("when") == "J7":
-                            _render_traitement_lecture(st.session_state.current_process)
+                    if batch_active_j7:
+                        chk_col, card_col = st.columns([0.35, 9.65])
+                        with chk_col:
+                            st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
+                            st.checkbox("", key=f"batch_chk_j7_{s['id']}")
+                            st.markdown("</div>", unsafe_allow_html=True)
+                        with card_col:
+                            _render_lecture_card(s, "j7_")
+                    else:
+                        _render_lecture_card(s, "j7_")
+                        if st.session_state.get("current_process") == s['id']:
+                            _cp = next((x for x in st.session_state.schedules
+                                        if x['id'] == st.session_state.current_process), None)
+                            if _cp and _cp.get("when") == "J7":
+                                _render_traitement_lecture(st.session_state.current_process)
+
+                _render_batch_confirm(pending_j7, "j7")
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
