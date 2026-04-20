@@ -4514,8 +4514,14 @@ if active == "historique":
                 st.rerun()
 
         # ── Filtre par période ────────────────────────────────────────────────
+        
+        from datetime import datetime
         from datetime import date as dt_date
-
+        def _parse_date(date_str):
+            try:
+                return datetime.strptime(date_str, "%Y-%m-%d")
+            except:
+                return None
         all_dates_ok = [d for d in (_parse_date(r.get("date","")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
