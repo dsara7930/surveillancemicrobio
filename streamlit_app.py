@@ -2270,6 +2270,7 @@ if active == "surveillance":
 
                     # 🔧 Recréation des colonnes dans la boucle
                     col1, col2 = st.columns(2)
+                    _is_classea = _sp.get('room_class','').strip().upper() == 'A'
 
                     with col2:
                         scan_isolateur = ""
