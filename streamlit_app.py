@@ -4687,8 +4687,8 @@ if active == "historique":
                 "alertes":0,"actions":0,
                 "germes":defaultdict(int),
                 "ufc_j2_list":[],"ufc_j7_list":[],
-                "remarques":[],
-                "commentaires":[],
+                "remarques":{},
+                "commentaires":{},
             })
             for r in surv_f:
                 pt     = r.get("prelevement","—")
@@ -4708,18 +4708,16 @@ if active == "historique":
                 if ufc_j2 > 0: pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
                 if ufc_j7 > 0: pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
-                # Remarque d'identification
-                rem = (r.get("remarque","") or "").strip()
-                if rem:
-                    pts_stats[pt]["remarques"].append(f"{r.get('date','?')} — {rem}")
-
-                # Commentaire du prélèvement (via sample_id → prelevements)
                 _sid_r = r.get("sample_id","")
+                rem = (r.get("remarque","") or "").strip()
+                if rem and not rem.lower().startswith("lecture") and _sid_r not in pts_stats[pt]["remarques"]:
+                    pts_stats[pt]["remarques"][_sid_r] = f"{r.get('date','?')} — {rem}"
+
                 if _sid_r:
                     _smp_r = next((p for p in st.session_state.prelevements if p.get("id") == _sid_r), None)
                     cmt = (_smp_r.get("commentaire","") or "").strip() if _smp_r else ""
-                    if cmt:
-                        pts_stats[pt]["commentaires"].append(f"{r.get('date','?')} — {cmt}")
+                    if cmt and not cmt.lower().startswith("lecture") and _sid_r not in pts_stats[pt]["commentaires"]:
+                        pts_stats[pt]["commentaires"][_sid_r] = f"{r.get('date','?')} — {cmt}"
 
             sorted_pts   = sorted(pts_stats.items(), key=lambda x: -x[1]["positives"])
             chart_labels = [p[:22]+"…" if len(p)>22 else p for p,_ in sorted_pts]
@@ -4774,7 +4772,7 @@ if active == "historique":
                     "<div style='font-size:.72rem;font-weight:800;color:#fff;text-align:center'>Taux+</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#7dd3fc;text-align:center'>Moy J2</div>"
                     "<div style='font-size:.72rem;font-weight:800;color:#c4b5fd;text-align:center'>Moy J7</div>"
-                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes détectés</div>"
+                    "<div style='font-size:.72rem;font-weight:800;color:#fff'>Germes / Notes</div>"
                     "</div>",
                     unsafe_allow_html=True)
 
@@ -4793,12 +4791,33 @@ if active == "historique":
                     moy_j7  = str(round(sum(j7_list)/len(j7_list))) if j7_list else "—"
                     row_bg  = "#f8fafc" if ri%2==0 else "#ffffff"
 
-                    # ── Ligne principale ──────────────────────────────────────────
+                    notes_parts = []
+                    for txt in pt_data["remarques"].values():
+                        notes_parts.append(
+                            "<span style='color:#7c3aed;font-style:normal;font-weight:600'>"
+                            "🔬 "+txt+"</span>")
+                    for txt in pt_data["commentaires"].values():
+                        notes_parts.append(
+                            "<span style='color:#0369a1;font-style:normal;font-weight:600'>"
+                            "💬 "+txt+"</span>")
+                    notes_html = (
+                        "<div style='margin-top:4px;font-size:.68rem;line-height:1.5'>"
+                        + "<br>".join(notes_parts)
+                        + "</div>"
+                    ) if notes_parts else ""
+
+                    germes_cell = (
+                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>"
+                        + germes_str
+                        + notes_html
+                        + "</div>"
+                    )
+
                     st.markdown(
                         "<div style='display:grid;"
                         "grid-template-columns:2fr 0.55fr 0.55fr 0.55fr 0.7fr 0.7fr 0.7fr 1.8fr;"
                         "gap:4px;background:"+row_bg+";border:1px solid #e2e8f0;border-top:none;"
-                        "padding:9px 14px;align-items:center'>"
+                        "padding:9px 14px;align-items:start'>"
                         "<div style='font-size:.88rem;font-weight:700;color:#0f172a'>📍 "+pt_name+"</div>"
                         "<div style='font-size:1rem;font-weight:800;color:#1e40af;text-align:center'>"+str(t)+"</div>"
                         "<div style='font-size:1rem;font-weight:800;color:#22c55e;text-align:center'>"+str(pt_data["negatives"])+"</div>"
@@ -4808,35 +4827,9 @@ if active == "historique":
                         "<div style='font-size:.85rem;font-weight:700;color:"+tc+";text-align:center'>"+str(round(taux))+"%</div>"
                         "<div style='font-size:.82rem;font-weight:700;color:#0369a1;text-align:center'>"+moy_j2+"</div>"
                         "<div style='font-size:.82rem;font-weight:700;color:#7c3aed;text-align:center'>"+moy_j7+"</div>"
-                        "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+germes_str+"</div>"
+                        + germes_cell +
                         "</div>",
                         unsafe_allow_html=True)
-
-                    # ── Remarques d'identification (violet) ───────────────────────
-                    rems = pt_data["remarques"]
-                    if rems:
-                        items_html = "".join(f"<li style='margin-bottom:3px'>{r}</li>" for r in rems)
-                        st.markdown(
-                            "<div style='background:#faf5ff;border:1px solid #e2e8f0;border-top:none;"
-                            "border-left:3px solid #7c3aed;"
-                            "padding:7px 16px 7px 28px;font-size:.73rem;color:#334155;line-height:1.6'>"
-                            "<span style='font-weight:700;color:#7c3aed'>🔬 Remarques d'identification</span>"
-                            "<ul style='margin:3px 0 2px 14px;padding:0'>" + items_html + "</ul>"
-                            "</div>",
-                            unsafe_allow_html=True)
-
-                    # ── Commentaires de prélèvement (bleu) ────────────────────────
-                    cmts = pt_data["commentaires"]
-                    if cmts:
-                        items_html = "".join(f"<li style='margin-bottom:3px'>{c}</li>" for c in cmts)
-                        st.markdown(
-                            "<div style='background:#eff6ff;border:1px solid #e2e8f0;border-top:none;"
-                            "border-left:3px solid #0369a1;"
-                            "padding:7px 16px 7px 28px;font-size:.73rem;color:#334155;line-height:1.6'>"
-                            "<span style='font-weight:700;color:#0369a1'>💬 Commentaires de prélèvement</span>"
-                            "<ul style='margin:3px 0 2px 14px;padding:0'>" + items_html + "</ul>"
-                            "</div>",
-                            unsafe_allow_html=True)
 
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
