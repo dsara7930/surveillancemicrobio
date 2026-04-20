@@ -1937,41 +1937,36 @@ if active == "surveillance":
         return "".join(_AZERTY_MAP.get(c, c) for c in s)
 
     def _parse_qr_to_point_id(raw: str):
-        import json, re
+        """
+        Gère :
+        - "12"
+        - {"id":"12"}
+        - "p12_1772635202"  ← ancien format
+        """
+        import json
+        import re
 
-        raw = raw.strip()
         if not raw:
             return None, None
 
-        raw = _fix_encoding(raw)
+        raw = raw.strip()
 
-        if not raw.startswith("{"):
-            corrected = _fix_azerty(raw)
-            return corrected, None
+        # ── CAS JSON ─────────────────────────────────────
+        if raw.startswith("{"):
+            try:
+                data = json.loads(raw)
+                pid = str(data.get("id", "")).strip()
+                return (pid, None) if pid else (None, "JSON sans id")
+            except:
+                return None, "QR JSON invalide"
 
-        try:
-            data = json.loads(raw)
-            pid = str(data.get("id", "")).strip()
-            return (pid, None) if pid else (None, "JSON valide mais champ 'id' absent.")
-        except json.JSONDecodeError:
-            pass
-
-        corrected = _fix_azerty(raw)
-        try:
-            data = json.loads(corrected)
-            pid = str(data.get("id", "")).strip()
-            return (pid, None) if pid else (None, "JSON corrigé (AZERTY) mais champ 'id' absent.")
-        except json.JSONDecodeError:
-            pass
-
-        m = re.search(r'"id"\s*:\s*"([^"]+)"', raw)
-        if m:
-            return m.group(1), None
-        m = re.search(r'"id"\s*:\s*(\d+)', raw)
+        # ── CAS ancien format : p12_XXXX ─────────────────
+        m = re.match(r"p(\d+)_", raw)
         if m:
             return m.group(1), None
 
-        return None, f"QR illisible — contenu non parseable : `{raw[:80]}`"
+        # ── CAS ID simple ────────────────────────────────
+        return raw, None
 
     # ══════════════════════════════════════════════════════════════════════════
     # ETAT SESSION QR
