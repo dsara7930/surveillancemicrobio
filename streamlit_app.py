@@ -2091,12 +2091,29 @@ if active == "surveillance":
                         unsafe_allow_html=True)
                     iso_col, poste_col = st.columns(2)
                     with iso_col:
-                        p_isolateur = st.radio("Isolateur", ["Iso 16/0724", "Iso 14/07169"], horizontal=True, key="new_prelev_isolateur")
+                       p_isolateur = st.radio(
+                        "Isolateur",
+                        ["— Sélectionner —", "Iso 16/0724", "Iso 14/07169"],
+                        index=0,
+                        horizontal=True,
+                        key="new_prelev_isolateur"
+                    )
                     with poste_col:
-                        p_poste = st.radio("Poste", ["Poste 1", "Poste 2", "Commun"], horizontal=True, key="new_prelev_poste")
+                        p_poste = st.radio(
+                        "Poste",
+                        ["— Sélectionner —", "Poste 1", "Poste 2", "Commun"],
+                        index=0,
+                        horizontal=True,
+                        key="new_prelev_poste"
+                    )
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
+                    if p_isolateur == "— Sélectionner —":
+                        p_isolateur = ""
+
+                    if p_poste == "— Sélectionner —":
+                        p_poste = ""
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                     sample = {
                         "id":                   pid,
@@ -2266,12 +2283,18 @@ if active == "surveillance":
                     if _is_classea:
                         scan_isolateur = st.radio(
                             "Isolateur",
-                            ["Iso 16/0724", "Iso 14/07169"],
-                            horizontal=True, key="scan_iso_sel")
+                            ["— Sélectionner —", "Iso 16/0724", "Iso 14/07169"],
+                            index=0,
+                            horizontal=True,
+                            key="scan_iso_sel"
+                        )
                         scan_poste = st.radio(
                             "Poste",
-                            ["Poste 1", "Poste 2", "Commun"],
-                            horizontal=True, key="scan_poste_sel")
+                            ["— Sélectionner —", "Poste 1", "Poste 2", "Commun"],
+                            index=0,
+                            horizontal=True,
+                            key="scan_poste_sel"
+                        ))
                     scan_comment = st.text_area(
                         "💬 Commentaire", placeholder="Remarques...",
                         height=80, key="scan_comment")
@@ -2285,6 +2308,11 @@ if active == "surveillance":
                         if not scan_oper:
                             st.error("⚠️ Veuillez sélectionner un opérateur.")
                         else:
+                            if scan_isolateur == "— Sélectionner —":
+                                scan_isolateur = ""
+
+                            if scan_poste == "— Sélectionner —":
+                                scan_poste = ""
                             _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                             _sample_scan = {
                                 "id":                   _pid,
