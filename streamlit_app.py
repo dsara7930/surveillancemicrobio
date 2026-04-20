@@ -2255,16 +2255,19 @@ if active == "surveillance":
                         _iso_badge=f" · <span style='background:#fef9c3;color:#854d0e;border-radius:4px;padding:1px 6px;font-size:.7rem;font-weight:700'>🔬 {iso} · {pst}</span>"
                     st.markdown(f"<div style='background:#f8fafc;border-left:3px solid #2563eb;border-radius:8px;padding:8px 14px;margin-bottom:4px;font-size:.78rem'><span style='font-weight:700'>🔳 {_sp['label']}</span> · Classe {_sp.get('room_class','—')}{_iso_badge} · <span style='color:{lcs_col}'>Nv.{lc_s}</span> · {_sp.get('date','—')} · {_sp.get('operateur','—')}</div>", unsafe_allow_html=True)
 
-                    # ── Calcul des échéances ───────────────────────────────────
-                    _scan_j2 = next_working_day_offset(scan_date, 2)
-                    _scan_j7 = scan_date + timedelta(days=7)
+                   # ── Calcul des échéances ───────────────────────────────────
+        _sp_date = datetime.strptime(_sp["date"], "%Y-%m-%d").date()
 
-                    st.markdown(f"""
-                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
-                                padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                    📅 J2 (2 jours ouvrés) : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
-                    📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
-                    </div>""", unsafe_allow_html=True)
+        _scan_j2 = next_working_day_offset(_sp_date, 2)
+        _scan_j7 = _sp_date + timedelta(days=7)
+
+        st.markdown(f"""
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
+                    padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+        📅 J2 (2 jours ouvrés) : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
+        📅 J7 (7 jours calendaires) : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
+        </div>""", unsafe_allow_html=True)
+
 
                 with sf2:
                     scan_isolateur = ""
