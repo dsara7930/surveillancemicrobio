@@ -2457,20 +2457,31 @@ if active == "surveillance":
             # ── Cartes individuelles (hors mode batch) ─────────────────────
             batch_active_j2 = st.session_state.get("batch_mode_j2", False)
             if not batch_active_j2:
-                sort_col_j2, _ = st.columns([2, 3])
+                sort_col_j2, filter_col_j2 = st.columns(2)
                 with sort_col_j2:
                     sort_j2 = st.selectbox(
                         "🔃 Trier par",
                         options=["echeance", "label", "operateur", "date_prelevement"],
                         format_func=lambda x: {
                             "echeance":         "📅 Échéance",
-                            "label":            "📍 Lieu de prélèvement (A→Z)",
+                            "label":            "📍 Lieu (A→Z)",
                             "operateur":        "👤 Opérateur (A→Z)",
-                            "date_prelevement": "🗓️ Date de prélèvement",
+                            "date_prelevement": "🗓️ Date prélèvement",
                         }[x],
                         key="sort_j2",
                     )
-                sorted_j2 = _sort_schedules(overdue_j2 + upcoming_j2, sort_j2)
+                with filter_col_j2:
+                    all_labels_j2 = sorted({s.get("label","—") for s in overdue_j2 + upcoming_j2})
+                    filter_j2 = st.multiselect(
+                        "🔍 Filtrer par point",
+                        options=all_labels_j2,
+                        default=[],
+                        key="filter_j2",
+                        placeholder="Tous les points…",
+                    )
+                filtered_j2 = [s for s in overdue_j2 + upcoming_j2
+                                if not filter_j2 or s.get("label") in filter_j2]
+                sorted_j2 = _sort_schedules(filtered_j2, sort_j2)
                 for s in sorted_j2:
                     _render_lecture_card(s, "j2_")
                     if st.session_state.get("current_process") == s['id']:
@@ -2523,20 +2534,31 @@ if active == "surveillance":
             # ── Cartes individuelles (hors mode batch) ─────────────────────
             batch_active_j7 = st.session_state.get("batch_mode_j7", False)
             if not batch_active_j7:
-                sort_col_j7, _ = st.columns([2, 3])
+                sort_col_j7, filter_col_j7 = st.columns(2)
                 with sort_col_j7:
                     sort_j7 = st.selectbox(
                         "🔃 Trier par",
                         options=["echeance", "label", "operateur", "date_prelevement"],
                         format_func=lambda x: {
                             "echeance":         "📅 Échéance",
-                            "label":            "📍 Lieu de prélèvement (A→Z)",
+                            "label":            "📍 Lieu (A→Z)",
                             "operateur":        "👤 Opérateur (A→Z)",
-                            "date_prelevement": "🗓️ Date de prélèvement",
+                            "date_prelevement": "🗓️ Date prélèvement",
                         }[x],
                         key="sort_j7",
                     )
-                sorted_j7 = _sort_schedules(overdue_j7 + upcoming_j7, sort_j7)
+                with filter_col_j7:
+                    all_labels_j7 = sorted({s.get("label","—") for s in overdue_j7 + upcoming_j7})
+                    filter_j7 = st.multiselect(
+                        "🔍 Filtrer par point",
+                        options=all_labels_j7,
+                        default=[],
+                        key="filter_j7",
+                        placeholder="Tous les points…",
+                    )
+                filtered_j7 = [s for s in overdue_j7 + upcoming_j7
+                                if not filter_j7 or s.get("label") in filter_j7]
+                sorted_j7 = _sort_schedules(filtered_j7, sort_j7)
                 for s in sorted_j7:
                     _render_lecture_card(s, "j7_")
                     if st.session_state.get("current_process") == s['id']:
@@ -2908,30 +2930,30 @@ if active == "surveillance":
 
         if st.session_state.surveillance:
             st.divider()
-            st.markdown("### 📋 Derniers résultats")
-            for r in reversed(st.session_state.surveillance[-10:]):
-                sc = "#ef4444" if r["status"] == "action" else "#f59e0b" if r["status"] == "alert" else "#22c55e"
-                ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
-                ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
-                total_score = r.get("total_score")
-                germ_score = r.get("germ_score")
-                loc_crit_r = r.get("location_criticality")
-                score_badge = (
-                    f"<span style='background:{sc}22;color:{sc};border:1px solid {sc}55;border-radius:4px;"
-                    f"padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:6px'>"
-                    f"Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>"
-                    if total_score is not None else ""
-                )
-                st.markdown(
-                    f"<div style='background:#f8fafc;border-left:3px solid {sc};border-radius:8px;"
-                    f"padding:10px 14px;margin-bottom:6px'>"
-                    f"<span style='font-size:1.1rem'>{ic}</span> "
-                    f"<span style='font-size:.78rem;font-weight:600'>"
-                    f"{r['prelevement']} — <em>{r['germ_match']}</em>{score_badge}</span>"
-                    f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
-                    f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True)
+            with st.expander("📋 Derniers résultats", expanded=False):
+                for r in reversed(st.session_state.surveillance[-10:]):
+                    sc = "#ef4444" if r["status"] == "action" else "#f59e0b" if r["status"] == "alert" else "#22c55e"
+                    ic = "🚨" if r["status"] == "action" else "⚠️" if r["status"] == "alert" else "✅"
+                    ufc_display = f"{r['ufc']} UFC" if r.get('ufc') else "—"
+                    total_score = r.get("total_score")
+                    germ_score = r.get("germ_score")
+                    loc_crit_r = r.get("location_criticality")
+                    score_badge = (
+                        f"<span style='background:{sc}22;color:{sc};border:1px solid {sc}55;border-radius:4px;"
+                        f"padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:6px'>"
+                        f"Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>"
+                        if total_score is not None else ""
+                    )
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border-left:3px solid {sc};border-radius:8px;"
+                        f"padding:10px 14px;margin-bottom:6px'>"
+                        f"<span style='font-size:1.1rem'>{ic}</span> "
+                        f"<span style='font-size:.78rem;font-weight:600'>"
+                        f"{r['prelevement']} — <em>{r['germ_match']}</em>{score_badge}</span>"
+                        f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
+                        f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
