@@ -2294,7 +2294,7 @@ if active == "surveillance":
                             index=0,
                             horizontal=True,
                             key="scan_poste_sel"
-                        ))
+                        )
                     scan_comment = st.text_area(
                         "💬 Commentaire", placeholder="Remarques...",
                         height=80, key="scan_comment")
