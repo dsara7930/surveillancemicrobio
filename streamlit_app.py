@@ -5191,7 +5191,6 @@ if active == "parametres":
 
     (subtab_mesures,
     subtab_points,
-    subtab_plans,
     subtab_seuils,
     subtab_operateurs,
     subtab_backup,
