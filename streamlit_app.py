@@ -1864,30 +1864,80 @@ if active == "surveillance":
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
-    # HELPERS GLOBAUX
+    # HELPERS QR
     # ══════════════════════════════════════════════════════════════════════════
-    def _fix_qr_input(text: str) -> str:
-        def _fix_encoding(s):
-            try:
-                return s.encode('latin-1').decode('utf-8')
-            except (UnicodeDecodeError, UnicodeEncodeError):
-                return s
 
-        def _fix_azerty(s):
-            AZERTY_MAP = {
-                'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
-                'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
-                'M': ':', ';': 'm',
-                '&': '1', 'é': '2', '"': '3', "'": '4',
-                '(': '5', '-': '6', 'è': '7', '_': '8',
-                'ç': '9', 'à': '0',
-            }
-            return "".join(AZERTY_MAP.get(c, c) for c in s)
+    def _fix_encoding(s: str) -> str:
+        try:
+            return s.encode('latin-1').decode('utf-8')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            return s
 
-        text = _fix_encoding(text)
-        if not text.startswith("{"):
-            text = _fix_azerty(text)
-        return text
+    _AZERTY_MAP = {
+        'q': 'a', 'z': 'w', 'a': 'q', 'w': 'z',
+        'Q': 'A', 'Z': 'W', 'A': 'Q', 'W': 'Z',
+        'M': ':', ';': 'm',
+        '&': '1', 'e\u0301': '2', '"': '3', "'": '4',
+        '(': '5', '-': '6', 'e\u0300': '7', '_': '8',
+        'c\u0327': '9', 'a\u0300': '0',
+    }
+
+    def _fix_azerty(s: str) -> str:
+        return "".join(_AZERTY_MAP.get(c, c) for c in s)
+
+    def _parse_qr_to_point_id(raw: str):
+        """
+        Extrait l'id du point depuis le contenu QR.
+        Accepte :
+          - ID brut         -> "42"
+          - JSON complet    -> '{"id": "42", "label": "..."}'
+          - JSON corrompu   -> tentative de recuperation (encodage, AZERTY)
+        Retourne (point_id: str | None, error_msg: str | None)
+        """
+        import json, re
+
+        raw = raw.strip()
+        if not raw:
+            return None, None
+
+        # Correction encodage systematique
+        raw = _fix_encoding(raw)
+
+        # Cas ID brut (pas de JSON)
+        if not raw.startswith("{"):
+            corrected = _fix_azerty(raw)
+            return corrected, None
+
+        # Cas JSON — Tentative 1 : JSON standard
+        try:
+            data = json.loads(raw)
+            pid = str(data.get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON valide mais champ 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        # Tentative 2 : JSON apres correction AZERTY
+        corrected = _fix_azerty(raw)
+        try:
+            data = json.loads(corrected)
+            pid = str(data.get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON corrige (AZERTY) mais champ 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        # Tentative 3 : regex en dernier recours
+        m = re.search(r'"id"\s*:\s*"([^"]+)"', raw)
+        if m:
+            return m.group(1), None
+        m = re.search(r'"id"\s*:\s*(\d+)', raw)
+        if m:
+            return m.group(1), None
+
+        return None, f"QR illisible — contenu non parseable : `{raw[:80]}`"
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ETAT SESSION QR
+    # ══════════════════════════════════════════════════════════════════════════
 
     if "prelev_mode" not in st.session_state:
         st.session_state["prelev_mode"] = "manuel"
@@ -1895,7 +1945,7 @@ if active == "surveillance":
         st.session_state["qr_counter"] = 0
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ONGLET 1 — NOUVEAU PRÉLÈVEMENT
+    # ONGLET 1 — NOUVEAU PRELEVEMENT
     # ══════════════════════════════════════════════════════════════════════════
     with tab_nouveau:
         tog1, tog2 = st.columns(2)
@@ -1914,6 +1964,7 @@ if active == "surveillance":
 
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+        # MODE MANUEL
         if st.session_state["prelev_mode"] == "manuel":
 
             if not st.session_state.points:
@@ -2053,10 +2104,12 @@ if active == "surveillance":
                                 save_pending_identifications(st.session_state.pending_identifications)
                                 st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                                 st.rerun()
+
+        # MODE SCAN QR
         else:
-            # MODE SCAN QR
             st.markdown("""
-            <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;border-radius:14px;padding:14px 18px;margin-bottom:14px">
+            <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;
+                        border-radius:14px;padding:14px 18px;margin-bottom:14px">
             <div style="font-weight:700;color:#1e40af;font-size:.9rem;margin-bottom:6px">🔳 Comment scanner</div>
             <div style="font-size:.8rem;color:#1e293b;line-height:1.8">
                 <strong>1.</strong> Imprimez les étiquettes depuis <em>Planning → Planning mensuel</em> 🖨️<br>
@@ -2065,24 +2118,43 @@ if active == "surveillance":
             </div></div>""", unsafe_allow_html=True)
 
             qr_raw_input = st.text_input(
-                "Zone de scan", key=f"qr_scan_input_{st.session_state['qr_counter']}",
+                "Zone de scan",
+                key=f"qr_scan_input_{st.session_state['qr_counter']}",
                 placeholder="Cliquez ici puis scannez l'étiquette QR...",
                 label_visibility="collapsed")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-            if qr_raw:
-                qr_fixed = _fix_qr_input(qr_raw)
-                if qr_fixed != qr_raw:
-                    st.caption("🔄 Correction automatique appliquée.")
-                qr_raw = qr_fixed
 
             _scanned_data = None
+
             if qr_raw:
-                _found = next((p for p in st.session_state.points if str(p["id"]) == qr_raw), None)
-                if _found:
-                    _scanned_data = _found
-                else:
-                    st.markdown("<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-top:8px'><div style='font-weight:700;color:#92400e'>⚠️ Numéro non reconnu</div></div>", unsafe_allow_html=True)
+                point_id_from_qr, parse_error = _parse_qr_to_point_id(qr_raw)
+
+                if parse_error:
+                    st.markdown(
+                        f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;"
+                        f"padding:12px 16px;margin-top:8px'>"
+                        f"<div style='font-weight:700;color:#991b1b'>❌ QR illisible</div>"
+                        f"<div style='font-size:.8rem;color:#7f1d1d;margin-top:4px'>{parse_error}</div>"
+                        f"</div>", unsafe_allow_html=True)
+
+                elif point_id_from_qr:
+                    _found = next(
+                        (p for p in st.session_state.points if str(p["id"]) == str(point_id_from_qr)),
+                        None)
+                    if _found:
+                        _scanned_data = _found
+                        if point_id_from_qr != qr_raw:
+                            st.caption("🔄 Correction automatique appliquée (encodage / AZERTY).")
+                    else:
+                        st.markdown(
+                            f"<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;"
+                            f"padding:12px 16px;margin-top:8px'>"
+                            f"<div style='font-weight:700;color:#92400e'>⚠️ Point introuvable</div>"
+                            f"<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
+                            f"ID lu : <code>{point_id_from_qr}</code> — vérifiez que l'étiquette "
+                            f"correspond à un point de prélèvement actif.</div>"
+                            f"</div>", unsafe_allow_html=True)
 
             if _scanned_data:
                 _lbl  = _scanned_data.get("label", "")
@@ -2091,60 +2163,111 @@ if active == "surveillance":
                 _lc   = int(_scanned_data.get("location_criticality", 1))
                 _gel  = _scanned_data.get("gelose", "")
                 _is_classea = _rc.strip().upper() == "A"
-                lc_col_s = {"1": "#22c55e", "2": "#f59e0b", "3": "#ef4444"}.get(str(_lc), "#94a3b8")
 
                 st.markdown(
-                    f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
-                    f"<div style='font-size:1rem;font-weight:700;color:#166534;margin-bottom:10px'>✅ Point reconnu — {_lbl}</div>"
+                    f"<div style='background:linear-gradient(135deg,#f0fdf4,#dcfce7);"
+                    f"border:2.5px solid #22c55e;border-radius:14px;padding:16px 20px;margin:10px 0'>"
+                    f"<div style='font-size:1rem;font-weight:700;color:#166534;margin-bottom:4px'>"
+                    f"✅ Point reconnu — {_lbl}</div>"
+                    f"<div style='font-size:.78rem;color:#166534'>Type : {_type} · "
+                    f"Classe : {_rc or '—'} · Gélose : {_gel or '—'}</div>"
                     f"</div>", unsafe_allow_html=True)
 
-                sf1,sf2=st.columns(2)
+                sf1, sf2 = st.columns(2)
                 with sf1:
-                    oper_list_s=[o['nom']+(' — '+o.get('profession','') if o.get('profession') else '') for o in st.session_state.operators]
+                    oper_list_s = [
+                        o['nom'] + (' — ' + o.get('profession','') if o.get('profession') else '')
+                        for o in st.session_state.operators
+                    ]
                     if oper_list_s:
-                        scan_oper=st.selectbox("👤 Opérateur *",["— Sélectionner —"]+oper_list_s,key="scan_oper_sel")
-                        scan_oper=scan_oper if scan_oper!="— Sélectionner —" else ""
+                        scan_oper = st.selectbox(
+                            "👤 Opérateur *",
+                            ["— Sélectionner —"] + oper_list_s,
+                            key="scan_oper_sel")
+                        scan_oper = scan_oper if scan_oper != "— Sélectionner —" else ""
                     else:
-                        scan_oper=st.text_input("👤 Opérateur *",placeholder="Nom",key="scan_oper_manual")
-                    scan_date=st.date_input("📅 Date",value=datetime.today(),key="scan_date")
+                        scan_oper = st.text_input(
+                            "👤 Opérateur *", placeholder="Nom", key="scan_oper_manual")
+                    scan_date = st.date_input("📅 Date", value=datetime.today(), key="scan_date")
+                    _scan_j2  = next_working_day_offset(scan_date, 2)
+                    _scan_j7  = next_working_day_offset(scan_date, 5)
+                    st.markdown(f"""
+                    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
+                                padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
+                    📅 J2 : <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong><br>
+                    📅 J7 : <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong>
+                    </div>""", unsafe_allow_html=True)
+
                 with sf2:
-                    scan_isolateur=""; scan_poste="Poste 1"
+                    scan_isolateur = ""
+                    scan_poste     = "Poste 1"
                     if _is_classea:
-                        scan_isolateur=st.radio("Isolateur",["Iso 16/0724","Iso 14/07169"],horizontal=True,key="scan_iso_sel")
-                        scan_poste=st.radio("Poste",["Poste 1","Poste 2","Commun"],horizontal=True,key="scan_poste_sel")
-                    scan_comment=st.text_area("💬 Commentaire",placeholder="Remarques...",height=80,key="scan_comment")
+                        scan_isolateur = st.radio(
+                            "Isolateur",
+                            ["Iso 16/0724", "Iso 14/07169"],
+                            horizontal=True, key="scan_iso_sel")
+                        scan_poste = st.radio(
+                            "Poste",
+                            ["Poste 1", "Poste 2", "Commun"],
+                            horizontal=True, key="scan_poste_sel")
+                    scan_comment = st.text_area(
+                        "💬 Commentaire", placeholder="Remarques...",
+                        height=80, key="scan_comment")
 
-                _scan_j2=next_working_day_offset(scan_date,2); _scan_j7=next_working_day_offset(scan_date,5)
-
-                sbc1,sbc2=st.columns([3,1])
+                sbc1, sbc2 = st.columns([3, 1])
                 with sbc1:
-                    if st.button(f"💾 Enregistrer — {_lbl}",use_container_width=True,type="primary",key="scan_save_btn"):
+                    if st.button(
+                        f"💾 Enregistrer — {_lbl}",
+                        use_container_width=True, type="primary", key="scan_save_btn"
+                    ):
                         if not scan_oper:
                             st.error("⚠️ Veuillez sélectionner un opérateur.")
                         else:
-                            _pid=f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                            _sample_scan={"id":_pid,"label":_lbl,"type":_type,"gelose":_gel,"room_class":_rc,"location_criticality":_lc,"operateur":scan_oper,"date":str(scan_date),"archived":False,"num_isolateur":scan_isolateur if _is_classea else "","poste":scan_poste if _is_classea else "","commentaire":scan_comment or "","created_via":"qr_scan"}
+                            _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                            _sample_scan = {
+                                "id":                  _pid,
+                                "label":               _lbl,
+                                "type":                _type,
+                                "gelose":              _gel,
+                                "room_class":          _rc,
+                                "location_criticality": _lc,
+                                "operateur":           scan_oper,
+                                "date":                str(scan_date),
+                                "archived":            False,
+                                "num_isolateur":       scan_isolateur if _is_classea else "",
+                                "poste":               scan_poste     if _is_classea else "",
+                                "commentaire":         scan_comment or "",
+                                "created_via":         "qr_scan",
+                            }
                             st.session_state.prelevements.append(_sample_scan)
                             save_prelevements(st.session_state.prelevements)
-                            for _when,_due in [("J2",_scan_j2),("J7",_scan_j7)]:
-                                st.session_state.schedules.append({"id":f"sch_{_pid}_{_when}","sample_id":_pid,"label":_lbl,"due_date":_due.isoformat(),"when":_when,"status":"pending"})
+                            for _when, _due in [("J2", _scan_j2), ("J7", _scan_j7)]:
+                                st.session_state.schedules.append({
+                                    "id":        f"sch_{_pid}_{_when}",
+                                    "sample_id": _pid,
+                                    "label":     _lbl,
+                                    "due_date":  _due.isoformat(),
+                                    "when":      _when,
+                                    "status":    "pending",
+                                })
                             save_schedules(st.session_state.schedules)
-                            st.success(f"✅ **{_lbl}** enregistré")
-                            st.session_state["qr_counter"]+=1; st.rerun()
+                            st.success(
+                                f"✅ **{_lbl}** enregistré · "
+                                f"J2 → {_scan_j2.strftime('%d/%m/%Y')} | "
+                                f"J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                            st.session_state["qr_counter"] += 1
+                            st.rerun()
                 with sbc2:
-                    if st.button("✕ Annuler",use_container_width=True,key="scan_cancel_btn"):
-                        st.session_state["qr_counter"]+=1; st.rerun()
+                    if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
+                        st.session_state["qr_counter"] += 1
+                        st.rerun()
+
     # ══════════════════════════════════════════════════════════════════════════
     # HELPER : tri des lectures
     # ══════════════════════════════════════════════════════════════════════════
     def _sort_schedules(schedule_list, sort_key):
-        """
-        Trie une liste de lectures selon le critère choisi.
-        sort_key : "label" | "operateur" | "date_prelevement" | "echeance"
-        """
         def _get_smp(s):
             return next((p for p in st.session_state.prelevements if p['id'] == s['sample_id']), {})
-
         if sort_key == "label":
             return sorted(schedule_list, key=lambda s: s.get("label", "").lower())
         elif sort_key == "operateur":
@@ -2154,6 +2277,7 @@ if active == "surveillance":
         elif sort_key == "echeance":
             return sorted(schedule_list, key=lambda s: s.get("due_date", "9999-12-31"))
         return schedule_list
+
     # ══════════════════════════════════════════════════════════════════════════
     # HELPER : rendu d'une carte de lecture
     # ══════════════════════════════════════════════════════════════════════════
@@ -2173,7 +2297,6 @@ if active == "surveillance":
         comment_short = (pt_comment[:40] + "…") if len(pt_comment) > 40 else (pt_comment or "—")
 
         with st.container():
-            # Case à cocher si mode batch
             if show_checkbox:
                 chk_key = f"batch_chk_{tab_prefix}_{s['id']}"
                 st.checkbox(f"**{s['label']}** — {s['when']} — échéance {s['due_date'][:10]}", key=chk_key)
@@ -2234,11 +2357,14 @@ if active == "surveillance":
                         st.success("Prélèvement supprimé.")
                         st.rerun()
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER : traitement d'une lecture
+    # ══════════════════════════════════════════════════════════════════════════
     def _render_traitement_lecture(proc_id):
-        proc=next((x for x in st.session_state.schedules if x['id']==proc_id), None)
+        proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
         if not proc: return
-        smp      =next((p for p in st.session_state.prelevements if p['id']==proc['sample_id']), None)
-        loc_crit =_get_location_criticality(smp) if smp else 1
+        smp      = next((p for p in st.session_state.prelevements if p['id'] == proc['sample_id']), None)
+        loc_crit = _get_location_criticality(smp) if smp else 1
 
         if proc["when"] == "J7":
             st.markdown(
@@ -2260,7 +2386,9 @@ if active == "surveillance":
                 save_pending_identifications(st.session_state.pending_identifications)
                 if smp and smp.get("archived"):
                     smp["archived"] = False
-                    st.session_state.archived_samples = [x for x in st.session_state.archived_samples if x.get("id") != smp["id"]]
+                    st.session_state.archived_samples = [
+                        x for x in st.session_state.archived_samples if x.get("id") != smp["id"]
+                    ]
                     save_archived_samples(st.session_state.archived_samples)
                     save_prelevements(st.session_state.prelevements)
                 st.session_state.current_process = None
@@ -2339,7 +2467,7 @@ if active == "surveillance":
                 st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
-    # HELPER : batch négatif — header uniquement
+    # HELPER : batch négatif — header
     # ══════════════════════════════════════════════════════════════════════════
     def _render_batch_negatif_section(pending_list, tab_key):
         if not pending_list:
@@ -2354,7 +2482,6 @@ if active == "surveillance":
             btn_label = "✕ Fermer sélection" if st.session_state[batch_mode_key] else "☑️ Sélection multiple — tout négatif"
             if st.button(btn_label, key=f"toggle_batch_{tab_key}", use_container_width=True):
                 st.session_state[batch_mode_key] = not st.session_state[batch_mode_key]
-                # Nettoyer les cases à l'ouverture/fermeture
                 for s in pending_list:
                     st.session_state.pop(f"batch_chk_{tab_key}_{s['id']}", None)
                 st.session_state.pop(f"sel_all_{tab_key}", None)
@@ -2363,16 +2490,16 @@ if active == "surveillance":
         if not st.session_state[batch_mode_key]:
             return
 
-        # Tout sélectionner
         sel_all_key = f"sel_all_{tab_key}"
         with col_b:
             if st.checkbox("✅ Tout sélectionner", key=sel_all_key):
                 for s in pending_list:
                     st.session_state[f"batch_chk_{tab_key}_{s['id']}"] = True
 
-
+    # ══════════════════════════════════════════════════════════════════════════
+    # HELPER : batch négatif — confirmation
+    # ══════════════════════════════════════════════════════════════════════════
     def _render_batch_confirm(pending_list, tab_key):
-        """Bouton de confirmation — à appeler après la boucle de cartes."""
         batch_mode_key = f"batch_mode_{tab_key}"
         if not st.session_state.get(batch_mode_key):
             return
@@ -4322,7 +4449,7 @@ if active == "historique":
         c4.metric("🚨 Actions",   actions)
         st.divider()
 
-        hist_tab_plan, hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
+        hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
             "📍 Stats par point",
             "🦠 Stats par germe",
             "👤 Répartition par préleveur",
