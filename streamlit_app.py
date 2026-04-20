@@ -252,7 +252,6 @@ DEFAULT_FAQ = [
             "Rendez-vous dans **Surveillance → Nouveau prélèvement**, puis :\n\n"
             "1. Sélectionnez le point de prélèvement dans le menu déroulant\n"
             "2. Choisissez l'opérateur et la date\n"
-            "3. Sélectionnez éventuellement un plan de localisation\n"
             "4. Validez le formulaire\n\n"
             "Le prélèvement apparaîtra dans la liste en attente d'identification microbiologique."
         ),
@@ -277,19 +276,6 @@ DEFAULT_FAQ = [
             "la criticité du lieu, la gélose utilisée et la fréquence de prélèvement\n"
             "- Modifiez (✏️) ou supprimez (🗑️) les points existants\n\n"
             "Les points sont synchronisés automatiquement avec Supabase si configuré."
-        ),
-    },
-    {
-        "id": "faq_007", "category": "Paramètres", "order": 6,
-        "question": "Comment ajouter un plan de localisation ?",
-        "answer": (
-            "Dans **Paramètres → Plans** :\n\n"
-            "1. Cliquez sur **➕ Ajouter un plan**\n"
-            "2. Donnez un nom au plan\n"
-            "3. Importez une image (PNG, JPG) ou un PDF (la première page sera utilisée)\n"
-            "4. Validez\n\n"
-            "Le plan sera disponible lors de la création d'un prélèvement pour "
-            "visualiser et positionner le point sur la carte."
         ),
     },
     {
@@ -1915,14 +1901,14 @@ if active == "surveillance":
         tog1, tog2 = st.columns(2)
         with tog1:
             if st.button("✏️  Saisie manuelle", use_container_width=True,
-                         type="primary" if st.session_state["prelev_mode"]=="manuel" else "secondary",
-                         key="tog_manuel"):
+                        type="primary" if st.session_state["prelev_mode"]=="manuel" else "secondary",
+                        key="tog_manuel"):
                 st.session_state["prelev_mode"] = "manuel"
                 st.rerun()
         with tog2:
             if st.button("📷  Scan QR code", use_container_width=True,
-                         type="primary" if st.session_state["prelev_mode"]=="scan" else "secondary",
-                         key="tog_scan"):
+                        type="primary" if st.session_state["prelev_mode"]=="scan" else "secondary",
+                        key="tog_scan"):
                 st.session_state["prelev_mode"] = "scan"
                 st.rerun()
 
@@ -1955,25 +1941,25 @@ if active == "surveillance":
                     lc_lbl      = _loc_crit_label(pt_loc_crit)
                     st.markdown(f"""
                     <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:4px">
-                      <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <div style="font-size:.75rem;font-weight:700;color:#0369a1;margin-bottom:8px">{type_icon} Détails du point sélectionné</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
                         <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
+                        <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Type</div>
+                        <div style="font-size:.85rem;font-weight:700;color:#0f172a;margin-top:2px">{pt_type}</div>
                         </div>
                         <div style="background:#dbeafe;border-radius:6px;padding:8px;border:1px solid #93c5fd">
-                          <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe ISO / GMP</div>
-                          <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:2px">{pt_room if pt_room and pt_room != '—' else '—'}</div>
+                        <div style="font-size:.6rem;color:#1e40af;text-transform:uppercase">Classe ISO / GMP</div>
+                        <div style="font-size:.85rem;font-weight:800;color:#1e40af;margin-top:2px">{pt_room if pt_room and pt_room != '—' else '—'}</div>
                         </div>
                         <div style="background:{lc_col}11;border-radius:6px;padding:8px;border:1px solid {lc_col}44">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
-                          <div style="font-size:.85rem;font-weight:700;color:{lc_col};margin-top:2px">Nv.{pt_loc_crit} — {lc_lbl}</div>
+                        <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Criticité lieu</div>
+                        <div style="font-size:.85rem;font-weight:700;color:{lc_col};margin-top:2px">Nv.{pt_loc_crit} — {lc_lbl}</div>
                         </div>
                         <div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #e0f2fe">
-                          <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
-                          <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
+                        <div style="font-size:.6rem;color:#64748b;text-transform:uppercase">Gélose</div>
+                        <div style="font-size:.85rem;font-weight:700;color:#1d4ed8;margin-top:2px">🧫 {pt_gelose}</div>
                         </div>
-                      </div>
+                    </div>
                     </div>""", unsafe_allow_html=True)
 
                 with p_col2:
@@ -1989,8 +1975,8 @@ if active == "surveillance":
                     j7_date_calc = next_working_day_offset(p_date, 5)
                     st.markdown(f"""
                     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px;margin-top:6px;font-size:.7rem;color:#166534">
-                      📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
-                      📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
+                    📅 J2 (2 jours ouvrés) : <strong>{j2_date_calc.strftime('%d/%m/%Y')}</strong><br>
+                    📅 J7 (5 jours ouvrés) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...", height=70, key="new_prelev_commentaire")
 
@@ -2008,101 +1994,8 @@ if active == "surveillance":
                         p_poste = st.radio("Poste", ["Poste 1","Poste 2","Commun"], horizontal=True, key="new_prelev_poste")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                plans_available = st.session_state.get("plans", [])
-                st.markdown(
-                    "<div style='font-size:.75rem;font-weight:700;color:#475569;margin:10px 0 6px'>"
-                    "🗺️ Localiser sur le plan <span style='font-weight:400;font-style:italic'>(optionnel)</span></div>",
-                    unsafe_allow_html=True)
-                if not plans_available:
-                    st.markdown(
-                        "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center'>"
-                        "<div style='color:#64748b;font-size:.8rem'>Aucun plan — ajoutez-en dans <strong>Paramètres → Plans</strong></div></div>",
-                        unsafe_allow_html=True)
-                else:
-                    plan_names    = ["— Aucun plan —"] + [p["name"] for p in plans_available]
-                    sel_plan_name = st.selectbox("Choisir un plan", plan_names, key="new_prelev_plan_sel")
-                    sel_plan = None
-                    if sel_plan_name != "— Aucun plan —":
-                        sel_plan = next((p for p in plans_available if p["name"] == sel_plan_name), None)
-                    if sel_plan and sel_plan.get("image_b64"):
-                        _cur_label = selected_point.get("label", "")
-                        _cur_pt    = next((mp for mp in st.session_state.get("map_points",[])
-                                           if mp.get("label")==_cur_label), None)
-                        _cur_zone  = _cur_pt.get("zone") if _cur_pt else None
-
-                        COLS = list("ABCDEFGHIJ")
-                        ROWS = list(range(1, 11))
-
-                        img_b64 = sel_plan["image_b64"]
-                        if not img_b64.startswith("data:"):
-                            img_b64 = "data:image/png;base64," + img_b64
-
-                        z_col1, z_col2 = st.columns(2)
-                        with z_col1:
-                            sel_col = st.selectbox(
-                                "Colonne (A→J)", COLS,
-                                index=COLS.index(_cur_zone[0]) if _cur_zone and _cur_zone[0] in COLS else 0,
-                                key=f"zone_col_{_cur_label}")
-                        with z_col2:
-                            sel_row = st.selectbox(
-                                "Ligne (1→10)", ROWS,
-                                index=ROWS.index(int(_cur_zone[1:])) if _cur_zone and _cur_zone[1:].isdigit() else 0,
-                                key=f"zone_row_{_cur_label}")
-                        new_zone = f"{sel_col}{sel_row}"
-
-                        _bc1, _bc2 = st.columns(2)
-                        with _bc1:
-                            if st.button("📌 Enregistrer la zone", key=f"zone_save_{_cur_label}",
-                                         use_container_width=True, type="primary"):
-                                _new_mp = {
-                                    "label":      _cur_label,
-                                    "room_class": selected_point.get("room_class",""),
-                                    "loc_crit":   pt_loc_crit,
-                                    "zone":       new_zone,
-                                    "zone_col":   ord(new_zone[0]) - ord('A'),
-                                    "zone_row":   int(new_zone[1:]) - 1,
-                                }
-                                _raw_mp_save = _supa_get('map_points')
-                                if _raw_mp_save:
-                                    try:
-                                        _full_list = json.loads(_raw_mp_save) if isinstance(_raw_mp_save, str) else _raw_mp_save
-                                    except Exception:
-                                        _full_list = list(st.session_state.get("map_points", []))
-                                else:
-                                    _full_list = list(st.session_state.get("map_points", []))
-
-                                _found = False
-                                for _mp in _full_list:
-                                    if _mp.get("label") == _cur_label:
-                                        _mp.update(_new_mp)
-                                        _found = True
-                                        break
-                                if not _found:
-                                    _full_list.append(_new_mp)
-
-                                st.session_state["map_points"] = _full_list
-                                _supa_upsert('map_points', json.dumps(_full_list, ensure_ascii=False))
-                                st.success(f"📌 Zone {new_zone} enregistrée pour {_cur_label}")
-                                st.rerun()
-                        with _bc2:
-                            if st.button("🗑️ Effacer", key=f"zone_clear_{_cur_label}",
-                                         use_container_width=True, disabled=_cur_pt is None):
-                                st.session_state.map_points = [
-                                    p for p in st.session_state.get("map_points",[])
-                                    if p.get("label") != _cur_label]
-                                _supa_upsert('map_points',
-                                             json.dumps(st.session_state.map_points, ensure_ascii=False))
-                                st.rerun()
-
-                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                    _cur_label_save = selected_point.get("label", "")
-                    _mp_for_zone = next(
-                        (mp for mp in st.session_state.get("map_points", [])
-                        if mp.get("label") == _cur_label_save), None)
-                    _zone_for_save = _mp_for_zone.get("zone") if _mp_for_zone else None
-
                     sample = {
                         "id": pid,
                         "label": selected_point['label'],
@@ -2117,7 +2010,6 @@ if active == "surveillance":
                         "poste": p_poste if str(pt_room).strip().upper() == "A" else "",
                         "commentaire": p_commentaire if p_commentaire else "",
                         "created_via": "manuel",
-                        "zone": _zone_for_save,
                     }
                     st.session_state.prelevements.append(sample)
                     save_prelevements(st.session_state.prelevements)
@@ -2161,7 +2053,6 @@ if active == "surveillance":
                                 save_pending_identifications(st.session_state.pending_identifications)
                                 st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                                 st.rerun()
-
         else:
             # MODE SCAN QR
             st.markdown("""
@@ -4405,276 +4296,12 @@ if active == "historique":
         st.divider()
 
         hist_tab_plan, hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
-            "🗺️ Plan interactif",
             "📍 Stats par point",
             "🦠 Stats par germe",
             "👤 Répartition par préleveur",
             "📋 Liste des entrées",
         ])
 
-        # ══════════════════════════════════════════════════════════════════════
-        # ONGLET 0 : PLAN INTERACTIF
-        # ══════════════════════════════════════════════════════════════════════
-        def render_heatmap_prelevements():
-            st.markdown("### 🗺️ Heatmap des prélèvements par zone")
-            st.markdown(
-                "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;"
-                "padding:10px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af'>"
-                "ℹ️ Chaque cellule représente une zone de la grille 10×10 (A→J / 1→10). "
-                "L'intensité du bleu indique la fréquence de prélèvement. "
-                "<b>Survolez</b> une cellule pour voir la répartition par type de surface."
-                "</div>",
-                unsafe_allow_html=True,
-            )
-        
-            # ── Préparer les données ──────────────────────────────────────────────
-            prelevements = st.session_state.get("prelevements", [])
-        
-            # Garder uniquement ceux qui ont une zone définie
-            with_zone = [
-                {
-                    "zone":  p.get("zone", ""),
-                    "type":  p.get("type", "—"),
-                    "label": p.get("label", ""),
-                }
-                for p in prelevements
-                if p.get("zone")
-            ]
-        
-            if not with_zone:
-                st.markdown(
-                    "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-                    "border-radius:12px;padding:32px;text-align:center'>"
-                    "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
-                    "<div style='font-weight:700;color:#475569;margin-bottom:4px'>"
-                    "Aucun prélèvement localisé</div>"
-                    "<div style='font-size:.8rem;color:#94a3b8'>"
-                    "Utilisez <b>Surveillance → Nouveau prélèvement</b> et "
-                    "enregistrez une zone sur le plan.</div></div>",
-                    unsafe_allow_html=True,
-                )
-                return
-        
-            prelevements_json = json.dumps(with_zone, ensure_ascii=False)
-        
-            # ── HTML du composant ─────────────────────────────────────────────────
-            html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <style>
-        *{{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}}
-        body{{background:#fff;padding:12px 4px 8px}}
-        .controls{{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}}
-        .controls label{{font-size:12px;color:#64748b}}
-        .controls select{{font-size:12px;padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer}}
-        .legend-bar{{display:flex;align-items:center;gap:8px;margin-bottom:12px}}
-        .legend-bar .grad{{height:10px;width:160px;border-radius:5px;background:linear-gradient(to right,#E6F1FB,#378ADD,#042C53)}}
-        .legend-bar span{{font-size:11px;color:#94a3b8}}
-        .col-labels{{display:flex;margin-bottom:3px;padding-left:26px}}
-        .col-lbl{{width:40px;text-align:center;font-size:10px;color:#94a3b8;font-weight:600}}
-        .grid-outer{{display:flex;gap:0}}
-        .row-labels{{display:flex;flex-direction:column;width:26px}}
-        .row-lbl{{height:40px;display:flex;align-items:center;justify-content:flex-end;padding-right:5px;font-size:10px;color:#94a3b8;font-weight:600}}
-        .grid{{display:grid;grid-template-columns:repeat(10,40px);grid-template-rows:repeat(10,40px);gap:3px}}
-        .cell{{width:40px;height:40px;border-radius:6px;cursor:pointer;position:relative;
-            transition:transform .12s;display:flex;align-items:center;justify-content:center;
-            border:1.5px solid transparent}}
-        .cell:hover{{transform:scale(1.15);z-index:10;box-shadow:0 2px 12px rgba(0,0,0,.18);border-color:rgba(0,0,0,.22)}}
-        .cell.zero{{background:#f8fafc;border:1.5px dashed #e2e8f0}}
-        .cell .cnt{{font-size:10px;font-weight:600;pointer-events:none}}
-        .stats{{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}}
-        .stat-card{{flex:1;min-width:80px;background:#f8fafc;border:1px solid #e2e8f0;
-                    border-radius:8px;padding:8px 10px}}
-        .stat-card .sv{{font-size:18px;font-weight:600;color:#0f172a}}
-        .stat-card .sl{{font-size:10px;color:#94a3b8;margin-top:2px}}
-        .chk-row{{display:flex;align-items:center;gap:6px}}
-        .chk-row input{{width:14px;height:14px;cursor:pointer;accent-color:#378ADD}}
-        /* Tooltip */
-        #tooltip{{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:10px;
-                padding:12px 14px;pointer-events:none;opacity:0;transition:opacity .15s;
-                z-index:9999;min-width:170px;max-width:230px;
-                box-shadow:0 4px 20px rgba(0,0,0,.13)}}
-        #tooltip.show{{opacity:1}}
-        .tt-zone{{font-size:15px;font-weight:600;color:#0f172a;margin-bottom:4px}}
-        .tt-total{{font-size:12px;color:#64748b;margin-bottom:9px}}
-        .tt-bar-row{{display:flex;align-items:center;gap:6px;margin-bottom:4px}}
-        .tt-bar-label{{font-size:11px;color:#64748b;width:80px;flex-shrink:0;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-        .tt-bar{{height:7px;border-radius:4px;min-width:3px}}
-        .tt-pct{{font-size:11px;color:#64748b;min-width:30px}}
-        .tt-none{{font-size:12px;color:#94a3b8;font-style:italic}}
-        </style>
-        </head>
-        <body>
-        
-        <div class="controls">
-        <label>Type de surface :</label>
-        <select id="typeFilter">
-            <option value="all">Tous</option>
-            <option value="Sol">Sol</option>
-            <option value="Paroi">Paroi</option>
-            <option value="Plafond">Plafond</option>
-            <option value="Air">Air</option>
-            <option value="Surface">Surface</option>
-        </select>
-        <div class="chk-row">
-            <input type="checkbox" id="showCount" checked>
-            <label for="showCount">Afficher les compteurs</label>
-        </div>
-        </div>
-        
-        <div class="legend-bar">
-        <span>0</span>
-        <div class="grad"></div>
-        <span id="maxLbl">max</span>
-        <span style="margin-left:8px;font-size:11px;color:#94a3b8">prélèvements</span>
-        </div>
-        
-        <div class="col-labels" id="colLabels"></div>
-        <div class="grid-outer">
-        <div class="row-labels" id="rowLabels"></div>
-        <div class="grid" id="grid"></div>
-        </div>
-        
-        <div class="stats" id="statsRow"></div>
-        <div id="tooltip"></div>
-        
-        <script>
-        const RAW_DATA = {prelevements_json};
-        const COLS = "ABCDEFGHIJ".split("");
-        const ROWS = [1,2,3,4,5,6,7,8,9,10];
-        const TYPE_COLORS = {{
-        "Sol":"#378ADD","Paroi":"#1D9E75","Plafond":"#D85A30",
-        "Air":"#D4537E","Surface":"#7F77DD","—":"#888780"
-        }};
-        
-        function hexRgb(h){{
-        return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
-        }}
-        function lerp(t,a,b){{return a.map((v,i)=>Math.round(v+(b[i]-v)*t));}}
-        const C0=hexRgb("#E6F1FB"),C1=hexRgb("#378ADD"),C2=hexRgb("#042C53");
-        function cellColor(v,max){{
-        if(v===0) return null;
-        const t=Math.min(v/max,1);
-        const rgb=t<0.5?lerp(t*2,C0,C1):lerp((t-0.5)*2,C1,C2);
-        return `rgb(${{rgb[0]}},${{rgb[1]}},${{rgb[2]}})`;
-        }}
-        function textColor(v,max){{
-        if(v===0) return "#94a3b8";
-        return Math.min(v/max,1)>0.45?"#E6F1FB":"#0C447C";
-        }}
-        
-        function buildCounts(data){{
-        const counts={{}},details={{}};
-        for(const d of data){{
-            counts[d.zone]=(counts[d.zone]||0)+1;
-            if(!details[d.zone]) details[d.zone]={{}};
-            details[d.zone][d.type]=(details[d.zone][d.type]||0)+1;
-        }}
-        return {{counts,details}};
-        }}
-        
-        function render(){{
-        const typeVal=document.getElementById("typeFilter").value;
-        const filtered=typeVal==="all"?RAW_DATA:RAW_DATA.filter(d=>d.type===typeVal);
-        const {{counts,details}}=buildCounts(filtered);
-        const maxCount=Math.max(1,...Object.values(counts));
-        const showCnt=document.getElementById("showCount").checked;
-        
-        document.getElementById("maxLbl").textContent=maxCount;
-        
-        document.getElementById("colLabels").innerHTML=
-            COLS.map(c=>`<div class="col-lbl">${{c}}</div>`).join("");
-        document.getElementById("rowLabels").innerHTML=
-            ROWS.map(r=>`<div class="row-lbl">${{r}}</div>`).join("");
-        
-        const grid=document.getElementById("grid");
-        grid.innerHTML="";
-        for(let ri=0;ri<10;ri++){{
-            for(let ci=0;ci<10;ci++){{
-            const zone=COLS[ci]+ROWS[ri];
-            const v=counts[zone]||0;
-            const cell=document.createElement("div");
-            cell.className="cell"+(v===0?" zero":"");
-            const bg=cellColor(v,maxCount);
-            if(bg) cell.style.background=bg;
-            if(showCnt&&v>0){{
-                const span=document.createElement("span");
-                span.className="cnt";
-                span.style.color=textColor(v,maxCount);
-                span.textContent=v;
-                cell.appendChild(span);
-            }}
-            cell.addEventListener("mouseenter",e=>showTT(e,zone,v,details[zone]||{{}}));
-            cell.addEventListener("mousemove",moveTT);
-            cell.addEventListener("mouseleave",hideTT);
-            grid.appendChild(cell);
-            }}
-        }}
-        
-        const total=filtered.length;
-        const zonesUsed=Object.keys(counts).length;
-        const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
-        document.getElementById("statsRow").innerHTML=`
-            <div class="stat-card"><div class="sv">${{total}}</div>
-            <div class="sl">prélevements${{typeVal!=="all"?" (filtrés)":""}}</div></div>
-            <div class="stat-card"><div class="sv">${{zonesUsed}}</div>
-            <div class="sl">zones / 100</div></div>
-            <div class="stat-card"><div class="sv">${{top?top[0]:"—"}}</div>
-            <div class="sl">zone + prélevée${{top?" ("+top[1]+"×)":""}}</div></div>
-            <div class="stat-card"><div class="sv">${{total>0?Math.round(zonesUsed):0}}</div>
-            <div class="sl">zones touchées</div></div>
-        `;
-        }}
-        
-        function showTT(e,zone,total,detail){{
-        const tt=document.getElementById("tooltip");
-        const entries=Object.entries(detail).sort((a,b)=>b[1]-a[1]);
-        const maxD=Math.max(1,...entries.map(x=>x[1]));
-        let html=`<div class="tt-zone">Zone ${{zone}}</div>
-            <div class="tt-total">${{total}} prélèvement${{total>1?"s":""}}</div>`;
-        if(!entries.length){{
-            html+=`<div class="tt-none">Aucun prélèvement</div>`;
-        }}else{{
-            for(const [type,count] of entries){{
-            const pct=Math.round((count/total)*100);
-            const w=Math.round((count/maxD)*90);
-            const col=TYPE_COLORS[type]||"#888780";
-            html+=`<div class="tt-bar-row">
-                <span class="tt-bar-label">${{type}}</span>
-                <div class="tt-bar" style="width:${{w}}px;background:${{col}}"></div>
-                <span class="tt-pct">${{pct}}%</span>
-            </div>`;
-            }}
-        }}
-        tt.innerHTML=html;
-        positionTT(e.clientX,e.clientY);
-        tt.classList.add("show");
-        }}
-        function moveTT(e){{positionTT(e.clientX,e.clientY);}}
-        function positionTT(x,y){{
-        const tt=document.getElementById("tooltip");
-        let left=x+14,top=y-20;
-        if(left+240>window.innerWidth-10) left=x-240-14;
-        if(top+180>window.innerHeight-10) top=y-180;
-        tt.style.left=left+"px";
-        tt.style.top=top+"px";
-        }}
-        function hideTT(){{document.getElementById("tooltip").classList.remove("show");}}
-        
-        document.getElementById("typeFilter").addEventListener("change",render);
-        document.getElementById("showCount").addEventListener("change",render);
-        render();
-        </script>
-        </body>
-        </html>
-        """
-        
-            components.html(html, height=520, scrolling=False)
-        with hist_tab_plan:
-            render_heatmap_prelevements()
    # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
@@ -5295,7 +4922,6 @@ if active == "parametres":
     subtab_faq) = st.tabs([
         "📋 Mesures correctives",
         "📍 Points de prélèvement",
-        "🗺️ Plans",
         "⚖️ Seuils d'alerte",
         "👤 Opérateurs",
         "💾 Sauvegarde",
@@ -5876,166 +5502,6 @@ if active == "parametres":
                     st.success(f"✅ Point **{np_label}** ajouté")
                     st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # PLANS DE LOCALISATION
-    # ══════════════════════════════════════════════════════════════════════════
-    with subtab_plans:
-        st.markdown("### 🗺️ Gestion des plans de localisation")
-        st.markdown("""
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
-        padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#1e40af">
-        ℹ️ Les plans permettent de localiser visuellement les points de prélèvement.<br>
-        Dans <strong>Surveillance → Nouveau prélèvement</strong>, choisissez un plan
-        dans le menu déroulant pour afficher la carte et positionner le point.
-        </div>""", unsafe_allow_html=True)
-
-        if not st.session_state.plans:
-            st.markdown(
-                "<div style='background:#f8fafc;border:1.5px dashed #cbd5e1;"
-                "border-radius:12px;padding:32px;text-align:center'>"
-                "<div style='font-size:2.5rem;margin-bottom:8px'>🗺️</div>"
-                "<div style='font-weight:700;color:#475569;margin-bottom:4px'>Aucun plan défini</div>"
-                "<div style='font-size:.8rem;color:#94a3b8'>Ajoutez un plan ci-dessous</div></div>",
-                unsafe_allow_html=True)
-        else:
-            st.markdown(
-                f"<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
-                f"padding:12px 16px;margin-bottom:16px'>"
-                f"<span style='font-size:.75rem;color:#0369a1;font-weight:700'>"
-                f"🗺️ {len(st.session_state.plans)} plan(s)</span></div>",
-                unsafe_allow_html=True)
-            for pi, plan in enumerate(list(st.session_state.plans)):
-                has_img = bool(plan.get("image_b64"))
-                pc1, pc2, pc3 = st.columns([5, 1, 1])
-                with pc1:
-                    img_badge = (
-                        " <span style='background:#f0fdf4;color:#166534;border:1px solid #86efac;"
-                        "border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700'>"
-                        "🖼️ Image</span>"
-                        if has_img else
-                        " <span style='background:#f8fafc;color:#94a3b8;border:1px solid #e2e8f0;"
-                        "border-radius:4px;padding:1px 7px;font-size:.62rem'>Pas d'image</span>")
-                    st.markdown(
-                        f"<div style='background:#f8fafc;border:1.5px solid #e2e8f0;"
-                        f"border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px'>"
-                        f"<span style='font-size:1.3rem'>🗺️</span><div>"
-                        f"<div style='font-weight:700;color:#0f172a'>{plan['name']}</div>"
-                        f"<div style='font-size:.7rem;color:#64748b;margin-top:2px'>"
-                        f"ID: {plan['id']}{img_badge}</div></div></div>",
-                        unsafe_allow_html=True)
-                with pc2:
-                    if can_edit:
-                        if st.button("✏️", key=f"edit_plan_{pi}"):
-                            st.session_state["_edit_plan_idx"] = pi
-                            st.session_state.pop("_ep_image_b64", None)
-                            st.rerun()
-                with pc3:
-                    if can_edit:
-                        if st.button("🗑️", key=f"del_plan_{pi}"):
-                            st.session_state.plans.pop(pi)
-                            save_plans(st.session_state.plans)
-                            st.success("Plan supprimé.")
-                            st.rerun()
-
-        st.divider()
-
-        edit_plan_idx = st.session_state.get("_edit_plan_idx")
-        if edit_plan_idx is not None and edit_plan_idx < len(st.session_state.plans):
-            plan_e = st.session_state.plans[edit_plan_idx]
-            st.markdown(f"### ✏️ Modifier — {plan_e['name']}")
-            ep1, ep2 = st.columns([3, 2])
-            with ep1:
-                ep_name = st.text_input("Nom du plan *", value=plan_e.get("name", ""), key="ep_name")
-            with ep2:
-                ep_upload = st.file_uploader(
-                    "Remplacer l'image (PNG/JPG/PDF)",
-                    type=["png", "jpg", "jpeg", "pdf"], key="ep_upload")
-            if ep_upload:
-                import base64 as _b64ep
-                if ep_upload.type == "application/pdf":
-                    try:
-                        import fitz
-                        doc = fitz.open(stream=ep_upload.read(), filetype="pdf")
-                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
-                        st.session_state["_ep_image_b64"] = (
-                            f"data:image/png;base64,{_b64ep.b64encode(pix.tobytes('png')).decode()}")
-                        st.success("PDF converti.")
-                    except Exception as e:
-                        st.error(f"Erreur PDF : {e}")
-                else:
-                    raw_ep = ep_upload.read()
-                    st.session_state["_ep_image_b64"] = (
-                        f"data:{ep_upload.type};base64,{_b64ep.b64encode(raw_ep).decode()}")
-            cur_img = st.session_state.get("_ep_image_b64", plan_e.get("image_b64", ""))
-            if cur_img:
-                st.image(cur_img, caption="Aperçu du plan", use_column_width=True)
-            eb1, eb2 = st.columns(2)
-            with eb1:
-                if st.button("✅ Enregistrer", key="ep_save", use_container_width=True, type="primary"):
-                    if ep_name.strip():
-                        st.session_state.plans[edit_plan_idx]["name"] = ep_name.strip()
-                        if st.session_state.get("_ep_image_b64"):
-                            st.session_state.plans[edit_plan_idx]["image_b64"] = st.session_state["_ep_image_b64"]
-                        save_plans(st.session_state.plans)
-                        st.session_state["_edit_plan_idx"] = None
-                        st.session_state.pop("_ep_image_b64", None)
-                        st.success("✅ Plan mis à jour")
-                        st.rerun()
-                    else:
-                        st.error("Le nom est obligatoire.")
-            with eb2:
-                if st.button("Annuler", key="ep_cancel", use_container_width=True):
-                    st.session_state["_edit_plan_idx"] = None
-                    st.session_state.pop("_ep_image_b64", None)
-                    st.rerun()
-        elif can_edit:
-            st.markdown("### ➕ Ajouter un plan")
-            np1, np2 = st.columns([3, 2])
-            with np1:
-                np_plan_name = st.text_input(
-                    "Nom du plan *",
-                    placeholder="Ex: ZAC — Isolateur ISO 16, Salle de préparation B...",
-                    key="np_plan_name")
-            with np2:
-                np_plan_upload = st.file_uploader(
-                    "Image du plan (PNG / JPG / PDF)",
-                    type=["png", "jpg", "jpeg", "pdf"], key="np_plan_upload")
-            np_plan_b64 = ""
-            if np_plan_upload:
-                import base64 as _b64np2
-                if np_plan_upload.type == "application/pdf":
-                    try:
-                        import fitz
-                        doc = fitz.open(stream=np_plan_upload.read(), filetype="pdf")
-                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2, 2))
-                        np_plan_b64 = (
-                            f"data:image/png;base64,{_b64np2.b64encode(pix.tobytes('png')).decode()}")
-                        st.success("✅ PDF converti — première page utilisée comme plan")
-                    except ImportError:
-                        st.error("❌ PyMuPDF non installé — ajoutez pymupdf dans requirements.txt")
-                    except Exception as e:
-                        st.error(f"Erreur PDF : {e}")
-                else:
-                    np_plan_b64 = (
-                        f"data:{np_plan_upload.type};base64,"
-                        f"{_b64np2.b64encode(np_plan_upload.read()).decode()}")
-            if np_plan_b64:
-                st.image(np_plan_b64, caption="Aperçu du plan", use_column_width=True)
-            if st.button("➕ Ajouter ce plan", key="np_plan_add",
-                         use_container_width=True, type="primary"):
-                if not np_plan_name.strip():
-                    st.error("Le nom du plan est obligatoire.")
-                else:
-                    import time as _time_plans
-                    plan_id = f"plan_{len(st.session_state.plans)+1}_{int(_time_plans.time())}"
-                    st.session_state.plans.append({
-                        "id":        plan_id,
-                        "name":      np_plan_name.strip(),
-                        "image_b64": np_plan_b64,
-                    })
-                    save_plans(st.session_state.plans)
-                    st.success(f"✅ Plan **{np_plan_name}** ajouté avec succès !")
-                    st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
     # SEUILS D'ALERTE ET D'ACTION
