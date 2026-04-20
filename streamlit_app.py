@@ -1937,14 +1937,6 @@ if active == "surveillance":
         return "".join(_AZERTY_MAP.get(c, c) for c in s)
 
     def _parse_qr_to_point_id(raw: str):
-        """
-        Extrait l'id du point depuis le contenu QR.
-        Accepte :
-          - ID brut         -> "42"
-          - JSON complet    -> '{"id": "42", "label": "..."}'
-          - JSON corrompu   -> tentative de recuperation (encodage, AZERTY)
-        Retourne (point_id: str | None, error_msg: str | None)
-        """
         import json, re
 
         raw = raw.strip()
@@ -4473,13 +4465,28 @@ if active == "historique":
     def _crit_color(c):
         return {5:"#7c3aed",4:"#ef4444",3:"#f97316",2:"#f59e0b",1:"#22c55e"}.get(c,"#94a3b8")
 
-    def _parse_date(d_str):
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+    def _parse_qr_to_point_id(raw: str):
+        
+        import json
+
+        if not raw:
+            return None, None
+
+        raw = raw.strip()
+
+        # ── CAS 1 : JSON ─────────────────────────────────────────────
+        if raw.startswith("{"):
             try:
-                return datetime.strptime(str(d_str), fmt).date()
-            except Exception:
-                pass
-        return None
+                data = json.loads(raw)
+                pid = str(data.get("id", "")).strip()
+                if pid:
+                    return pid, None
+                return None, "QR JSON valide mais sans champ 'id'."
+            except json.JSONDecodeError:
+                return None, "QR JSON invalide."
+
+        # ── CAS 2 : ID brut ─────────────────────────────────────────
+        return raw, None
 
     if surv:
         # ── Export / Vider ────────────────────────────────────────────────────
