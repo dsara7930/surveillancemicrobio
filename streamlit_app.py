@@ -2144,7 +2144,7 @@ if active == "surveillance":
                                 st.success(f"🗑️ Prélèvement **{samp['label']}** supprimé.")
                                 st.rerun()
 
-         # ══════════════════════════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════════════════════════
         # MODE SCAN QR
         # ══════════════════════════════════════════════════════════════════════
         else:
@@ -2272,30 +2272,38 @@ if active == "surveillance":
                     with sf2:
                         scan_isolateur = ""
                         scan_poste     = "Poste 1"
+
                         if _is_classea:
                             scan_isolateur = st.radio(
                                 "Isolateur",
                                 ["Iso 16/0724", "Iso 14/07169"],
                                 index=None,
                                 horizontal=True,
-                                key="scan_iso_sel"
+                                key=f"scan_iso_sel_{_sp['id']}"
                             )
                             scan_poste = st.radio(
                                 "Poste",
                                 ["Poste 1", "Poste 2", "Commun"],
                                 index=None,
                                 horizontal=True,
-                                key="scan_poste_sel"
+                                key=f"scan_poste_sel_{_sp['id']}"
                             )
+
                         scan_comment = st.text_area(
-                            "💬 Commentaire", placeholder="Remarques...",
-                            height=80, key="scan_comment")
+                            "💬 Commentaire",
+                            placeholder="Remarques...",
+                            height=80,
+                            key=f"scan_comment_{_sp['id']}"
+                        )
 
                     sbc1, sbc2 = st.columns([3, 1])
+
                     with sbc1:
                         if st.button(
-                            f"💾 Enregistrer — {_lbl}",
-                            use_container_width=True, type="primary", key="scan_save_btn"
+                            f"💾 Enregistrer — {_sp['label']}",
+                            use_container_width=True,
+                            type="primary",
+                            key=f"scan_save_btn_{_sp['id']}"
                         ):
                             if not scan_oper:
                                 st.error("⚠️ Veuillez sélectionner un opérateur.")
@@ -2340,7 +2348,11 @@ if active == "surveillance":
                                 st.session_state["qr_counter"] += 1
                                 st.rerun()
                     with sbc2:
-                        if st.button("✕ Annuler", use_container_width=True, key="scan_cancel_btn"):
+                        if st.button(
+                            "✕ Annuler",
+                            use_container_width=True,
+                            key=f"scan_cancel_btn_{_sp['id']}"
+                        ):
                             st.session_state["qr_counter"] += 1
                             st.rerun()
 
