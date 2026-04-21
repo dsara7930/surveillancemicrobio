@@ -3096,7 +3096,6 @@ if active == "surveillance":
                         f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
                         f"</div>",
                         unsafe_allow_html=True)
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
 # Calendrier supprimé.
@@ -3165,20 +3164,14 @@ if active == "planning":
         we = ws + timedelta(days=6)
         return ws.strftime('%d/%m') + ' – ' + we.strftime('%d/%m/%Y')
 
-    def _make_qr_bytes(point_id, isolateur: str = "") -> bytes:
-        """
-        Encode dans le QR : "<point_id>|<isolateur>" si isolateur fourni,
-        sinon simplement "<point_id>".
-        Rétrocompatible : les anciens QR sans "|" continuent de fonctionner.
-        """
+    def _make_qr_bytes(point_id) -> bytes:
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
             box_size=4,
             border=2,
         )
-        payload = f"{point_id}|{isolateur}" if isolateur else str(point_id)
-        qr.add_data(payload)
+        qr.add_data(str(point_id))
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         buf = BytesIO()
@@ -3279,13 +3272,15 @@ if active == "planning":
             _done_dates_for_pt = set(_done_this_month.get(pt['label'], {}).keys())
 
             if is_daily:
+                # Pour le quotidien : placer uniquement sur les jours pas encore faits
                 for d in all_wd:
                     if d in _done_dates_for_pt:
-                        continue
+                        continue  # déjà fait ce jour-là
                     for _ in range(max_per_day):
                         planning[d].append(dict(task_base))
             else:
                 rng          = _rnd.Random(year * 10000 + month * 100 + hash(pt['label']) % 100)
+                # Exclure du pool les jours déjà réalisés
                 available_wd = [d for d in all_wd if d not in _done_dates_for_pt]
                 day_counts   = {d: 0 for d in available_wd}
                 day_labels   = {d: {} for d in available_wd}
@@ -3322,6 +3317,7 @@ if active == "planning":
         today           = _today_dt
         all_days_sorted = sorted(plan.keys())
 
+        # Jours ouvrés futurs disponibles dans le mois (après aujourd'hui)
         future_days = [d for d in all_days_sorted if d > today]
 
         for day in all_days_sorted:
@@ -3329,23 +3325,29 @@ if active == "planning":
             if not skipped_labels:
                 continue
 
+            # Séparer les tâches à redistribuer (non-daily) de celles à supprimer (daily)
             tasks_to_move = [
                 t for t in plan.get(day, [])
                 if t["label"] in skipped_labels
                 and "/ jour" not in t.get("_freq_unit", "")
             ]
+            # Retirer toutes les tâches skippées du jour original
             plan[day] = [
                 t for t in plan.get(day, [])
                 if t["label"] not in skipped_labels
             ]
 
+            # Redistribuer uniquement vers les jours futurs (> aujourd'hui)
             for task in tasks_to_move:
+                # Préférer un jour futur où ce point n'est pas encore planifié
                 candidates = [
                     d for d in future_days
                     if not any(t["label"] == task["label"] for t in plan.get(d, []))
                 ]
+                # Sinon, n'importe quel jour futur (charge minimale)
                 if not candidates:
                     candidates = future_days
+                # Si aucun jour futur disponible dans le mois → tâche perdue (fin de mois)
                 if not candidates:
                     continue
                 best = min(candidates, key=lambda d: len(plan.get(d, [])))
@@ -3429,13 +3431,10 @@ if active == "planning":
             _pt_data = next(
                 (p for p in st.session_state.points if p.get("label") == lv), None
             )
-
-            # ── QR code : encode point_id + isolateur ──────────────────────
             qr_flowable = None
             if _pt_data:
                 try:
-                    _iso_for_qr = task.get("_isolateur", "") or ""
-                    _qr_buf     = BytesIO(_make_qr_bytes(_pt_data["id"], _iso_for_qr))
+                    _qr_buf     = BytesIO(_make_qr_bytes(_pt_data["id"]))
                     qr_flowable = RLImage(_qr_buf, width=2.0 * rl_cm, height=2.0 * rl_cm)
                 except Exception:
                     qr_flowable = None
@@ -3929,6 +3928,7 @@ if active == "planning":
                             f"{'s' if _n_sel_etiq > 1 else ''} prête"
                             f"{'s' if _n_sel_etiq > 1 else ''} — {_day_lbl}"
                         )
+
     # ════════════════════════════════════════════════════════════════════════
     # ONGLET 2 — Export Excel
     # ════════════════════════════════════════════════════════════════════════
