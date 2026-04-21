@@ -1022,7 +1022,7 @@ with st.sidebar:
     )
     tabs_cfg = [
         ("accueil",      "🏠", "Accueil"),
-        ("logigramme",   "📊", "Logigramme"),
+        ("Base de données",   "🦠", "Base de données"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
         ("analyse",   "📋", "Analyse"),
@@ -1119,7 +1119,7 @@ if active == "faq":
     )
 
     if st.button("← Retour", key="faq_back"):
-        st.session_state.active_tab = "logigramme"
+        st.session_state.active_tab = "Base de données"
         st.rerun()
 
     st.markdown(
@@ -1266,11 +1266,11 @@ if active == "accueil":
             st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : LOGIGRAMME
+# TAB : BASE DE DONNEES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if active == "logigramme":
-    can_edit = check_access_protege("Logigramme")
+if active == "Base de données":
+    can_edit = check_access_protege("Base de données")
 
     PATHO_OPTS = [
         "1 — Non pathogène",
