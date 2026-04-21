@@ -1025,7 +1025,7 @@ with st.sidebar:
         ("logigramme",   "📊", "Logigramme"),
         ("surveillance", "🔍", "Identification & Surveillance"),
         ("planning",     "📅", "Planning"),
-        ("historique",   "📋", "Historique"),
+        ("analyse",   "📋", "Analyse"),
         ("parametres",   "⚙️", "Paramètres & Seuils"),
     ]
     for key, icon, label in tabs_cfg:
@@ -1829,6 +1829,112 @@ renderList();
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
+def _render_mesures_correctives(entry: dict, entry_idx: int):
+    """
+    Affiche le bloc « Mesures correctives » sous une entrée dont le statut
+    est 'alert' ou 'action'.
+    - Zone de texte « Autre action réalisée »
+    - Bouton « Prise en compte des mesures correctives »
+    - Statut persisté dans entry['mc_statut'], entry['mc_detail'], entry['mc_date']
+    """
+    from datetime import datetime as _dt
+
+    STATUS    = entry.get("status", "ok")
+    MC_STATUT = entry.get("mc_statut", "")      # "" | "fait"
+    MC_DETAIL = entry.get("mc_detail", "")      # texte libre
+    MC_DATE   = entry.get("mc_date",   "")      # ISO date de validation
+
+    if STATUS not in ("alert", "action"):
+        return  # Rien à afficher si conforme
+
+    # ── Couleurs selon statut mesures correctives ──────────────────────────
+    if MC_STATUT == "fait":
+        _brd = "#86efac"; _bg = "#f0fdf4"; _title_col = "#166534"
+        _badge_bg = "#22c55e"; _badge_txt = "MESURES CORRECTIVES FAITES ✅"
+    else:
+        _brd = "#fca5a5" if STATUS == "action" else "#fcd34d"
+        _bg  = "#fef2f2" if STATUS == "action" else "#fffbeb"
+        _title_col = "#991b1b" if STATUS == "action" else "#92400e"
+        _badge_bg  = "#ef4444" if STATUS == "action" else "#f59e0b"
+        _badge_txt = "MESURES CORRECTIVES EN ATTENTE"
+
+    st.markdown(
+        f"<div style='background:{_bg};border:1.5px solid {_brd};"
+        f"border-radius:12px;padding:14px 18px;margin-top:10px'>"
+        f"<div style='font-size:.82rem;font-weight:800;color:{_title_col};"
+        f"margin-bottom:10px;display:flex;justify-content:space-between;align-items:center'>"
+        f"<span>🔧 Mesures correctives</span>"
+        f"<span style='background:{_badge_bg};color:#fff;border-radius:6px;"
+        f"padding:2px 10px;font-size:.68rem;font-weight:700'>{_badge_txt}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    if MC_STATUT == "fait":
+        # ── Affichage en lecture : mesures validées ────────────────────────
+        st.markdown(
+            f"<div style='font-size:.78rem;color:#166534;margin-bottom:6px'>"
+            f"✅ Validé le <b>{MC_DATE}</b></div>",
+            unsafe_allow_html=True,
+        )
+        if MC_DETAIL:
+            st.markdown(
+                "<div style='background:#dcfce7;border-left:3px solid #22c55e;"
+                "border-radius:6px;padding:10px 14px;font-size:.82rem;color:#14532d;"
+                "white-space:pre-wrap'>"
+                f"📝 {MC_DETAIL}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        if st.button(
+            "↩️ Annuler la validation",
+            key=f"mc_annuler_{entry_idx}",
+            use_container_width=False,
+        ):
+            st.session_state.surveillance[entry_idx]["mc_statut"] = ""
+            st.session_state.surveillance[entry_idx]["mc_detail"] = ""
+            st.session_state.surveillance[entry_idx]["mc_date"]   = ""
+            save_surveillance(st.session_state.surveillance)
+            _supa_upsert(
+                "surveillance",
+                json.dumps(st.session_state.surveillance, ensure_ascii=False),
+            )
+            st.rerun()
+
+    else:
+        # ── Formulaire de saisie des mesures ──────────────────────────────
+        _detail_key = f"mc_detail_input_{entry_idx}"
+        detail_val  = st.text_area(
+            "📝 Autre action réalisée *(optionnel)*",
+            value=st.session_state.get(_detail_key, MC_DETAIL),
+            placeholder=(
+                "Ex : Nettoyage renforcé effectué, décontamination de surface réalisée, "
+                "technicien alerté, procédure X appliquée…"
+            ),
+            height=100,
+            key=_detail_key,
+        )
+
+        if st.button(
+            "✅ Prise en compte des mesures correctives",
+            key=f"mc_valider_{entry_idx}",
+            type="primary",
+            use_container_width=True,
+        ):
+            _now = _dt.today().strftime("%d/%m/%Y %H:%M")
+            st.session_state.surveillance[entry_idx]["mc_statut"] = "fait"
+            st.session_state.surveillance[entry_idx]["mc_detail"] = detail_val.strip()
+            st.session_state.surveillance[entry_idx]["mc_date"]   = _now
+            save_surveillance(st.session_state.surveillance)
+            _supa_upsert(
+                "surveillance",
+                json.dumps(st.session_state.surveillance, ensure_ascii=False),
+            )
+            st.success("✅ Mesures correctives enregistrées.")
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 if active == "surveillance":
     st.markdown("### 🔍 Identification & Surveillance microbiologique")
@@ -4536,10 +4642,10 @@ if active == "planning":
                 f"Onglets : **Planning Semaine** (matriciel) · **Non-faits** (récapitulatif)"
             )
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : HISTORIQUE
+# TAB : ANALYSE
 # ═══════════════════════════════════════════════════════════════════════════════
-if active == "historique":
-    st.markdown("### 📋 Historique de surveillance")
+if active == "analyse":
+    st.markdown("### 📋 Analyse des prélèvements")
     surv  = st.session_state.surveillance
     total = len(surv)
 
@@ -5056,6 +5162,76 @@ if active == "historique":
                         "<div style='font-size:.72rem;color:#475569;font-style:italic'>"+pts_str+"</div>"
                         "</div>",
                         unsafe_allow_html=True)
+                st.divider()
+                st.markdown(
+                    "<div style='font-size:.85rem;font-weight:700;color:#1e40af;margin-bottom:8px'>"
+                    "🔧 Suivi des mesures correctives par germe</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Regrouper par germe les entrées avec mc_statut
+                from collections import defaultdict as _dfd
+                mc_by_germ = _dfd(lambda: {"en_attente": 0, "fait": 0, "details": []})
+
+                for r in surv_f:
+                    germ   = r.get("germ_saisi", "") or r.get("germ_match", "") or ""
+                    status = r.get("status", "ok")
+                    mc     = r.get("mc_statut", "")
+                    if status not in ("alert", "action") or germ in ("Négatif", "—", ""):
+                        continue
+                    if mc == "fait":
+                        mc_by_germ[germ]["fait"] += 1
+                        if r.get("mc_detail", "").strip():
+                            mc_by_germ[germ]["details"].append({
+                                "date":   r.get("date", "—"),
+                                "point":  r.get("prelevement", "—"),
+                                "detail": r.get("mc_detail", ""),
+                                "mc_date": r.get("mc_date", ""),
+                            })
+                    else:
+                        mc_by_germ[germ]["en_attente"] += 1
+
+                if not mc_by_germ:
+                    st.info("Aucun dépassement de seuil sur la période.")
+                else:
+                    for germ_mc, gd in sorted(mc_by_germ.items(),
+                                            key=lambda x: -(x[1]["en_attente"] + x[1]["fait"])):
+                        total_mc = gd["en_attente"] + gd["fait"]
+                        pct_fait = gd["fait"] / total_mc * 100 if total_mc > 0 else 0
+                        _gc      = _crit_color(_get_criticite(germ_mc))
+
+                        with st.expander(
+                            f"🦠 {germ_mc}  —  "
+                            f"{'✅' if gd['en_attente'] == 0 else '⚠️'} "
+                            f"{gd['fait']}/{total_mc} mesures validées "
+                            f"({round(pct_fait)}%)",
+                            expanded=(gd["en_attente"] > 0),
+                        ):
+                            ca, cb = st.columns(2)
+                            ca.metric("✅ Mesures faites",     gd["fait"])
+                            cb.metric("⏳ En attente",          gd["en_attente"])
+
+                            if gd["details"]:
+                                st.markdown(
+                                    "<div style='font-size:.78rem;font-weight:700;"
+                                    "color:#0369a1;margin:10px 0 6px'>📝 Actions réalisées</div>",
+                                    unsafe_allow_html=True,
+                                )
+                                for det in gd["details"]:
+                                    st.markdown(
+                                        f"<div style='background:#f0f9ff;border-left:3px solid #0ea5e9;"
+                                        f"border-radius:6px;padding:8px 12px;margin-bottom:6px;"
+                                        f"font-size:.78rem'>"
+                                        f"<span style='color:#0369a1;font-weight:700'>"
+                                        f"📍 {det['point']} · {det['date']}</span>"
+                                        f"<span style='color:#64748b;font-size:.7rem'>"
+                                        f" — validé le {det['mc_date']}</span><br>"
+                                        f"<span style='color:#0f172a'>{det['detail']}</span>"
+                                        f"</div>",
+                                        unsafe_allow_html=True,
+                                    )
+
+
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                     "<div style='font-size:.78rem;color:#94a3b8'>"
@@ -5175,113 +5351,129 @@ if active == "historique":
                 except ValueError:
                     continue
 
-            for real_i, r in reversed(surv_f_indexed):
-                ic = "🚨" if r["status"]=="action" else "⚠️" if r["status"]=="alert" else "✅"
-                with st.expander(
-                    ic+" "+r.get("date","—")+" — "+r.get("prelevement","—")
-                    +" — "+r.get("germ_match","—")+" — "+str(r.get("ufc","—"))+" UFC/m³"):
-                    if st.session_state.get("edit_surv_idx") == real_i:
-                        st.markdown("**✏️ Modifier cette entrée**")
+            for _li, r in enumerate(reversed(surv_f)):
+                _real_idx = len(st.session_state.surveillance) - 1 - _li
+                status_r  = r.get("status", "ok")
+                mc_statut = r.get("mc_statut", "")
+                mc_detail = r.get("mc_detail", "")
+                mc_date   = r.get("mc_date", "")
+                germ_r    = r.get("germ_saisi", "") or r.get("germ_match", "") or ""
 
-                        # ── Ligne 0 : titre du prélèvement + lieu ──────────────────────────
-                        e0a, e0b = st.columns([3, 3])
-                        with e0a:
-                            new_prelevement = st.text_input(
-                                "Titre du prélèvement",
-                                value=r.get("prelevement", ""),
-                                key=f"es_prev_{real_i}")
-                        with e0b:
-                            new_lieu = st.text_input(
-                                "Lieu",
-                                value=r.get("lieu", ""),
-                                key=f"es_lieu_{real_i}")
-                        
-                        e1, e2 = st.columns(2)
-                        with e1:
-                            new_germ      = st.text_input("Germe",     value=r.get("germ_match",""), key=f"es_germ_{real_i}")
-                            new_ufc       = st.number_input("UFC",     value=int(r.get("ufc",0) or 0), min_value=0, key=f"es_ufc_{real_i}")
-                            new_operateur = st.text_input("Opérateur", value=r.get("operateur",""),   key=f"es_oper_{real_i}")
+                # ── Couleurs statut principal ──────────────────────────────────
+                if status_r == "action":
+                    _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
+                elif status_r == "alert":
+                    _sc = "#d97706"; _sb = "#fffbeb"; _sl = "⚠️ ALERTE"
+                else:
+                    _sc = "#16a34a"; _sb = "#f0fdf4"; _sl = "✅ CONFORME"
 
-                            # ── Criticité manuelle ──────────────────────────────────────────
-                            CRIT_OPTIONS = {
-                                0: "0 – Non définie",
-                                1: "1 – Faible",
-                                2: "2 – Modérée",
-                                3: "3 – Élevée",
-                                4: "4 – Critique",
-                            }
-                            current_crit = int(
-                                r.get("criticite_override",
-                                    _get_criticite(r.get("germ_match", ""))) or 0
-                            )
-                            new_criticite = st.selectbox(
-                                "Criticité du germe",
-                                options=list(CRIT_OPTIONS.keys()),
-                                format_func=lambda x: CRIT_OPTIONS[x],
-                                index=current_crit,
-                                key=f"es_crit_{real_i}")
-
-                        with e2:
-                            new_remarque    = st.text_area("Remarque",    value=r.get("remarque",""),    height=70, key=f"es_rem_{real_i}")
-                            new_commentaire = st.text_area("Commentaire", value=r.get("commentaire",""), height=70, key=f"es_com_{real_i}")
-
-                        sb1, sb2 = st.columns(2)
-                        with sb1:
-                            if st.button("💾 Sauvegarder", key=f"es_save_{real_i}",
-                                        use_container_width=True, type="primary"):
-                                st.session_state.surveillance[real_i].update({
-                                    "prelevement":        new_prelevement,
-                                    "lieu":               new_lieu,
-                                    "germ_match":         new_germ,
-                                    "germ_saisi":         new_germ,
-                                    "ufc":                new_ufc,
-                                    "operateur":          new_operateur,
-                                    "remarque":           new_remarque,
-                                    "commentaire":        new_commentaire,
-                                    "criticite_override": new_criticite,
-                                })
-                                save_surveillance(st.session_state.surveillance)
-                                st.session_state["edit_surv_idx"] = None
-                                st.rerun()
-                        with sb2:
-                            if st.button("✕ Annuler", key=f"es_cancel_{real_i}", use_container_width=True):
-                                st.session_state["edit_surv_idx"] = None
-                                st.rerun()
+                # ── Badge mesures correctives (si dépassement) ─────────────────
+                _mc_badge = ""
+                if status_r in ("alert", "action"):
+                    if mc_statut == "fait":
+                        _mc_badge = (
+                            "<span style='background:#22c55e;color:#fff;border-radius:5px;"
+                            "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
+                            "🔧 MC FAITES</span>"
+                        )
                     else:
-                        c1,c2,c3,c4 = st.columns([3,3,3,1])
-                        crit_r = r.get("criticite_override") if r.get("criticite_override") is not None \
-                                 else _get_criticite(r.get("germ_match",""))
-                        c1.markdown(
-                            "**Germe saisi :** "+str(r.get("germ_saisi","—"))
-                            +"\n\n**Correspondance :** "+str(r.get("germ_match","—"))
-                            +" ("+str(r.get("match_score","—"))+")"
-                            +("\n\n**Criticité :** "+str(crit_r)+" – "+_crit_label(crit_r) if crit_r>0 else ""))
-                        c2.markdown(
-                            "**UFC/m³ :** "+str(r.get("ufc","—"))
-                            +"\n\n**Seuil alerte :** "+str(r.get("alert_threshold","—"))
-                            +" | **Seuil action :** "+str(r.get("action_threshold","—")))
-                        c3.markdown(
-                            "**Opérateur :** "+str(r.get("operateur","N/A"))
-                            +"\n\n**Remarque :** "+str(r.get("remarque","—")))
-                        if r.get("commentaire"):
-                            c3.markdown(
-                                f"<div style='background:#f5f3ff;border:1px solid #c4b5fd;"
-                                f"border-radius:6px;padding:6px 10px;margin-top:6px;"
-                                f"font-size:.78rem;color:#5b21b6'>"
-                                f"💬 <b>Commentaire :</b> {r['commentaire']}</div>",
-                                unsafe_allow_html=True)
-                        with c4:
-                            if st.button("✏️", key=f"edit_surv_{real_i}", use_container_width=True):
-                                st.session_state["edit_surv_idx"] = real_i
-                                st.rerun()
-                            if st.button("🗑️", key=f"del_surv_{real_i}", use_container_width=True):
-                                st.session_state.surveillance.pop(real_i)
+                        _mc_badge = (
+                            "<span style='background:#f59e0b;color:#fff;border-radius:5px;"
+                            "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
+                            "🔧 MC EN ATTENTE</span>"
+                        )
+
+                # ── Rendu ligne principale ─────────────────────────────────────
+                st.markdown(
+                    f"<div style='background:{_sb};border:1px solid {_sc}44;"
+                    f"border-left:4px solid {_sc};border-radius:8px;"
+                    f"padding:10px 14px;margin-bottom:6px'>"
+                    f"<div style='display:flex;justify-content:space-between;"
+                    f"align-items:center;margin-bottom:4px'>"
+                    f"<span style='font-size:.82rem;font-weight:700;color:#0f172a'>"
+                    f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
+                    f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
+                    f"{r.get('ufc', 0)} UFC</span>"
+                    f"<div>"
+                    f"<span style='background:{_sc};color:#fff;border-radius:5px;"
+                    f"padding:1px 8px;font-size:.7rem;font-weight:700'>{_sl}</span>"
+                    f"{_mc_badge}</div></div>"
+                    f"<div style='font-size:.72rem;color:#475569'>"
+                    f"📅 {r.get('date','—')} &nbsp;·&nbsp; "
+                    f"👤 {r.get('preleveur','—')}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # ── Mesures correctives inline (dépliables si dépassement) ────
+                if status_r in ("alert", "action"):
+                    with st.expander(
+                        (
+                            f"✅ Mesures correctives faites — {mc_date}"
+                            if mc_statut == "fait"
+                            else "🔧 Saisir / valider les mesures correctives"
+                        ),
+                        expanded=False,
+                    ):
+                        if mc_statut == "fait":
+                            if mc_detail:
+                                st.markdown(
+                                    f"<div style='background:#dcfce7;border-left:3px solid #22c55e;"
+                                    f"border-radius:6px;padding:10px 14px;font-size:.82rem;"
+                                    f"color:#14532d;white-space:pre-wrap'>📝 {mc_detail}</div>",
+                                    unsafe_allow_html=True,
+                                )
+                            else:
+                                st.success("✅ Mesures correctives validées (sans détail).")
+
+                            if st.button(
+                                "↩️ Annuler la validation",
+                                key=f"liste_mc_annuler_{_li}",
+                            ):
+                                st.session_state.surveillance[_real_idx]["mc_statut"] = ""
+                                st.session_state.surveillance[_real_idx]["mc_detail"] = ""
+                                st.session_state.surveillance[_real_idx]["mc_date"]   = ""
                                 save_surveillance(st.session_state.surveillance)
+                                _supa_upsert(
+                                    "surveillance",
+                                    json.dumps(st.session_state.surveillance, ensure_ascii=False),
+                                )
+                                st.rerun()
+
+                        else:
+                            _dk  = f"liste_mc_txt_{_li}"
+                            _txt = st.text_area(
+                                "📝 Autre action réalisée *(optionnel)*",
+                                value=st.session_state.get(_dk, ""),
+                                placeholder=(
+                                    "Ex : Nettoyage renforcé, décontamination, "
+                                    "procédure appliquée…"
+                                ),
+                                height=90,
+                                key=_dk,
+                            )
+                            if st.button(
+                                "✅ Prise en compte des mesures correctives",
+                                key=f"liste_mc_valider_{_li}",
+                                type="primary",
+                                use_container_width=True,
+                            ):
+                                from datetime import datetime as _dt2
+                                _now2 = _dt2.today().strftime("%d/%m/%Y %H:%M")
+                                st.session_state.surveillance[_real_idx]["mc_statut"] = "fait"
+                                st.session_state.surveillance[_real_idx]["mc_detail"] = _txt.strip()
+                                st.session_state.surveillance[_real_idx]["mc_date"]   = _now2
+                                save_surveillance(st.session_state.surveillance)
+                                _supa_upsert(
+                                    "surveillance",
+                                    json.dumps(st.session_state.surveillance, ensure_ascii=False),
+                                )
+                                st.success("✅ Mesures correctives enregistrées.")
                                 st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB : PARAMÈTRES — COMPLET (AVEC IA)
+# TAB : PARAMÈTRES — COMPLET 
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if active == "parametres":
@@ -6236,7 +6428,7 @@ if active == "parametres":
         b1.metric("🦠 Germes",          len(backup_data.get("germs", [])))
         b2.metric("🧪 Prélèvements",    len(backup_data.get("prelevements", [])))
         b3.metric("📅 Lectures planif.", len(backup_data.get("schedules", [])))
-        b4.metric("📋 Historique",       len(backup_data.get("surveillance", [])))
+        b4.metric("📋 Analyse",       len(backup_data.get("surveillance", [])))
         st.download_button(
             label=f"⬇️ Télécharger ({len(backup_json)//1024 + 1} Ko)",
             data=backup_json, file_name=backup_filename,
@@ -6272,7 +6464,7 @@ if active == "parametres":
                     <div>📅 Lectures : <strong>{len(backup_content.get("schedules",[]))}</strong></div>
                     <div>👤 Opérateurs : <strong>{len(backup_content.get("operators",[]))}</strong></div>
                     <div>📍 Points : <strong>{len(backup_content.get("points",[]))}</strong></div>
-                    <div>📋 Historique : <strong>{len(backup_content.get("surveillance",[]))}</strong></div>
+                    <div>📋 Analyse : <strong>{len(backup_content.get("surveillance",[]))}</strong></div>
                   </div>
                   <div style="font-size:.68rem;color:#475569;margin-top:8px">
                     Exporté le : {meta.get("exported_at","—")[:19].replace("T"," ")}
