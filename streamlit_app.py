@@ -4367,14 +4367,10 @@ if active == "historique":
         return {5:"#7c3aed",4:"#ef4444",3:"#f97316",2:"#f59e0b",1:"#22c55e"}.get(c,"#94a3b8")
 
     def _parse_qr_to_point_id(raw: str):
-        
         import json
-
         if not raw:
             return None, None
-
         raw = raw.strip()
-
         # ── CAS 1 : JSON ─────────────────────────────────────────────
         if raw.startswith("{"):
             try:
@@ -4385,9 +4381,15 @@ if active == "historique":
                 return None, "QR JSON valide mais sans champ 'id'."
             except json.JSONDecodeError:
                 return None, "QR JSON invalide."
-
         # ── CAS 2 : ID brut ─────────────────────────────────────────
         return raw, None
+
+    # ── _parse_date retourne un datetime.date (pas datetime.datetime) ─────────
+    def _parse_date(date_str):
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            return None
 
     if surv:
         # ── Export / Vider ────────────────────────────────────────────────────
@@ -4420,15 +4422,11 @@ if active == "historique":
                 st.rerun()
 
         # ── Filtre par période ────────────────────────────────────────────────
-        
         from datetime import datetime
         from datetime import date as dt_date
-        def _parse_date(date_str):
-            try:
-                return datetime.strptime(date_str, "%Y-%m-%d")
-            except:
-                return None
-        all_dates_ok = [d for d in (_parse_date(r.get("date","")) for r in surv) if d]
+
+        # all_dates_ok : liste de datetime.date (cohérent avec st.date_input)
+        all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
 
@@ -4466,9 +4464,10 @@ if active == "historique":
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # _parse_date renvoie maintenant un date → comparaison directe avec date_debut/date_fin
         surv_f = [r for r in surv
-                if _parse_date(r.get("date","")) is not None
-                and date_debut <= _parse_date(r.get("date","")) <= date_fin]
+                  if _parse_date(r.get("date", "")) is not None
+                  and date_debut <= _parse_date(r.get("date", "")) <= date_fin]
         total_f = len(surv_f)
         if total_f < total:
             st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
@@ -4491,7 +4490,7 @@ if active == "historique":
             "📋 Liste des entrées",
         ])
 
-   # ══════════════════════════════════════════════════════════════════════
+        # ══════════════════════════════════════════════════════════════════════
         # ONGLET 1 : STATS PAR POINT
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_pts:
@@ -4777,6 +4776,7 @@ if active == "historique":
                     +(" — 30 premières affichées" if len(alertes_list)>30 else "")
                     +"</div></div>",
                     unsafe_allow_html=True)
+
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 2 : STATS PAR GERME
         # ══════════════════════════════════════════════════════════════════════
@@ -4826,7 +4826,7 @@ if active == "historique":
                   }});
                 }})();
                 </script>"""
-                st.components.v1.html(chart_html, height=500)
+                st.components.v1.html(gchart_html, height=360)
                 st.markdown(
                     "<div style='display:grid;"
                     "grid-template-columns:2fr 0.6fr 1fr 0.9fr 0.9fr 1.5fr;"
@@ -4872,7 +4872,6 @@ if active == "historique":
                     +str(len(germs_stats))+" germe(s) — "+str(total_pos)+" positifs"
                     "</div></div>",
                     unsafe_allow_html=True)
-
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
         # ══════════════════════════════════════════════════════════════════════
