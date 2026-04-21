@@ -4083,7 +4083,6 @@ if active == "planning":
             C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L = "DBEAFE"
             C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L  = "F1F5F9"
             C_GREY_HDR = "334155"; C_GREEN  = "16A34A"; C_RED    = "DC2626"
-            C_ORANGE   = "EA580C"
 
             thin   = Side(style="thin",   color="CBD5E1")
             medium = Side(style="medium", color="94A3B8")
@@ -4377,13 +4376,6 @@ if active == "planning":
                             and include_nonfaits
                         )
 
-                        # Tâche redistribuée depuis une semaine passée
-                        _is_redistributed = (
-                            is_planned
-                            and not _was_planned_raw
-                            and include_nonfaits
-                        )
-
                         if is_done:
                             c.value = "✓"
                             c.font  = Font(name="Arial", size=11, bold=True, color=C_GREEN)
@@ -4394,12 +4386,6 @@ if active == "planning":
                             c.value = "⏭"
                             c.font  = Font(name="Arial", size=10, bold=True, color=C_RED)
                             c.fill  = fill("FEE2E2")
-
-                        elif _is_redistributed:
-                            # Affiché dans la colonne de redistribution
-                            c.value = "↩ X"
-                            c.font  = Font(name="Arial", size=9, bold=True, color=C_ORANGE)
-                            c.fill  = fill("FFF7ED")
 
                         elif is_planned:
                             if _is_multi_day:
