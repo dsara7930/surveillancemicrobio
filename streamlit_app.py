@@ -2068,12 +2068,14 @@ if active == "surveillance":
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True, key="save_prelev", type="primary"):
-                    if p_isolateur == "— Sélectionner —":
-                        p_isolateur = ""
-
-                    if p_poste == "— Sélectionner —":
-                        p_poste = ""
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                    if not p_oper:
+                        st.error("⚠️ Veuillez sélectionner un opérateur.")
+                    elif str(pt_room).strip().upper() == "A" and not p_isolateur:
+                        st.error("⚠️ Veuillez sélectionner un isolateur.")
+                    elif str(pt_room).strip().upper() == "A" and not p_poste:
+                        st.error("⚠️ Veuillez sélectionner un poste.")
+                    else:
+                        pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                     sample = {
                         "id":                   pid,
                         "label":                selected_point['label'],
@@ -2209,33 +2211,36 @@ if active == "surveillance":
                         scan_oper=st.text_input("👤 Opérateur *",placeholder="Nom",key="scan_oper_manual")
                     scan_date=st.date_input("📅 Date",value=datetime.today(),key="scan_date")
                 with sf2:
-                    scan_isolateur=""; scan_poste="Poste 1"
+                    scan_isolateur = ""
+                    scan_poste = ""
                     if _is_classea:
-                        st.markdown("<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px'><div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:6px'>🔬 Classe A</div>", unsafe_allow_html=True)
-                        scan_isolateur=st.radio("Isolateur",["Iso 16/0724","Iso 14/07169"],horizontal=True,key="scan_iso_sel")
-                        scan_poste=st.radio("Poste",["Poste 1","Poste 2","Commun"],horizontal=True,key="scan_poste_sel")
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    scan_comment=st.text_area("💬 Commentaire",placeholder="Remarques...",height=80,key="scan_comment")
+                        st.markdown("<div style='background:#fef9c3;...'>🔬 Classe A</div>", unsafe_allow_html=True)
+                        scan_isolateur = st.radio("Isolateur", ["Iso 16/0724", "Iso 14/07169"], index=None, horizontal=True, key="scan_iso_sel")
+                        scan_poste = st.radio("Poste", ["Poste 1", "Poste 2", "Commun"], index=None, horizontal=True, key="scan_poste_sel")
+                    scan_comment = st.text_area("💬 Commentaire", placeholder="Remarques...", height=80, key="scan_comment")
 
                 _scan_j2 = next_working_day_offset(scan_date, 2); _scan_j7 = next_working_day_offset(scan_date, 7)
                 st.markdown(f"<div style='background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 14px;font-size:.72rem;color:#166534;margin-bottom:10px'>📅 J2 → <strong>{_scan_j2.strftime('%d/%m/%Y')}</strong> &nbsp;·&nbsp; 📅 J7 → <strong>{_scan_j7.strftime('%d/%m/%Y')}</strong></div>", unsafe_allow_html=True)
 
                 sbc1,sbc2=st.columns([3,1])
-                with sbc1:
-                    if st.button(f"💾 Enregistrer — {_lbl}",use_container_width=True,type="primary",key="scan_save_btn"):
-                        if not scan_oper:
-                            st.error("⚠️ Veuillez sélectionner un opérateur.")
-                        else:
-                            _pid=f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-                            _sample_scan={"id":_pid,"label":_lbl,"type":_type,"gelose":_gel,"room_class":_rc,"location_criticality":_lc,"operateur":scan_oper,"date":str(scan_date),"archived":False,"num_isolateur":scan_isolateur if _is_classea else "","poste":scan_poste if _is_classea else "","commentaire":scan_comment or "","created_via":"qr_scan"}
-                            st.session_state.prelevements.append(_sample_scan)
-                            save_prelevements(st.session_state.prelevements)
-                            for _when,_due in [("J2",_scan_j2),("J7",_scan_j7)]:
-                                st.session_state.schedules.append({"id":f"sch_{_pid}_{_when}","sample_id":_pid,"label":_lbl,"due_date":_due.isoformat(),"when":_when,"status":"pending"})
-                            save_schedules(st.session_state.schedules)
-                            iso_info=f" · {scan_isolateur} · {scan_poste}" if _is_classea else ""
-                            st.success(f"✅ **{_lbl}** enregistré{iso_info}\nJ2 → {_scan_j2.strftime('%d/%m/%Y')} · J7 → {_scan_j7.strftime('%d/%m/%Y')}")
-                            st.session_state["qr_counter"]+=1; st.rerun()
+                if st.button(f"💾 Enregistrer — {_lbl}", use_container_width=True, type="primary", key="scan_save_btn"):
+                    if not scan_oper:
+                        st.error("⚠️ Veuillez sélectionner un opérateur.")
+                    elif _is_classea and not scan_isolateur:
+                        st.error("⚠️ Veuillez sélectionner un isolateur.")
+                    elif _is_classea and not scan_poste:
+                        st.error("⚠️ Veuillez sélectionner un poste.")
+                    else:
+                        _pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                        _sample_scan = {"id":_pid,"label":_lbl,"type":_type,"gelose":_gel,"room_class":_rc,"location_criticality":_lc,"operateur":scan_oper,"date":str(scan_date),"archived":False,"num_isolateur":scan_isolateur if _is_classea else "","poste":scan_poste if _is_classea else "","commentaire":scan_comment or "","created_via":"qr_scan"}
+                        st.session_state.prelevements.append(_sample_scan)
+                        save_prelevements(st.session_state.prelevements)
+                        for _when,_due in [("J2",_scan_j2),("J7",_scan_j7)]:
+                            st.session_state.schedules.append({"id":f"sch_{_pid}_{_when}","sample_id":_pid,"label":_lbl,"due_date":_due.isoformat(),"when":_when,"status":"pending"})
+                        save_schedules(st.session_state.schedules)
+                        iso_info=f" · {scan_isolateur} · {scan_poste}" if _is_classea else ""
+                        st.success(f"✅ **{_lbl}** enregistré{iso_info}\nJ2 → {_scan_j2.strftime('%d/%m/%Y')} · J7 → {_scan_j7.strftime('%d/%m/%Y')}")
+                        st.session_state["qr_counter"]+=1; st.rerun()
                 with sbc2:
                     if st.button("✕ Annuler",use_container_width=True,key="scan_cancel_btn"):
                         st.session_state["qr_counter"]+=1; 
