@@ -2272,11 +2272,13 @@ if active == "surveillance":
                     col1, col2 = st.columns(2)
                     
 
+                   
                     with col2:
                         scan_isolateur = ""
                         scan_poste     = "Poste 1"
+                        _is_classea_sp = _sp.get('room_class', '').strip().upper() == 'A'  # ← local à _sp
 
-                        if _is_classea:
+                        if _is_classea_sp:
                             scan_isolateur = st.radio(
                                 "Isolateur",
                                 ["Iso 16/0724", "Iso 14/07169"],
@@ -2327,8 +2329,8 @@ if active == "surveillance":
                                     "operateur":            scan_oper,
                                     "date":                 str(scan_date),
                                     "archived":             False,
-                                    "num_isolateur":        scan_isolateur if _is_classea else "",
-                                    "poste":                scan_poste     if _is_classea else "",
+                                    "num_isolateur": scan_isolateur if _is_classea_sp else "",
+                                    "poste":         scan_poste     if _is_classea_sp else "",
                                     "commentaire":          scan_comment or "",
                                     "created_via":          "qr_scan",
                                 }
