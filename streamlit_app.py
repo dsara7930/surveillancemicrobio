@@ -3052,6 +3052,40 @@ if active == "surveillance":
                             worst = max(scored_germs, key=lambda x: x["score"])
                             ts_prev = loc_crit * worst["score"]
                             st_prev, _, sc_prev = _evaluate_score(ts_prev)
+                            ufc_total_prev = sum(s["ufc"] for s in scored_germs)
+                            preview_rows = "".join(
+                                f"<tr><td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
+                                f"<td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td>"
+                                f"<td style='padding:2px 8px;text-align:center;font-weight:700;"
+                                f"color:{'#ef4444' if s['name'] == worst['name'] else '#64748b'}'>"
+                                f"{s['score']}{'  👑' if s['name'] == worst['name'] else ''}</td></tr>"
+                                for s in scored_germs)
+                            st.markdown(f"""
+                            <div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;border-radius:8px;padding:10px 14px;margin-top:8px">
+                            <div style="font-size:.6rem;color:#475569;text-transform:uppercase;font-weight:700;margin-bottom:6px">Aperçu score — germe le plus critique 👑</div>
+                            <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
+                                <tr style="border-bottom:1px solid #e2e8f0">
+                                    <th style="padding:2px 8px;text-align:left;color:#94a3b8">Germe</th>
+                                    <th style="padding:2px 8px;text-align:center;color:#94a3b8">UFC</th>
+                                    <th style="padding:2px 8px;text-align:center;color:#94a3b8">Score germe</th>
+                                </tr>
+                                {preview_rows}
+                                <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
+                                    <td style="padding:4px 8px;font-weight:800;color:#166534">Σ UFC TOTAL</td>
+                                    <td style="padding:4px 8px;text-align:center;font-weight:900;color:#166534;font-size:.85rem">{ufc_total_prev}</td>
+                                    <td style="padding:4px 8px;text-align:center;font-size:.65rem;color:#64748b">somme des germes</td>
+                                </tr>
+                            </table>
+                            <div style="display:flex;align-items:center;gap:12px">
+                                <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
+                                <div style="font-size:.72rem;color:#475569">
+                                    Lieu {loc_crit} × Germe le + critique {worst['score']}<br>
+                                    <span style="font-weight:700;color:{sc_prev}">
+                                        {'🚨 ACTION' if st_prev == 'action' else '⚠️ ALERTE' if st_prev == 'alert' else '✅ Conforme'}
+                                    </span>
+                                </div>
+                            </div>
+                            </div>""", unsafe_allow_html=True)
 
                         ic1, ic2 = st.columns([3, 1])
                         with ic1:
