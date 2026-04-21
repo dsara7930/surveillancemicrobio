@@ -3153,6 +3153,7 @@ if active == "surveillance":
                                         save_surveillance(st.session_state.surveillance)
                                         for _ri in real_indices:
                                             st.session_state.pending_identifications[_ri]["status"] = "done"
+                                        save_pending_identifications(st.session_state.pending_identifications)
                                         if smp and not smp.get("archived"):
                                             smp["archived"] = True
                                             st.session_state.archived_samples.append(smp)
