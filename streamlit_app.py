@@ -4467,8 +4467,8 @@ if active == "historique":
         st.markdown("</div>", unsafe_allow_html=True)
 
         surv_f = [r for r in surv
-                  if _parse_date(r.get("date","")) is not None
-                  and date_debut <= _parse_date(r.get("date","")) <= date_fin]
+                if _parse_date(r.get("date","")) is not None
+                and date_debut <= _parse_date(r.get("date","")) <= date_fin]
         total_f = len(surv_f)
         if total_f < total:
             st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
