@@ -2555,30 +2555,11 @@ if active == "surveillance":
                                        if x["sample_id"] == proc["sample_id"] and x["when"] == "J7"), None)
                         st.success(f"✅ J2 négative — J7 prévue le {j7_sch['due_date'][:10] if j7_sch else '?'}.")
 
-                    # → remplacer par
                     elif proc["when"] == "J7" and smp and not smp.get("archived"):
                         smp["archived"] = True
                         st.session_state.archived_samples.append(smp)
                         save_archived_samples(st.session_state.archived_samples)
                         save_prelevements(st.session_state.prelevements)
-                        st.session_state.surveillance.append({
-                            "date":                 str(datetime.today().date()),
-                            "prelevement":          smp.get("label", "?"),
-                            "sample_id":            proc["sample_id"],
-                            "germ_match":           "Négatif",
-                            "germ_saisi":           "Négatif",
-                            "ufc":                  0,
-                            "ufc_total":            0,
-                            "germ_score":           0,
-                            "location_criticality": _get_location_criticality(smp),
-                            "total_score":          0,
-                            "status":               "ok",
-                            "operateur":            smp.get("operateur", "?"),
-                            "remarque":             "",
-                            "readings":             "J7",
-                            "room_class":           smp.get("room_class", ""),
-                        })
-                        save_surveillance(st.session_state.surveillance)
                         st.success("✅ J7 négative — prélèvement archivé.")
 
                 st.session_state.current_process = None
