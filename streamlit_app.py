@@ -5380,7 +5380,6 @@ if active == "analyse":
                 mc_date   = r.get("mc_date", "")
                 germ_r    = r.get("germ_saisi", "") or r.get("germ_match", "") or ""
 
-                # ── Couleurs statut principal ──────────────────────────────────
                 if status_r == "action":
                     _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
                 elif status_r == "alert":
@@ -5388,7 +5387,6 @@ if active == "analyse":
                 else:
                     _sc = "#16a34a"; _sb = "#f0fdf4"; _sl = "✅ CONFORME"
 
-                # ── Badge mesures correctives (si dépassement) ─────────────────
                 _mc_badge = ""
                 if status_r in ("alert", "action"):
                     if mc_statut == "fait":
@@ -5404,7 +5402,6 @@ if active == "analyse":
                             "🔧 MC EN ATTENTE</span>"
                         )
 
-                # ── Rendu ligne principale ─────────────────────────────────────
                 st.markdown(
                     f"<div style='background:{_sb};border:1px solid {_sc}44;"
                     f"border-left:4px solid {_sc};border-radius:8px;"
@@ -5429,7 +5426,7 @@ if active == "analyse":
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-                # Affichage commentaire / remarque sous la carte
+
                 _remarque  = r.get("remarque", "")
                 _triggered = r.get("triggered_by", "")
                 if _remarque or _triggered:
@@ -5443,7 +5440,7 @@ if active == "analyse":
                         + "</div>",
                         unsafe_allow_html=True,
                     )
-                # Détail germes si multi-germe
+
                 _germs_detail = r.get("germs_detail", [])
                 if len(_germs_detail) > 1:
                     _gd_html = " &nbsp;·&nbsp; ".join(
@@ -5457,17 +5454,18 @@ if active == "analyse":
                         f"margin-bottom:6px;font-size:.72rem;color:#1e40af'>"
                         f"🦠 {_gd_html}</div>",
                         unsafe_allow_html=True,
-                    )    
-                # ── Mesures correctives inline (dépliables si dépassement) ────
-                if status_r in ("alert", "action"):
-                    with st.expander(
-                        (
-                            f"✅ Mesures correctives faites — {mc_date}"
-                            if mc_statut == "fait"
-                            else "🔧 Saisir / valider les mesures correctives"
-                        ),
-                        expanded=False,
-                    ):
+                    )
+
+                # ── Onglets actions ───────────────────────────────────────────────────
+                _tab_mc, _tab_edit, _tab_del = st.tabs([
+                    "🔧 Mesures correctives" if status_r in ("alert","action") else "ℹ️ Détails",
+                    "✏️ Modifier",
+                    "🗑️ Supprimer",
+                ])
+
+                # ── Onglet mesures correctives / détails ──────────────────────────────
+                with _tab_mc:
+                    if status_r in ("alert", "action"):
                         if mc_statut == "fait":
                             if mc_detail:
                                 st.markdown(
@@ -5478,30 +5476,18 @@ if active == "analyse":
                                 )
                             else:
                                 st.success("✅ Mesures correctives validées (sans détail).")
-
-                            if st.button(
-                                "↩️ Annuler la validation",
-                                key=f"liste_mc_annuler_{_li}",
-                            ):
+                            if st.button("↩️ Annuler la validation", key=f"liste_mc_annuler_{_li}"):
                                 st.session_state.surveillance[_real_idx]["mc_statut"] = ""
                                 st.session_state.surveillance[_real_idx]["mc_detail"] = ""
                                 st.session_state.surveillance[_real_idx]["mc_date"]   = ""
                                 save_surveillance(st.session_state.surveillance)
-                                _supa_upsert(
-                                    "surveillance",
-                                    json.dumps(st.session_state.surveillance, ensure_ascii=False),
-                                )
                                 st.rerun()
-
                         else:
                             _dk  = f"liste_mc_txt_{_li}"
                             _txt = st.text_area(
                                 "📝 Autre action réalisée *(optionnel)*",
                                 value=st.session_state.get(_dk, ""),
-                                placeholder=(
-                                    "Ex : Nettoyage renforcé, décontamination, "
-                                    "procédure appliquée…"
-                                ),
+                                placeholder="Ex : Nettoyage renforcé, décontamination…",
                                 height=90,
                                 key=_dk,
                             )
@@ -5517,11 +5503,166 @@ if active == "analyse":
                                 st.session_state.surveillance[_real_idx]["mc_detail"] = _txt.strip()
                                 st.session_state.surveillance[_real_idx]["mc_date"]   = _now2
                                 save_surveillance(st.session_state.surveillance)
-                                _supa_upsert(
-                                    "surveillance",
-                                    json.dumps(st.session_state.surveillance, ensure_ascii=False),
-                                )
                                 st.success("✅ Mesures correctives enregistrées.")
+                                st.rerun()
+                    else:
+                        st.markdown(
+                            "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
+                            "✅ Résultat conforme — aucune mesure corrective requise.</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                # ── Onglet modification ───────────────────────────────────────────────
+                with _tab_edit:
+                    st.markdown("**✏️ Modifier cette entrée**")
+
+                    germ_names_edit = sorted([g['name'] for g in st.session_state.germs])
+
+                    _ec1, _ec2 = st.columns(2)
+                    with _ec1:
+                        _new_prelev = st.text_input(
+                            "📍 Point de prélèvement",
+                            value=r.get("prelevement", ""),
+                            key=f"edit_prelev_{_li}",
+                        )
+                        _new_date = st.text_input(
+                            "📅 Date (YYYY-MM-DD)",
+                            value=r.get("date", ""),
+                            key=f"edit_date_{_li}",
+                        )
+                        _new_oper = st.text_input(
+                            "👤 Opérateur",
+                            value=r.get("operateur", r.get("preleveur", "")),
+                            key=f"edit_oper_{_li}",
+                        )
+                    with _ec2:
+                        # Sélection du germe
+                        _cur_germ = r.get("germ_saisi", "") or r.get("germ_match", "") or "Négatif"
+                        _germ_opts = ["Négatif"] + germ_names_edit
+                        _germ_idx  = _germ_opts.index(_cur_germ) if _cur_germ in _germ_opts else 0
+                        _new_germ  = st.selectbox(
+                            "🦠 Germe identifié",
+                            _germ_opts,
+                            index=_germ_idx,
+                            key=f"edit_germ_{_li}",
+                        )
+                        _new_ufc = st.number_input(
+                            "UFC",
+                            min_value=0,
+                            value=int(r.get("ufc", 0) or 0),
+                            step=1,
+                            key=f"edit_ufc_{_li}",
+                        )
+                        _new_remarque = st.text_area(
+                            "💬 Remarque",
+                            value=r.get("remarque", ""),
+                            height=80,
+                            key=f"edit_rem_{_li}",
+                        )
+
+                    # Recalcul automatique du score si germe changé
+                    if _new_germ != "Négatif":
+                        _gobj = next(
+                            (g for g in st.session_state.germs if g['name'] == _new_germ), None
+                        )
+                        if _gobj:
+                            _new_germ_score = (
+                                int(_gobj.get('pathogenicity', 1))
+                                * int(_gobj.get('resistance', 1))
+                                * int(_gobj.get('dissemination', 1))
+                            )
+                            _loc_c_edit = int(r.get("location_criticality", 1) or 1)
+                            _new_total  = _loc_c_edit * _new_germ_score
+                            _new_status, _new_lbl, _new_col = _evaluate_score(_new_total)
+                            st.markdown(
+                                f"<div style='background:{_new_col}11;border:1px solid {_new_col}44;"
+                                f"border-radius:8px;padding:8px 12px;font-size:.78rem;"
+                                f"font-weight:700;color:{_new_col}'>"
+                                f"Score recalculé : {_new_total} "
+                                f"(lieu {_loc_c_edit} × germe {_new_germ_score}) → {_new_lbl}"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            _new_germ_score = int(r.get("germ_score", 0) or 0)
+                            _new_total      = int(r.get("total_score", 0) or 0)
+                            _new_status     = r.get("status", "ok")
+                    else:
+                        _new_germ_score = 0
+                        _new_total      = 0
+                        _new_status     = "ok"
+
+                    if st.button(
+                        "💾 Sauvegarder les modifications",
+                        key=f"edit_save_{_li}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        st.session_state.surveillance[_real_idx].update({
+                            "prelevement": _new_prelev.strip(),
+                            "date":        _new_date.strip(),
+                            "operateur":   _new_oper.strip(),
+                            "germ_saisi":  _new_germ,
+                            "germ_match":  _new_germ,
+                            "ufc":         _new_ufc,
+                            "ufc_total":   _new_ufc,
+                            "germ_score":  _new_germ_score,
+                            "total_score": _new_total,
+                            "status":      _new_status,
+                            "remarque":    _new_remarque.strip(),
+                        })
+                        save_surveillance(st.session_state.surveillance)
+                        st.success("✅ Entrée mise à jour — stats recalculées automatiquement.")
+                        st.rerun()
+
+                # ── Onglet suppression ────────────────────────────────────────────────
+                with _tab_del:
+                    st.markdown(
+                        f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+                        f"border-radius:10px;padding:14px 16px;margin-bottom:12px'>"
+                        f"<div style='font-weight:700;color:#991b1b;margin-bottom:6px'>"
+                        f"🗑️ Supprimer cette entrée ?</div>"
+                        f"<div style='font-size:.8rem;color:#7f1d1d'>"
+                        f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
+                        f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
+                        f"📅 {r.get('date','—')}<br>"
+                        f"Cette action est <strong>irréversible</strong> et mettra à jour "
+                        f"toutes les statistiques.</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    _confirm_key = f"confirm_del_{_li}"
+                    if not st.session_state.get(_confirm_key, False):
+                        if st.button(
+                            "🗑️ Supprimer cette entrée",
+                            key=f"del_btn_{_li}",
+                            use_container_width=True,
+                        ):
+                            st.session_state[_confirm_key] = True
+                            st.rerun()
+                    else:
+                        st.error("⚠️ Confirmer la suppression définitive ?")
+                        _dc1, _dc2 = st.columns(2)
+                        with _dc1:
+                            if st.button(
+                                "✅ OUI — Supprimer définitivement",
+                                key=f"del_confirm_{_li}",
+                                type="primary",
+                                use_container_width=True,
+                            ):
+                                st.session_state.surveillance.pop(_real_idx)
+                                save_surveillance(st.session_state.surveillance)
+                                st.session_state[_confirm_key] = False
+                                st.success("🗑️ Entrée supprimée — stats recalculées.")
+                                st.rerun()
+                        with _dc2:
+                            if st.button(
+                                "❌ Annuler",
+                                key=f"del_cancel_{_li}",
+                                use_container_width=True,
+                            ):
+                                st.session_state[_confirm_key] = False
                                 st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
