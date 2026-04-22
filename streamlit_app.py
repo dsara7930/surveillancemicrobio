@@ -3142,20 +3142,36 @@ if active == "surveillance":
                                     g for g in st.session_state[germs_list_key]
                                     if g["germ"] and g["germ"] != "— Sélectionner un germe —"
                                 ]
-                                if not valid_entries:
+                               if not valid_entries:
                                     st.error("Veuillez sélectionner au moins un germe.")
                                 else:
+                                    scored_entries = [
+                                        {
+                                            **g,
+                                            "germ_score": compute_germ_score(g)
+                                        }
+                                        for g in valid_entries
+                                    ]
+
                                     worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
                                     total_sc = loc_crit * worst_entry["germ_score"]
                                     status, status_lbl, status_col = _evaluate_score(total_sc)
+
                                     ufc_total = sum(e["ufc"] for e in scored_entries)
+
                                     triggered_by = None
                                     if status in ("alert", "action"):
-                                        triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_saisi']})"
+                                        triggered_by = (
+                                            f"lieu {loc_crit} × germe {worst_entry['germ_score']} "
+                                            f"({worst_entry['germ_saisi']})"
+                                        )
+
                                     germs_detail = [
-                                        {"name": e["germ_saisi"],
+                                        {
+                                            "name": e["germ_saisi"],
                                             "ufc": e["ufc"],
-                                            "germ_score": e["germ_score"],}
+                                            "germ_score": e["germ_score"],
+                                        }
                                         for e in scored_entries
                                     ]
                                     st.session_state.surveillance.append({
