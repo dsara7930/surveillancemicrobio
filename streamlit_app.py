@@ -849,14 +849,32 @@ def _valider_negatif(proc_id):
     proc["date_read"] = str(datetime.today().date())
 
     if proc["when"] == "J2":
-        # J2 négative → J7 reste en attente, pas d'archivage ni d'entrée dans surveillance
         pass
+
     elif proc["when"] == "J7" and smp and not smp.get("archived"):
-        # J7 négative → archiver + enregistrer dans surveillance
+        # ── Calcul criticité inline (évite dépendance à _get_location_criticality) ──
+        _lc = 1
+        _label_smp = smp.get("label", "")
+        if _label_smp:
+            _pt_fr = next(
+                (p for p in st.session_state.points if p.get("label") == _label_smp), None
+            )
+            if _pt_fr:
+                try:
+                    _lc = int(_pt_fr.get("location_criticality", 1))
+                except (ValueError, TypeError):
+                    _lc = 1
+        if _lc == 1:
+            try:
+                _lc = int(smp.get("location_criticality", 1) or 1)
+            except (ValueError, TypeError):
+                _lc = 1
+
         smp["archived"] = True
         st.session_state.archived_samples.append(smp)
         save_archived_samples(st.session_state.archived_samples)
         save_prelevements(st.session_state.prelevements)
+
         st.session_state.surveillance.append({
             "date":                 str(datetime.today().date()),
             "prelevement":          smp.get("label", "?"),
@@ -866,7 +884,7 @@ def _valider_negatif(proc_id):
             "ufc":                  0,
             "ufc_total":            0,
             "germ_score":           0,
-            "location_criticality": _get_location_criticality(smp),
+            "location_criticality": _lc,
             "total_score":          0,
             "status":               "ok",
             "operateur":            smp.get("operateur", "?"),
@@ -877,7 +895,6 @@ def _valider_negatif(proc_id):
         save_surveillance(st.session_state.surveillance)
 
     save_schedules(st.session_state.schedules)
-
 # ── CONTRÔLE D'ACCÈS PROTÉGÉ ───────────────────────────────────────────────────
 def check_access_protege(onglet_nom: str) -> bool:
     key_mode = f"access_mode_{onglet_nom}"
@@ -2576,6 +2593,31 @@ if active == "surveillance":
                         st.session_state.archived_samples.append(smp)
                         save_archived_samples(st.session_state.archived_samples)
                         save_prelevements(st.session_state.prelevements)
+                        
+                        _lc_neg = 1
+                        try:
+                            _lc_neg = int(smp.get("location_criticality", 1) or 1)
+                        except (ValueError, TypeError):
+                            _lc_neg = 1
+                        
+                        st.session_state.surveillance.append({
+                            "date":                 str(datetime.today().date()),
+                            "prelevement":          smp.get("label", "?"),
+                            "sample_id":            proc["sample_id"],
+                            "germ_match":           "Négatif",
+                            "germ_saisi":           "Négatif",
+                            "ufc":                  0,
+                            "ufc_total":            0,
+                            "germ_score":           0,
+                            "location_criticality": _lc_neg,
+                            "total_score":          0,
+                            "status":               "ok",
+                            "operateur":            smp.get("operateur", "?"),
+                            "remarque":             "",
+                            "readings":             "J7",
+                            "room_class":           smp.get("room_class", ""),
+                        })
+                        save_surveillance(st.session_state.surveillance)
                         st.success("✅ J7 négative — prélèvement archivé.")
 
                 st.session_state.current_process = None
@@ -5376,14 +5418,46 @@ if active == "analyse":
                     f"<div>"
                     f"<span style='background:{_sc};color:#fff;border-radius:5px;"
                     f"padding:1px 8px;font-size:.7rem;font-weight:700'>{_sl}</span>"
-                    f"{_mc_badge}</div></div>"
+                    f"{_mc_badge}</div>"
+                    f"</div>"
                     f"<div style='font-size:.72rem;color:#475569'>"
                     f"📅 {r.get('date','—')} &nbsp;·&nbsp; "
-                    f"👤 {r.get('preleveur','—')}</div>"
+                    f"👤 {r.get('operateur', r.get('preleveur','—'))} &nbsp;·&nbsp; "
+                    f"🏥 {r.get('room_class','—')} &nbsp;·&nbsp; "
+                    f"Score : {r.get('total_score','—')}"
+                    f"</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-
+                # Affichage commentaire / remarque sous la carte
+                _remarque  = r.get("remarque", "")
+                _triggered = r.get("triggered_by", "")
+                if _remarque or _triggered:
+                    st.markdown(
+                        f"<div style='background:#f8fafc;border-left:3px solid #cbd5e1;"
+                        f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
+                        f"margin-bottom:6px;font-size:.72rem;color:#475569'>"
+                        + (f"💬 {_remarque}" if _remarque else "")
+                        + (" &nbsp;·&nbsp; " if _remarque and _triggered else "")
+                        + (f"⚡ {_triggered}" if _triggered else "")
+                        + "</div>",
+                        unsafe_allow_html=True,
+                    )
+                # Détail germes si multi-germe
+                _germs_detail = r.get("germs_detail", [])
+                if len(_germs_detail) > 1:
+                    _gd_html = " &nbsp;·&nbsp; ".join(
+                        f"<b>{'👑 ' if g.get('is_worst') else ''}{g['name']}</b> "
+                        f"({g.get('ufc',0)} UFC · score {g.get('germ_score','?')})"
+                        for g in _germs_detail
+                    )
+                    st.markdown(
+                        f"<div style='background:#eff6ff;border-left:3px solid #93c5fd;"
+                        f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
+                        f"margin-bottom:6px;font-size:.72rem;color:#1e40af'>"
+                        f"🦠 {_gd_html}</div>",
+                        unsafe_allow_html=True,
+                    )    
                 # ── Mesures correctives inline (dépliables si dépassement) ────
                 if status_r in ("alert", "action"):
                     with st.expander(
