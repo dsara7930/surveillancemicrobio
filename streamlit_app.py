@@ -654,6 +654,13 @@ def load_plans():  return _load_json_key('plans', PLANS_FILE)
 def save_plans(d, supa=True):
     _save_json_key('plans', d, PLANS_FILE)
     if supa: _supa_upsert('plans', json.dumps(d, ensure_ascii=False))
+def compute_germ_score(g):
+    gobj = next((x for x in st.session_state.germs if x['name'] == g["germ"]), None)
+    if gobj:
+        return (int(gobj.get('pathogenicity', 1))
+                * int(gobj.get('resistance', 1))
+                * int(gobj.get('dissemination', 1)))
+    return 1
 
 def load_faq():
     raw_json = _supa_get('faq')
