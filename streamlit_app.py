@@ -4813,7 +4813,16 @@ if active == "analyse":
         # ── Filtre par période ────────────────────────────────────────────────
         from datetime import datetime
         from datetime import date as dt_date
+        # 🔒 Sécurisation des valeurs session
+        st.session_state["hist_date_debut_val"] = max(
+            d_min,
+            min(st.session_state["hist_date_debut_val"], d_max)
+        )
 
+        st.session_state["hist_date_fin_val"] = max(
+            d_min,
+            min(st.session_state["hist_date_fin_val"], d_max)
+        )
         # all_dates_ok : liste de datetime.date (cohérent avec st.date_input)
         all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
