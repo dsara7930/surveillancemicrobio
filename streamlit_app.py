@@ -3075,9 +3075,8 @@ if active == "surveillance":
                         g for g in current_germs
                         if g["germ"] and g["germ"] != "— Sélectionner un germe —"
                     ]
-
+                    scored_germs = []
                     if valid_germs:
-                        scored_germs = []
                         for vg in valid_germs:
                             gobj = next((g for g in st.session_state.germs if g['name'] == vg["germ"]), None)
                             if gobj:
