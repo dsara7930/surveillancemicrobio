@@ -839,6 +839,7 @@ def _loc_crit_label(n):
 
 # ── HELPER : valider une lecture comme NÉGATIVE ────────────────────────────────
 def _valider_negatif(proc_id):
+    """Valide une lecture (J2 ou J7) comme négative et archive si J7."""
     proc = next((x for x in st.session_state.schedules if x['id'] == proc_id), None)
     if not proc:
         return
@@ -849,32 +850,14 @@ def _valider_negatif(proc_id):
     proc["date_read"] = str(datetime.today().date())
 
     if proc["when"] == "J2":
-        # J2 négative → J7 reste en attente, pas d'archivage ni d'entrée dans surveillance
+        # J2 négative → J7 reste en attente, pas d'archivage
         pass
     elif proc["when"] == "J7" and smp and not smp.get("archived"):
-        # J7 négative → archiver + enregistrer dans surveillance
+        # J7 négative → archiver (fin de cycle)
         smp["archived"] = True
         st.session_state.archived_samples.append(smp)
         save_archived_samples(st.session_state.archived_samples)
         save_prelevements(st.session_state.prelevements)
-        st.session_state.surveillance.append({
-            "date":                 str(datetime.today().date()),
-            "prelevement":          smp.get("label", "?"),
-            "sample_id":            proc["sample_id"],
-            "germ_match":           "Négatif",
-            "germ_saisi":           "Négatif",
-            "ufc":                  0,
-            "ufc_total":            0,
-            "germ_score":           0,
-            "location_criticality": _get_location_criticality(smp),
-            "total_score":          0,
-            "status":               "ok",
-            "operateur":            smp.get("operateur", "?"),
-            "remarque":             "",
-            "readings":             "J7",
-            "room_class":           smp.get("room_class", ""),
-        })
-        save_surveillance(st.session_state.surveillance)
 
     save_schedules(st.session_state.schedules)
 
