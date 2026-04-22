@@ -3153,7 +3153,7 @@ if active == "surveillance":
                                     if status in ("alert", "action"):
                                         triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_saisi']})"
                                     germs_detail = [
-                                        {"name": "germ_saisi": e["germ_saisi"],
+                                        {"name": e["germ_saisi"],
                                             "ufc": e["ufc"],
                                             "germ_score": e["germ_score"],}
                                         for e in scored_entries
