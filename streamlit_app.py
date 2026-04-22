@@ -3168,79 +3168,77 @@ if active == "surveillance":
                                 g for g in st.session_state[germs_list_key]
                                 if g["germ"] and g["germ"] != "— Sélectionner un germe —"
                             ]
-
                             if not valid_entries:
                                 st.error("Veuillez sélectionner au moins un germe.")
                             else:
-                                scored_entries = [
-                                    {**g, "germ_score": compute_germ_score(g)}
-                                    for g in valid_entries
-                                ]
-
-                                worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
-                                total_sc = loc_crit * worst_entry["germ_score"]
-                                status, status_lbl, status_col = _evaluate_score(total_sc)
-                                ufc_total = sum(e["ufc"] for e in scored_entries)
-
-                                triggered_by = None
-                                if status in ("alert", "action"):
-                                    triggered_by = (
-                                        f"lieu {loc_crit} × germe {worst_entry['germ_score']} "
-                                        f"({worst_entry['germ_saisi']})"
-                                    )
-
-                                germs_detail = [
-                                    {
-                                        "name": e["germ_match"], "germ_saisi": e["germ_saisi"],
-                                        "ufc": e["ufc"],
-                                        "germ_score": e["germ_score"],
-                                        "is_worst": e["germ_match"] == worst_entry["germ_match"]
-                                    }
-                                    for e in scored_entries
-                                ]
-
-                                st.session_state.surveillance.append({
-                                    "date": str(date_id), "prelevement": _label, "sample_id": _sid,
-                                    "germ_saisi": worst_entry["germ_saisi"],"germ_match": worst_entry["germ_match"],
-                                    "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
-                                    "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
-                                    "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
-                                    "location_criticality": loc_crit, "total_score": total_sc,
-                                    "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                    "room_class": pt_class, "alert_threshold": "Score ≥ 24",
-                                    "action_threshold": "Score > 36", "triggered_by": triggered_by,
-                                    "status": status, "operateur": pt_oper, "remarque": remarque,
-                                    "readings": _when_str,
-                                })
-                                save_surveillance(st.session_state.surveillance)
-
-                                for _ri in real_indices:
-                                    st.session_state.pending_identifications[_ri]["status"] = "done"
-                                save_pending_identifications(st.session_state.pending_identifications)
-
-                                if smp and not smp.get("archived"):
-                                    smp["archived"] = True
-                                    st.session_state.archived_samples.append(smp)
-                                    save_archived_samples(st.session_state.archived_samples)
-                                    save_prelevements(st.session_state.prelevements)
-
-                                st.session_state.pop(germs_list_key, None)
-
-                                if status in ("alert", "action"):
-                                    st.session_state["_show_mesures_popup"] = {
-                                        "status": status, "germ": worst_entry["germ_match"],
-                                        "ufc": worst_entry["ufc"],
-                                        "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                        "label": _label, "room_class": pt_class,
-                                        "triggered_by": triggered_by,
-                                        "germ_score": worst_entry["germ_score"],
-                                        "loc_criticality": loc_crit, "total_score": total_sc,
-                                        "germs_detail": germs_detail,
-                                    }
+                                scored_entries = []
+                                for ve in valid_entries:
+                                    match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
+                                    if match and score_fuzzy > 0.4:
+                                        gs = _get_germ_score(match)
+                                        scored_entries.append({
+                                            "germ_saisi":  ve["germ"],
+                                            "germ_match":  match["name"],
+                                            "match_score": f"{int(score_fuzzy * 100)}%",
+                                            "ufc":         ve["ufc"],
+                                            "germ_score":  gs,
+                                            "match_obj":   match,
+                                        })
+                                if not scored_entries:
+                                    st.warning("⚠️ Aucune correspondance trouvée.")
                                 else:
-                                    germs_summary = ", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
-                                    st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc})")
-                                st.rerun()
+                                    worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
+                                    total_sc = loc_crit * worst_entry["germ_score"]
+                                    status, status_lbl, status_col = _evaluate_score(total_sc)
+                                    ufc_total = sum(e["ufc"] for e in scored_entries)
+                                    triggered_by = None
+                                    if status in ("alert", "action"):
+                                        triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_match']})"
+                                    germs_detail = [
+                                        {"name": e["germ_match"], "germ_saisi": e["germ_saisi"],
+                                            "match_score": e["match_score"], "ufc": e["ufc"],
+                                            "germ_score": e["germ_score"],
+                                            "is_worst": e["germ_match"] == worst_entry["germ_match"]}
+                                        for e in scored_entries
+                                    ]
+                                    st.session_state.surveillance.append({
+                                        "date": str(date_id), "prelevement": _label, "sample_id": _sid,
+                                        "germ_saisi": worst_entry["germ_saisi"], "germ_match": worst_entry["germ_match"],
+                                        "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
+                                        "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
+                                        "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
+                                        "location_criticality": loc_crit, "total_score": total_sc,
+                                        "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                        "room_class": pt_class, "alert_threshold": "Score ≥ 24",
+                                        "action_threshold": "Score > 36", "triggered_by": triggered_by,
+                                        "status": status, "operateur": pt_oper, "remarque": remarque,
+                                        "readings": _when_str,
+                                    })
+                                    save_surveillance(st.session_state.surveillance)
+                                    for _ri in real_indices:
+                                        st.session_state.pending_identifications[_ri]["status"] = "done"
+                                    save_pending_identifications(st.session_state.pending_identifications)
+                                    if smp and not smp.get("archived"):
+                                        smp["archived"] = True
+                                        st.session_state.archived_samples.append(smp)
+                                        save_archived_samples(st.session_state.archived_samples)
+                                        save_prelevements(st.session_state.prelevements)
+                                    st.session_state.pop(germs_list_key, None)
+                                    if status in ("alert", "action"):
+                                        st.session_state["_show_mesures_popup"] = {
+                                            "status": status, "germ": worst_entry["germ_match"],
+                                            "ufc": worst_entry["ufc"],
+                                            "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                            "label": _label, "room_class": pt_class,
+                                            "triggered_by": triggered_by,
+                                            "germ_score": worst_entry["germ_score"],
+                                            "loc_criticality": loc_crit, "total_score": total_sc,
+                                            "germs_detail": germs_detail,
+                                        }
+                                    else:
+                                        germs_summary = ", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
+                                        st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc})")
+                                    st.rerun()
 
                     with idc2:
                         _back_lbl = (
