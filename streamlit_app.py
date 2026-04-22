@@ -771,24 +771,6 @@ def import_all_data(data: dict):
     except Exception as e:
         return False, f"Erreur lors de la restauration : {e}"
 
-def find_germ_match(query, germs):
-    query_low  = query.lower().strip()
-    query_genus = query_low.split()[0] if query_low else ""
-    best_score = 0
-    best_match = None
-    for g in germs:
-        name_low = g["name"].lower()
-        genus    = name_low.split()[0]
-        if query_genus and query_genus == genus:
-            score = 0.9
-        else:
-            score       = difflib.SequenceMatcher(None, query_low, name_low).ratio()
-            genus_score = difflib.SequenceMatcher(None, query_genus, genus).ratio()
-            score       = max(score, genus_score * 0.85)
-        if score > best_score:
-            best_score = score
-            best_match = g
-    return best_match, best_score
 
 def load_planning_skips():
     raw_json = _supa_get('planning_skips')
@@ -879,7 +861,6 @@ def _valider_negatif(proc_id):
             "date":                 str(datetime.today().date()),
             "prelevement":          smp.get("label", "?"),
             "sample_id":            proc["sample_id"],
-            "germ_match":           "Négatif",
             "germ_saisi":           "Négatif",
             "ufc":                  0,
             "ufc_total":            0,
@@ -2604,7 +2585,6 @@ if active == "surveillance":
                             "date":                 str(datetime.today().date()),
                             "prelevement":          smp.get("label", "?"),
                             "sample_id":            proc["sample_id"],
-                            "germ_match":           "Négatif",
                             "germ_saisi":           "Négatif",
                             "ufc":                  0,
                             "ufc_total":            0,
@@ -3165,74 +3145,57 @@ if active == "surveillance":
                                 if not valid_entries:
                                     st.error("Veuillez sélectionner au moins un germe.")
                                 else:
-                                    scored_entries = []
-                                    for ve in valid_entries:
-                                        match, score_fuzzy = find_germ_match(ve["germ"], st.session_state.germs)
-                                        if match and score_fuzzy > 0.4:
-                                            gs = _get_germ_score(match)
-                                            scored_entries.append({
-                                                "germ_saisi":  ve["germ"],
-                                                "germ_match":  match["name"],
-                                                "match_score": f"{int(score_fuzzy * 100)}%",
-                                                "ufc":         ve["ufc"],
-                                                "germ_score":  gs,
-                                                "match_obj":   match,
-                                            })
-                                    if not scored_entries:
-                                        st.warning("⚠️ Aucune correspondance trouvée.")
-                                    else:
-                                        worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
-                                        total_sc = loc_crit * worst_entry["germ_score"]
-                                        status, status_lbl, status_col = _evaluate_score(total_sc)
-                                        ufc_total = sum(e["ufc"] for e in scored_entries)
-                                        triggered_by = None
-                                        if status in ("alert", "action"):
-                                            triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_match']})"
-                                        germs_detail = [
-                                            {"name": e["germ_match"], "germ_saisi": e["germ_saisi"],
-                                             "match_score": e["match_score"], "ufc": e["ufc"],
-                                             "germ_score": e["germ_score"],
-                                             "is_worst": e["germ_match"] == worst_entry["germ_match"]}
-                                            for e in scored_entries
-                                        ]
-                                        st.session_state.surveillance.append({
-                                            "date": str(date_id), "prelevement": _label, "sample_id": _sid,
-                                            "germ_saisi": worst_entry["germ_saisi"], "germ_match": worst_entry["germ_match"],
-                                            "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
-                                            "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
-                                            "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
-                                            "location_criticality": loc_crit, "total_score": total_sc,
+                                    worst_entry = max(scored_entries, key=lambda x: x["germ_score"])
+                                    total_sc = loc_crit * worst_entry["germ_score"]
+                                    status, status_lbl, status_col = _evaluate_score(total_sc)
+                                    ufc_total = sum(e["ufc"] for e in scored_entries)
+                                    triggered_by = None
+                                    if status in ("alert", "action"):
+                                        triggered_by = f"lieu {loc_crit} × germe {worst_entry['germ_score']} ({worst_entry['germ_saisi']})"
+                                    germs_detail = [
+                                        {"name": "germ_saisi": e["germ_saisi"],
+                                            "ufc": e["ufc"],
+                                            "germ_score": e["germ_score"],}
+                                        for e in scored_entries
+                                    ]
+                                    st.session_state.surveillance.append({
+                                        "date": str(date_id), "prelevement": _label, "sample_id": _sid,
+                                        "germ_saisi": worst_entry["germ_saisi"],
+                                        "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
+                                        "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
+                                        "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
+                                        "location_criticality": loc_crit, "total_score": total_sc,
+                                        "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
+                                        "room_class": pt_class, "alert_threshold": "Score ≥ 24",
+                                        "action_threshold": "Score > 36", "triggered_by": triggered_by,
+                                        "status": status, "operateur": pt_oper, "remarque": remarque,
+                                        "readings": _when_str,
+                                    })
+                                    save_surveillance(st.session_state.surveillance)
+                                    for _ri in real_indices:
+                                        st.session_state.pending_identifications[_ri]["status"] = "done"
+                                    save_pending_identifications(st.session_state.pending_identifications)
+                                    if smp and not smp.get("archived"):
+                                        smp["archived"] = True
+                                        st.session_state.archived_samples.append(smp)
+                                        save_archived_samples(st.session_state.archived_samples)
+                                        save_prelevements(st.session_state.prelevements)
+                                    st.session_state.pop(germs_list_key, None)
+                                    if status in ("alert", "action"):
+                                        st.session_state["_show_mesures_popup"] = {
+                                            "status": status, "germ": worst_entry["germ_saisi"],
+                                            "ufc": worst_entry["ufc"],
                                             "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                            "room_class": pt_class, "alert_threshold": "Score ≥ 24",
-                                            "action_threshold": "Score > 36", "triggered_by": triggered_by,
-                                            "status": status, "operateur": pt_oper, "remarque": remarque,
-                                            "readings": _when_str,
-                                        })
-                                        save_surveillance(st.session_state.surveillance)
-                                        for _ri in real_indices:
-                                            st.session_state.pending_identifications[_ri]["status"] = "done"
-                                        save_pending_identifications(st.session_state.pending_identifications)
-                                        if smp and not smp.get("archived"):
-                                            smp["archived"] = True
-                                            st.session_state.archived_samples.append(smp)
-                                            save_archived_samples(st.session_state.archived_samples)
-                                            save_prelevements(st.session_state.prelevements)
-                                        st.session_state.pop(germs_list_key, None)
-                                        if status in ("alert", "action"):
-                                            st.session_state["_show_mesures_popup"] = {
-                                                "status": status, "germ": worst_entry["germ_match"],
-                                                "ufc": worst_entry["ufc"],
-                                                "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
-                                                "label": _label, "room_class": pt_class,
-                                                "triggered_by": triggered_by,
-                                                "germ_score": worst_entry["germ_score"],
-                                                "loc_criticality": loc_crit, "total_score": total_sc,
-                                                "germs_detail": germs_detail,
-                                            }
-                                        else:
-                                            germs_summary = ", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
-                                            st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc})")
-                                        st.rerun()
+                                            "label": _label, "room_class": pt_class,
+                                            "triggered_by": triggered_by,
+                                            "germ_score": worst_entry["germ_score"],
+                                            "loc_criticality": loc_crit, "total_score": total_sc,
+                                            "germs_detail": germs_detail,
+                                        }
+                                    else:
+                                        germs_summary = ", ".join(f"{e['name']} ({e['ufc']} UFC)" for e in germs_detail)
+                                        st.success(f"✅ {germs_summary} — **Conforme** (score {total_sc})")
+                                    st.rerun()
 
                         with idc2:
                             _back_lbl = "↩️ Corriger J7" if _when_set == {"J7"} else "↩️ Corriger J2" if _when_set == {"J2"} else "↩️ Corriger lecture"
@@ -3295,7 +3258,7 @@ if active == "surveillance":
                         f"padding:10px 14px;margin-bottom:6px'>"
                         f"<span style='font-size:1.1rem'>{ic}</span> "
                         f"<span style='font-size:.78rem;font-weight:600'>"
-                        f"{r['prelevement']} — <em>{r['germ_match']}</em>{score_badge}</span>"
+                        f"{r['prelevement']} — <em>{r['germ_saisi']}</em>{score_badge}</span>"
                         f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
                         f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
                         f"</div>",
@@ -4906,7 +4869,7 @@ if active == "analyse":
             for r in surv_f:
                 pt     = r.get("prelevement","—")
                 ufc    = int(r.get("ufc",0) or 0)
-                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                germ   = r.get("germ_saisi","") or ""
                 st_r   = r.get("status","ok")
                 ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
                 ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
@@ -5115,7 +5078,7 @@ if active == "analyse":
             germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
             total_pos=0
             for r in surv_f:
-                germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                germ = r.get("germ_saisi","") or ""
                 if germ in ("Négatif","—","") or int(r.get("ufc",0) or 0)==0: continue
                 total_pos+=1
                 germs_stats[germ]["count"]+=1
@@ -5206,7 +5169,7 @@ if active == "analyse":
                 mc_by_germ = _dfd(lambda: {"en_attente": 0, "fait": 0, "details": []})
 
                 for r in surv_f:
-                    germ   = r.get("germ_saisi", "") or r.get("germ_match", "") or ""
+                    germ   = r.get("germ_saisi", "") or ""
                     status = r.get("status", "ok")
                     mc     = r.get("mc_statut", "")
                     if status not in ("alert", "action") or germ in ("Négatif", "—", ""):
@@ -5283,7 +5246,7 @@ if active == "analyse":
             for r in surv_f:
                 op=(r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
                 ufc=int(r.get("ufc",0) or 0)
-                germ=r.get("germ_match","") or ""
+                germ=r.get("germ_saisi","") or ""
                 st_r=r.get("status","ok")
                 prev_stats[op]["total"]+=1
                 if ufc>0 and germ not in ("Négatif","—",""):
@@ -5389,7 +5352,7 @@ if active == "analyse":
                 mc_statut = r.get("mc_statut", "")
                 mc_detail = r.get("mc_detail", "")
                 mc_date   = r.get("mc_date", "")
-                germ_r    = r.get("germ_saisi", "") or r.get("germ_match", "") or ""
+                germ_r    = r.get("germ_saisi", "") or ""
 
                 if status_r == "action":
                     _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
@@ -5548,7 +5511,7 @@ if active == "analyse":
                         )
                     with _ec2:
                         # Sélection du germe
-                        _cur_germ = r.get("germ_saisi", "") or r.get("germ_match", "") or "Négatif"
+                        _cur_germ = r.get("germ_saisi", "") or "Négatif"
                         _germ_opts = ["Négatif"] + germ_names_edit
                         _germ_idx  = _germ_opts.index(_cur_germ) if _cur_germ in _germ_opts else 0
                         _new_germ  = st.selectbox(
@@ -5614,7 +5577,6 @@ if active == "analyse":
                             "date":        _new_date.strip(),
                             "operateur":   _new_oper.strip(),
                             "germ_saisi":  _new_germ,
-                            "germ_match":  _new_germ,
                             "ufc":         _new_ufc,
                             "ufc_total":   _new_ufc,
                             "germ_score":  _new_germ_score,
