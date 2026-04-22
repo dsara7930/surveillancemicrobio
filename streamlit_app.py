@@ -778,6 +778,24 @@ def import_all_data(data: dict):
     except Exception as e:
         return False, f"Erreur lors de la restauration : {e}"
 
+def find_germ_match(query, germs):
+    query_low  = query.lower().strip()
+    query_genus = query_low.split()[0] if query_low else ""
+    best_score = 0
+    best_match = None
+    for g in germs:
+        name_low = g["name"].lower()
+        genus    = name_low.split()[0]
+        if query_genus and query_genus == genus:
+            score = 0.9
+        else:
+            score       = difflib.SequenceMatcher(None, query_low, name_low).ratio()
+            genus_score = difflib.SequenceMatcher(None, query_genus, genus).ratio()
+            score       = max(score, genus_score * 0.85)
+        if score > best_score:
+            best_score = score
+            best_match = g
+    return best_match, best_score
 
 def load_planning_skips():
     raw_json = _supa_get('planning_skips')
@@ -868,6 +886,7 @@ def _valider_negatif(proc_id):
             "date":                 str(datetime.today().date()),
             "prelevement":          smp.get("label", "?"),
             "sample_id":            proc["sample_id"],
+            "germ_match":           "Négatif",
             "germ_saisi":           "Négatif",
             "ufc":                  0,
             "ufc_total":            0,
@@ -2592,6 +2611,7 @@ if active == "surveillance":
                             "date":                 str(datetime.today().date()),
                             "prelevement":          smp.get("label", "?"),
                             "sample_id":            proc["sample_id"],
+                            "germ_match":           "Négatif",
                             "germ_saisi":           "Négatif",
                             "ufc":                  0,
                             "ufc_total":            0,
@@ -3171,16 +3191,17 @@ if active == "surveillance":
 
                                 germs_detail = [
                                     {
-                                        "name": e["germ_saisi"],
+                                        "name": e["germ_match"], "germ_saisi": e["germ_saisi"],
                                         "ufc": e["ufc"],
                                         "germ_score": e["germ_score"],
+                                        "is_worst": e["germ_match"] == worst_entry["germ_match"]
                                     }
                                     for e in scored_entries
                                 ]
 
                                 st.session_state.surveillance.append({
                                     "date": str(date_id), "prelevement": _label, "sample_id": _sid,
-                                    "germ_saisi": worst_entry["germ_saisi"],
+                                    "germ_saisi": worst_entry["germ_saisi"],"germ_match": worst_entry["germ_match"],
                                     "match_score": worst_entry["match_score"], "ufc": worst_entry["ufc"],
                                     "ufc_total": ufc_total, "germ_score": worst_entry["germ_score"],
                                     "germs_detail": germs_detail, "multi_germ": len(scored_entries) > 1,
@@ -3207,7 +3228,7 @@ if active == "surveillance":
 
                                 if status in ("alert", "action"):
                                     st.session_state["_show_mesures_popup"] = {
-                                        "status": status, "germ": worst_entry["germ_saisi"],
+                                        "status": status, "germ": worst_entry["germ_match"],
                                         "ufc": worst_entry["ufc"],
                                         "risk": worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
                                         "label": _label, "room_class": pt_class,
@@ -3293,7 +3314,7 @@ if active == "surveillance":
                                     f"padding:10px 14px;margin-bottom:6px'>"
                                     f"<span style='font-size:1.1rem'>{ic}</span> "
                                     f"<span style='font-size:.78rem;font-weight:600'>"
-                                    f"{r['prelevement']} — <em>{r['germ_saisi']}</em>{score_badge}</span>"
+                                    f"{r['prelevement']} — <em>{r['germ_match']}</em>{score_badge}</span>"
                                     f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
                                     f"{r['date']} · {ufc_display} · {r.get('operateur') or 'N/A'}</div>"
                                     f"</div>",
@@ -4904,7 +4925,7 @@ if active == "analyse":
             for r in surv_f:
                 pt     = r.get("prelevement","—")
                 ufc    = int(r.get("ufc",0) or 0)
-                germ   = r.get("germ_saisi","") or ""
+                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
                 st_r   = r.get("status","ok")
                 ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
                 ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
@@ -5113,7 +5134,7 @@ if active == "analyse":
             germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
             total_pos=0
             for r in surv_f:
-                germ = r.get("germ_saisi","") or ""
+                germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
                 if germ in ("Négatif","—","") or int(r.get("ufc",0) or 0)==0: continue
                 total_pos+=1
                 germs_stats[germ]["count"]+=1
@@ -5204,7 +5225,7 @@ if active == "analyse":
                 mc_by_germ = _dfd(lambda: {"en_attente": 0, "fait": 0, "details": []})
 
                 for r in surv_f:
-                    germ   = r.get("germ_saisi", "") or ""
+                    germ   = r.get("germ_saisi", "") or r.get("germ_match","") or ""
                     status = r.get("status", "ok")
                     mc     = r.get("mc_statut", "")
                     if status not in ("alert", "action") or germ in ("Négatif", "—", ""):
@@ -5281,7 +5302,7 @@ if active == "analyse":
             for r in surv_f:
                 op=(r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
                 ufc=int(r.get("ufc",0) or 0)
-                germ=r.get("germ_saisi","") or ""
+                germ=r.get("germ_match","") or ""
                 st_r=r.get("status","ok")
                 prev_stats[op]["total"]+=1
                 if ufc>0 and germ not in ("Négatif","—",""):
@@ -5387,7 +5408,7 @@ if active == "analyse":
                 mc_statut = r.get("mc_statut", "")
                 mc_detail = r.get("mc_detail", "")
                 mc_date   = r.get("mc_date", "")
-                germ_r    = r.get("germ_saisi", "") or ""
+                germ_r    = r.get("germ_saisi", "") or r.get("germ_match","") or ""
 
                 if status_r == "action":
                     _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
