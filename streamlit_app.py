@@ -5410,7 +5410,6 @@ if active == "analyse":
                         f"margin-bottom:6px;font-size:.72rem;color:#475569'>"
                         + (f"💬 {_remarque}" if _remarque else "")
                         + (" &nbsp;·&nbsp; " if _remarque and _triggered else "")
-                        + (f"⚡ {_triggered}" if _triggered else "")
                         + "</div>",
                         unsafe_allow_html=True,
                     )
