@@ -4810,15 +4810,21 @@ if active == "analyse":
                     os.remove(CSV_FILE)
                 st.rerun()
 
-        # ── Filtre par période ────────────────────────────────────────────────
-        from datetime import datetime
         from datetime import date as dt_date
-        
-        # all_dates_ok : liste de datetime.date (cohérent avec st.date_input)
+
+        # ── Bornes ─────────────────────────────────────
         all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
-        # 🔒 Sécurisation des valeurs session
+
+        # ── Initialisation (AVANT toute lecture) ───────
+        if "hist_date_debut_val" not in st.session_state:
+            st.session_state["hist_date_debut_val"] = d_min
+
+        if "hist_date_fin_val" not in st.session_state:
+            st.session_state["hist_date_fin_val"] = d_max
+
+        # ── Sécurisation (MAINTENANT c’est safe) ───────
         st.session_state["hist_date_debut_val"] = max(
             d_min,
             min(st.session_state["hist_date_debut_val"], d_max)
@@ -4828,14 +4834,10 @@ if active == "analyse":
             d_min,
             min(st.session_state["hist_date_fin_val"], d_max)
         )
-        if "hist_date_debut_val" not in st.session_state:
-            st.session_state["hist_date_debut_val"] = d_min
-        if "hist_date_fin_val" not in st.session_state:
-            st.session_state["hist_date_fin_val"] = d_max
-        if d_max > st.session_state["hist_date_fin_val"]:
-            st.session_state["hist_date_fin_val"] = d_max
-        if d_min < st.session_state["hist_date_debut_val"]:
-            st.session_state["hist_date_debut_val"] = d_min
+
+        # cohérence début/fin
+        if st.session_state["hist_date_debut_val"] > st.session_state["hist_date_fin_val"]:
+            st.session_state["hist_date_fin_val"] = st.session_state["hist_date_debut_val"]
 
         st.markdown(
             "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
