@@ -2397,7 +2397,7 @@ if active == "surveillance":
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
-                             key="save_prelev", type="primary"):
+                            key="save_prelev", type="primary"):
                     if not p_oper:
                         st.error("⚠️ Veuillez sélectionner un opérateur.")
                     elif str(pt_room).strip().upper() == "A" and not p_isolateur:
@@ -2406,6 +2406,8 @@ if active == "surveillance":
                         st.error("⚠️ Veuillez sélectionner un poste.")
                     else:
                         pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                        is_zone_a = str(pt_room).strip().upper() == "A"
+
                         sample = {
                             "id":                   pid,
                             "label":                selected_point["label"],
@@ -2416,8 +2418,8 @@ if active == "surveillance":
                             "operateur":            p_oper if p_oper else "Non renseigné",
                             "date":                 str(p_date) if p_date else str(today),
                             "archived":             False,
-                            "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                            "poste":                p_poste    if str(pt_room).strip().upper() == "A" else "",
+                            "num_isolateur":        p_isolateur if is_zone_a else "",
+                            "poste":                p_poste     if is_zone_a else "",
                             "commentaire":          p_commentaire if p_commentaire else "",
                             "created_via":          "manuel",
                         }
