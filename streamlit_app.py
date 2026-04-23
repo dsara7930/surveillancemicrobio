@@ -3078,10 +3078,10 @@ if active == "surveillance":
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
 
-                if st.session_state.get("_show_mesures_popup"):
-                    _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
+        if st.session_state.get("_show_mesures_popup"):
+            _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
 
-                st.markdown("#### 🔴 Identifications en attente")
+        st.markdown("#### 🔴 Identifications en attente")
 
         def _j7_done_or_absent(sample_id):
             j7 = next((x for x in st.session_state.schedules
