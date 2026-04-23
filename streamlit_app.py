@@ -3148,7 +3148,17 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
+    
     with tab_ident:
+        from datetime import date
+        _date_prelev = None
+        if smp and smp.get("date"):
+            try:
+                _date_prelev = date.fromisoformat(smp["date"])
+            except Exception:
+                _date_prelev = date.today()
+        else:
+            _date_prelev = date.today()
         # ── Popup mesures correctives post-identification ──────────────────────
         if st.session_state.get("_show_mesures_popup"):
             _render_mesures_correctives(
@@ -3333,12 +3343,12 @@ if active == "surveillance":
                         </div>""", unsafe_allow_html=True)
 
                     # Afficher le commentaire du prélèvement s'il existe
-                    if p_commentaire:
+                    if _comment_prelev:
                         st.markdown(
                             f"<div style='background:#f0f9ff;border:1px solid #bae6fd;"
                             f"border-radius:8px;padding:8px 12px;margin-bottom:6px;"
                             f"font-size:.75rem;color:#0369a1'>"
-                            f"💬 <b>Commentaire prélèvement :</b> {p_commentaire}</div>",
+                            f"💬 <b>Commentaire prélèvement :</b> {_comment_prelev}</div>",
                             unsafe_allow_html=True)
 
                     ic1, ic2 = st.columns([3, 1])
