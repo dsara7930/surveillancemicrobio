@@ -2374,94 +2374,70 @@ if active == "surveillance":
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...",
                                                  height=70, key="new_prelev_commentaire")
 
-                # Initialisation pour éviter les NameError
                 p_isolateur = ""
-                p_poste = ""
-
-                # Bloc spécifique classe A
+                p_poste     = "Poste 1"
                 if str(pt_room).strip().upper() == "A":
                     st.markdown(
                         "<div style='background:#fef9c3;border:1px solid #fde047;border-radius:8px;"
                         "padding:10px 14px;margin-top:8px'>"
                         "<div style='font-size:.7rem;font-weight:700;color:#854d0e;margin-bottom:8px'>"
                         "🔬 Paramètres Zone Classe A</div>",
-                        unsafe_allow_html=True
-                    )
-
+                        unsafe_allow_html=True)
                     iso_col, poste_col = st.columns(2)
-
                     with iso_col:
-                        p_isolateur = st.radio(
-                            "Isolateur",
-                            ["Iso 16/0724", "Iso 14/07169"],
-                            index=None,
-                            horizontal=True,
-                            key="new_prelev_isolateur"
-                        )
-
+                        p_isolateur = st.radio("Isolateur",
+                                               ["Iso 16/0724", "Iso 14/07169"],
+                                               index=None, horizontal=True,
+                                               key="new_prelev_isolateur")
                     with poste_col:
-                        p_poste = st.radio(
-                            "Poste",
-                            ["Poste 1", "Poste 2", "Commun"],
-                            index=None,
-                            horizontal=True,
-                            key="new_prelev_poste"
-                        )
-
+                        p_poste = st.radio("Poste",
+                                           ["Poste 1", "Poste 2", "Commun"],
+                                           index=None, horizontal=True,
+                                           key="new_prelev_poste")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-
-                # Bouton d'enregistrement
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
-                            key="save_prelev", type="primary"):
-
+                             key="save_prelev", type="primary"):
                     if not p_oper:
                         st.error("⚠️ Veuillez sélectionner un opérateur.")
-                        st.stop()  # 🔴 BLOQUE ICI
-
-                    if str(pt_room).strip().upper() == "A" and not p_isolateur:
+                    elif str(pt_room).strip().upper() == "A" and not p_isolateur:
                         st.error("⚠️ Veuillez sélectionner un isolateur.")
-                        st.stop()
-
-                    if str(pt_room).strip().upper() == "A" and not p_poste:
+                    elif str(pt_room).strip().upper() == "A" and not p_poste:
                         st.error("⚠️ Veuillez sélectionner un poste.")
-                        st.stop()
-
-                    # 👉 ce code ne sera exécuté QUE si tout est OK
-                    pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
-
-                    sample = {
-                        "id": pid,
-                        "label": selected_point["label"],
-                        "type": selected_point.get("type"),
-                        "gelose": selected_point.get("gelose", "—"),
-                        "room_class": selected_point.get("room_class", ""),
-                        "location_criticality": pt_loc_crit,
-                        "operateur": p_oper if p_oper else "Non renseigné",
-                        "date": str(p_date) if p_date else str(today),
-                        "archived": False,
-                        "num_isolateur": p_isolateur if str(pt_room).strip().upper() == "A" else "",
-                        "poste": p_poste if str(pt_room).strip().upper() == "A" else "",
-                        "commentaire": p_commentaire if p_commentaire else "",
-                        "created_via": "manuel",
-                    }
-                    st.session_state.prelevements.append(sample)
-                    save_prelevements(st.session_state.prelevements)
-                    for when, due in [("J2", j2_date_calc), ("J7", j7_date_calc)]:
-                        st.session_state.schedules.append({
-                            "id":        f"sch_{pid}_{when}",
-                            "sample_id": pid,
-                            "label":     sample["label"],
-                            "due_date":  due.isoformat(),
-                            "when":      when,
-                            "status":    "pending",
-                        })
-                    save_schedules(st.session_state.schedules)
-                    st.success(
-                        f"✅ **{sample['label']}** enregistré !\n"
-                        f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                        f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}"
-                    )
+                    else:
+                        pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
+                        sample = {
+                            "id":                   pid,
+                            "label":                selected_point["label"],
+                            "type":                 selected_point.get("type"),
+                            "gelose":               selected_point.get("gelose", "—"),
+                            "room_class":           selected_point.get("room_class", ""),
+                            "location_criticality": pt_loc_crit,
+                            "operateur":            p_oper if p_oper else "Non renseigné",
+                            "date":                 str(p_date) if p_date else str(today),
+                            "archived":             False,
+                            "num_isolateur":        p_isolateur if str(pt_room).strip().upper() == "A" else "",
+                            "poste":                p_poste    if str(pt_room).strip().upper() == "A" else "",
+                            "commentaire":          p_commentaire if p_commentaire else "",
+                            "created_via":          "manuel",
+                        }
+                        st.session_state.prelevements.append(sample)
+                        save_prelevements(st.session_state.prelevements)
+                        for when, due in [("J2", j2_date_calc), ("J7", j7_date_calc)]:
+                            st.session_state.schedules.append({
+                                "id":        f"sch_{pid}_{when}",
+                                "sample_id": pid,
+                                "label":     sample["label"],
+                                "due_date":  due.isoformat(),
+                                "when":      when,
+                                "status":    "pending",
+                            })
+                        save_schedules(st.session_state.schedules)
+                        st.success(
+                            f"✅ **{sample['label']}** enregistré !\n"
+                            f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
+                            f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}"
+                        )
 
                 st.divider()
                 st.markdown("#### 📋 Prélèvements en cours")
