@@ -2445,23 +2445,23 @@ if active == "surveillance":
                         "commentaire": p_commentaire if p_commentaire else "",
                         "created_via": "manuel",
                     }
-                        st.session_state.prelevements.append(sample)
-                        save_prelevements(st.session_state.prelevements)
-                        for when, due in [("J2", j2_date_calc), ("J7", j7_date_calc)]:
-                            st.session_state.schedules.append({
-                                "id":        f"sch_{pid}_{when}",
-                                "sample_id": pid,
-                                "label":     sample["label"],
-                                "due_date":  due.isoformat(),
-                                "when":      when,
-                                "status":    "pending",
-                            })
-                        save_schedules(st.session_state.schedules)
-                        st.success(
-                            f"✅ **{sample['label']}** enregistré !\n"
-                            f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
-                            f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}"
-                        )
+                    st.session_state.prelevements.append(sample)
+                    save_prelevements(st.session_state.prelevements)
+                    for when, due in [("J2", j2_date_calc), ("J7", j7_date_calc)]:
+                        st.session_state.schedules.append({
+                            "id":        f"sch_{pid}_{when}",
+                            "sample_id": pid,
+                            "label":     sample["label"],
+                            "due_date":  due.isoformat(),
+                            "when":      when,
+                            "status":    "pending",
+                        })
+                    save_schedules(st.session_state.schedules)
+                    st.success(
+                        f"✅ **{sample['label']}** enregistré !\n"
+                        f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
+                        f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}"
+                    )
 
                 st.divider()
                 st.markdown("#### 📋 Prélèvements en cours")
