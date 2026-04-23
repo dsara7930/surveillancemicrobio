@@ -2415,10 +2415,9 @@ if active == "surveillance":
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
                             key="save_prelev", type="primary"):
 
-                    # Vérifications
                     if not p_oper:
-                        st.error("⚠️ Il faut sélectionner un préleveur.")
-                        st.stop()
+                        st.error("⚠️ Veuillez sélectionner un opérateur.")
+                        st.stop()  # 🔴 BLOQUE ICI
 
                     if str(pt_room).strip().upper() == "A" and not p_isolateur:
                         st.error("⚠️ Veuillez sélectionner un isolateur.")
@@ -2428,7 +2427,7 @@ if active == "surveillance":
                         st.error("⚠️ Veuillez sélectionner un poste.")
                         st.stop()
 
-                    # Création du prélèvement
+                    # 👉 ce code ne sera exécuté QUE si tout est OK
                     pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
 
                     sample = {
