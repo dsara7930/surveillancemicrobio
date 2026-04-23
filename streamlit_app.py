@@ -3333,7 +3333,7 @@ if active == "surveillance":
                         </div>""", unsafe_allow_html=True)
 
                     # Afficher le commentaire du prélèvement s'il existe
-                    if _comment_prelev:
+                    if p_commentaire:
                         st.markdown(
                             f"<div style='background:#f0f9ff;border:1px solid #bae6fd;"
                             f"border-radius:8px;padding:8px 12px;margin-bottom:6px;"
