@@ -2952,114 +2952,96 @@ if active == "surveillance":
             else:
                 st.markdown("<div style='font-size:.8rem;color:#94a3b8;font-style:italic'>Aucune mesure corrective configurée.</div>", unsafe_allow_html=True)
 
-            st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
-
-            # ── Commentaire imprimable ────────────────────────────────────
-            _comment_key = f"mc_comment_{key_suffix}"
-            st.markdown(
-                "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;"
-                "padding:12px 16px;margin-top:10px;margin-bottom:10px'>"
-                "<div style='font-size:.78rem;font-weight:700;color:#1e40af;margin-bottom:6px'>"
-                "💬 Commentaire (inclus dans le PDF)</div>",
-                unsafe_allow_html=True,
-            )
-            _comment_val = st.text_area(
-                "Commentaire",
-                value=st.session_state.get(_comment_key, ""),
-                placeholder="Ex : Nettoyage renforcé effectué, appel technicien, procédure X appliquée…",
-                height=90,
-                key=_comment_key,
-                label_visibility="collapsed",
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
                 # ── Génération PDF mesures correctives ───────────────────────────────────
-            def _gen_pdf_mesures(pop_data, mesures, commentaire=""):
-                _st = []
-                from reportlab.lib.pagesizes import A4 as _RL_A4
-                from reportlab.lib.units import cm as rl_cm
-                from reportlab.lib import colors as rlc
-                from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
+            def _gen_pdf_mesures(pop_data, mesures):
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units     import cm as rl_cm
+                from reportlab.lib           import colors as rlc
+                from reportlab.platypus      import (
+                    BaseDocTemplate, Frame, PageTemplate,
+                    Paragraph, Spacer, HRFlowable, Table, TableStyle,
+                )
                 from reportlab.lib.styles import ParagraphStyle
                 from io import BytesIO
+
+                buf   = BytesIO()
+                A4_W, A4_H = A4
+                MARGIN = 1.8 * rl_cm
+
+                s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
+                s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
+                s_val    = ParagraphStyle("mc_v", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
+                s_mhead  = ParagraphStyle("mc_mh",fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
+                s_item   = ParagraphStyle("mc_i", fontName="Helvetica",       fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+                s_footer = ParagraphStyle("mc_f", fontName="Helvetica",       fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
+
+                doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
+                                        topMargin=MARGIN, bottomMargin=MARGIN)
+                frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
+                            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+                doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
+
+                _status_txt = "🚨 ACTION REQUISE" if pop_data["status"] == "action" else "⚠️ ALERTE"
+                _status_col = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
                 from datetime import datetime as _dtn
+                _now_str = _dtn.now().strftime("%d/%m/%Y %H:%M")
 
-                _buf   = BytesIO()
-                _W, _H = 595.27, 841.89
-                _M     = 1.8 * rl_cm
+                story = [
+                    Paragraph("FICHE MESURES CORRECTIVES", s_title),
+                    Paragraph(f"MicroSurveillance URC — Généré le {_now_str}", s_sub),
+                    HRFlowable(width="100%", thickness=1.5, color=_status_col, spaceAfter=10),
+                ]
 
-                s_title  = ParagraphStyle("mc_t",  fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
-                s_sub    = ParagraphStyle("mc_s",  fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
-                s_val    = ParagraphStyle("mc_v",  fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
-                s_mhead  = ParagraphStyle("mc_mh", fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
-                s_item   = ParagraphStyle("mc_i",  fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
-                s_note   = ParagraphStyle("mc_n",  fontName="Helvetica-Oblique", fontSize=9, leading=12, textColor=rlc.HexColor("#1e40af"), leftIndent=10, spaceAfter=5)
-                s_footer = ParagraphStyle("mc_f",  fontName="Helvetica",      fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
-
-                _doc   = BaseDocTemplate(_buf, pagesize=_RL_A4, leftMargin=_M, rightMargin=_M, topMargin=_M, bottomMargin=_M)
-                _frame = Frame(_M, _M, _W - 2*_M, _H - 2*_M, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-                _doc.addPageTemplates([PageTemplate(id="main", frames=[_frame])])
-
-                _sc  = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
-                _stx = "ACTION REQUISE" if pop_data["status"] == "action" else "ALERTE"
-                _now = _dtn.now().strftime("%d/%m/%Y %H:%M")
-
-                _st.append(Paragraph("FICHE MESURES CORRECTIVES", s_title))
-                _st.append(Paragraph(f"MicroSurveillance URC — Généré le {_now}", s_sub))
-                _st.append(HRFlowable(width="100%", thickness=1.5, color=_sc, spaceAfter=10))
-
-                _tbl = Table(
-                    [["Statut",   _stx],
-                     ["Point",    pop_data.get("label", "—")],
-                     ["Germe",    pop_data.get("germ", "—")],
-                     ["UFC",      str(pop_data.get("ufc", "—"))],
-                     ["Score",    str(pop_data.get("total_score", "—"))],
-                     ["Lieu Nv.", str(pop_data.get("loc_criticality", "—"))]],
-                    colWidths=[4*rl_cm, _W - 2*_M - 4*rl_cm]
-                )
-                _tbl.setStyle(TableStyle([
-                    ("FONTNAME",       (0,0),(0,-1), "Helvetica-Bold"),
-                    ("FONTNAME",       (1,0),(1,-1), "Helvetica"),
-                    ("FONTSIZE",       (0,0),(-1,-1), 9),
-                    ("TEXTCOLOR",      (0,0),(0,-1),  rlc.HexColor("#64748b")),
-                    ("TEXTCOLOR",      (1,0),(1,0),   _sc),
-                    ("FONTNAME",       (1,0),(1,0),   "Helvetica-Bold"),
-                    ("ROWBACKGROUNDS", (0,0),(-1,-1), [rlc.HexColor("#f8fafc"), rlc.white]),
-                    ("LEFTPADDING",    (0,0),(-1,-1), 8),
-                    ("RIGHTPADDING",   (0,0),(-1,-1), 8),
-                    ("TOPPADDING",     (0,0),(-1,-1), 5),
-                    ("BOTTOMPADDING",  (0,0),(-1,-1), 5),
-                    ("GRID",           (0,0),(-1,-1), 0.5, rlc.HexColor("#e2e8f0")),
+                # ── Tableau résumé ────────────────────────────────────────────────────
+                tbl_data = [
+                    ["Statut",    _status_txt],
+                    ["Point",     pop_data.get("label", "—")],
+                    ["Germe",     pop_data.get("germ", "—")],
+                    ["UFC",       str(pop_data.get("ufc", "—"))],
+                    ["Score",     str(pop_data.get("total_score", "—"))],
+                    ["Lieu Nv.",  str(pop_data.get("loc_criticality", "—"))],
+                ]
+                tbl = Table(tbl_data, colWidths=[4*rl_cm, A4_W - 2*MARGIN - 4*rl_cm])
+                tbl.setStyle(TableStyle([
+                    ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
+                    ("FONTSIZE",      (0, 0), (-1, -1), 9),
+                    ("TEXTCOLOR",     (0, 0), (0, -1), rlc.HexColor("#64748b")),
+                    ("TEXTCOLOR",     (1, 0), (1, 0),  _status_col),
+                    ("FONTNAME",      (1, 0), (1, 0),  "Helvetica-Bold"),
+                    ("ROWBACKGROUNDS",(0, 0), (-1, -1), [rlc.HexColor("#f8fafc"), rlc.white]),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("GRID",          (0, 0), (-1, -1), 0.5, rlc.HexColor("#e2e8f0")),
                 ]))
-                _st.append(_tbl)
-                _st.append(Spacer(1, 14))
+                story += [tbl, Spacer(1, 14)]
 
-                _st.append(Paragraph("Mesures correctives applicables", s_mhead))
+                # ── Mesures correctives ───────────────────────────────────────────────
+                story.append(Paragraph("📋 Mesures correctives applicables", s_mhead))
                 if mesures:
-                    for _i, _m in enumerate(mesures, 1):
-                        _txt = f"{_i}. {_m['text']}"
-                        if commentaire and commentaire.strip() and _i == len(mesures):
-                            _txt += f" — Note : {commentaire.strip()}"
-                        _st.append(Paragraph(_txt, s_item))
+                    for idx_m, m in enumerate(mesures, 1):
+                        story.append(Paragraph(f"{idx_m}. {m['text']}", s_item))
                 else:
-                    _txt = "Aucune mesure corrective configurée."
-                    if commentaire and commentaire.strip():
-                        _txt += f" — Note : {commentaire.strip()}"
-                    _st.append(Paragraph(_txt, s_val))
+                    story.append(Paragraph("Aucune mesure corrective configurée.", s_val))
 
-                _st.append(Spacer(1, 20))
-                _st.append(HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8))
-                _st.append(Paragraph("Préleveur / Responsable : ________________________________", s_val))
-                _st.append(Spacer(1, 6))
-                _st.append(Paragraph("Date de traitement :       ________________________________", s_val))
-                _st.append(Spacer(1, 6))
-                _st.append(Paragraph("Signature :                 ________________________________", s_val))
-                _st.append(Spacer(1, 20))
-                _st.append(Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer))
+                story += [
+                    Spacer(1, 20),
+                    HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
+                    Paragraph("Préleveur / Responsable : ________________________________", s_val),
+                    Spacer(1, 6),
+                    Paragraph("Date de traitement :    ________________________________", s_val),
+                    Spacer(1, 6),
+                    Paragraph("Signature :              ________________________________", s_val),
+                    Spacer(1, 20),
+                    Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer),
+                ]
 
-                _doc.build(_st)
-                _buf.seek(0)
-                return _buf.getvalue()
+                doc.build(story)
+                buf.seek(0)
+                return buf.getvalue()
 
             # ── Boutons ───────────────────────────────────────────────────────────────
             _b1, _b2, _b3 = st.columns([3, 2, 1])
@@ -3074,8 +3056,7 @@ if active == "surveillance":
                 _pdf_key = f"_pdf_mesures_{key_suffix}"
                 if st.button("🖨️ Imprimer (PDF)", use_container_width=True, key=f"alert_print_{key_suffix}"):
                     try:
-                        _comment_to_print = st.session_state.get(f"mc_comment_{key_suffix}", "")
-                        st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures, _comment_to_print)
+                        st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures)
                     except ImportError:
                         st.error("❌ ReportLab non installé.")
                     except Exception as _pe:
