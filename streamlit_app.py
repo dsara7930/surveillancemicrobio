@@ -4930,21 +4930,44 @@ if active == "analyse":
             })
             for r in surv_f:
                 pt     = r.get("prelevement","—")
-                ufc    = int(r.get("ufc",0) or 0)
                 germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
                 st_r   = r.get("status","ok")
                 ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
                 ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
-                pts_stats[pt]["total"] += 1
-                if ufc > 0 and germ not in ("Négatif","—",""):
+
+                j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
+                j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
+
+                if j2_pos:
+                    # ── 1 seul prélèvement positif (J2 prime sur J7)
+                    pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["positives"] += 1
                     pts_stats[pt]["germes"][germ] += 1
-                else:
+                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                    elif st_r == "action": pts_stats[pt]["actions"] += 1
+                    pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
+                    if ufc_j7 > 0:
+                        pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
+
+                elif not j2_pos and not j7_pos:
+                    # ── 1 prélèvement négatif (J2 et J7 négatifs)
+                    pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["negatives"] += 1
-                if st_r == "alert":    pts_stats[pt]["alertes"]  += 1
-                elif st_r == "action": pts_stats[pt]["actions"]  += 1
-                if ufc_j2 > 0: pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
-                if ufc_j7 > 0: pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
+                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                    elif st_r == "action": pts_stats[pt]["actions"] += 1
+
+                else:
+                    # ── J2 négatif + J7 positif → 2 prélèvements distincts
+                    # Prélèvement 1 : négatif (J2)
+                    pts_stats[pt]["total"]     += 1
+                    pts_stats[pt]["negatives"] += 1
+                    # Prélèvement 2 : positif (J7)
+                    pts_stats[pt]["total"]     += 1
+                    pts_stats[pt]["positives"] += 1
+                    pts_stats[pt]["germes"][germ] += 1
+                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                    elif st_r == "action": pts_stats[pt]["actions"] += 1
+                    pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
             sorted_pts   = sorted(pts_stats.items(), key=lambda x: -x[1]["positives"])
             chart_labels = [p[:22]+"…" if len(p)>22 else p for p,_ in sorted_pts]
@@ -5100,25 +5123,64 @@ if active == "analyse":
                       new Chart(document.getElementById('evolChart'),{{
                         type:'line',plugins:[thr],
                         data:{{labels:d.dates,datasets:[
-                          {{label:'🔵 J2',data:d.j2,borderColor:'#0ea5e9',
-                            backgroundColor:'#0ea5e922',borderWidth:2,pointRadius:4,tension:0.3,fill:false}},
-                          {{label:'🟣 J7',data:d.j7,borderColor:'#8b5cf6',
-                            backgroundColor:'#8b5cf622',borderWidth:2,pointRadius:4,tension:0.3,fill:false}}
-                        ]}},
-                        options:{{responsive:true,maintainAspectRatio:false,
-                          interaction:{{mode:'index',intersect:false}},
-                          plugins:{{legend:{{position:'top',labels:{{font:{{size:11}},boxWidth:14}}}},
-                            tooltip:{{callbacks:{{footer:items=>{{
-                              const v=items[0]?.parsed?.y??0;
-                              return v>=d.action?'🚨 ACTION':v>=d.alerte?'⚠️ ALERTE':'✅ Conforme';
-                            }}}}}}}},
-                          scales:{{
-                            x:{{ticks:{{font:{{size:10}},maxRotation:45}}}},
-                            y:{{beginAtZero:true,
-                              title:{{display:true,text:'UFC/m³',font:{{size:10}}}},
-                              ticks:{{font:{{size:10}}}}}}
-                          }}
-                        }}
+                            {{
+                                label:'🔵 J2',
+                                data: d.j2,
+                                borderColor:'#0ea5e9',
+                                backgroundColor:'#0ea5e922',
+                                borderWidth:2,
+                                tension:0.3,
+                                fill:false,
+                                pointRadius: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 6 : 4),
+                                pointStyle:  d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 'crossRot' : 'circle'),
+                                pointBorderColor: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? '#0ea5e9' : '#0ea5e9'),
+                                pointBorderWidth: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 2.5 : 1.5),
+                            }},
+                            {{
+                                label:'🟣 J7',
+                                data: d.j7,
+                                borderColor:'#8b5cf6',
+                                backgroundColor:'#8b5cf622',
+                                borderWidth:2,
+                                tension:0.3,
+                                fill:false,
+                                pointRadius: d.j7.map((v,i) => (v>0 && d.j2[i]===0) ? 7 : 4),
+                                pointStyle:  d.j7.map((v,i) => (v>0 && d.j2[i]===0) ? 'star' : 'circle'),
+                                pointBorderColor: '#8b5cf6',
+                                pointBorderWidth: 1.5,
+                            }}
+                            ]}},
+                        options:{{
+                            responsive:true, maintainAspectRatio:false,
+                            interaction:{{mode:'index', intersect:false}},
+                            plugins:{{
+                                legend:{{position:'top', labels:{{font:{{size:11}}, boxWidth:14}}}},
+                                tooltip:{{
+                                callbacks:{{
+                                    label: function(item) {{
+                                    const label = item.dataset.label;
+                                    const val   = item.parsed.y;
+                                    const note  = (val === 0 && label.includes('J2'))
+                                                    ? ' (négatif J2)'
+                                                    : (val === 0 ? '' : ' UFC/m³');
+                                    return label + ': ' + val + note;
+                                    }},
+                                    footer: items => {{
+                                    const v = Math.max(...items.map(i => i.parsed.y));
+                                    return v >= d.action ? '🚨 ACTION' : v >= d.alerte ? '⚠️ ALERTE' : '✅ Conforme';
+                                    }}
+                                }}
+                                }}
+                            }},
+                            scales:{{
+                                x:{{ticks:{{font:{{size:10}}, maxRotation:45}}}},
+                                y:{{
+                                beginAtZero:true,
+                                title:{{display:true, text:'UFC/m³', font:{{size:10}}}},
+                                ticks:{{font:{{size:10}}}}
+                                }}
+                            }}
+                            }}
                       }});
                     }})();
                     </script>"""
@@ -5140,14 +5202,31 @@ if active == "analyse":
             germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
             total_pos=0
             for r in surv_f:
-                germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
-                if germ in ("Négatif","—","") or int(r.get("ufc",0) or 0)==0: continue
-                total_pos+=1
-                germs_stats[germ]["count"]+=1
-                germs_stats[germ]["ufc_sum"]+=int(r.get("ufc",0) or 0)
-                germs_stats[germ]["points"].add(r.get("prelevement","—"))
-                if germs_stats[germ]["criticite"]==0:
-                    germs_stats[germ]["criticite"]=_get_criticite(germ)
+                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+
+                j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
+                j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
+
+                if j2_pos:
+                    # 1 résultat positif J2
+                    total_pos += 1
+                    germs_stats[germ]["count"]   += 1
+                    germs_stats[germ]["ufc_sum"] += ufc_j2
+                    germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                    if germs_stats[germ]["criticite"] == 0:
+                        germs_stats[germ]["criticite"] = _get_criticite(germ)
+
+                elif not j2_pos and j7_pos:
+                    # J2 négatif + J7 positif → compte comme 1 résultat positif supplémentaire (J7)
+                    total_pos += 1
+                    germs_stats[germ]["count"]   += 1
+                    germs_stats[germ]["ufc_sum"] += ufc_j7
+                    germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                    if germs_stats[germ]["criticite"] == 0:
+                        germs_stats[germ]["criticite"] = _get_criticite(germ)
+                # Sinon (J2 négatif + J7 négatif) : on ignore, pas de germe à comptabiliser
             if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
             else:
