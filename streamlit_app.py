@@ -3024,20 +3024,35 @@ if active == "surveillance":
             with _b1:
                 if st.button("✅ Compris — Mesures prises en charge", use_container_width=True,
                             type="primary", key=f"alert_ok_{key_suffix}"):
-                    # ── Sauvegarder mc_statut dans la surveillance ────────
-                    _sid_popup = pop_data.get("sample_id") or pop_data.get("label")
+
+                    _sid_popup  = pop_data.get("sample_id") or pop_data.get("label") or pop_data.get("prelevement")
+                    _date_popup = pop_data.get("date", "")
+                    _germ_popup = pop_data.get("germ", "") or pop_data.get("germ_saisi", "") or pop_data.get("germ_match", "")
+                    _ufc_popup  = pop_data.get("ufc")
+
                     for _ri, _sr in enumerate(st.session_state.surveillance):
-                        _match_sid = (
-                            _sr.get("sample_id") == _sid_popup
-                            or _sr.get("prelevement") == pop_data.get("label")
+                        _match = (
+                            (
+                                _sr.get("prelevement") == _sid_popup
+                                or _sr.get("sample_id") == _sid_popup
+                                or _sr.get("label")     == _sid_popup
+                            )
+                            and (_sr.get("date", "") == _date_popup or not _date_popup)
+                            and (
+                                _sr.get("germ_saisi", "") == _germ_popup
+                                or _sr.get("germ_match", "") == _germ_popup
+                                or not _germ_popup
+                            )
+                            and (_sr.get("ufc") == _ufc_popup or _ufc_popup is None)
+                            and _sr.get("status") in ("alert", "action")
                         )
-                        if _match_sid and _sr.get("status") in ("alert", "action"):
-                            if st.session_state.surveillance[_ri].get("mc_statut") != "fait":
-                                from datetime import datetime as _dt2
-                                st.session_state.surveillance[_ri]["mc_statut"] = "fait"
-                                st.session_state.surveillance[_ri]["mc_detail"] = ""
-                                st.session_state.surveillance[_ri]["mc_date"]   = _dt2.now().strftime("%d/%m/%Y %H:%M")
+                        if _match:
+                            from datetime import datetime as _dt2
+                            st.session_state.surveillance[_ri]["mc_statut"] = "fait"
+                            st.session_state.surveillance[_ri]["mc_detail"] = ""
+                            st.session_state.surveillance[_ri]["mc_date"]   = _dt2.now().strftime("%d/%m/%Y %H:%M")
                             break
+
                     save_surveillance(st.session_state.surveillance)
                     _supa_upsert(
                         "surveillance",
@@ -5928,11 +5943,12 @@ if active == "parametres":
         }
 
         # ── germ_type extrait dynamiquement depuis st.session_state.germs ─────────
+        # APRÈS
         _familles_raw = sorted({
             g["path"][1]
             for g in st.session_state.get("germs", [])
             if len(g.get("path", [])) > 1
-        })
+        }) or ["Bactéries", "Champignons"]  # fallback si germs pas encore chargé
         _fam_key_map   = {"Bactéries": "bacteria", "Champignons": "fungi"}
         _fam_emoji_map = {"Bactéries": "🦠",       "Champignons": "🍄"}
         _fam_color_map = {"bacteria": "#0284c7",   "fungi": "#7c3aed"}
