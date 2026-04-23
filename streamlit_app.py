@@ -3048,6 +3048,25 @@ if active == "surveillance":
             with _b1:
                 if st.button("✅ Compris — Mesures prises en charge", use_container_width=True,
                             type="primary", key=f"alert_ok_{key_suffix}"):
+                    # ── Sauvegarder mc_statut dans la surveillance ────────
+                    _sid_popup = pop_data.get("sample_id") or pop_data.get("label")
+                    for _ri, _sr in enumerate(st.session_state.surveillance):
+                        _match_sid = (
+                            _sr.get("sample_id") == _sid_popup
+                            or _sr.get("prelevement") == pop_data.get("label")
+                        )
+                        if _match_sid and _sr.get("status") in ("alert", "action"):
+                            if st.session_state.surveillance[_ri].get("mc_statut") != "fait":
+                                from datetime import datetime as _dt2
+                                st.session_state.surveillance[_ri]["mc_statut"] = "fait"
+                                st.session_state.surveillance[_ri]["mc_detail"] = ""
+                                st.session_state.surveillance[_ri]["mc_date"]   = _dt2.now().strftime("%d/%m/%Y %H:%M")
+                            break
+                    save_surveillance(st.session_state.surveillance)
+                    _supa_upsert(
+                        "surveillance",
+                        json.dumps(st.session_state.surveillance, ensure_ascii=False),
+                    )
                     st.session_state["_last_mesures_popup"] = pop_data
                     st.session_state["_show_mesures_popup"] = None
                     st.rerun()
