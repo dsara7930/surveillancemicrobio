@@ -2975,15 +2975,11 @@ if active == "surveillance":
 
                 # ── Génération PDF mesures correctives ───────────────────────────────────
             def _gen_pdf_mesures(pop_data, mesures, commentaire=""):
-                _st = []  # ← PREMIÈRE LIGNE, avant tout import
-
+                _st = []
                 from reportlab.lib.pagesizes import A4 as _RL_A4
-                from reportlab.lib.units     import cm as rl_cm
-                from reportlab.lib           import colors as rlc
-                from reportlab.platypus      import (
-                    BaseDocTemplate, Frame, PageTemplate,
-                    Paragraph, Spacer, HRFlowable, Table, TableStyle,
-                )
+                from reportlab.lib.units import cm as rl_cm
+                from reportlab.lib import colors as rlc
+                from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
                 from reportlab.lib.styles import ParagraphStyle
                 from io import BytesIO
                 from datetime import datetime as _dtn
@@ -2992,18 +2988,16 @@ if active == "surveillance":
                 _W, _H = 595.27, 841.89
                 _M     = 1.8 * rl_cm
 
-                s_title   = ParagraphStyle("mc_t",   fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
-                s_sub     = ParagraphStyle("mc_s",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
-                s_val     = ParagraphStyle("mc_v",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
-                s_mhead   = ParagraphStyle("mc_mh",  fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
-                s_item    = ParagraphStyle("mc_i",   fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
-                s_footer  = ParagraphStyle("mc_f",   fontName="Helvetica",      fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
-                s_comment = ParagraphStyle("mc_com", fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+                s_title  = ParagraphStyle("mc_t",  fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                s_sub    = ParagraphStyle("mc_s",  fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
+                s_val    = ParagraphStyle("mc_v",  fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
+                s_mhead  = ParagraphStyle("mc_mh", fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
+                s_item   = ParagraphStyle("mc_i",  fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+                s_note   = ParagraphStyle("mc_n",  fontName="Helvetica-Oblique", fontSize=9, leading=12, textColor=rlc.HexColor("#1e40af"), leftIndent=10, spaceAfter=5)
+                s_footer = ParagraphStyle("mc_f",  fontName="Helvetica",      fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
 
-                _doc   = BaseDocTemplate(_buf, pagesize=_RL_A4, leftMargin=_M, rightMargin=_M,
-                                         topMargin=_M, bottomMargin=_M)
-                _frame = Frame(_M, _M, _W - 2*_M, _H - 2*_M,
-                               leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+                _doc   = BaseDocTemplate(_buf, pagesize=_RL_A4, leftMargin=_M, rightMargin=_M, topMargin=_M, bottomMargin=_M)
+                _frame = Frame(_M, _M, _W - 2*_M, _H - 2*_M, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
                 _doc.addPageTemplates([PageTemplate(id="main", frames=[_frame])])
 
                 _sc  = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
@@ -3016,11 +3010,11 @@ if active == "surveillance":
 
                 _tbl = Table(
                     [["Statut",   _stx],
-                     ["Point",    pop_data.get("label","—")],
-                     ["Germe",    pop_data.get("germ","—")],
-                     ["UFC",      str(pop_data.get("ufc","—"))],
-                     ["Score",    str(pop_data.get("total_score","—"))],
-                     ["Lieu Nv.", str(pop_data.get("loc_criticality","—"))]],
+                     ["Point",    pop_data.get("label", "—")],
+                     ["Germe",    pop_data.get("germ", "—")],
+                     ["UFC",      str(pop_data.get("ufc", "—"))],
+                     ["Score",    str(pop_data.get("total_score", "—"))],
+                     ["Lieu Nv.", str(pop_data.get("loc_criticality", "—"))]],
                     colWidths=[4*rl_cm, _W - 2*_M - 4*rl_cm]
                 )
                 _tbl.setStyle(TableStyle([
@@ -3043,14 +3037,15 @@ if active == "surveillance":
                 _st.append(Paragraph("Mesures correctives applicables", s_mhead))
                 if mesures:
                     for _i, _m in enumerate(mesures, 1):
-                        _st.append(Paragraph(f"{_i}. {_m['text']}", s_item))
+                        _txt = f"{_i}. {_m['text']}"
+                        if commentaire and commentaire.strip() and _i == len(mesures):
+                            _txt += f" — Note : {commentaire.strip()}"
+                        _st.append(Paragraph(_txt, s_item))
                 else:
-                    _st.append(Paragraph("Aucune mesure corrective configurée.", s_val))
-
-                if commentaire and commentaire.strip():
-                    _st.append(Spacer(1, 10))
-                    _st.append(Paragraph("Commentaire", s_mhead))
-                    _st.append(Paragraph(commentaire.strip(), s_comment))
+                    _txt = "Aucune mesure corrective configurée."
+                    if commentaire and commentaire.strip():
+                        _txt += f" — Note : {commentaire.strip()}"
+                    _st.append(Paragraph(_txt, s_val))
 
                 _st.append(Spacer(1, 20))
                 _st.append(HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8))
