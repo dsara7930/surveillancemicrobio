@@ -6742,7 +6742,7 @@ if active == "parametres":
               Formule du score total
             </div>
             <div style="font-size:1rem;color:#e2e8f0;font-weight:700">
-              Score total = <span style="color:#60a5fa">Criticité lieu (1–3)</span>
+              Score total = <span style="color:#60a5fa">Criticité lieu (1–4)</span>
               × <span style="color:#34d399">Pathogénicité (1–3)</span>
               × <span style="color:#fbbf24">Résistance (1–3)</span>
               × <span style="color:#f87171">Dissémination (1–3)</span>
@@ -6750,7 +6750,7 @@ if active == "parametres":
             <div style="font-size:.72rem;color:#64748b;margin-top:8px">
               Score minimum : 1×1×1×1 = <b style="color:#94a3b8">1</b>
               &nbsp;·&nbsp;
-              Score maximum : 3×3×3×3 = <b style="color:#f87171">81</b>
+              Score maximum : 4×3×3×3 = <b style="color:#f87171">108</b>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
