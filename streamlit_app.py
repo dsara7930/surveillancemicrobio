@@ -3338,17 +3338,11 @@ if active == "surveillance":
                         )
                         st.rerun()
 
-                    # ── REMARQUE + DATE IDENTIFICATION ─────────────
+                    # ── REMARQUE─────────────
                     remarque = st.text_area(
                         "Remarque",
                         key=f"rem_{_key}",
                         height=60
-                    )
-
-                    date_id = st.date_input(
-                        "Date identification",
-                        value=_date_prelev,
-                        key=f"date_{_key}"
                     )
 
                     _when_set = set(pg["when_list"])
