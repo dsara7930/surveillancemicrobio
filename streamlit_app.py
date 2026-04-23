@@ -2954,134 +2954,134 @@ if active == "surveillance":
 
             st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
 
-        # ── Génération PDF mesures correctives ───────────────────────────────────
-    def _gen_pdf_mesures(pop_data, mesures):
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units     import cm as rl_cm
-        from reportlab.lib           import colors as rlc
-        from reportlab.platypus      import (
-            BaseDocTemplate, Frame, PageTemplate,
-            Paragraph, Spacer, HRFlowable, Table, TableStyle,
-        )
-        from reportlab.lib.styles import ParagraphStyle
-        from io import BytesIO
+                # ── Génération PDF mesures correctives ───────────────────────────────────
+            def _gen_pdf_mesures(pop_data, mesures):
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units     import cm as rl_cm
+                from reportlab.lib           import colors as rlc
+                from reportlab.platypus      import (
+                    BaseDocTemplate, Frame, PageTemplate,
+                    Paragraph, Spacer, HRFlowable, Table, TableStyle,
+                )
+                from reportlab.lib.styles import ParagraphStyle
+                from io import BytesIO
 
-        buf   = BytesIO()
-        A4_W, A4_H = A4
-        MARGIN = 1.8 * rl_cm
+                buf   = BytesIO()
+                A4_W, A4_H = A4
+                MARGIN = 1.8 * rl_cm
 
-        s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
-        s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
-        s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
-        s_val    = ParagraphStyle("mc_v", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
-        s_mhead  = ParagraphStyle("mc_mh",fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
-        s_item   = ParagraphStyle("mc_i", fontName="Helvetica",       fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
-        s_footer = ParagraphStyle("mc_f", fontName="Helvetica",       fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
+                s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
+                s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
+                s_val    = ParagraphStyle("mc_v", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
+                s_mhead  = ParagraphStyle("mc_mh",fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
+                s_item   = ParagraphStyle("mc_i", fontName="Helvetica",       fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+                s_footer = ParagraphStyle("mc_f", fontName="Helvetica",       fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
 
-        doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
-                                topMargin=MARGIN, bottomMargin=MARGIN)
-        frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
-                    leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
-        doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
+                doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
+                                        topMargin=MARGIN, bottomMargin=MARGIN)
+                frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
+                            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+                doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
 
-        _status_txt = "🚨 ACTION REQUISE" if pop_data["status"] == "action" else "⚠️ ALERTE"
-        _status_col = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
-        from datetime import datetime as _dtn
-        _now_str = _dtn.now().strftime("%d/%m/%Y %H:%M")
+                _status_txt = "🚨 ACTION REQUISE" if pop_data["status"] == "action" else "⚠️ ALERTE"
+                _status_col = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
+                from datetime import datetime as _dtn
+                _now_str = _dtn.now().strftime("%d/%m/%Y %H:%M")
 
-        story = [
-            Paragraph("FICHE MESURES CORRECTIVES", s_title),
-            Paragraph(f"MicroSurveillance URC — Généré le {_now_str}", s_sub),
-            HRFlowable(width="100%", thickness=1.5, color=_status_col, spaceAfter=10),
-        ]
+                story = [
+                    Paragraph("FICHE MESURES CORRECTIVES", s_title),
+                    Paragraph(f"MicroSurveillance URC — Généré le {_now_str}", s_sub),
+                    HRFlowable(width="100%", thickness=1.5, color=_status_col, spaceAfter=10),
+                ]
 
-        # ── Tableau résumé ────────────────────────────────────────────────────
-        tbl_data = [
-            ["Statut",    _status_txt],
-            ["Point",     pop_data.get("label", "—")],
-            ["Germe",     pop_data.get("germ", "—")],
-            ["UFC",       str(pop_data.get("ufc", "—"))],
-            ["Score",     str(pop_data.get("total_score", "—"))],
-            ["Lieu Nv.",  str(pop_data.get("loc_criticality", "—"))],
-        ]
-        tbl = Table(tbl_data, colWidths=[4*rl_cm, A4_W - 2*MARGIN - 4*rl_cm])
-        tbl.setStyle(TableStyle([
-            ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
-            ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
-            ("FONTSIZE",      (0, 0), (-1, -1), 9),
-            ("TEXTCOLOR",     (0, 0), (0, -1), rlc.HexColor("#64748b")),
-            ("TEXTCOLOR",     (1, 0), (1, 0),  _status_col),
-            ("FONTNAME",      (1, 0), (1, 0),  "Helvetica-Bold"),
-            ("ROWBACKGROUNDS",(0, 0), (-1, -1), [rlc.HexColor("#f8fafc"), rlc.white]),
-            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-            ("TOPPADDING",    (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ("GRID",          (0, 0), (-1, -1), 0.5, rlc.HexColor("#e2e8f0")),
-        ]))
-        story += [tbl, Spacer(1, 14)]
+                # ── Tableau résumé ────────────────────────────────────────────────────
+                tbl_data = [
+                    ["Statut",    _status_txt],
+                    ["Point",     pop_data.get("label", "—")],
+                    ["Germe",     pop_data.get("germ", "—")],
+                    ["UFC",       str(pop_data.get("ufc", "—"))],
+                    ["Score",     str(pop_data.get("total_score", "—"))],
+                    ["Lieu Nv.",  str(pop_data.get("loc_criticality", "—"))],
+                ]
+                tbl = Table(tbl_data, colWidths=[4*rl_cm, A4_W - 2*MARGIN - 4*rl_cm])
+                tbl.setStyle(TableStyle([
+                    ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
+                    ("FONTSIZE",      (0, 0), (-1, -1), 9),
+                    ("TEXTCOLOR",     (0, 0), (0, -1), rlc.HexColor("#64748b")),
+                    ("TEXTCOLOR",     (1, 0), (1, 0),  _status_col),
+                    ("FONTNAME",      (1, 0), (1, 0),  "Helvetica-Bold"),
+                    ("ROWBACKGROUNDS",(0, 0), (-1, -1), [rlc.HexColor("#f8fafc"), rlc.white]),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("GRID",          (0, 0), (-1, -1), 0.5, rlc.HexColor("#e2e8f0")),
+                ]))
+                story += [tbl, Spacer(1, 14)]
 
-        # ── Mesures correctives ───────────────────────────────────────────────
-        story.append(Paragraph("📋 Mesures correctives applicables", s_mhead))
-        if mesures:
-            for idx_m, m in enumerate(mesures, 1):
-                story.append(Paragraph(f"{idx_m}. {m['text']}", s_item))
-        else:
-            story.append(Paragraph("Aucune mesure corrective configurée.", s_val))
+                # ── Mesures correctives ───────────────────────────────────────────────
+                story.append(Paragraph("📋 Mesures correctives applicables", s_mhead))
+                if mesures:
+                    for idx_m, m in enumerate(mesures, 1):
+                        story.append(Paragraph(f"{idx_m}. {m['text']}", s_item))
+                else:
+                    story.append(Paragraph("Aucune mesure corrective configurée.", s_val))
 
-        story += [
-            Spacer(1, 20),
-            HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
-            Paragraph("Préleveur / Responsable : ________________________________", s_val),
-            Spacer(1, 6),
-            Paragraph("Date de traitement :    ________________________________", s_val),
-            Spacer(1, 6),
-            Paragraph("Signature :              ________________________________", s_val),
-            Spacer(1, 20),
-            Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer),
-        ]
+                story += [
+                    Spacer(1, 20),
+                    HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
+                    Paragraph("Préleveur / Responsable : ________________________________", s_val),
+                    Spacer(1, 6),
+                    Paragraph("Date de traitement :    ________________________________", s_val),
+                    Spacer(1, 6),
+                    Paragraph("Signature :              ________________________________", s_val),
+                    Spacer(1, 20),
+                    Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer),
+                ]
 
-        doc.build(story)
-        buf.seek(0)
-        return buf.getvalue()
+                doc.build(story)
+                buf.seek(0)
+                return buf.getvalue()
 
-    # ── Boutons ───────────────────────────────────────────────────────────────
-    _b1, _b2, _b3 = st.columns([3, 2, 1])
-    with _b1:
-        if st.button("✅ Compris — Mesures prises en charge", use_container_width=True,
-                    type="primary", key=f"alert_ok_{key_suffix}"):
-            st.session_state["_last_mesures_popup"] = pop_data
-            st.session_state["_show_mesures_popup"] = None
-            st.rerun()
+            # ── Boutons ───────────────────────────────────────────────────────────────
+            _b1, _b2, _b3 = st.columns([3, 2, 1])
+            with _b1:
+                if st.button("✅ Compris — Mesures prises en charge", use_container_width=True,
+                            type="primary", key=f"alert_ok_{key_suffix}"):
+                    st.session_state["_last_mesures_popup"] = pop_data
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
 
-    with _b2:
-        _pdf_key = f"_pdf_mesures_{key_suffix}"
-        if st.button("🖨️ Imprimer (PDF)", use_container_width=True, key=f"alert_print_{key_suffix}"):
-            try:
-                st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures)
-            except ImportError:
-                st.error("❌ ReportLab non installé.")
-            except Exception as _pe:
-                st.error(f"Erreur PDF : {_pe}")
-        if st.session_state.get(_pdf_key):
-            st.download_button(
-                "⬇️ Télécharger la fiche PDF",
-                data=st.session_state[_pdf_key],
-                file_name=f"mesures_correctives_{pop_data.get('label','')[:20].replace(' ','_')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                key=f"alert_dl_{key_suffix}",
-            )
+            with _b2:
+                _pdf_key = f"_pdf_mesures_{key_suffix}"
+                if st.button("🖨️ Imprimer (PDF)", use_container_width=True, key=f"alert_print_{key_suffix}"):
+                    try:
+                        st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures)
+                    except ImportError:
+                        st.error("❌ ReportLab non installé.")
+                    except Exception as _pe:
+                        st.error(f"Erreur PDF : {_pe}")
+                if st.session_state.get(_pdf_key):
+                    st.download_button(
+                        "⬇️ Télécharger la fiche PDF",
+                        data=st.session_state[_pdf_key],
+                        file_name=f"mesures_correctives_{pop_data.get('label','')[:20].replace(' ','_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key=f"alert_dl_{key_suffix}",
+                    )
 
-    with _b3:
-        if st.button("✕ Ignorer", use_container_width=True, key=f"alert_dismiss_{key_suffix}"):
-            st.session_state["_show_mesures_popup"] = None
-            st.rerun()
+            with _b3:
+                if st.button("✕ Ignorer", use_container_width=True, key=f"alert_dismiss_{key_suffix}"):
+                    st.session_state["_show_mesures_popup"] = None
+                    st.rerun()
 
-        if st.session_state.get("_show_mesures_popup"):
-            _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
+                if st.session_state.get("_show_mesures_popup"):
+                    _render_alerte_mesures(st.session_state["_show_mesures_popup"], "main")
 
-        st.markdown("#### 🔴 Identifications en attente")
+                st.markdown("#### 🔴 Identifications en attente")
 
         def _j7_done_or_absent(sample_id):
             j7 = next((x for x in st.session_state.schedules
