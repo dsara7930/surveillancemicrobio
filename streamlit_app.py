@@ -3332,12 +3332,23 @@ if active == "surveillance":
                         </div>
                         </div>""", unsafe_allow_html=True)
 
+                    # Afficher le commentaire du prélèvement s'il existe
+                    if _comment_prelev:
+                        st.markdown(
+                            f"<div style='background:#f0f9ff;border:1px solid #bae6fd;"
+                            f"border-radius:8px;padding:8px 12px;margin-bottom:6px;"
+                            f"font-size:.75rem;color:#0369a1'>"
+                            f"💬 <b>Commentaire prélèvement :</b> {p_commentaire}</div>",
+                            unsafe_allow_html=True)
+
                     ic1, ic2 = st.columns([3, 1])
                     with ic1:
                         remarque = st.text_area("Remarque", height=68, key=f"rem_id_{_key}")
                     with ic2:
-                        date_id = st.date_input("Date identification", value=datetime.today(),
-                                                key=f"date_id_{_key}")
+                        date_id = st.date_input(
+                            "Date identification",
+                            value=_date_prelev,   # ← date du prélèvement
+                            key=f"date_id_{_key}")
 
                     _when_set = set(pg["when_list"])
                     _has_j7   = "J7" in _when_set
