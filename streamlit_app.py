@@ -2988,18 +2988,11 @@ if active == "surveillance":
                 buf   = BytesIO()
                 A4_W, A4_H = A4
                 MARGIN = 1.8 * rl_cm
-                # ── Commentaire ───────────────────────────────────────────────────────
+                # ── Commentaire ───────────────────────────────────────────
                 if commentaire and commentaire.strip():
-                    story += [
-                        Spacer(1, 10),
-                        Paragraph("💬 Commentaire", s_mhead),
-                        Paragraph(commentaire.strip(), ParagraphStyle(
-                            "mc_com", fontName="Helvetica", fontSize=9, leading=13,
-                            textColor=rlc.HexColor("#0f172a"),
-                            leftIndent=10, spaceAfter=5,
-                            backColor=rlc.HexColor("#f0f9ff"),
-                        )),
-                    ]
+                    story.append(Spacer(1, 10))
+                    story.append(Paragraph("💬 Commentaire", s_mhead))
+                    story.append(Paragraph(commentaire.strip(), s_comment))
                 s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
                 s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
                 s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
@@ -3007,7 +3000,8 @@ if active == "surveillance":
                 s_mhead  = ParagraphStyle("mc_mh",fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
                 s_item   = ParagraphStyle("mc_i", fontName="Helvetica",       fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
                 s_footer = ParagraphStyle("mc_f", fontName="Helvetica",       fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
-
+                # ── Ajouter cette ligne ──
+                s_comment = ParagraphStyle("mc_com", fontName="Helvetica", fontSize=9, leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
                 doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
                                         topMargin=MARGIN, bottomMargin=MARGIN)
                 frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
