@@ -3152,22 +3152,9 @@ if active == "surveillance":
     with tab_ident:
         from datetime import date
 
-        # ── Sécurisation du prélèvement sélectionné ─────────────────────────────
-        smp = smp if 'smp' in locals() else None
+        st.markdown("#### 🔴 Identifications en attente")
 
-        # ── Date du prélèvement (toujours définie) ───────────────────────────────
-        _date_prelev = date.today()
-
-        if smp and smp.get("date"):
-            try:
-                _date_prelev = date.fromisoformat(smp["date"])
-            except Exception:
-                _date_prelev = date.today()
-
-        # ── Commentaire du prélèvement (toujours défini) ────────────────────────
-        _comment_prelev = smp.get("p_commentaire", "") if smp else ""
-
-        # ── Popup mesures correctives post-identification ───────────────────────
+        # ── Popup mesures correctives ────────────────────────────────────────────
         if st.session_state.get("_show_mesures_popup"):
             _render_mesures_correctives(
                 st.session_state["_show_mesures_popup"],
@@ -3175,28 +3162,38 @@ if active == "surveillance":
                 popup_mode=True,
             )
 
-        st.markdown("#### 🔴 Identifications en attente")
-
         def _j7_done_or_absent(sample_id):
-            j7 = next((x for x in st.session_state.schedules
-                       if x["sample_id"] == sample_id and x["when"] == "J7"), None)
+            j7 = next(
+                (x for x in st.session_state.schedules
+                if x["sample_id"] == sample_id and x["when"] == "J7"),
+                None
+            )
             return j7 is None or j7["status"] in ("done", "skipped")
 
+        # ── Filtrage des identifications ────────────────────────────────────────
         _all_pending = [
             p for p in st.session_state.pending_identifications
             if p.get("status") == "pending" and _j7_done_or_absent(p["sample_id"])
         ]
 
         _seen_sids = {}
+
         for _p in _all_pending:
             _sid = _p["sample_id"]
+
             if _sid not in _seen_sids:
                 _seen_sids[_sid] = {
-                    "sample_id": _sid, "label": _p["label"],
-                    "date": _p["date"], "entries": [], "when_list": [], "colonies": 0,
+                    "sample_id": _sid,
+                    "label": _p["label"],
+                    "date": _p["date"],
+                    "entries": [],
+                    "when_list": [],
+                    "colonies": 0,
                 }
+
             _seen_sids[_sid]["entries"].append(_p)
             _seen_sids[_sid]["when_list"].append(_p["when"])
+
             if _p["when"] == "J7" or _seen_sids[_sid]["colonies"] == 0:
                 _seen_sids[_sid]["colonies"] = _p["colonies"]
 
@@ -3204,22 +3201,47 @@ if active == "surveillance":
 
         if not pending_ids_grouped:
             st.success("✅ Aucune identification en attente.")
+
         else:
-            germ_names = sorted([g["name"] for g in st.session_state.germs])
-            LOC_CRIT_COLORS = {"1": "#22c55e", "2": "#0babf5", "3": "#ee811a", "4": "#f50b0b"}
-            LOC_CRIT_LABELS = {"1": "Limité",  "2": "Modéré",  "3": "Important", "4": "Critique"}
-
             for pg in pending_ids_grouped:
-                _sid      = pg["sample_id"]
-                _entries  = pg["entries"]
-                _when_str = " + ".join(sorted(set(pg["when_list"])))
-                _ufc      = pg["colonies"]
-                _label    = pg["label"]
-                _date     = pg["date"]
 
-                smp      = next((p for p in st.session_state.prelevements if p["id"] == _sid), None)
-                pt_oper  = smp.get("operateur",  "?") if smp else "?"
-                pt_class = smp.get("room_class", "")  if smp else ""
+                _sid = pg["sample_id"]
+                _entries = pg["entries"]
+                _when_str = " + ".join(sorted(set(pg["when_list"])))
+                _ufc = pg["colonies"]
+                _label = pg["label"]
+                _date = pg["date"]
+
+                # ── Récupération prélèvement ───────────────────────────────────────
+                smp = next(
+                    (p for p in st.session_state.prelevements if p["id"] == _sid),
+                    None
+                )
+
+                pt_oper = smp.get("operateur", "?") if smp else "?"
+                pt_class = smp.get("room_class", "") if smp else ""
+
+                _comment_prelev = smp.get("commentaire", "") if smp else ""
+                _date_prelev = smp.get("date") if smp else None
+
+                # ── Affichage bloc expander ────────────────────────────────────────
+                with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
+
+                    # ── COMMENTAIRE PRÉLÈVEMENT ──────────────────────────────────
+                    if _comment_prelev:
+                        st.markdown(
+                            f"""
+                            <div style='background:#f0f9ff;border:1px solid #bae6fd;
+                            border-radius:8px;padding:8px 12px;margin-bottom:8px;
+                            font-size:.75rem;color:#0369a1'>
+                            💬 <b>Commentaire prélèvement :</b><br>{_comment_prelev}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                    # ── SUITE DE TON CODE IDENTIFICATION ─────────────────────────
+                    # (germes, score, etc. inchangés)
 
                 _key           = _sid.replace("-", "_")
                 germs_list_key = f"germs_list_{_key}"
@@ -3543,39 +3565,6 @@ if active == "surveillance":
                                 del st.session_state[germs_list_key]
                             st.rerun()
 
-                    if st.session_state.surveillance:
-                        st.divider()
-                        with st.expander("📋 Derniers résultats", expanded=False):
-                            for r in reversed(st.session_state.surveillance[-10:]):
-                                sc = ("#ef4444" if r["status"] == "action"
-                                      else "#f59e0b" if r["status"] == "alert"
-                                      else "#22c55e")
-                                ic = ("🚨" if r["status"] == "action"
-                                      else "⚠️" if r["status"] == "alert"
-                                      else "✅")
-                                ufc_display  = f"{r['ufc']} UFC" if r.get("ufc") else "—"
-                                total_score  = r.get("total_score")
-                                germ_score   = r.get("germ_score")
-                                loc_crit_r   = r.get("location_criticality")
-                                score_badge  = (
-                                    f"<span style='background:{sc}22;color:{sc};"
-                                    f"border:1px solid {sc}55;border-radius:4px;"
-                                    f"padding:1px 7px;font-size:.62rem;font-weight:700;margin-left:6px'>"
-                                    f"Score {total_score} (Nv.{loc_crit_r}×{germ_score})</span>"
-                                    if total_score is not None else ""
-                                )
-                                st.markdown(
-                                    f"<div style='background:#f8fafc;border-left:3px solid {sc};"
-                                    f"border-radius:8px;padding:10px 14px;margin-bottom:6px'>"
-                                    f"<span style='font-size:1.1rem'>{ic}</span> "
-                                    f"<span style='font-size:.78rem;font-weight:600'>"
-                                    f"{r['prelevement']} — <em>{r['germ_match']}</em>"
-                                    f"{score_badge}</span>"
-                                    f"<div style='font-size:.68rem;color:#475569;margin-top:2px'>"
-                                    f"{r['date']} · {ufc_display} · "
-                                    f"{r.get('operateur') or 'N/A'}</div>"
-                                    f"</div>",
-                                    unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
 # Algorithme : max prélèvements/classe/semaine → répartition mensuelle
