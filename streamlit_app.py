@@ -2985,82 +2985,87 @@ if active == "surveillance":
                 from reportlab.lib.styles import ParagraphStyle
                 from io import BytesIO
 
-                buf   = BytesIO()
+                buf    = BytesIO()
                 A4_W, A4_H = A4
                 MARGIN = 1.8 * rl_cm
-                # ── Commentaire ───────────────────────────────────────────
-                if commentaire and commentaire.strip():
-                    story.append(Spacer(1, 10))
-                    story.append(Paragraph("💬 Commentaire", s_mhead))
-                    story.append(Paragraph(commentaire.strip(), s_comment))
-                s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
-                s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
-                s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
-                s_val    = ParagraphStyle("mc_v", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
-                s_mhead  = ParagraphStyle("mc_mh",fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
-                s_item   = ParagraphStyle("mc_i", fontName="Helvetica",       fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
-                s_footer = ParagraphStyle("mc_f", fontName="Helvetica",       fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
-                # ── Ajouter cette ligne ──
-                s_comment = ParagraphStyle("mc_com", fontName="Helvetica", fontSize=9, leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+
+                # ── 1. Styles ─────────────────────────────────────────────
+                s_title   = ParagraphStyle("mc_t",   fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
+                s_sub     = ParagraphStyle("mc_s",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
+                s_val     = ParagraphStyle("mc_v",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
+                s_mhead   = ParagraphStyle("mc_mh",  fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=rlc.HexColor("#991b1b"), spaceBefore=12, spaceAfter=6)
+                s_item    = ParagraphStyle("mc_i",   fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+                s_footer  = ParagraphStyle("mc_f",   fontName="Helvetica",      fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
+                s_comment = ParagraphStyle("mc_com", fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
+
+                # ── 2. Document ───────────────────────────────────────────
                 doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
                                         topMargin=MARGIN, bottomMargin=MARGIN)
                 frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
-                            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+                              leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
                 doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
 
-                _status_txt = "🚨 ACTION REQUISE" if pop_data["status"] == "action" else "⚠️ ALERTE"
+                _status_txt = "ACTION REQUISE" if pop_data["status"] == "action" else "ALERTE"
                 _status_col = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
                 from datetime import datetime as _dtn
                 _now_str = _dtn.now().strftime("%d/%m/%Y %H:%M")
 
+                # ── 3. Story : en-tête ────────────────────────────────────
                 story = [
                     Paragraph("FICHE MESURES CORRECTIVES", s_title),
                     Paragraph(f"MicroSurveillance URC — Généré le {_now_str}", s_sub),
                     HRFlowable(width="100%", thickness=1.5, color=_status_col, spaceAfter=10),
                 ]
 
-                # ── Tableau résumé ────────────────────────────────────────────────────
+                # ── 4. Tableau résumé ─────────────────────────────────────
                 tbl_data = [
-                    ["Statut",    _status_txt],
-                    ["Point",     pop_data.get("label", "—")],
-                    ["Germe",     pop_data.get("germ", "—")],
-                    ["UFC",       str(pop_data.get("ufc", "—"))],
-                    ["Score",     str(pop_data.get("total_score", "—"))],
-                    ["Lieu Nv.",  str(pop_data.get("loc_criticality", "—"))],
+                    ["Statut",   _status_txt],
+                    ["Point",    pop_data.get("label", "—")],
+                    ["Germe",    pop_data.get("germ", "—")],
+                    ["UFC",      str(pop_data.get("ufc", "—"))],
+                    ["Score",    str(pop_data.get("total_score", "—"))],
+                    ["Lieu Nv.", str(pop_data.get("loc_criticality", "—"))],
                 ]
                 tbl = Table(tbl_data, colWidths=[4*rl_cm, A4_W - 2*MARGIN - 4*rl_cm])
                 tbl.setStyle(TableStyle([
-                    ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
-                    ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
-                    ("FONTSIZE",      (0, 0), (-1, -1), 9),
-                    ("TEXTCOLOR",     (0, 0), (0, -1), rlc.HexColor("#64748b")),
-                    ("TEXTCOLOR",     (1, 0), (1, 0),  _status_col),
-                    ("FONTNAME",      (1, 0), (1, 0),  "Helvetica-Bold"),
-                    ("ROWBACKGROUNDS",(0, 0), (-1, -1), [rlc.HexColor("#f8fafc"), rlc.white]),
-                    ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-                    ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-                    ("TOPPADDING",    (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                    ("GRID",          (0, 0), (-1, -1), 0.5, rlc.HexColor("#e2e8f0")),
+                    ("FONTNAME",       (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTNAME",       (1, 0), (1, -1), "Helvetica"),
+                    ("FONTSIZE",       (0, 0), (-1, -1), 9),
+                    ("TEXTCOLOR",      (0, 0), (0, -1),  rlc.HexColor("#64748b")),
+                    ("TEXTCOLOR",      (1, 0), (1, 0),   _status_col),
+                    ("FONTNAME",       (1, 0), (1, 0),   "Helvetica-Bold"),
+                    ("ROWBACKGROUNDS", (0, 0), (-1, -1), [rlc.HexColor("#f8fafc"), rlc.white]),
+                    ("LEFTPADDING",    (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING",   (0, 0), (-1, -1), 8),
+                    ("TOPPADDING",     (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING",  (0, 0), (-1, -1), 5),
+                    ("GRID",           (0, 0), (-1, -1), 0.5, rlc.HexColor("#e2e8f0")),
                 ]))
                 story += [tbl, Spacer(1, 14)]
 
-                # ── Mesures correctives ───────────────────────────────────────────────
-                story.append(Paragraph("📋 Mesures correctives applicables", s_mhead))
+                # ── 5. Mesures correctives ────────────────────────────────
+                story.append(Paragraph("Mesures correctives applicables", s_mhead))
                 if mesures:
                     for idx_m, m in enumerate(mesures, 1):
                         story.append(Paragraph(f"{idx_m}. {m['text']}", s_item))
                 else:
                     story.append(Paragraph("Aucune mesure corrective configurée.", s_val))
 
+                # ── 6. Commentaire (si renseigné) ─────────────────────────
+                if commentaire and commentaire.strip():
+                    story.append(Spacer(1, 10))
+                    story.append(Paragraph("Commentaire", s_mhead))
+                    story.append(Paragraph(commentaire.strip(), s_comment))
+
+                # ── 7. Zone de signature ──────────────────────────────────
                 story += [
                     Spacer(1, 20),
                     HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
                     Paragraph("Préleveur / Responsable : ________________________________", s_val),
                     Spacer(1, 6),
-                    Paragraph("Date de traitement :    ________________________________", s_val),
+                    Paragraph("Date de traitement :       ________________________________", s_val),
                     Spacer(1, 6),
-                    Paragraph("Signature :              ________________________________", s_val),
+                    Paragraph("Signature :                 ________________________________", s_val),
                     Spacer(1, 20),
                     Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer),
                 ]
