@@ -3162,16 +3162,17 @@ if active == "surveillance":
                 popup_mode=True,
             )
 
-        # ── sécurité germes (IMPORTANT) ───────────────────────────
+        # ── sécurité germes ───────────────────────────────────────
         germ_names = sorted([g["name"] for g in st.session_state.get("germs", [])])
 
-        # ── sécurité couleurs critique ────────────────────────────
+        # ── couleurs criticité ───────────────────────────────────
         LOC_CRIT_COLORS = {
             "1": "#22c55e",
             "2": "#0babf5",
             "3": "#ee811a",
             "4": "#f50b0b",
         }
+
         LOC_CRIT_LABELS = {
             "1": "Limité",
             "2": "Modéré",
@@ -3231,28 +3232,39 @@ if active == "surveillance":
                 _label = pg["label"]
                 _date = pg["date"]
 
-                # ── prélèvement SAFE ────────────────────────────────
+                # ── prélèvement SAFE ───────────────────────────────
                 smp = next(
-                    (p for p in st.session_state.prelevements
-                    if p["id"] == _sid),
+                    (p for p in st.session_state.prelevements if p["id"] == _sid),
                     None
                 )
 
                 pt_oper = smp.get("operateur", "?") if smp else "?"
                 pt_class = smp.get("room_class", "") if smp else ""
 
-                _comment_prelev = smp.get("p_commentaire", "") if smp else ""
-                _date_prelev = (
-                    date.fromisoformat(smp["date"])
-                    if smp and smp.get("date")
-                    else date.today()
-                )
+                # ── COMMENTAIRE ROBUSTE (toutes versions) ───────────
+                _comment_prelev = ""
+                if smp:
+                    _comment_prelev = (
+                        smp.get("commentaire")
+                        or smp.get("p_commentaire")
+                        or smp.get("scan_comment")
+                        or ""
+                    )
 
-                # clé safe
+                # ── DATE SAFE ───────────────────────────────────────
+                try:
+                    _date_prelev = (
+                        date.fromisoformat(smp["date"])
+                        if smp and smp.get("date")
+                        else date.today()
+                    )
+                except Exception:
+                    _date_prelev = date.today()
+
+                # ── clé session ─────────────────────────────────────
                 _key = _sid.replace("-", "_")
                 germs_list_key = f"germs_list_{_key}"
 
-                # init session state
                 if germs_list_key not in st.session_state:
                     st.session_state[germs_list_key] = [
                         {"germ": "— Sélectionner un germe —", "ufc": 0}
@@ -3264,20 +3276,20 @@ if active == "surveillance":
                     expanded=True
                 ):
 
-                    # ── COMMENTAIRE PRÉLÈVEMENT ───────────────────
-                    if _comment_prelev:
-                        st.markdown(
-                            f"""
-                            <div style='background:#f0f9ff;border:1px solid #bae6fd;
-                            border-radius:8px;padding:8px 12px;margin-bottom:8px;
-                            font-size:.75rem;color:#0369a1'>
-                            💬 <b>Commentaire prélèvement :</b><br>{_comment_prelev}
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                    # ── COMMENTAIRE (toujours visible) ───────────────
+                    st.markdown(
+                        f"""
+                        <div style='background:#f0f9ff;border:1px solid #bae6fd;
+                        border-radius:8px;padding:8px 12px;margin-bottom:8px;
+                        font-size:.75rem;color:#0369a1'>
+                        💬 <b>Commentaire prélèvement :</b><br>
+                        {_comment_prelev if _comment_prelev else "Aucun commentaire"}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
-                    # ── criticité safe ───────────────────────────
+                    # ── criticité ────────────────────────────────────
                     loc_crit = int(
                         smp.get("location_criticality", 1) if smp else 1
                     )
@@ -3293,7 +3305,7 @@ if active == "surveillance":
                         unsafe_allow_html=True
                     )
 
-                    # ── GERMES SAFE ─────────────────────────────
+                    # ── suite germes (inchangé logique) ──────────────
                     current_germs = st.session_state[germs_list_key]
                     germs_to_remove = []
 
@@ -3335,7 +3347,7 @@ if active == "surveillance":
                         )
                         st.rerun()
 
-                    # ── COMMENTAIRE → IDENTIFICATION (important) ─────
+                    # ── remarque + date ─────────────────────────────
                     remarque = st.text_area(
                         "Remarque",
                         key=f"rem_{_key}",
