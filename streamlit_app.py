@@ -2975,7 +2975,7 @@ if active == "surveillance":
 
                 # ── Génération PDF mesures correctives ───────────────────────────────────
             def _gen_pdf_mesures(pop_data, mesures, commentaire=""):
-                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.pagesizes import A4 as _A4
                 from reportlab.lib.units     import cm as rl_cm
                 from reportlab.lib           import colors as rlc
                 from reportlab.platypus      import (
@@ -2983,13 +2983,15 @@ if active == "surveillance":
                     Paragraph, Spacer, HRFlowable, Table, TableStyle,
                 )
                 from reportlab.lib.styles import ParagraphStyle
+                from reportlab.lib.pagesizes import A4 as _RL_A4
                 from io import BytesIO
+                from datetime import datetime as _dtn
 
                 buf    = BytesIO()
-                A4_W, A4_H = A4
+                _W     = 595.27  # A4 width  en points
+                _H     = 841.89  # A4 height en points
                 MARGIN = 1.8 * rl_cm
 
-                # ── 1. Styles ─────────────────────────────────────────────
                 s_title   = ParagraphStyle("mc_t",   fontName="Helvetica-Bold", fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
                 s_sub     = ParagraphStyle("mc_s",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
                 s_val     = ParagraphStyle("mc_v",   fontName="Helvetica",      fontSize=9,  leading=12, textColor=rlc.HexColor("#475569"), spaceAfter=8)
@@ -2998,26 +3000,22 @@ if active == "surveillance":
                 s_footer  = ParagraphStyle("mc_f",   fontName="Helvetica",      fontSize=7,  leading=9,  textColor=rlc.HexColor("#94a3b8"))
                 s_comment = ParagraphStyle("mc_com", fontName="Helvetica",      fontSize=9,  leading=13, textColor=rlc.HexColor("#0f172a"), leftIndent=10, spaceAfter=5)
 
-                # ── 2. Document ───────────────────────────────────────────
-                doc   = BaseDocTemplate(buf, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
+                doc   = BaseDocTemplate(buf, pagesize=_RL_A4, leftMargin=MARGIN, rightMargin=MARGIN,
                                         topMargin=MARGIN, bottomMargin=MARGIN)
-                frame = Frame(MARGIN, MARGIN, A4_W - 2*MARGIN, A4_H - 2*MARGIN,
+                frame = Frame(MARGIN, MARGIN, _W - 2*MARGIN, _H - 2*MARGIN,
                               leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
                 doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
 
                 _status_txt = "ACTION REQUISE" if pop_data["status"] == "action" else "ALERTE"
                 _status_col = rlc.HexColor("#dc2626") if pop_data["status"] == "action" else rlc.HexColor("#d97706")
-                from datetime import datetime as _dtn
-                _now_str = _dtn.now().strftime("%d/%m/%Y %H:%M")
+                _now_str    = _dtn.now().strftime("%d/%m/%Y %H:%M")
 
-                # ── 3. Story : en-tête ────────────────────────────────────
                 story = [
                     Paragraph("FICHE MESURES CORRECTIVES", s_title),
                     Paragraph(f"MicroSurveillance URC — Généré le {_now_str}", s_sub),
                     HRFlowable(width="100%", thickness=1.5, color=_status_col, spaceAfter=10),
                 ]
 
-                # ── 4. Tableau résumé ─────────────────────────────────────
                 tbl_data = [
                     ["Statut",   _status_txt],
                     ["Point",    pop_data.get("label", "—")],
@@ -3026,7 +3024,7 @@ if active == "surveillance":
                     ["Score",    str(pop_data.get("total_score", "—"))],
                     ["Lieu Nv.", str(pop_data.get("loc_criticality", "—"))],
                 ]
-                tbl = Table(tbl_data, colWidths=[4*rl_cm, A4_W - 2*MARGIN - 4*rl_cm])
+                tbl = Table(tbl_data, colWidths=[4*rl_cm, _W - 2*MARGIN - 4*rl_cm])
                 tbl.setStyle(TableStyle([
                     ("FONTNAME",       (0, 0), (0, -1), "Helvetica-Bold"),
                     ("FONTNAME",       (1, 0), (1, -1), "Helvetica"),
@@ -3043,7 +3041,6 @@ if active == "surveillance":
                 ]))
                 story += [tbl, Spacer(1, 14)]
 
-                # ── 5. Mesures correctives ────────────────────────────────
                 story.append(Paragraph("Mesures correctives applicables", s_mhead))
                 if mesures:
                     for idx_m, m in enumerate(mesures, 1):
@@ -3051,13 +3048,11 @@ if active == "surveillance":
                 else:
                     story.append(Paragraph("Aucune mesure corrective configurée.", s_val))
 
-                # ── 6. Commentaire (si renseigné) ─────────────────────────
                 if commentaire and commentaire.strip():
                     story.append(Spacer(1, 10))
                     story.append(Paragraph("Commentaire", s_mhead))
                     story.append(Paragraph(commentaire.strip(), s_comment))
 
-                # ── 7. Zone de signature ──────────────────────────────────
                 story += [
                     Spacer(1, 20),
                     HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
