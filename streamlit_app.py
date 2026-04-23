@@ -5600,8 +5600,22 @@ if active == "analyse":
                 except ValueError:
                     continue
 
-            for _li, r in enumerate(reversed(surv_f)):
-                _real_idx = len(st.session_state.surveillance) - 1 - _li
+            
+            surv_f_reversed = list(reversed(surv_f))
+            for _li, r in enumerate(surv_f_reversed):
+                # Comparer par valeurs uniques, pas par identité objet
+                _real_idx = next(
+                    (
+                        i for i, s in enumerate(st.session_state.surveillance)
+                        if s.get("date") == r.get("date")
+                        and s.get("prelevement") == r.get("prelevement")
+                        and s.get("operateur", s.get("preleveur","")) == r.get("operateur", r.get("preleveur",""))
+                        and s.get("ufc") == r.get("ufc")
+                    ),
+                    None
+                )
+                if _real_idx is None:
+                    continue
                 status_r  = r.get("status", "ok")
                 mc_statut = r.get("mc_statut", "")
                 mc_detail = r.get("mc_detail", "")
