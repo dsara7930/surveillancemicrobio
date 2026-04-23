@@ -225,7 +225,7 @@ DEFAULT_FAQ = [
         "question": "Comment est calculé le score de criticité ?",
         "answer": (
             "Le score total est calculé selon la formule :\n\n"
-            "**Score = Criticité lieu (1–3) × Pathogénicité (1–3) × Résistance (1–3) × Dissémination (1–3)**\n\n"
+            "**Score = Criticité lieu (1–4) × Pathogénicité (1–3) × Résistance (1–3) × Dissémination (1–3)**\n\n"
             "- Score **< seuil alerte** → ✅ Conforme\n"
             "- Score entre les deux seuils → ⚠️ Alerte\n"
             "- Score **> seuil action** → 🚨 Action immédiate\n\n"
