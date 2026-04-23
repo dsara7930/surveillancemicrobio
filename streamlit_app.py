@@ -2975,6 +2975,8 @@ if active == "surveillance":
 
                 # ── Génération PDF mesures correctives ───────────────────────────────────
             def _gen_pdf_mesures(pop_data, mesures, commentaire=""):
+                _st = []  # ← PREMIÈRE LIGNE, avant tout import
+
                 from reportlab.lib.pagesizes import A4 as _RL_A4
                 from reportlab.lib.units     import cm as rl_cm
                 from reportlab.lib           import colors as rlc
@@ -3008,11 +3010,9 @@ if active == "surveillance":
                 _stx = "ACTION REQUISE" if pop_data["status"] == "action" else "ALERTE"
                 _now = _dtn.now().strftime("%d/%m/%Y %H:%M")
 
-                _st = [
-                    Paragraph("FICHE MESURES CORRECTIVES", s_title),
-                    Paragraph(f"MicroSurveillance URC — Généré le {_now}", s_sub),
-                    HRFlowable(width="100%", thickness=1.5, color=_sc, spaceAfter=10),
-                ]
+                _st.append(Paragraph("FICHE MESURES CORRECTIVES", s_title))
+                _st.append(Paragraph(f"MicroSurveillance URC — Généré le {_now}", s_sub))
+                _st.append(HRFlowable(width="100%", thickness=1.5, color=_sc, spaceAfter=10))
 
                 _tbl = Table(
                     [["Statut",   _stx],
@@ -3037,7 +3037,8 @@ if active == "surveillance":
                     ("BOTTOMPADDING",  (0,0),(-1,-1), 5),
                     ("GRID",           (0,0),(-1,-1), 0.5, rlc.HexColor("#e2e8f0")),
                 ]))
-                _st += [_tbl, Spacer(1, 14)]
+                _st.append(_tbl)
+                _st.append(Spacer(1, 14))
 
                 _st.append(Paragraph("Mesures correctives applicables", s_mhead))
                 if mesures:
@@ -3051,17 +3052,15 @@ if active == "surveillance":
                     _st.append(Paragraph("Commentaire", s_mhead))
                     _st.append(Paragraph(commentaire.strip(), s_comment))
 
-                _st += [
-                    Spacer(1, 20),
-                    HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8),
-                    Paragraph("Préleveur / Responsable : ________________________________", s_val),
-                    Spacer(1, 6),
-                    Paragraph("Date de traitement :       ________________________________", s_val),
-                    Spacer(1, 6),
-                    Paragraph("Signature :                 ________________________________", s_val),
-                    Spacer(1, 20),
-                    Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer),
-                ]
+                _st.append(Spacer(1, 20))
+                _st.append(HRFlowable(width="100%", thickness=0.5, color=rlc.HexColor("#cbd5e1"), spaceAfter=8))
+                _st.append(Paragraph("Préleveur / Responsable : ________________________________", s_val))
+                _st.append(Spacer(1, 6))
+                _st.append(Paragraph("Date de traitement :       ________________________________", s_val))
+                _st.append(Spacer(1, 6))
+                _st.append(Paragraph("Signature :                 ________________________________", s_val))
+                _st.append(Spacer(1, 20))
+                _st.append(Paragraph("URC — MicroSurveillance · Document généré automatiquement", s_footer))
 
                 _doc.build(_st)
                 _buf.seek(0)
