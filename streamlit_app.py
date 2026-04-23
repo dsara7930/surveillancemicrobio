@@ -3165,7 +3165,7 @@ if active == "surveillance":
                 _date_prelev = date.today()
 
         # ── Commentaire du prélèvement (toujours défini) ────────────────────────
-        _comment_prelev = smp.get("commentaire", "") if smp else ""
+        _comment_prelev = smp.get("p_commentaire", "") if smp else ""
 
         # ── Popup mesures correctives post-identification ───────────────────────
         if st.session_state.get("_show_mesures_popup"):
