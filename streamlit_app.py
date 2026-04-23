@@ -5953,20 +5953,19 @@ if active == "parametres":
         _fam_emoji_map = {"Bactéries": "🦠",       "Champignons": "🍄"}
         _fam_color_map = {"bacteria": "#0284c7",   "fungi": "#7c3aed"}
 
-        germ_type_labels = {"all": "🌐 Tous germes"}
-        for _f in _familles_raw:
-            _k = _fam_key_map.get(_f, _f.lower())
-            germ_type_labels[_k] = f"{_fam_emoji_map.get(_f, '🔬')} {_f}"
-        if len(_familles_raw) > 1:
-            germ_type_labels["both"] = (
-                " ".join(_fam_emoji_map.get(_f, "🔬") for _f in _familles_raw)
-                + " " + " & ".join(_familles_raw)
-            )
-        germ_type_r_map    = {v: k for k, v in germ_type_labels.items()}
-        germ_type_colors   = {"all": "#64748b", "both": "#0f766e", **{
-            _fam_key_map.get(_f, _f.lower()): _fam_color_map.get(_fam_key_map.get(_f, _f.lower()), "#64748b")
-            for _f in _familles_raw
-        }}
+        germ_type_labels = {
+            "all":      "🌐 Tous germes",
+            "bacteria": "🦠 Bactéries",
+            "fungi":    "🍄 Champignons",
+            "both":     "🦠🍄 Bactéries & Champignons",
+        }
+        germ_type_r_map  = {v: k for k, v in germ_type_labels.items()}
+        germ_type_colors = {
+            "all":      "#64748b",
+            "bacteria": "#0284c7",
+            "fungi":    "#7c3aed",
+            "both":     "#0f766e",
+        }
 
         # ── Filtres ────────────────────────────────────────────────────────────────
         col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([2, 1.5, 1.5, 1.5, 1])
