@@ -1870,13 +1870,6 @@ renderList();
 # TAB : SURVEILLANCE
 # ═══════════════════════════════════════════════════════════════════════════════
 def _render_mesures_correctives(entry: dict, entry_idx: int):
-    """
-    Affiche le bloc « Mesures correctives » sous une entrée dont le statut
-    est 'alert' ou 'action'.
-    - Zone de texte « Autre action réalisée »
-    - Bouton « Prise en compte des mesures correctives »
-    - Statut persisté dans entry['mc_statut'], entry['mc_detail'], entry['mc_date']
-    """
     from datetime import datetime as _dt
 
     STATUS    = entry.get("status", "ok")
@@ -5690,7 +5683,7 @@ if active == "analyse":
                 # ── Onglet mesures correctives / détails ──────────────────────────────
                 with _tab_mc:
                     if status_r in ("alert", "action"):
-                        _render_mesures_correctives(r, _real_idx)
+                        _render_mesures_correctives(st.session_state.surveillance[_real_idx], _real_idx)
                     else:
                         st.markdown(
                             "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
@@ -5903,136 +5896,167 @@ if active == "parametres":
             return freq / 4.33          # ≈ semaines par mois
         else:
             return freq                 # fallback : on suppose hebdomadaire
-  
-
+# MESURES CORRECTIVES #
     with subtab_mesures:
         om = st.session_state.origin_measures
 
+        # ── Mappings ───────────────────────────────────────────────────────────────
         scope_labels = {
-            "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
-            "Flore fécale": "🦠 Flore fécale",
-            "Oropharynx / Gouttelettes": "😷 Oropharynx",
-            "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
-            "Sol / Carton / Surface sèche": "📦 Sol / Surface sèche"
+            "all":                          "🌐 Toutes",
+            "Air":                          "💨 Air",
+            "Humidité":                     "💧 Humidité",
+            "Flore fécale":                 "🦠 Flore fécale",
+            "Oropharynx / Gouttelettes":   "😷 Oropharynx",
+            "Peau / Muqueuse":             "🖐️ Peau / Muqueuse",
+            "Sol / Carton / Surface sèche":"📦 Sol / Surface sèche",
         }
-        type_labels  = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
-        type_colors  = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
-        scope_r_map  = {v: k for k, v in scope_labels.items()}
+        scope_r_map = {v: k for k, v in scope_labels.items()}
+
+        type_labels = {"alert": "⚠️ Alerte", "action": "🚨 Action", "both": "⚠️🚨 Alerte & Action"}
+        type_colors = {"alert": "#f59e0b", "action": "#ef4444", "both": "#818cf8"}
+        type_r_map  = {v: k for k, v in type_labels.items()}
+
         risk_opts_map = {
             "all": "🌐 Toutes", "1": "🟢 1", "2": "🟢 2", "3": "🟡 3",
-            "4": "🟠 4", "5": "🔴 5", "[3,4,5]": "3-4-5",
-            "[4,5]": "4-5", "[1,2,3]": "1-2-3"
+            "4": "🟠 4", "5": "🔴 5", "[3,4,5]": "3-4-5", "[4,5]": "4-5", "[1,2,3]": "1-2-3",
         }
         risk_opts_rev = {v: k for k, v in risk_opts_map.items()}
 
-        # ← NOUVEAU : mapping type de germe
-        germ_type_labels = {
-            "all":      "🌐 Tous germes",
-            "bacteria": "🦠 Bactéries",
-            "fungi":    "🍄 Champignons",
-            "both":     "🦠🍄 Bactéries & Champignons",
+        risk_display = {
+            "all": ("🌐", "#64748b"), "1": ("🟢 1", "#16a34a"), "2": ("🟢 2", "#16a34a"),
+            "3": ("🟡 3", "#ca8a04"), "4": ("🟠 4", "#ea580c"), "5": ("🔴 5", "#dc2626"),
         }
-        germ_type_r_map = {v: k for k, v in germ_type_labels.items()}
 
-        # ── Filtres ────────────────────────────────────────────────────────────
-        col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([2, 1.5, 1.5, 1.5, 1])  # ← NOUVEAU col_f4 pour germe
+        # ── germ_type extrait dynamiquement depuis st.session_state.germs ─────────
+        _familles_raw = sorted({
+            g["path"][1]
+            for g in st.session_state.get("germs", [])
+            if len(g.get("path", [])) > 1
+        })
+        _fam_key_map   = {"Bactéries": "bacteria", "Champignons": "fungi"}
+        _fam_emoji_map = {"Bactéries": "🦠",       "Champignons": "🍄"}
+        _fam_color_map = {"bacteria": "#0284c7",   "fungi": "#7c3aed"}
+
+        germ_type_labels = {"all": "🌐 Tous germes"}
+        for _f in _familles_raw:
+            _k = _fam_key_map.get(_f, _f.lower())
+            germ_type_labels[_k] = f"{_fam_emoji_map.get(_f, '🔬')} {_f}"
+        if len(_familles_raw) > 1:
+            germ_type_labels["both"] = (
+                " ".join(_fam_emoji_map.get(_f, "🔬") for _f in _familles_raw)
+                + " " + " & ".join(_familles_raw)
+            )
+        germ_type_r_map    = {v: k for k, v in germ_type_labels.items()}
+        germ_type_colors   = {"all": "#64748b", "both": "#0f766e", **{
+            _fam_key_map.get(_f, _f.lower()): _fam_color_map.get(_fam_key_map.get(_f, _f.lower()), "#64748b")
+            for _f in _familles_raw
+        }}
+
+        # ── Filtres ────────────────────────────────────────────────────────────────
+        col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([2, 1.5, 1.5, 1.5, 1])
         with col_f1:
-            filter_scope = st.selectbox("Origine",
-                ["Tout afficher"] + list(scope_labels.values()),
+            filter_scope = st.selectbox(
+                "Origine", ["Tout afficher"] + list(scope_labels.values()),
                 label_visibility="collapsed", key="filter_scope")
         with col_f2:
-            filter_risk_lbl = st.selectbox("Criticité",
-                ["🌐 Tout", "🟢 1", "🟢 2", "🟡 3", "🟠 4", "🔴 5"],
+            filter_risk_lbl = st.selectbox(
+                "Criticité", ["🌐 Tout", "🟢 1", "🟢 2", "🟡 3", "🟠 4", "🔴 5"],
                 label_visibility="collapsed", key="filter_risk")
         with col_f3:
-            filter_type = st.selectbox("Type",
-                ["Tout", "⚠️ Alerte", "🚨 Action"],
+            filter_type = st.selectbox(
+                "Type", ["Tout", "⚠️ Alerte", "🚨 Action"],
                 label_visibility="collapsed", key="filter_type")
-        with col_f4:  # ← NOUVEAU
-            filter_germ_type = st.selectbox("Germe",
-                list(germ_type_labels.values()),
+        with col_f4:
+            filter_germ_type = st.selectbox(
+                "Germe", list(germ_type_labels.values()),
                 label_visibility="collapsed", key="filter_germ_type")
         with col_f5:
             if can_edit:
-                if st.button("➕ Nouvelle", use_container_width=True):
-                    st.session_state.show_new_measure = True
+                if st.button("➕ Nouvelle", use_container_width=True, key="btn_new_mesure"):
+                    st.session_state.show_new_measure    = True
                     st.session_state["_edit_mesure_idx"] = None
                     st.rerun()
 
         active_scope     = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
-        active_risk      = filter_risk_lbl.split()[-1] if filter_risk_lbl != "🌐 Tout" else None
+        active_risk      = filter_risk_lbl.split()[-1]   if filter_risk_lbl != "🌐 Tout"    else None
         active_type      = ("alert" if "Alerte" in filter_type else "action") if filter_type != "Tout" else None
-        active_germ_type = germ_type_r_map.get(filter_germ_type, "all")  # ← NOUVEAU
+        active_germ_type = germ_type_r_map.get(filter_germ_type, "all")
 
-        # ── Formulaire nouvelle mesure ─────────────────────────────────────────
+        # ── Formulaire nouvelle mesure ─────────────────────────────────────────────
         if can_edit and st.session_state.get("show_new_measure", False):
-            with st.container():
-                st.markdown(
-                    "<div style='background:#f0fdf4;border:1.5px solid #86efac;"
-                    "border-radius:10px;padding:16px;margin-bottom:12px'>",
-                    unsafe_allow_html=True)
-                st.markdown("#### ➕ Nouvelle mesure")
-                nmc1, nmc2, nmc3, nmc4, nmc5 = st.columns([3, 2, 1.5, 1.5, 1.5])  # ← NOUVEAU nmc5
-                with nmc1:
-                    nm_text = st.text_input("Texte *", key="nm_text")
-                with nmc2:
-                    nm_scope_label = st.selectbox("Origine", list(scope_labels.values()), key="nm_scope")
-                    nm_scope = scope_r_map.get(nm_scope_label, "all")
-                with nmc3:
-                    nm_risk_lbl = st.selectbox("Criticité", list(risk_opts_map.values()), key="nm_risk")
-                    nm_risk_key = risk_opts_rev.get(nm_risk_lbl, "all")
-                    nm_risk = ("all" if nm_risk_key == "all"
+            st.markdown(
+                "<div style='background:#f0fdf4;border:1.5px solid #86efac;"
+                "border-radius:10px;padding:16px;margin-bottom:12px'>",
+                unsafe_allow_html=True)
+            st.markdown("#### ➕ Nouvelle mesure")
+
+            nmc1, nmc2, nmc3, nmc4, nmc5 = st.columns([3, 2, 1.5, 1.5, 1.5])
+            with nmc1:
+                nm_text = st.text_input("Texte *", key="nm_text")
+            with nmc2:
+                nm_scope_label = st.selectbox("Origine", list(scope_labels.values()), key="nm_scope")
+                nm_scope       = scope_r_map.get(nm_scope_label, "all")
+            with nmc3:
+                nm_risk_lbl = st.selectbox("Criticité", list(risk_opts_map.values()), key="nm_risk")
+                nm_risk_key = risk_opts_rev.get(nm_risk_lbl, "all")
+                nm_risk     = ("all"                  if nm_risk_key == "all"
                             else json.loads(nm_risk_key) if nm_risk_key.startswith("[")
                             else int(nm_risk_key))
-                with nmc4:
-                    nm_type_label = st.selectbox("Type", list(type_labels.values()), key="nm_type")
-                    nm_type = {v: k for k, v in type_labels.items()}.get(nm_type_label, "alert")
-                with nmc5:  # ← NOUVEAU
-                    nm_germ_type_label = st.selectbox("Germe", list(germ_type_labels.values()), key="nm_germ_type")
-                    nm_germ_type = germ_type_r_map.get(nm_germ_type_label, "all")
+            with nmc4:
+                nm_type_label = st.selectbox("Type", list(type_labels.values()), key="nm_type")
+                nm_type       = type_r_map.get(nm_type_label, "alert")
+            with nmc5:
+                nm_germ_lbl  = st.selectbox("Germe", list(germ_type_labels.values()), key="nm_germ_type")
+                nm_germ_type = germ_type_r_map.get(nm_germ_lbl, "all")
 
-                nb1, nb2 = st.columns(2)
-                with nb1:
-                    if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
-                        if nm_text.strip():
-                            om.append({
-                                "id":        f"m{len(om)+1:03d}_custom",
-                                "text":      nm_text.strip(),
-                                "scope":     nm_scope,
-                                "risk":      nm_risk,
-                                "type":      nm_type,
-                                "germ_type": nm_germ_type,  # ← NOUVEAU
-                            })
-                            save_origin_measures(om, supa=False)
-                            st.session_state.origin_measures  = om
-                            st.session_state.show_new_measure = False
-                            st.rerun()
-                with nb2:
-                    if st.button("Annuler", use_container_width=True, key="nm_cancel"):
+            nb1, nb2 = st.columns(2)
+            with nb1:
+                if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
+                    if nm_text.strip():
+                        om.append({
+                            "id":        f"m{len(om)+1:03d}_custom",
+                            "text":      nm_text.strip(),
+                            "scope":     nm_scope,
+                            "risk":      nm_risk,
+                            "type":      nm_type,
+                            "germ_type": nm_germ_type,
+                        })
+                        save_origin_measures(om, supa=False)
+                        st.session_state.origin_measures  = om
                         st.session_state.show_new_measure = False
                         st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        st.error("Le texte est obligatoire.")
+            with nb2:
+                if st.button("Annuler", use_container_width=True, key="nm_cancel"):
+                    st.session_state.show_new_measure = False
+                    st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Filtre ─────────────────────────────────────────────────────────────
+        # ── Fonction filtre ────────────────────────────────────────────────────────
         def _passes_filter(m):
-            if active_scope and m["scope"] != active_scope:
+            if active_scope and m.get("scope") != active_scope:
                 return False
-            if active_type and m["type"] != active_type and m["type"] != "both":
-                return False
+            if active_type:
+                mt = m.get("type", "alert")
+                if mt != "both" and mt != active_type:
+                    return False
             if active_risk:
                 mr = m.get("risk", "all")
                 if mr != "all":
                     if isinstance(mr, list):
-                        if int(active_risk) not in mr: return False
+                        if int(active_risk) not in mr:
+                            return False
                     else:
-                        if str(mr) != active_risk: return False
-            # ← NOUVEAU : filtre par type de germe
+                        if str(mr) != active_risk:
+                            return False
             if active_germ_type != "all":
                 mgt = m.get("germ_type", "all")
-                if mgt != "all" and mgt != active_germ_type and mgt != "both":
+                if mgt != "all" and mgt != "both" and mgt != active_germ_type:
                     return False
             return True
 
+        # ── Bandeau modifications non sauvegardées ─────────────────────────────────
         if st.session_state.get("_mesures_modifiees"):
             st.markdown(
                 "<div style='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;"
@@ -6040,95 +6064,123 @@ if active == "parametres":
                 "⚠️ Modifications non sauvegardées — cliquez sur <strong>💾 Sauvegarder</strong>."
                 "</div>", unsafe_allow_html=True)
 
-        # ── Liste des mesures ──────────────────────────────────────────────────
-        for m in [m for m in om if _passes_filter(m)]:
-            real_idx = om.index(m)
-            tcol = type_colors.get(m["type"], "#0f172a")
-            tlbl = type_labels.get(m["type"], m["type"])
-            gtlbl = germ_type_labels.get(m.get("germ_type", "all"), "🌐 Tous germes")  # ← NOUVEAU
+        # ── Liste des mesures ──────────────────────────────────────────────────────
+        for real_idx, m in enumerate(om):
+            if not _passes_filter(m):
+                continue
 
+            tcol  = type_colors.get(m.get("type", "alert"), "#0f172a")
+            tlbl  = type_labels.get(m.get("type", "alert"), m.get("type", ""))
+            gtkey = m.get("germ_type", "all")
+            gtlbl = germ_type_labels.get(gtkey, "🌐 Tous germes")
+            gtcol = germ_type_colors.get(gtkey, "#64748b")
+
+            # Criticité badge
+            mr = m.get("risk", "all")
+            if mr == "all":
+                risk_lbl, risk_col = "🌐", "#64748b"
+            elif isinstance(mr, list):
+                risk_lbl, risk_col = "-".join(str(x) for x in mr), "#94a3b8"
+            else:
+                _rd = risk_display.get(str(mr), ("?", "#94a3b8"))
+                risk_lbl, risk_col = _rd
+
+            # ── Mode édition ───────────────────────────────────────────────────────
             if st.session_state.get("_edit_mesure_idx") == real_idx:
-                with st.container():
-                    st.markdown(
-                        "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
-                        "border-radius:10px;padding:14px;margin-bottom:8px'>",
-                        unsafe_allow_html=True)
-                    st.markdown("**✏️ Modifier la mesure**")
-                    ec1, ec2, ec3, ec4, ec5 = st.columns([3, 2, 1.5, 1.5, 1.5])  # ← NOUVEAU ec5
-                    with ec1:
-                        new_text = st.text_input("Texte *", value=m.get("text", ""), key=f"em_text_{real_idx}")
-                    with ec2:
-                        cur_scope_lbl = scope_labels.get(m.get("scope", "all"), "🌐 Toutes")
-                        scope_opts    = list(scope_labels.values())
-                        scope_idx     = scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0
-                        new_scope_lbl = st.selectbox("Origine", scope_opts, index=scope_idx, key=f"em_scope_{real_idx}")
-                        new_scope = scope_r_map.get(new_scope_lbl, "all")
-                    with ec3:
-                        cur_risk     = m.get("risk", "all")
-                        cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
-                                        else json.dumps(cur_risk).replace(" ", ""))
-                        cur_risk_lbl = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
-                        risk_opts_list = list(risk_opts_map.values())
-                        risk_idx = risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0
-                        new_risk_lbl = st.selectbox("Criticité", risk_opts_list, index=risk_idx, key=f"em_risk_{real_idx}")
-                        new_risk_key = risk_opts_rev.get(new_risk_lbl, "all")
-                        new_risk = ("all" if new_risk_key == "all"
+                st.markdown(
+                    "<div style='background:#eff6ff;border:1.5px solid #93c5fd;"
+                    "border-radius:10px;padding:14px;margin-bottom:8px'>",
+                    unsafe_allow_html=True)
+                st.markdown("**✏️ Modifier la mesure**")
+
+                ec1, ec2, ec3, ec4, ec5 = st.columns([3, 2, 1.5, 1.5, 1.5])
+                with ec1:
+                    new_text = st.text_input("Texte *", value=m.get("text", ""), key=f"em_text_{real_idx}")
+                with ec2:
+                    cur_scope_lbl = scope_labels.get(m.get("scope", "all"), "🌐 Toutes")
+                    scope_opts    = list(scope_labels.values())
+                    new_scope_lbl = st.selectbox(
+                        "Origine", scope_opts,
+                        index=scope_opts.index(cur_scope_lbl) if cur_scope_lbl in scope_opts else 0,
+                        key=f"em_scope_{real_idx}")
+                    new_scope = scope_r_map.get(new_scope_lbl, "all")
+                with ec3:
+                    cur_risk     = m.get("risk", "all")
+                    cur_risk_key = (str(cur_risk) if not isinstance(cur_risk, list)
+                                    else json.dumps(cur_risk, separators=(',', ':')))
+                    cur_risk_lbl  = risk_opts_map.get(cur_risk_key, "🌐 Toutes")
+                    risk_opts_list = list(risk_opts_map.values())
+                    new_risk_lbl  = st.selectbox(
+                        "Criticité", risk_opts_list,
+                        index=risk_opts_list.index(cur_risk_lbl) if cur_risk_lbl in risk_opts_list else 0,
+                        key=f"em_risk_{real_idx}")
+                    new_risk_key = risk_opts_rev.get(new_risk_lbl, "all")
+                    new_risk     = ("all"                   if new_risk_key == "all"
                                     else json.loads(new_risk_key) if new_risk_key.startswith("[")
                                     else int(new_risk_key))
-                    with ec4:
-                        cur_type_lbl = type_labels.get(m.get("type", "alert"), "⚠️ Alerte")
-                        type_opts    = list(type_labels.values())
-                        type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
-                        new_type_lbl = st.selectbox("Type", type_opts, index=type_idx, key=f"em_type_{real_idx}")
-                        new_type = {v: k for k, v in type_labels.items()}.get(new_type_lbl, "alert")
-                    with ec5:  # ← NOUVEAU
-                        cur_gt_lbl   = germ_type_labels.get(m.get("germ_type", "all"), "🌐 Tous germes")
-                        gt_opts      = list(germ_type_labels.values())
-                        gt_idx       = gt_opts.index(cur_gt_lbl) if cur_gt_lbl in gt_opts else 0
-                        new_gt_lbl   = st.selectbox("Germe", gt_opts, index=gt_idx, key=f"em_germ_type_{real_idx}")
-                        new_germ_type = germ_type_r_map.get(new_gt_lbl, "all")
+                with ec4:
+                    cur_type_lbl = type_labels.get(m.get("type", "alert"), "⚠️ Alerte")
+                    type_opts    = list(type_labels.values())
+                    new_type_lbl = st.selectbox(
+                        "Type", type_opts,
+                        index=type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0,
+                        key=f"em_type_{real_idx}")
+                    new_type = type_r_map.get(new_type_lbl, "alert")
+                with ec5:
+                    cur_gt_lbl = germ_type_labels.get(m.get("germ_type", "all"), "🌐 Tous germes")
+                    gt_opts    = list(germ_type_labels.values())
+                    new_gt_lbl = st.selectbox(
+                        "Germe", gt_opts,
+                        index=gt_opts.index(cur_gt_lbl) if cur_gt_lbl in gt_opts else 0,
+                        key=f"em_germ_type_{real_idx}")
+                    new_germ_type = germ_type_r_map.get(new_gt_lbl, "all")
 
-                    sb1, sb2 = st.columns(2)
-                    with sb1:
-                        if st.button("✔️ Valider", key=f"em_save_{real_idx}", use_container_width=True, type="primary"):
-                            if new_text.strip():
-                                om[real_idx]["text"]      = new_text.strip()
-                                om[real_idx]["scope"]     = new_scope
-                                om[real_idx]["risk"]      = new_risk
-                                om[real_idx]["type"]      = new_type
-                                om[real_idx]["germ_type"] = new_germ_type  # ← NOUVEAU
-                                save_origin_measures(om, supa=False)
-                                st.session_state.origin_measures       = om
-                                st.session_state["_edit_mesure_idx"]   = None
-                                st.session_state["_mesures_modifiees"] = True
-                                st.rerun()
-                            else:
-                                st.error("Le texte est obligatoire.")
-                    with sb2:
-                        if st.button("✕ Annuler", key=f"em_cancel_{real_idx}", use_container_width=True):
-                            st.session_state["_edit_mesure_idx"] = None
+                sb1, sb2 = st.columns(2)
+                with sb1:
+                    if st.button("✔️ Valider", key=f"em_save_{real_idx}",
+                                use_container_width=True, type="primary"):
+                        if new_text.strip():
+                            om[real_idx].update({
+                                "text":      new_text.strip(),
+                                "scope":     new_scope,
+                                "risk":      new_risk,
+                                "type":      new_type,
+                                "germ_type": new_germ_type,
+                            })
+                            save_origin_measures(om, supa=False)
+                            st.session_state.origin_measures       = om
+                            st.session_state["_edit_mesure_idx"]   = None
+                            st.session_state["_mesures_modifiees"] = True
                             st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
+                        else:
+                            st.error("Le texte est obligatoire.")
+                with sb2:
+                    if st.button("✕ Annuler", key=f"em_cancel_{real_idx}", use_container_width=True):
+                        st.session_state["_edit_mesure_idx"] = None
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Mode lecture ───────────────────────────────────────────────────────
             else:
-                rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([4, 1.2, 1.2, 1.5, 0.8, 0.8])  # ← NOUVEAU rc3 pour germe
+                rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([4, 1.2, 1.2, 1.2, 0.8, 0.8])
                 with rc1:
                     st.markdown(
-                        f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m["text"]}</div>',
+                        f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m.get("text","")}</div>',
                         unsafe_allow_html=True)
-                with rc2:  # ← NOUVEAU badge type germe
-                    germ_type_colors = {
-                        "all": "#64748b", "bacteria": "#0284c7",
-                        "fungi": "#7c3aed", "both": "#0f766e"
-                    }
-                    _gtcol = germ_type_colors.get(m.get("germ_type", "all"), "#64748b")
+                with rc2:
                     st.markdown(
-                        f'<div style="padding:6px 0;font-size:.65rem;color:{_gtcol};'
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{gtcol};'
                         f'font-weight:600;text-align:center">{gtlbl}</div>',
                         unsafe_allow_html=True)
                 with rc3:
                     st.markdown(
                         f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};'
                         f'font-weight:600;text-align:center">{tlbl}</div>',
+                        unsafe_allow_html=True)
+                with rc4:
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{risk_col};'
+                        f'font-weight:600;text-align:center">{risk_lbl}</div>',
                         unsafe_allow_html=True)
                 with rc5:
                     if can_edit:
@@ -6145,7 +6197,7 @@ if active == "parametres":
                             st.session_state["_mesures_modifiees"] = True
                             st.rerun()
 
-        # ── Boutons sauvegarde / réinitialisation ──────────────────────────────
+        # ── Boutons sauvegarde / réinitialisation ──────────────────────────────────
         col_sr, col_def = st.columns(2)
         with col_sr:
             if can_edit:
@@ -6160,7 +6212,6 @@ if active == "parametres":
                     save_origin_measures(st.session_state.origin_measures, supa=True)
                     st.session_state["_mesures_modifiees"] = False
                     st.rerun()
-
     # ══════════════════════════════════════════════════════════════════════════
     # POINTS DE PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
