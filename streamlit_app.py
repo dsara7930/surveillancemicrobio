@@ -2954,8 +2954,27 @@ if active == "surveillance":
 
             st.markdown("<div style='height:4px'></div></div></div>", unsafe_allow_html=True)
 
+            # ── Commentaire imprimable ────────────────────────────────────
+            _comment_key = f"mc_comment_{key_suffix}"
+            st.markdown(
+                "<div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;"
+                "padding:12px 16px;margin-top:10px;margin-bottom:10px'>"
+                "<div style='font-size:.78rem;font-weight:700;color:#1e40af;margin-bottom:6px'>"
+                "💬 Commentaire (inclus dans le PDF)</div>",
+                unsafe_allow_html=True,
+            )
+            _comment_val = st.text_area(
+                "Commentaire",
+                value=st.session_state.get(_comment_key, ""),
+                placeholder="Ex : Nettoyage renforcé effectué, appel technicien, procédure X appliquée…",
+                height=90,
+                key=_comment_key,
+                label_visibility="collapsed",
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
                 # ── Génération PDF mesures correctives ───────────────────────────────────
-            def _gen_pdf_mesures(pop_data, mesures):
+            def _gen_pdf_mesures(pop_data, mesures, commentaire=""):
                 from reportlab.lib.pagesizes import A4
                 from reportlab.lib.units     import cm as rl_cm
                 from reportlab.lib           import colors as rlc
@@ -2969,7 +2988,18 @@ if active == "surveillance":
                 buf   = BytesIO()
                 A4_W, A4_H = A4
                 MARGIN = 1.8 * rl_cm
-
+                # ── Commentaire ───────────────────────────────────────────────────────
+                if commentaire and commentaire.strip():
+                    story += [
+                        Spacer(1, 10),
+                        Paragraph("💬 Commentaire", s_mhead),
+                        Paragraph(commentaire.strip(), ParagraphStyle(
+                            "mc_com", fontName="Helvetica", fontSize=9, leading=13,
+                            textColor=rlc.HexColor("#0f172a"),
+                            leftIndent=10, spaceAfter=5,
+                            backColor=rlc.HexColor("#f0f9ff"),
+                        )),
+                    ]
                 s_title  = ParagraphStyle("mc_t", fontName="Helvetica-Bold",  fontSize=14, leading=18, textColor=rlc.HexColor("#1e40af"), spaceAfter=6)
                 s_sub    = ParagraphStyle("mc_s", fontName="Helvetica",       fontSize=9,  leading=12, textColor=rlc.HexColor("#64748b"), spaceAfter=10)
                 s_label  = ParagraphStyle("mc_l", fontName="Helvetica-Bold",  fontSize=10, leading=13, textColor=rlc.HexColor("#0f172a"), spaceAfter=2)
@@ -3058,7 +3088,8 @@ if active == "surveillance":
                 _pdf_key = f"_pdf_mesures_{key_suffix}"
                 if st.button("🖨️ Imprimer (PDF)", use_container_width=True, key=f"alert_print_{key_suffix}"):
                     try:
-                        st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures)
+                        _comment_to_print = st.session_state.get(f"mc_comment_{key_suffix}", "")
+                        st.session_state[_pdf_key] = _gen_pdf_mesures(pop_data, mesures, _comment_to_print)
                     except ImportError:
                         st.error("❌ ReportLab non installé.")
                     except Exception as _pe:
