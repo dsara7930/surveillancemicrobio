@@ -2894,64 +2894,47 @@ if active == "surveillance":
         return 1
 
     with tab_ident:
-        def _render_alerte_mesures(pop_data, key_suffix):
-            _is_action = pop_data["status"] == "action"
-            _border = "#ef4444" if _is_action else "#f59e0b"
-            _bg_head = "#fef2f2" if _is_action else "#fffbeb"
-            _hd_col = "#991b1b" if _is_action else "#92400e"
-            _ic = "🚨" if _is_action else "⚠️"
-            _txt = "ACTION REQUISE" if _is_action else "ALERTE"
-            _germ_sc = pop_data.get("germ_score", "—")
-            _loc_c = pop_data.get("loc_criticality", "—")
-            _total = pop_data.get("total_score", "—")
-            type_colors = {"action": "#ef4444", "alert": "#f59e0b", "both": "#818cf8"}
-            type_labels = {"action": "🚨 Action", "alert": "⚠️ Alerte", "both": "⚠️🚨 Les deux"}
+        def _render_mesures_correctives(entry: dict, entry_idx: int):
+            """
+            Affiche le bloc « Mesures correctives » sous une entrée dont le statut
+            est 'alert' ou 'action'.
+            - Zone de texte « Autre action réalisée »
+            - Bouton « Prise en compte des mesures correctives »
+            - Bouton « Imprimer (PDF) »
+            - Statut persisté dans entry['mc_statut'], entry['mc_detail'], entry['mc_date']
+            """
+            from datetime import datetime as _dt
 
-            def _match(m):
-                if pop_data["status"] == "alert" and m.get("type") not in ("alert", "both"):
-                    return False
-                if pop_data["status"] == "action" and m.get("type") not in ("action", "both"):
-                    return False
-                mr = m.get("risk", "all")
-                if mr != "all":
-                    gr = pop_data.get("risk", 1)
-                    if isinstance(mr, list):
-                        return gr in mr
-                    return mr == gr
-                return True
+            STATUS    = entry.get("status", "ok")
+            MC_STATUT = entry.get("mc_statut", "")
+            MC_DETAIL = entry.get("mc_detail", "")
+            MC_DATE   = entry.get("mc_date",   "")
 
-            mesures = [m for m in st.session_state.origin_measures if _match(m)]
-            st.markdown(f"""
-            <div style="border:2.5px solid {_border};border-radius:14px;overflow:hidden;margin-top:16px;margin-bottom:4px">
-                <div style="background:{_bg_head};padding:16px 20px;border-bottom:1.5px solid {_border}44">
-                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                    <span style="font-size:2rem;line-height:1">{_ic}</span>
-                    <div style="flex:1">
-                    <div style="font-size:1.05rem;font-weight:900;color:{_hd_col}">{_txt} — {pop_data['label']}</div>
-                    <div style="font-size:.78rem;color:#475569;margin-top:4px;line-height:1.8"><strong>{pop_data['ufc']} UFC</strong> &nbsp;·&nbsp; Germe : <em>{pop_data['germ']}</em> &nbsp;·&nbsp; Lieu Nv.{_loc_c}</div>
-                    </div>
-                    <div style="background:#fff;border:2px solid {_border}55;border-radius:12px;padding:12px 18px;text-align:center;min-width:130px">
-                    <div style="font-size:.58rem;color:#475569;text-transform:uppercase;font-weight:700">Score total</div>
-                    <div style="font-size:2.2rem;font-weight:900;color:{_border};line-height:1.1">{_total}</div>
-                    </div>
-                </div>
-                </div>
-                <div style="background:#fff;padding:14px 20px 6px 20px">
-                <div style="font-size:.82rem;font-weight:800;color:{_hd_col};margin-bottom:10px">📋 Mesures correctives applicables</div>""",
-                unsafe_allow_html=True)
+            if STATUS not in ("alert", "action"):
+                return
 
-            if mesures:
-                for _m in mesures:
-                    _tc = type_colors.get(_m["type"], "#94a3b8")
-                    _tl = type_labels.get(_m["type"], _m["type"])
-                    st.markdown(
-                        f"<div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {_tc};"
-                        f"border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:7px'>"
-                        f"<span style='color:{_tc};font-weight:700;margin-right:6px'>▸</span>{_m['text']}</div>",
-                        unsafe_allow_html=True)
+            # ── Couleurs selon statut mesures correctives ──────────────────────────
+            if MC_STATUT == "fait":
+                _brd = "#86efac"; _bg = "#f0fdf4"; _title_col = "#166534"
+                _badge_bg = "#22c55e"; _badge_txt = "MESURES CORRECTIVES FAITES ✅"
             else:
-                st.markdown("<div style='font-size:.8rem;color:#94a3b8;font-style:italic'>Aucune mesure corrective configurée.</div>", unsafe_allow_html=True)
+                _brd = "#fca5a5" if STATUS == "action" else "#fcd34d"
+                _bg  = "#fef2f2" if STATUS == "action" else "#fffbeb"
+                _title_col = "#991b1b" if STATUS == "action" else "#92400e"
+                _badge_bg  = "#ef4444" if STATUS == "action" else "#f59e0b"
+                _badge_txt = "MESURES CORRECTIVES EN ATTENTE"
 
+            st.markdown(
+                f"<div style='background:{_bg};border:1.5px solid {_brd};"
+                f"border-radius:12px;padding:14px 18px;margin-top:10px'>"
+                f"<div style='font-size:.82rem;font-weight:800;color:{_title_col};"
+                f"margin-bottom:10px;display:flex;justify-content:space-between;align-items:center'>"
+                f"<span>🔧 Mesures correctives</span>"
+                f"<span style='background:{_badge_bg};color:#fff;border-radius:6px;"
+                f"padding:2px 10px;font-size:.68rem;font-weight:700'>{_badge_txt}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
                 # ── Génération PDF mesures correctives ───────────────────────────────────
             def _gen_pdf_mesures(pop_data, mesures):
                 from reportlab.lib.pagesizes import A4
