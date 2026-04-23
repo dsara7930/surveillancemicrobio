@@ -5690,45 +5690,7 @@ if active == "analyse":
                 # ── Onglet mesures correctives / détails ──────────────────────────────
                 with _tab_mc:
                     if status_r in ("alert", "action"):
-                        if mc_statut == "fait":
-                            if mc_detail:
-                                st.markdown(
-                                    f"<div style='background:#dcfce7;border-left:3px solid #22c55e;"
-                                    f"border-radius:6px;padding:10px 14px;font-size:.82rem;"
-                                    f"color:#14532d;white-space:pre-wrap'>📝 {mc_detail}</div>",
-                                    unsafe_allow_html=True,
-                                )
-                            else:
-                                st.success("✅ Mesures correctives validées (sans détail).")
-                            if st.button("↩️ Annuler la validation", key=f"liste_mc_annuler_{_li}"):
-                                st.session_state.surveillance[_real_idx]["mc_statut"] = ""
-                                st.session_state.surveillance[_real_idx]["mc_detail"] = ""
-                                st.session_state.surveillance[_real_idx]["mc_date"]   = ""
-                                save_surveillance(st.session_state.surveillance)
-                                st.rerun()
-                        else:
-                            _dk  = f"liste_mc_txt_{_li}"
-                            _txt = st.text_area(
-                                "📝 Autre action réalisée *(optionnel)*",
-                                value=st.session_state.get(_dk, ""),
-                                placeholder="Ex : Nettoyage renforcé, décontamination…",
-                                height=90,
-                                key=_dk,
-                            )
-                            if st.button(
-                                "✅ Prise en compte des mesures correctives",
-                                key=f"liste_mc_valider_{_li}",
-                                type="primary",
-                                use_container_width=True,
-                            ):
-                                from datetime import datetime as _dt2
-                                _now2 = _dt2.today().strftime("%d/%m/%Y %H:%M")
-                                st.session_state.surveillance[_real_idx]["mc_statut"] = "fait"
-                                st.session_state.surveillance[_real_idx]["mc_detail"] = _txt.strip()
-                                st.session_state.surveillance[_real_idx]["mc_date"]   = _now2
-                                save_surveillance(st.session_state.surveillance)
-                                st.success("✅ Mesures correctives enregistrées.")
-                                st.rerun()
+                        _render_mesures_correctives(r, _real_idx)
                     else:
                         st.markdown(
                             "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
