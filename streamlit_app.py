@@ -5905,11 +5905,9 @@ if active == "parametres":
             return freq                 # fallback : on suppose hebdomadaire
   
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # MESURES CORRECTIVES
-    # ══════════════════════════════════════════════════════════════════════════
     with subtab_mesures:
         om = st.session_state.origin_measures
+
         scope_labels = {
             "all": "🌐 Toutes", "Air": "💨 Air", "Humidité": "💧 Humidité",
             "Flore fécale": "🦠 Flore fécale",
@@ -5927,7 +5925,17 @@ if active == "parametres":
         }
         risk_opts_rev = {v: k for k, v in risk_opts_map.items()}
 
-        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 1.5, 1.5, 1])
+        # ← NOUVEAU : mapping type de germe
+        germ_type_labels = {
+            "all":      "🌐 Tous germes",
+            "bacteria": "🦠 Bactéries",
+            "fungi":    "🍄 Champignons",
+            "both":     "🦠🍄 Bactéries & Champignons",
+        }
+        germ_type_r_map = {v: k for k, v in germ_type_labels.items()}
+
+        # ── Filtres ────────────────────────────────────────────────────────────
+        col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([2, 1.5, 1.5, 1.5, 1])  # ← NOUVEAU col_f4 pour germe
         with col_f1:
             filter_scope = st.selectbox("Origine",
                 ["Tout afficher"] + list(scope_labels.values()),
@@ -5940,17 +5948,23 @@ if active == "parametres":
             filter_type = st.selectbox("Type",
                 ["Tout", "⚠️ Alerte", "🚨 Action"],
                 label_visibility="collapsed", key="filter_type")
-        with col_f4:
+        with col_f4:  # ← NOUVEAU
+            filter_germ_type = st.selectbox("Germe",
+                list(germ_type_labels.values()),
+                label_visibility="collapsed", key="filter_germ_type")
+        with col_f5:
             if can_edit:
                 if st.button("➕ Nouvelle", use_container_width=True):
                     st.session_state.show_new_measure = True
                     st.session_state["_edit_mesure_idx"] = None
                     st.rerun()
 
-        active_scope = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
-        active_risk  = filter_risk_lbl.split()[-1] if filter_risk_lbl != "🌐 Tout" else None
-        active_type  = ("alert" if "Alerte" in filter_type else "action") if filter_type != "Tout" else None
+        active_scope     = scope_r_map.get(filter_scope) if filter_scope != "Tout afficher" else None
+        active_risk      = filter_risk_lbl.split()[-1] if filter_risk_lbl != "🌐 Tout" else None
+        active_type      = ("alert" if "Alerte" in filter_type else "action") if filter_type != "Tout" else None
+        active_germ_type = germ_type_r_map.get(filter_germ_type, "all")  # ← NOUVEAU
 
+        # ── Formulaire nouvelle mesure ─────────────────────────────────────────
         if can_edit and st.session_state.get("show_new_measure", False):
             with st.container():
                 st.markdown(
@@ -5958,7 +5972,7 @@ if active == "parametres":
                     "border-radius:10px;padding:16px;margin-bottom:12px'>",
                     unsafe_allow_html=True)
                 st.markdown("#### ➕ Nouvelle mesure")
-                nmc1, nmc2, nmc3, nmc4 = st.columns([3, 2, 1.5, 1.5])
+                nmc1, nmc2, nmc3, nmc4, nmc5 = st.columns([3, 2, 1.5, 1.5, 1.5])  # ← NOUVEAU nmc5
                 with nmc1:
                     nm_text = st.text_input("Texte *", key="nm_text")
                 with nmc2:
@@ -5968,21 +5982,26 @@ if active == "parametres":
                     nm_risk_lbl = st.selectbox("Criticité", list(risk_opts_map.values()), key="nm_risk")
                     nm_risk_key = risk_opts_rev.get(nm_risk_lbl, "all")
                     nm_risk = ("all" if nm_risk_key == "all"
-                               else json.loads(nm_risk_key) if nm_risk_key.startswith("[")
-                               else int(nm_risk_key))
+                            else json.loads(nm_risk_key) if nm_risk_key.startswith("[")
+                            else int(nm_risk_key))
                 with nmc4:
                     nm_type_label = st.selectbox("Type", list(type_labels.values()), key="nm_type")
                     nm_type = {v: k for k, v in type_labels.items()}.get(nm_type_label, "alert")
+                with nmc5:  # ← NOUVEAU
+                    nm_germ_type_label = st.selectbox("Germe", list(germ_type_labels.values()), key="nm_germ_type")
+                    nm_germ_type = germ_type_r_map.get(nm_germ_type_label, "all")
+
                 nb1, nb2 = st.columns(2)
                 with nb1:
                     if st.button("✅ Ajouter", use_container_width=True, key="nm_submit"):
                         if nm_text.strip():
                             om.append({
-                                "id":    f"m{len(om)+1:03d}_custom",
-                                "text":  nm_text.strip(),
-                                "scope": nm_scope,
-                                "risk":  nm_risk,
-                                "type":  nm_type
+                                "id":        f"m{len(om)+1:03d}_custom",
+                                "text":      nm_text.strip(),
+                                "scope":     nm_scope,
+                                "risk":      nm_risk,
+                                "type":      nm_type,
+                                "germ_type": nm_germ_type,  # ← NOUVEAU
                             })
                             save_origin_measures(om, supa=False)
                             st.session_state.origin_measures  = om
@@ -5994,6 +6013,7 @@ if active == "parametres":
                         st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
+        # ── Filtre ─────────────────────────────────────────────────────────────
         def _passes_filter(m):
             if active_scope and m["scope"] != active_scope:
                 return False
@@ -6006,6 +6026,11 @@ if active == "parametres":
                         if int(active_risk) not in mr: return False
                     else:
                         if str(mr) != active_risk: return False
+            # ← NOUVEAU : filtre par type de germe
+            if active_germ_type != "all":
+                mgt = m.get("germ_type", "all")
+                if mgt != "all" and mgt != active_germ_type and mgt != "both":
+                    return False
             return True
 
         if st.session_state.get("_mesures_modifiees"):
@@ -6015,10 +6040,12 @@ if active == "parametres":
                 "⚠️ Modifications non sauvegardées — cliquez sur <strong>💾 Sauvegarder</strong>."
                 "</div>", unsafe_allow_html=True)
 
+        # ── Liste des mesures ──────────────────────────────────────────────────
         for m in [m for m in om if _passes_filter(m)]:
             real_idx = om.index(m)
             tcol = type_colors.get(m["type"], "#0f172a")
             tlbl = type_labels.get(m["type"], m["type"])
+            gtlbl = germ_type_labels.get(m.get("germ_type", "all"), "🌐 Tous germes")  # ← NOUVEAU
 
             if st.session_state.get("_edit_mesure_idx") == real_idx:
                 with st.container():
@@ -6027,7 +6054,7 @@ if active == "parametres":
                         "border-radius:10px;padding:14px;margin-bottom:8px'>",
                         unsafe_allow_html=True)
                     st.markdown("**✏️ Modifier la mesure**")
-                    ec1, ec2, ec3, ec4 = st.columns([3, 2, 1.5, 1.5])
+                    ec1, ec2, ec3, ec4, ec5 = st.columns([3, 2, 1.5, 1.5, 1.5])  # ← NOUVEAU ec5
                     with ec1:
                         new_text = st.text_input("Texte *", value=m.get("text", ""), key=f"em_text_{real_idx}")
                     with ec2:
@@ -6054,18 +6081,26 @@ if active == "parametres":
                         type_idx     = type_opts.index(cur_type_lbl) if cur_type_lbl in type_opts else 0
                         new_type_lbl = st.selectbox("Type", type_opts, index=type_idx, key=f"em_type_{real_idx}")
                         new_type = {v: k for k, v in type_labels.items()}.get(new_type_lbl, "alert")
+                    with ec5:  # ← NOUVEAU
+                        cur_gt_lbl   = germ_type_labels.get(m.get("germ_type", "all"), "🌐 Tous germes")
+                        gt_opts      = list(germ_type_labels.values())
+                        gt_idx       = gt_opts.index(cur_gt_lbl) if cur_gt_lbl in gt_opts else 0
+                        new_gt_lbl   = st.selectbox("Germe", gt_opts, index=gt_idx, key=f"em_germ_type_{real_idx}")
+                        new_germ_type = germ_type_r_map.get(new_gt_lbl, "all")
+
                     sb1, sb2 = st.columns(2)
                     with sb1:
                         if st.button("✔️ Valider", key=f"em_save_{real_idx}", use_container_width=True, type="primary"):
                             if new_text.strip():
-                                om[real_idx]["text"]  = new_text.strip()
-                                om[real_idx]["scope"] = new_scope
-                                om[real_idx]["risk"]  = new_risk
-                                om[real_idx]["type"]  = new_type
+                                om[real_idx]["text"]      = new_text.strip()
+                                om[real_idx]["scope"]     = new_scope
+                                om[real_idx]["risk"]      = new_risk
+                                om[real_idx]["type"]      = new_type
+                                om[real_idx]["germ_type"] = new_germ_type  # ← NOUVEAU
                                 save_origin_measures(om, supa=False)
-                                st.session_state.origin_measures        = om
-                                st.session_state["_edit_mesure_idx"]    = None
-                                st.session_state["_mesures_modifiees"]  = True
+                                st.session_state.origin_measures       = om
+                                st.session_state["_edit_mesure_idx"]   = None
+                                st.session_state["_mesures_modifiees"] = True
                                 st.rerun()
                             else:
                                 st.error("Le texte est obligatoire.")
@@ -6075,23 +6110,33 @@ if active == "parametres":
                             st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
             else:
-                rc1, rc2, rc3, rc4, rc5 = st.columns([4.5, 1.2, 1.5, 0.8, 0.8])
+                rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([4, 1.2, 1.2, 1.5, 0.8, 0.8])  # ← NOUVEAU rc3 pour germe
                 with rc1:
                     st.markdown(
                         f'<div style="padding:6px 0;font-size:.8rem;color:#1e293b">• {m["text"]}</div>',
                         unsafe_allow_html=True)
+                with rc2:  # ← NOUVEAU badge type germe
+                    germ_type_colors = {
+                        "all": "#64748b", "bacteria": "#0284c7",
+                        "fungi": "#7c3aed", "both": "#0f766e"
+                    }
+                    _gtcol = germ_type_colors.get(m.get("germ_type", "all"), "#64748b")
+                    st.markdown(
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{_gtcol};'
+                        f'font-weight:600;text-align:center">{gtlbl}</div>',
+                        unsafe_allow_html=True)
                 with rc3:
                     st.markdown(
-                        f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};"'
+                        f'<div style="padding:6px 0;font-size:.65rem;color:{tcol};'
                         f'font-weight:600;text-align:center">{tlbl}</div>',
                         unsafe_allow_html=True)
-                with rc4:
+                with rc5:
                     if can_edit:
                         if st.button("✏️", key=f"edit_btn_{real_idx}"):
                             st.session_state["_edit_mesure_idx"] = real_idx
                             st.session_state["show_new_measure"] = False
                             st.rerun()
-                with rc5:
+                with rc6:
                     if can_edit:
                         if st.button("🗑️", key=f"del_m_{real_idx}"):
                             om.pop(real_idx)
@@ -6100,6 +6145,7 @@ if active == "parametres":
                             st.session_state["_mesures_modifiees"] = True
                             st.rerun()
 
+        # ── Boutons sauvegarde / réinitialisation ──────────────────────────────
         col_sr, col_def = st.columns(2)
         with col_sr:
             if can_edit:
