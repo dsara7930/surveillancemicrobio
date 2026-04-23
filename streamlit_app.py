@@ -3404,21 +3404,16 @@ if active == "planning":
     # AUTO-SKIP : vendredi 23h59 passé → non-fait automatique + Supabase
     # ════════════════════════════════════════════════════════════════════════
     def _auto_skip_past_weeks(raw_plan, planning_skips, prelevements, today):
-        """
-        Parcourt tous les jours du plan.
-        Si le vendredi de la semaine d'un jour est strictement antérieur à
-        aujourd'hui (= la semaine est entièrement passée), tout prélèvement
-        planifié ce jour-là qui n'est ni réalisé ni déjà skippé est
-        automatiquement ajouté aux skips.
-        Retourne (planning_skips_mis_à_jour, nb_nouveaux_skips).
-        """
+        from datetime import datetime as _dt, time as _time
         nb_new = 0
+        _now = _dt.now()
+
         for day in sorted(raw_plan.keys()):
-            # Vendredi de la semaine courante de ce jour
             friday_of_week = day + timedelta(days=(4 - day.weekday()))
-            # Semaine encore en cours ou future → on ne touche pas
-            if friday_of_week >= today:
-                continue
+            # ✅ Cutoff : vendredi à 16h00 (et non plus 23h59)
+            friday_cutoff = _dt.combine(friday_of_week, _time(16, 0))
+            if _now < friday_cutoff:
+                continue  # Semaine encore en cours ou future → on ne touche pas
 
             tasks = raw_plan.get(day, [])
             if not tasks:
@@ -3568,16 +3563,29 @@ if active == "planning":
         return planning
 
     def _redistribute_skips(monthly_plan, planning_skips, holidays_set):
-        """
-        Redistribue les tâches skippées (non-faites, qu'elles soient manuelles
-        ou auto-détectées) vers les jours ouvrés FUTURS du mois (> aujourd'hui).
-        Les tâches fréquence ≥ 1/jour sont supprimées (non redistribuées).
-        """
         import copy
+        from datetime import datetime as _dt, time as _time
         plan            = copy.deepcopy(monthly_plan)
         today           = _today_dt
+        _now            = _dt.now()
         all_days_sorted = sorted(plan.keys())
         future_days     = [d for d in all_days_sorted if d > today]
+
+        # ── Gel semaine +1 dès vendredi 16h00 ────────────────────────────────
+        # Calcul du vendredi de la semaine EN COURS
+        _cur_monday  = today - timedelta(days=today.weekday())
+        _cur_friday  = _cur_monday + timedelta(days=4)
+        _freeze_cutoff = _dt.combine(_cur_friday, _time(16, 0))
+
+        if _now >= _freeze_cutoff:
+            # La semaine +1 est gelée : lundi et vendredi de la semaine prochaine
+            _next_monday = _cur_monday + timedelta(weeks=1)
+            _next_friday = _next_monday + timedelta(days=4)
+            # On exclut tous les jours de la semaine +1 des cibles de redistribution
+            future_days = [
+                d for d in future_days
+                if not (_next_monday <= d <= _next_friday)
+            ]
 
         for day in all_days_sorted:
             skipped_labels = planning_skips.get(day.isoformat(), [])
