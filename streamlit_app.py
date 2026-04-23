@@ -3241,7 +3241,7 @@ if active == "surveillance":
                 pt_oper = smp.get("operateur", "?") if smp else "?"
                 pt_class = smp.get("room_class", "") if smp else ""
 
-                _comment_prelev = smp.get("commentaire", "") if smp else ""
+                _comment_prelev = smp.get("p_commentaire", "") if smp else ""
                 _date_prelev = (
                     date.fromisoformat(smp["date"])
                     if smp and smp.get("date")
