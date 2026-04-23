@@ -3162,6 +3162,7 @@ if active == "surveillance":
                 popup_mode=True,
             )
 
+        # ── Sécurité schedules J7 ───────────────────────────────────────────────
         def _j7_done_or_absent(sample_id):
             j7 = next(
                 (x for x in st.session_state.schedules
@@ -3199,6 +3200,22 @@ if active == "surveillance":
 
         pending_ids_grouped = list(_seen_sids.values())
 
+        # ── Couleurs criticité (scope global ici = OK) ──────────────────────────
+        LOC_CRIT_COLORS = {
+            "1": "#22c55e",
+            "2": "#0babf5",
+            "3": "#ee811a",
+            "4": "#f50b0b"
+        }
+
+        LOC_CRIT_LABELS = {
+            "1": "Limité",
+            "2": "Modéré",
+            "3": "Important",
+            "4": "Critique"
+        }
+
+        # ── Affichage ────────────────────────────────────────────────────────────
         if not pending_ids_grouped:
             st.success("✅ Aucune identification en attente.")
 
@@ -3212,7 +3229,7 @@ if active == "surveillance":
                 _label = pg["label"]
                 _date = pg["date"]
 
-                # ── Récupération prélèvement ───────────────────────────────────────
+                # ── Prélèvement associé (SAFE) ───────────────────────────────────
                 smp = next(
                     (p for p in st.session_state.prelevements if p["id"] == _sid),
                     None
@@ -3224,10 +3241,13 @@ if active == "surveillance":
                 _comment_prelev = smp.get("commentaire", "") if smp else ""
                 _date_prelev = smp.get("date") if smp else None
 
-                # ── Affichage bloc expander ────────────────────────────────────────
-                with st.expander(f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}", expanded=True):
+                # ── UI bloc ───────────────────────────────────────────────────────
+                with st.expander(
+                    f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}",
+                    expanded=True
+                ):
 
-                    # ── COMMENTAIRE PRÉLÈVEMENT ──────────────────────────────────
+                    # ── Commentaire prélèvement ──────────────────────────────────
                     if _comment_prelev:
                         st.markdown(
                             f"""
@@ -3240,8 +3260,9 @@ if active == "surveillance":
                             unsafe_allow_html=True
                         )
 
-                    # ── SUITE DE TON CODE IDENTIFICATION ─────────────────────────
-                    # (germes, score, etc. inchangés)
+                    # ── Infos prélèvement (optionnel) ────────────────────────────
+                    st.caption(f"👤 Opérateur : {pt_oper} | 🏢 Classe : {pt_class}")
+
 
                 _key           = _sid.replace("-", "_")
                 germs_list_key = f"germs_list_{_key}"
