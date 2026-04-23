@@ -2400,13 +2400,10 @@ if active == "surveillance":
                             key="save_prelev", type="primary"):
                     if not p_oper:
                         st.error("⚠️ Veuillez sélectionner un opérateur.")
-                        st.stop()
                     elif str(pt_room).strip().upper() == "A" and not p_isolateur:
                         st.error("⚠️ Veuillez sélectionner un isolateur.")
-                        st.stop()
                     elif str(pt_room).strip().upper() == "A" and not p_poste:
                         st.error("⚠️ Veuillez sélectionner un poste.")
-                        st.stop()
                     else:
                         pid = f"s{len(st.session_state.prelevements)+1}_{int(datetime.now().timestamp())}"
                         is_zone_a = str(pt_room).strip().upper() == "A"
