@@ -3151,15 +3151,23 @@ if active == "surveillance":
     
     with tab_ident:
         from datetime import date
-        _date_prelev = None
+
+        # ── Sécurisation du prélèvement sélectionné ─────────────────────────────
+        smp = smp if 'smp' in locals() else None
+
+        # ── Date du prélèvement (toujours définie) ───────────────────────────────
+        _date_prelev = date.today()
+
         if smp and smp.get("date"):
             try:
                 _date_prelev = date.fromisoformat(smp["date"])
             except Exception:
                 _date_prelev = date.today()
-        else:
-            _date_prelev = date.today()
-        # ── Popup mesures correctives post-identification ──────────────────────
+
+        # ── Commentaire du prélèvement (toujours défini) ────────────────────────
+        _comment_prelev = smp.get("commentaire", "") if smp else ""
+
+        # ── Popup mesures correctives post-identification ───────────────────────
         if st.session_state.get("_show_mesures_popup"):
             _render_mesures_correctives(
                 st.session_state["_show_mesures_popup"],
