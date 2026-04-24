@@ -5058,7 +5058,7 @@ if active == "analyse":
                 f"{_mc_badge}</div>"
                 f"</div>"
                 f"<div style='font-size:.72rem;color:#475569'>"
-                f"📅 {r.get('date','—')} &nbsp;·&nbsp; "
+                f"📅 {r.get('date_prelevement', r.get('date','—'))} &nbsp;·&nbsp; "
                 f"👤 {r.get('operateur', r.get('preleveur','—'))} &nbsp;·&nbsp; "
                 f"🏥 {r.get('room_class','—')} &nbsp;·&nbsp; "
                 f"Score : {r.get('total_score','—')}"
@@ -5122,8 +5122,8 @@ if active == "analyse":
                         key=f"edit_prelev_{_li}",
                     )
                     _new_date = st.text_input(
-                        "📅 Date (YYYY-MM-DD)",
-                        value=r.get("date", ""),
+                        "📅 Date de prélèvement (YYYY-MM-DD)",
+                        value=r.get("date_prelevement", r.get("date", "")),
                         key=f"edit_date_{_li}",
                     )
                     _new_oper = st.text_input(
@@ -5217,7 +5217,7 @@ if active == "analyse":
                     f"<div style='font-size:.8rem;color:#7f1d1d'>"
                     f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
                     f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
-                    f"📅 {r.get('date','—')}<br>"
+                    f"📅 {r.get('date_prelevement', r.get('date','—'))} &nbsp;·&nbsp; "
                     f"Cette action est <strong>irréversible</strong> et mettra à jour "
                     f"toutes les statistiques.</div>"
                     f"</div>",
@@ -5927,10 +5927,10 @@ if active == "analyse":
 
             if tri_choix == "Date (récent → ancien)":
                 surv_f_liste = sorted(surv_f_liste,
-                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min, reverse=True)
+                    key=lambda x: _parse_date(x.get("date_prelevement", x.get("date",""))) or dt_date.min, reverse=True)
             elif tri_choix == "Date (ancien → récent)":
                 surv_f_liste = sorted(surv_f_liste,
-                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+                    key=lambda x: _parse_date(x.get("date_prelevement", x.get("date",""))) or dt_date.min)
             elif tri_choix == "Point A→Z":
                 surv_f_liste = sorted(surv_f_liste, key=lambda x: x.get("prelevement",""))
             elif tri_choix == "Point Z→A":
