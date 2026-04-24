@@ -2520,7 +2520,7 @@ if active == "surveillance":
                 qr_fixed = _fix_qr_input(qr_raw)
                 if qr_fixed != qr_raw:
                     st.caption("🔄 Correction automatique appliquée.")
-                qr_raw = qr_fixed
+                
 
             _scanned_data = None
             if qr_raw:
