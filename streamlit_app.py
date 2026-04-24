@@ -3258,7 +3258,7 @@ if active == "surveillance":
 
                 # ── expander ───────────────────────────────────────
                 with st.expander(
-                    f"🔴 {_label} — {_when_str} — {_ufc} UFC — {_date}",
+                    f"🔴 {_label} — {_when_str} — {_ufc} UFC — Prélevé le {_date_prelev}",
                     expanded=True
                 ):
 
