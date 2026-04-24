@@ -3333,7 +3333,81 @@ if active == "surveillance":
                             {"germ": "— Sélectionner un germe —", "ufc": 0}
                         )
                         st.rerun()
+                    # ── APERÇU SCORE (preview dynamique) ───────────────────
+                    valid_germs_preview = [
+                        g for g in current_germs
+                        if g["germ"] and g["germ"] != "— Sélectionner un germe —"
+                    ]
 
+                    if valid_germs_preview:
+                        scored_preview = []
+                        for vg in valid_germs_preview:
+                            gobj = next(
+                                (g for g in st.session_state.germs if g["name"] == vg["germ"]),
+                                None
+                            )
+                            if gobj:
+                                gs = (
+                                    int(gobj.get("pathogenicity", 1))
+                                    * int(gobj.get("resistance", 1))
+                                    * int(gobj.get("dissemination", 1))
+                                )
+                                scored_preview.append({
+                                    "name": vg["germ"],
+                                    "score": gs,
+                                    "ufc": vg["ufc"],
+                                })
+
+                        if scored_preview:
+                            worst_prev     = max(scored_preview, key=lambda x: x["score"])
+                            ts_prev        = loc_crit * worst_prev["score"]
+                            st_prev, _, sc_prev = _evaluate_score(ts_prev)
+                            ufc_total_prev = sum(s["ufc"] for s in scored_preview)
+
+                            preview_rows = "".join(
+                                f"<tr>"
+                                f"<td style='padding:2px 8px;color:#475569'>{s['name']}</td>"
+                                f"<td style='padding:2px 8px;text-align:center;color:#475569'>{s['ufc']} UFC</td>"
+                                f"<td style='padding:2px 8px;text-align:center;font-weight:700;"
+                                f"color:{'#ef4444' if s['name'] == worst_prev['name'] else '#64748b'}'>"
+                                f"{s['score']}{'  👑' if s['name'] == worst_prev['name'] else ''}</td>"
+                                f"</tr>"
+                                for s in scored_preview
+                            )
+
+                            st.markdown(
+                                f"""<div style="background:{sc_prev}11;border:1.5px solid {sc_prev}44;
+                                border-radius:8px;padding:10px 14px;margin-top:8px;margin-bottom:10px">
+                                <div style="font-size:.6rem;color:#475569;text-transform:uppercase;
+                                font-weight:700;margin-bottom:6px">
+                                Aperçu score — germe le plus critique 👑</div>
+                                <table style="width:100%;border-collapse:collapse;font-size:.72rem;margin-bottom:8px">
+                                    <tr style="border-bottom:1px solid #e2e8f0">
+                                        <th style="padding:2px 8px;text-align:left;color:#94a3b8">Germe</th>
+                                        <th style="padding:2px 8px;text-align:center;color:#94a3b8">UFC</th>
+                                        <th style="padding:2px 8px;text-align:center;color:#94a3b8">Score germe</th>
+                                    </tr>
+                                    {preview_rows}
+                                    <tr style="border-top:2px solid #e2e8f0;background:#f0fdf4">
+                                        <td style="padding:4px 8px;font-weight:800;color:#166534">Σ UFC TOTAL</td>
+                                        <td style="padding:4px 8px;text-align:center;font-weight:900;
+                                        color:#166534;font-size:.85rem">{ufc_total_prev}</td>
+                                        <td style="padding:4px 8px;text-align:center;font-size:.65rem;
+                                        color:#64748b">somme des germes</td>
+                                    </tr>
+                                </table>
+                                <div style="display:flex;align-items:center;gap:12px">
+                                    <div style="font-size:1.6rem;font-weight:900;color:{sc_prev}">{ts_prev}</div>
+                                    <div style="font-size:.72rem;color:#475569">
+                                        Lieu {loc_crit} × Germe le + critique {worst_prev['score']}<br>
+                                        <span style="font-weight:700;color:{sc_prev}">
+                                        {'🚨 ACTION' if st_prev == 'action' else '⚠️ ALERTE' if st_prev == 'alert' else '✅ Conforme'}
+                                        </span>
+                                    </div>
+                                </div>
+                                </div>""",
+                                unsafe_allow_html=True
+                            )
                     # ── REMARQUE ────────────────────────────────────
                     remarque = st.text_area(
                         "Remarque",
@@ -3449,8 +3523,7 @@ if active == "surveillance":
                                             "germ_saisi":           worst_entry["germ_saisi"],
                                             "germ_match":           worst_entry["germ_match"],
                                             "ufc":                  worst_entry["ufc"],
-                                            "risk":                 worst_entry["match_obj"].get(
-                                                                        "risk", worst_entry["germ_score"]),
+                                            "risk":                 worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
                                             "label":                _label,
                                             "room_class":           pt_class,
                                             "triggered_by":         triggered_by,
