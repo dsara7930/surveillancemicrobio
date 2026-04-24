@@ -4982,7 +4982,6 @@ if active == "analyse":
         if not raw:
             return None, None
         raw = raw.strip()
-        # ── CAS 1 : JSON ─────────────────────────────────────────────
         if raw.startswith("{"):
             try:
                 data = json.loads(raw)
@@ -4992,15 +4991,272 @@ if active == "analyse":
                 return None, "QR JSON valide mais sans champ 'id'."
             except json.JSONDecodeError:
                 return None, "QR JSON invalide."
-        # ── CAS 2 : ID brut ─────────────────────────────────────────
         return raw, None
 
-    # ── _parse_date retourne un datetime.date (pas datetime.datetime) ─────────
     def _parse_date(date_str):
         try:
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except Exception:
             return None
+
+    def _render_liste_entries(entries, surv_ref):
+        for _li, r in enumerate(entries):
+            _real_idx = next(
+                (
+                    i for i, s in enumerate(st.session_state.surveillance)
+                    if s.get("date") == r.get("date")
+                    and s.get("prelevement") == r.get("prelevement")
+                    and s.get("operateur", s.get("preleveur","")) == r.get("operateur", r.get("preleveur",""))
+                    and s.get("ufc") == r.get("ufc")
+                ),
+                None,
+            )
+            if _real_idx is None:
+                continue
+
+            status_r  = r.get("status", "ok")
+            mc_statut = r.get("mc_statut", "")
+            mc_detail = r.get("mc_detail", "")
+            mc_date   = r.get("mc_date", "")
+            germ_r    = r.get("germ_saisi", "") or r.get("germ_match","") or ""
+
+            if status_r == "action":
+                _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
+            elif status_r == "alert":
+                _sc = "#d97706"; _sb = "#fffbeb"; _sl = "⚠️ ALERTE"
+            else:
+                _sc = "#16a34a"; _sb = "#f0fdf4"; _sl = "✅ CONFORME"
+
+            _mc_badge = ""
+            if status_r in ("alert", "action"):
+                if mc_statut == "fait":
+                    _mc_badge = (
+                        "<span style='background:#22c55e;color:#fff;border-radius:5px;"
+                        "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
+                        "🔧 MC FAITES</span>"
+                    )
+                else:
+                    _mc_badge = (
+                        "<span style='background:#f59e0b;color:#fff;border-radius:5px;"
+                        "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
+                        "🔧 MC EN ATTENTE</span>"
+                    )
+
+            st.markdown(
+                f"<div style='background:{_sb};border:1px solid {_sc}44;"
+                f"border-left:4px solid {_sc};border-radius:8px;"
+                f"padding:10px 14px;margin-bottom:6px'>"
+                f"<div style='display:flex;justify-content:space-between;"
+                f"align-items:center;margin-bottom:4px'>"
+                f"<span style='font-size:.82rem;font-weight:700;color:#0f172a'>"
+                f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
+                f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
+                f"{r.get('ufc', 0)} UFC</span>"
+                f"<div>"
+                f"<span style='background:{_sc};color:#fff;border-radius:5px;"
+                f"padding:1px 8px;font-size:.7rem;font-weight:700'>{_sl}</span>"
+                f"{_mc_badge}</div>"
+                f"</div>"
+                f"<div style='font-size:.72rem;color:#475569'>"
+                f"📅 {r.get('date','—')} &nbsp;·&nbsp; "
+                f"👤 {r.get('operateur', r.get('preleveur','—'))} &nbsp;·&nbsp; "
+                f"🏥 {r.get('room_class','—')} &nbsp;·&nbsp; "
+                f"Score : {r.get('total_score','—')}"
+                f"</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+            _remarque  = r.get("remarque", "")
+            _triggered = r.get("triggered_by", "")
+            if _remarque or _triggered:
+                st.markdown(
+                    f"<div style='background:#f8fafc;border-left:3px solid #cbd5e1;"
+                    f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
+                    f"margin-bottom:6px;font-size:.72rem;color:#475569'>"
+                    + (f"💬 {_remarque}" if _remarque else "")
+                    + (" &nbsp;·&nbsp; " if _remarque and _triggered else "")
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
+
+            _germs_detail = r.get("germs_detail", [])
+            if len(_germs_detail) > 1:
+                _gd_html = " &nbsp;·&nbsp; ".join(
+                    f"<b>{'👑 ' if g.get('is_worst') else ''}{g['name']}</b> "
+                    f"({g.get('ufc',0)} UFC · score {g.get('germ_score','?')})"
+                    for g in _germs_detail
+                )
+                st.markdown(
+                    f"<div style='background:#eff6ff;border-left:3px solid #93c5fd;"
+                    f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
+                    f"margin-bottom:6px;font-size:.72rem;color:#1e40af'>"
+                    f"🦠 {_gd_html}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            _tab_mc, _tab_edit, _tab_del = st.tabs([
+                "🔧 Mesures correctives" if status_r in ("alert","action") else "ℹ️ Détails",
+                "✏️ Modifier",
+                "🗑️ Supprimer",
+            ])
+
+            with _tab_mc:
+                if status_r in ("alert", "action"):
+                    _render_mesures_correctives(st.session_state.surveillance[_real_idx], _real_idx)
+                else:
+                    st.markdown(
+                        "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
+                        "✅ Résultat conforme — aucune mesure corrective requise.</div>",
+                        unsafe_allow_html=True,
+                    )
+
+            with _tab_edit:
+                st.markdown("**✏️ Modifier cette entrée**")
+                germ_names_edit = sorted([g['name'] for g in st.session_state.germs])
+                _ec1, _ec2 = st.columns(2)
+                with _ec1:
+                    _new_prelev = st.text_input(
+                        "📍 Point de prélèvement",
+                        value=r.get("prelevement", ""),
+                        key=f"edit_prelev_{_li}",
+                    )
+                    _new_date = st.text_input(
+                        "📅 Date (YYYY-MM-DD)",
+                        value=r.get("date", ""),
+                        key=f"edit_date_{_li}",
+                    )
+                    _new_oper = st.text_input(
+                        "👤 Opérateur",
+                        value=r.get("operateur", r.get("preleveur", "")),
+                        key=f"edit_oper_{_li}",
+                    )
+                with _ec2:
+                    _cur_germ  = r.get("germ_saisi", "") or "Négatif"
+                    _germ_opts = ["Négatif"] + germ_names_edit
+                    _germ_idx  = _germ_opts.index(_cur_germ) if _cur_germ in _germ_opts else 0
+                    _new_germ  = st.selectbox(
+                        "🦠 Germe identifié",
+                        _germ_opts,
+                        index=_germ_idx,
+                        key=f"edit_germ_{_li}",
+                    )
+                    _new_ufc = st.number_input(
+                        "UFC",
+                        min_value=0,
+                        value=int(r.get("ufc", 0) or 0),
+                        step=1,
+                        key=f"edit_ufc_{_li}",
+                    )
+                    _new_remarque = st.text_area(
+                        "💬 Remarque",
+                        value=r.get("remarque", ""),
+                        height=80,
+                        key=f"edit_rem_{_li}",
+                    )
+
+                if _new_germ != "Négatif":
+                    _gobj = next(
+                        (g for g in st.session_state.germs if g['name'] == _new_germ), None
+                    )
+                    if _gobj:
+                        _new_germ_score = (
+                            int(_gobj.get('pathogenicity', 1))
+                            * int(_gobj.get('resistance', 1))
+                            * int(_gobj.get('dissemination', 1))
+                        )
+                        _loc_c_edit = int(r.get("location_criticality", 1) or 1)
+                        _new_total  = _loc_c_edit * _new_germ_score
+                        _new_status, _new_lbl, _new_col = _evaluate_score(_new_total)
+                        st.markdown(
+                            f"<div style='background:{_new_col}11;border:1px solid {_new_col}44;"
+                            f"border-radius:8px;padding:8px 12px;font-size:.78rem;"
+                            f"font-weight:700;color:{_new_col}'>"
+                            f"Score recalculé : {_new_total} "
+                            f"(lieu {_loc_c_edit} × germe {_new_germ_score}) → {_new_lbl}"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        _new_germ_score = int(r.get("germ_score", 0) or 0)
+                        _new_total      = int(r.get("total_score", 0) or 0)
+                        _new_status     = r.get("status", "ok")
+                else:
+                    _new_germ_score = 0
+                    _new_total      = 0
+                    _new_status     = "ok"
+
+                if st.button(
+                    "💾 Sauvegarder les modifications",
+                    key=f"edit_save_{_li}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    st.session_state.surveillance[_real_idx].update({
+                        "prelevement": _new_prelev.strip(),
+                        "date":        _new_date.strip(),
+                        "operateur":   _new_oper.strip(),
+                        "germ_saisi":  _new_germ,
+                        "ufc":         _new_ufc,
+                        "ufc_total":   _new_ufc,
+                        "germ_score":  _new_germ_score,
+                        "total_score": _new_total,
+                        "status":      _new_status,
+                        "remarque":    _new_remarque.strip(),
+                    })
+                    save_surveillance(st.session_state.surveillance)
+                    st.success("✅ Entrée mise à jour — stats recalculées automatiquement.")
+                    st.rerun()
+
+            with _tab_del:
+                st.markdown(
+                    f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+                    f"border-radius:10px;padding:14px 16px;margin-bottom:12px'>"
+                    f"<div style='font-weight:700;color:#991b1b;margin-bottom:6px'>"
+                    f"🗑️ Supprimer cette entrée ?</div>"
+                    f"<div style='font-size:.8rem;color:#7f1d1d'>"
+                    f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
+                    f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
+                    f"📅 {r.get('date','—')}<br>"
+                    f"Cette action est <strong>irréversible</strong> et mettra à jour "
+                    f"toutes les statistiques.</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                _confirm_key = f"confirm_del_{_li}"
+                if not st.session_state.get(_confirm_key, False):
+                    if st.button(
+                        "🗑️ Supprimer cette entrée",
+                        key=f"del_btn_{_li}",
+                        use_container_width=True,
+                    ):
+                        st.session_state[_confirm_key] = True
+                        st.rerun()
+                else:
+                    st.error("⚠️ Confirmer la suppression définitive ?")
+                    _dc1, _dc2 = st.columns(2)
+                    with _dc1:
+                        if st.button(
+                            "✅ OUI — Supprimer définitivement",
+                            key=f"del_confirm_{_li}",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            st.session_state.surveillance.pop(_real_idx)
+                            save_surveillance(st.session_state.surveillance)
+                            st.session_state[_confirm_key] = False
+                            st.success("🗑️ Entrée supprimée — stats recalculées.")
+                            st.rerun()
+                    with _dc2:
+                        if st.button(
+                            "❌ Annuler",
+                            key=f"del_cancel_{_li}",
+                            use_container_width=True,
+                        ):
+                            st.session_state[_confirm_key] = False
+                            st.rerun()
+
+    # ── fin helpers ───────────────────────────────────────────────────────────
 
     if surv:
         # ── Export / Vider ────────────────────────────────────────────────────
@@ -5039,25 +5295,15 @@ if active == "analyse":
         d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
         d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
 
-        # ── Initialisation (AVANT toute lecture) ───────
         if "hist_date_debut_val" not in st.session_state:
             st.session_state["hist_date_debut_val"] = d_min
-
         if "hist_date_fin_val" not in st.session_state:
             st.session_state["hist_date_fin_val"] = d_max
 
-        # ── Sécurisation (MAINTENANT c’est safe) ───────
         st.session_state["hist_date_debut_val"] = max(
-            d_min,
-            min(st.session_state["hist_date_debut_val"], d_max)
-        )
-
+            d_min, min(st.session_state["hist_date_debut_val"], d_max))
         st.session_state["hist_date_fin_val"] = max(
-            d_min,
-            min(st.session_state["hist_date_fin_val"], d_max)
-        )
-
-        # cohérence début/fin
+            d_min, min(st.session_state["hist_date_fin_val"], d_max))
         if st.session_state["hist_date_debut_val"] > st.session_state["hist_date_fin_val"]:
             st.session_state["hist_date_fin_val"] = st.session_state["hist_date_debut_val"]
 
@@ -5086,7 +5332,6 @@ if active == "analyse":
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # _parse_date renvoie maintenant un date → comparaison directe avec date_debut/date_fin
         surv_f = [r for r in surv
                   if _parse_date(r.get("date", "")) is not None
                   and date_debut <= _parse_date(r.get("date", "")) <= date_fin]
@@ -5136,7 +5381,6 @@ if active == "analyse":
                 j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
 
                 if j2_pos:
-                    # ── 1 seul prélèvement positif (J2 prime sur J7)
                     pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["positives"] += 1
                     pts_stats[pt]["germes"][germ] += 1
@@ -5147,18 +5391,14 @@ if active == "analyse":
                         pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
                 elif not j2_pos and not j7_pos:
-                    # ── 1 prélèvement négatif (J2 et J7 négatifs)
                     pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["negatives"] += 1
                     if st_r == "alert":    pts_stats[pt]["alertes"] += 1
                     elif st_r == "action": pts_stats[pt]["actions"] += 1
 
                 else:
-                    # ── J2 négatif + J7 positif → 2 prélèvements distincts
-                    # Prélèvement 1 : négatif (J2)
                     pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["negatives"] += 1
-                    # Prélèvement 2 : positif (J7)
                     pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["positives"] += 1
                     pts_stats[pt]["germes"][germ] += 1
@@ -5321,63 +5561,43 @@ if active == "analyse":
                         type:'line',plugins:[thr],
                         data:{{labels:d.dates,datasets:[
                             {{
-                                label:'🔵 J2',
-                                data: d.j2,
-                                borderColor:'#0ea5e9',
-                                backgroundColor:'#0ea5e922',
-                                borderWidth:2,
-                                tension:0.3,
-                                fill:false,
-                                pointRadius: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 6 : 4),
-                                pointStyle:  d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 'crossRot' : 'circle'),
-                                pointBorderColor: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? '#0ea5e9' : '#0ea5e9'),
-                                pointBorderWidth: d.j2.map((v,i) => (v===0 && d.j7[i]>0) ? 2.5 : 1.5),
+                                label:'🔵 J2',data:d.j2,borderColor:'#0ea5e9',
+                                backgroundColor:'#0ea5e922',borderWidth:2,tension:0.3,fill:false,
+                                pointRadius:d.j2.map((v,i)=>(v===0&&d.j7[i]>0)?6:4),
+                                pointStyle:d.j2.map((v,i)=>(v===0&&d.j7[i]>0)?'crossRot':'circle'),
+                                pointBorderColor:'#0ea5e9',pointBorderWidth:d.j2.map((v,i)=>(v===0&&d.j7[i]>0)?2.5:1.5),
                             }},
                             {{
-                                label:'🟣 J7',
-                                data: d.j7,
-                                borderColor:'#8b5cf6',
-                                backgroundColor:'#8b5cf622',
-                                borderWidth:2,
-                                tension:0.3,
-                                fill:false,
-                                pointRadius: d.j7.map((v,i) => (v>0 && d.j2[i]===0) ? 7 : 4),
-                                pointStyle:  d.j7.map((v,i) => (v>0 && d.j2[i]===0) ? 'star' : 'circle'),
-                                pointBorderColor: '#8b5cf6',
-                                pointBorderWidth: 1.5,
+                                label:'🟣 J7',data:d.j7,borderColor:'#8b5cf6',
+                                backgroundColor:'#8b5cf622',borderWidth:2,tension:0.3,fill:false,
+                                pointRadius:d.j7.map((v,i)=>(v>0&&d.j2[i]===0)?7:4),
+                                pointStyle:d.j7.map((v,i)=>(v>0&&d.j2[i]===0)?'star':'circle'),
+                                pointBorderColor:'#8b5cf6',pointBorderWidth:1.5,
                             }}
-                            ]}},
+                        ]}},
                         options:{{
-                            responsive:true, maintainAspectRatio:false,
-                            interaction:{{mode:'index', intersect:false}},
+                            responsive:true,maintainAspectRatio:false,
+                            interaction:{{mode:'index',intersect:false}},
                             plugins:{{
-                                legend:{{position:'top', labels:{{font:{{size:11}}, boxWidth:14}}}},
-                                tooltip:{{
-                                callbacks:{{
-                                    label: function(item) {{
-                                    const label = item.dataset.label;
-                                    const val   = item.parsed.y;
-                                    const note  = (val === 0 && label.includes('J2'))
-                                                    ? ' (négatif J2)'
-                                                    : (val === 0 ? '' : ' UFC/m³');
-                                    return label + ': ' + val + note;
+                                legend:{{position:'top',labels:{{font:{{size:11}},boxWidth:14}}}},
+                                tooltip:{{callbacks:{{
+                                    label:function(item){{
+                                        const label=item.dataset.label;
+                                        const val=item.parsed.y;
+                                        const note=(val===0&&label.includes('J2'))?' (négatif J2)':(val===0?'':' UFC/m³');
+                                        return label+': '+val+note;
                                     }},
-                                    footer: items => {{
-                                    const v = Math.max(...items.map(i => i.parsed.y));
-                                    return v >= d.action ? '🚨 ACTION' : v >= d.alerte ? '⚠️ ALERTE' : '✅ Conforme';
+                                    footer:items=>{{
+                                        const v=Math.max(...items.map(i=>i.parsed.y));
+                                        return v>=d.action?'🚨 ACTION':v>=d.alerte?'⚠️ ALERTE':'✅ Conforme';
                                     }}
-                                }}
-                                }}
+                                }}}}
                             }},
                             scales:{{
-                                x:{{ticks:{{font:{{size:10}}, maxRotation:45}}}},
-                                y:{{
-                                beginAtZero:true,
-                                title:{{display:true, text:'UFC/m³', font:{{size:10}}}},
-                                ticks:{{font:{{size:10}}}}
-                                }}
+                                x:{{ticks:{{font:{{size:10}},maxRotation:45}}}},
+                                y:{{beginAtZero:true,title:{{display:true,text:'UFC/m³',font:{{size:10}}}},ticks:{{font:{{size:10}}}}}}
                             }}
-                            }}
+                        }}
                       }});
                     }})();
                     </script>"""
@@ -5387,7 +5607,6 @@ if active == "analyse":
                     st.info("Aucune donnée datée pour ce point.")
 
             st.divider()
-            
 
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 2 : STATS PAR GERME
@@ -5407,7 +5626,6 @@ if active == "analyse":
                 j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
 
                 if j2_pos:
-                    # 1 résultat positif J2
                     total_pos += 1
                     germs_stats[germ]["count"]   += 1
                     germs_stats[germ]["ufc_sum"] += ufc_j2
@@ -5416,14 +5634,13 @@ if active == "analyse":
                         germs_stats[germ]["criticite"] = _get_criticite(germ)
 
                 elif not j2_pos and j7_pos:
-                    # J2 négatif + J7 positif → compte comme 1 résultat positif supplémentaire (J7)
                     total_pos += 1
                     germs_stats[germ]["count"]   += 1
                     germs_stats[germ]["ufc_sum"] += ufc_j7
                     germs_stats[germ]["points"].add(r.get("prelevement","—"))
                     if germs_stats[germ]["criticite"] == 0:
                         germs_stats[germ]["criticite"] = _get_criticite(germ)
-                # Sinon (J2 négatif + J7 négatif) : on ignore, pas de germe à comptabiliser
+
             if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
             else:
@@ -5502,7 +5719,6 @@ if active == "analyse":
                     unsafe_allow_html=True,
                 )
 
-                # Regrouper par germe les entrées avec mc_statut
                 from collections import defaultdict as _dfd
                 mc_by_germ = _dfd(lambda: {"en_attente": 0, "fait": 0, "details": []})
 
@@ -5516,9 +5732,9 @@ if active == "analyse":
                         mc_by_germ[germ]["fait"] += 1
                         if r.get("mc_detail", "").strip():
                             mc_by_germ[germ]["details"].append({
-                                "date":   r.get("date", "—"),
-                                "point":  r.get("prelevement", "—"),
-                                "detail": r.get("mc_detail", ""),
+                                "date":    r.get("date", "—"),
+                                "point":   r.get("prelevement", "—"),
+                                "detail":  r.get("mc_detail", ""),
                                 "mc_date": r.get("mc_date", ""),
                             })
                     else:
@@ -5528,11 +5744,9 @@ if active == "analyse":
                     st.info("Aucun dépassement de seuil sur la période.")
                 else:
                     for germ_mc, gd in sorted(mc_by_germ.items(),
-                                            key=lambda x: -(x[1]["en_attente"] + x[1]["fait"])):
+                                              key=lambda x: -(x[1]["en_attente"] + x[1]["fait"])):
                         total_mc = gd["en_attente"] + gd["fait"]
                         pct_fait = gd["fait"] / total_mc * 100 if total_mc > 0 else 0
-                        _gc      = _crit_color(_get_criticite(germ_mc))
-
                         with st.expander(
                             f"🦠 {germ_mc}  —  "
                             f"{'✅' if gd['en_attente'] == 0 else '⚠️'} "
@@ -5541,9 +5755,8 @@ if active == "analyse":
                             expanded=(gd["en_attente"] > 0),
                         ):
                             ca, cb = st.columns(2)
-                            ca.metric("✅ Mesures faites",     gd["fait"])
-                            cb.metric("⏳ En attente",          gd["en_attente"])
-
+                            ca.metric("✅ Mesures faites", gd["fait"])
+                            cb.metric("⏳ En attente",     gd["en_attente"])
                             if gd["details"]:
                                 st.markdown(
                                     "<div style='font-size:.78rem;font-weight:700;"
@@ -5564,13 +5777,13 @@ if active == "analyse":
                                         unsafe_allow_html=True,
                                     )
 
-
                 st.markdown(
                     "<div style='background:#1e293b;border-radius:0 0 10px 10px;padding:8px 14px'>"
                     "<div style='font-size:.78rem;color:#94a3b8'>"
                     +str(len(germs_stats))+" germe(s) — "+str(total_pos)+" positifs"
                     "</div></div>",
                     unsafe_allow_html=True)
+
         # ══════════════════════════════════════════════════════════════════════
         # ONGLET 3 : RÉPARTITION PAR PRÉLEVEUR
         # ══════════════════════════════════════════════════════════════════════
@@ -5582,18 +5795,26 @@ if active == "analyse":
                 "alertes":0,"actions":0,"germes":defaultdict(int)
             })
             for r in surv_f:
-                op=(r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
-                ufc=int(r.get("ufc",0) or 0)
-                germ=r.get("germ_match","") or ""
-                st_r=r.get("status","ok")
-                prev_stats[op]["total"]+=1
-                if ufc>0 and germ not in ("Négatif","—",""):
-                    prev_stats[op]["positives"]+=1
-                    prev_stats[op]["germes"][germ]+=1
+                op     = (r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
+                germ   = (r.get("germ_saisi","") or r.get("germ_match","") or "").strip()
+                st_r   = r.get("status","ok")
+                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+
+                is_positive = (
+                    (ufc_j2 > 0 or ufc_j7 > 0)
+                    and germ not in ("Négatif","—","")
+                )
+
+                prev_stats[op]["total"] += 1
+                if is_positive:
+                    prev_stats[op]["positives"]    += 1
+                    prev_stats[op]["germes"][germ] += 1
                 else:
-                    prev_stats[op]["negatives"]+=1
-                if st_r=="alert":    prev_stats[op]["alertes"]+=1
-                elif st_r=="action": prev_stats[op]["actions"]+=1
+                    prev_stats[op]["negatives"]    += 1
+
+                if st_r == "alert":    prev_stats[op]["alertes"] += 1
+                elif st_r == "action": prev_stats[op]["actions"] += 1
 
             op_list=sorted(prev_stats.items(),key=lambda x:-x[1]["total"])
             card_cols=st.columns(min(len(op_list),4))
@@ -5611,7 +5832,7 @@ if active == "analyse":
                         "font-size:1.2rem;margin:0 auto 10px auto'>"+ini+"</div>"
                         "<div style='font-size:.92rem;font-weight:700;color:#0f172a;margin-bottom:6px'>"+op_name+"</div>"
                         "<div style='font-size:2rem;font-weight:900;color:#1e40af'>"+str(t)+"</div>"
-                        "<div style='font-size:.68rem;color:#64748b;margin-bottom:10px'>résultat(s)</div>"
+                        "<div style='font-size:.68rem;color:#64748b;margin-bottom:10px'>prélèvement(s)</div>"
                         "<div style='display:grid;grid-template-columns:1fr 1fr;gap:6px'>"
                         "<div style='background:#f0fdf4;border-radius:8px;padding:6px'>"
                         "<div style='font-size:1rem;font-weight:800;color:#22c55e'>"+str(op_data["negatives"])+"</div>"
@@ -5676,280 +5897,69 @@ if active == "analyse":
         # ONGLET 4 : LISTE DES ENTRÉES
         # ══════════════════════════════════════════════════════════════════════
         with hist_tab_liste:
-            surv_f_indexed = []
-            for r in surv_f:
-                try:
-                    real_i = surv.index(r)
-                    surv_f_indexed.append((real_i, r))
-                except ValueError:
-                    continue
+            # ── Filtre par point ──────────────────────────────────────────────
+            all_points = sorted(set(r.get("prelevement","—") for r in surv_f))
+            selected_points = st.multiselect(
+                "📍 Filtrer par point de prélèvement",
+                options=all_points,
+                default=[],
+                placeholder="Tous les points",
+                key="liste_filter_points",
+            )
+            surv_f_liste = [r for r in surv_f if r.get("prelevement","—") in selected_points] \
+                           if selected_points else list(surv_f)
 
-            
-            surv_f_reversed = list(reversed(surv_f))
-            for _li, r in enumerate(surv_f_reversed):
-                # Comparer par valeurs uniques, pas par identité objet
-                _real_idx = next(
-                    (
-                        i for i, s in enumerate(st.session_state.surveillance)
-                        if s.get("date") == r.get("date")
-                        and s.get("prelevement") == r.get("prelevement")
-                        and s.get("operateur", s.get("preleveur","")) == r.get("operateur", r.get("preleveur",""))
-                        and s.get("ufc") == r.get("ufc")
-                    ),
-                    None
+            # ── Tri ───────────────────────────────────────────────────────────
+            col_tri1, col_tri2 = st.columns([2,1])
+            with col_tri1:
+                tri_choix = st.selectbox(
+                    "Trier par",
+                    ["Date (récent → ancien)", "Date (ancien → récent)",
+                     "Point A→Z", "Point Z→A", "UFC décroissant"],
+                    key="liste_tri",
+                    label_visibility="collapsed",
                 )
-                if _real_idx is None:
-                    continue
-                status_r  = r.get("status", "ok")
-                mc_statut = r.get("mc_statut", "")
-                mc_detail = r.get("mc_detail", "")
-                mc_date   = r.get("mc_date", "")
-                germ_r    = r.get("germ_saisi", "") or r.get("germ_match","") or ""
+            with col_tri2:
+                st.caption(f"{len(surv_f_liste)} entrée(s) affichée(s)")
 
-                if status_r == "action":
-                    _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
-                elif status_r == "alert":
-                    _sc = "#d97706"; _sb = "#fffbeb"; _sl = "⚠️ ALERTE"
-                else:
-                    _sc = "#16a34a"; _sb = "#f0fdf4"; _sl = "✅ CONFORME"
+            if tri_choix == "Date (récent → ancien)":
+                surv_f_liste = sorted(surv_f_liste,
+                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min, reverse=True)
+            elif tri_choix == "Date (ancien → récent)":
+                surv_f_liste = sorted(surv_f_liste,
+                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+            elif tri_choix == "Point A→Z":
+                surv_f_liste = sorted(surv_f_liste, key=lambda x: x.get("prelevement",""))
+            elif tri_choix == "Point Z→A":
+                surv_f_liste = sorted(surv_f_liste, key=lambda x: x.get("prelevement",""), reverse=True)
+            elif tri_choix == "UFC décroissant":
+                surv_f_liste = sorted(surv_f_liste,
+                    key=lambda x: int(x.get("ufc",0) or 0), reverse=True)
 
-                _mc_badge = ""
-                if status_r in ("alert", "action"):
-                    if mc_statut == "fait":
-                        _mc_badge = (
-                            "<span style='background:#22c55e;color:#fff;border-radius:5px;"
-                            "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
-                            "🔧 MC FAITES</span>"
-                        )
-                    else:
-                        _mc_badge = (
-                            "<span style='background:#f59e0b;color:#fff;border-radius:5px;"
-                            "padding:1px 8px;font-size:.65rem;font-weight:700;margin-left:6px'>"
-                            "🔧 MC EN ATTENTE</span>"
-                        )
+            # ── Affichage groupé ou plat ──────────────────────────────────────
+            if selected_points:
+                grouped = {}
+                for r in surv_f_liste:
+                    pt = r.get("prelevement","—")
+                    grouped.setdefault(pt, []).append(r)
 
-                st.markdown(
-                    f"<div style='background:{_sb};border:1px solid {_sc}44;"
-                    f"border-left:4px solid {_sc};border-radius:8px;"
-                    f"padding:10px 14px;margin-bottom:6px'>"
-                    f"<div style='display:flex;justify-content:space-between;"
-                    f"align-items:center;margin-bottom:4px'>"
-                    f"<span style='font-size:.82rem;font-weight:700;color:#0f172a'>"
-                    f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
-                    f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
-                    f"{r.get('ufc', 0)} UFC</span>"
-                    f"<div>"
-                    f"<span style='background:{_sc};color:#fff;border-radius:5px;"
-                    f"padding:1px 8px;font-size:.7rem;font-weight:700'>{_sl}</span>"
-                    f"{_mc_badge}</div>"
-                    f"</div>"
-                    f"<div style='font-size:.72rem;color:#475569'>"
-                    f"📅 {r.get('date','—')} &nbsp;·&nbsp; "
-                    f"👤 {r.get('operateur', r.get('preleveur','—'))} &nbsp;·&nbsp; "
-                    f"🏥 {r.get('room_class','—')} &nbsp;·&nbsp; "
-                    f"Score : {r.get('total_score','—')}"
-                    f"</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-
-                _remarque  = r.get("remarque", "")
-                _triggered = r.get("triggered_by", "")
-                if _remarque or _triggered:
-                    st.markdown(
-                        f"<div style='background:#f8fafc;border-left:3px solid #cbd5e1;"
-                        f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
-                        f"margin-bottom:6px;font-size:.72rem;color:#475569'>"
-                        + (f"💬 {_remarque}" if _remarque else "")
-                        + (" &nbsp;·&nbsp; " if _remarque and _triggered else "")
-                        + "</div>",
-                        unsafe_allow_html=True,
+                for pt_name, pt_entries in grouped.items():
+                    pt_pos = sum(
+                        1 for r in pt_entries
+                        if r.get("status") in ("alert","action")
+                        or (int(r.get("ufc",0) or 0) > 0
+                            and (r.get("germ_saisi","") or r.get("germ_match",""))
+                            not in ("Négatif","—",""))
                     )
-
-                _germs_detail = r.get("germs_detail", [])
-                if len(_germs_detail) > 1:
-                    _gd_html = " &nbsp;·&nbsp; ".join(
-                        f"<b>{'👑 ' if g.get('is_worst') else ''}{g['name']}</b> "
-                        f"({g.get('ufc',0)} UFC · score {g.get('germ_score','?')})"
-                        for g in _germs_detail
-                    )
-                    st.markdown(
-                        f"<div style='background:#eff6ff;border-left:3px solid #93c5fd;"
-                        f"border-radius:0 6px 6px 0;padding:6px 12px;margin-top:-4px;"
-                        f"margin-bottom:6px;font-size:.72rem;color:#1e40af'>"
-                        f"🦠 {_gd_html}</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                # ── Onglets actions ───────────────────────────────────────────────────
-                _tab_mc, _tab_edit, _tab_del = st.tabs([
-                    "🔧 Mesures correctives" if status_r in ("alert","action") else "ℹ️ Détails",
-                    "✏️ Modifier",
-                    "🗑️ Supprimer",
-                ])
-
-                # ── Onglet mesures correctives / détails ──────────────────────────────
-                with _tab_mc:
-                    if status_r in ("alert", "action"):
-                        _render_mesures_correctives(st.session_state.surveillance[_real_idx], _real_idx)
-                    else:
-                        st.markdown(
-                            "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
-                            "✅ Résultat conforme — aucune mesure corrective requise.</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                # ── Onglet modification ───────────────────────────────────────────────
-                with _tab_edit:
-                    st.markdown("**✏️ Modifier cette entrée**")
-
-                    germ_names_edit = sorted([g['name'] for g in st.session_state.germs])
-
-                    _ec1, _ec2 = st.columns(2)
-                    with _ec1:
-                        _new_prelev = st.text_input(
-                            "📍 Point de prélèvement",
-                            value=r.get("prelevement", ""),
-                            key=f"edit_prelev_{_li}",
-                        )
-                        _new_date = st.text_input(
-                            "📅 Date (YYYY-MM-DD)",
-                            value=r.get("date", ""),
-                            key=f"edit_date_{_li}",
-                        )
-                        _new_oper = st.text_input(
-                            "👤 Opérateur",
-                            value=r.get("operateur", r.get("preleveur", "")),
-                            key=f"edit_oper_{_li}",
-                        )
-                    with _ec2:
-                        # Sélection du germe
-                        _cur_germ = r.get("germ_saisi", "") or "Négatif"
-                        _germ_opts = ["Négatif"] + germ_names_edit
-                        _germ_idx  = _germ_opts.index(_cur_germ) if _cur_germ in _germ_opts else 0
-                        _new_germ  = st.selectbox(
-                            "🦠 Germe identifié",
-                            _germ_opts,
-                            index=_germ_idx,
-                            key=f"edit_germ_{_li}",
-                        )
-                        _new_ufc = st.number_input(
-                            "UFC",
-                            min_value=0,
-                            value=int(r.get("ufc", 0) or 0),
-                            step=1,
-                            key=f"edit_ufc_{_li}",
-                        )
-                        _new_remarque = st.text_area(
-                            "💬 Remarque",
-                            value=r.get("remarque", ""),
-                            height=80,
-                            key=f"edit_rem_{_li}",
-                        )
-
-                    # Recalcul automatique du score si germe changé
-                    if _new_germ != "Négatif":
-                        _gobj = next(
-                            (g for g in st.session_state.germs if g['name'] == _new_germ), None
-                        )
-                        if _gobj:
-                            _new_germ_score = (
-                                int(_gobj.get('pathogenicity', 1))
-                                * int(_gobj.get('resistance', 1))
-                                * int(_gobj.get('dissemination', 1))
-                            )
-                            _loc_c_edit = int(r.get("location_criticality", 1) or 1)
-                            _new_total  = _loc_c_edit * _new_germ_score
-                            _new_status, _new_lbl, _new_col = _evaluate_score(_new_total)
-                            st.markdown(
-                                f"<div style='background:{_new_col}11;border:1px solid {_new_col}44;"
-                                f"border-radius:8px;padding:8px 12px;font-size:.78rem;"
-                                f"font-weight:700;color:{_new_col}'>"
-                                f"Score recalculé : {_new_total} "
-                                f"(lieu {_loc_c_edit} × germe {_new_germ_score}) → {_new_lbl}"
-                                f"</div>",
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            _new_germ_score = int(r.get("germ_score", 0) or 0)
-                            _new_total      = int(r.get("total_score", 0) or 0)
-                            _new_status     = r.get("status", "ok")
-                    else:
-                        _new_germ_score = 0
-                        _new_total      = 0
-                        _new_status     = "ok"
-
-                    if st.button(
-                        "💾 Sauvegarder les modifications",
-                        key=f"edit_save_{_li}",
-                        type="primary",
-                        use_container_width=True,
+                    with st.expander(
+                        f"📍 {pt_name}  —  {len(pt_entries)} prélèvement(s)  ·  "
+                        f"{'🦠 '+str(pt_pos)+' positif(s)' if pt_pos else '✅ Tous conformes'}",
+                        expanded=True,
                     ):
-                        st.session_state.surveillance[_real_idx].update({
-                            "prelevement": _new_prelev.strip(),
-                            "date":        _new_date.strip(),
-                            "operateur":   _new_oper.strip(),
-                            "germ_saisi":  _new_germ,
-                            "ufc":         _new_ufc,
-                            "ufc_total":   _new_ufc,
-                            "germ_score":  _new_germ_score,
-                            "total_score": _new_total,
-                            "status":      _new_status,
-                            "remarque":    _new_remarque.strip(),
-                        })
-                        save_surveillance(st.session_state.surveillance)
-                        st.success("✅ Entrée mise à jour — stats recalculées automatiquement.")
-                        st.rerun()
+                        _render_liste_entries(pt_entries, surv)
+            else:
+                _render_liste_entries(surv_f_liste, surv)
 
-                # ── Onglet suppression ────────────────────────────────────────────────
-                with _tab_del:
-                    st.markdown(
-                        f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
-                        f"border-radius:10px;padding:14px 16px;margin-bottom:12px'>"
-                        f"<div style='font-weight:700;color:#991b1b;margin-bottom:6px'>"
-                        f"🗑️ Supprimer cette entrée ?</div>"
-                        f"<div style='font-size:.8rem;color:#7f1d1d'>"
-                        f"📍 {r.get('prelevement','—')} &nbsp;·&nbsp; "
-                        f"🦠 {germ_r or '—'} &nbsp;·&nbsp; "
-                        f"📅 {r.get('date','—')}<br>"
-                        f"Cette action est <strong>irréversible</strong> et mettra à jour "
-                        f"toutes les statistiques.</div>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                    _confirm_key = f"confirm_del_{_li}"
-                    if not st.session_state.get(_confirm_key, False):
-                        if st.button(
-                            "🗑️ Supprimer cette entrée",
-                            key=f"del_btn_{_li}",
-                            use_container_width=True,
-                        ):
-                            st.session_state[_confirm_key] = True
-                            st.rerun()
-                    else:
-                        st.error("⚠️ Confirmer la suppression définitive ?")
-                        _dc1, _dc2 = st.columns(2)
-                        with _dc1:
-                            if st.button(
-                                "✅ OUI — Supprimer définitivement",
-                                key=f"del_confirm_{_li}",
-                                type="primary",
-                                use_container_width=True,
-                            ):
-                                st.session_state.surveillance.pop(_real_idx)
-                                save_surveillance(st.session_state.surveillance)
-                                st.session_state[_confirm_key] = False
-                                st.success("🗑️ Entrée supprimée — stats recalculées.")
-                                st.rerun()
-                        with _dc2:
-                            if st.button(
-                                "❌ Annuler",
-                                key=f"del_cancel_{_li}",
-                                use_container_width=True,
-                            ):
-                                st.session_state[_confirm_key] = False
-                                st.rerun()
     else:
         st.info("Aucun prélèvement enregistré.")
 # ═══════════════════════════════════════════════════════════════════════════════
