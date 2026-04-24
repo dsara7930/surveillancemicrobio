@@ -1096,6 +1096,9 @@ with st.sidebar:
         ):
             st.session_state.active_tab = "faq"
             st.rerun()
+
+    st.divider()
+
     supa_ok   = get_supabase_client() is not None
     supa_icon = "🟢" if supa_ok else "🔴"
     supa_txt  = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
