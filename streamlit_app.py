@@ -3395,6 +3395,7 @@ if active == "surveillance":
                                     ]
                                     st.session_state.surveillance.append({
                                         "date":                 str(date_id),
+                                        "date_prelevement":     str(_date_prelev),   # ← AJOUTER cette ligne
                                         "prelevement":          _label,
                                         "sample_id":            _sid,
                                         "germ_saisi":           worst_entry["germ_saisi"],
@@ -3407,8 +3408,7 @@ if active == "surveillance":
                                         "multi_germ":           len(scored_entries) > 1,
                                         "location_criticality": loc_crit,
                                         "total_score":          total_sc,
-                                        "risk":                 worst_entry["match_obj"].get(
-                                            "risk", worst_entry["germ_score"]),
+                                        "risk":                 worst_entry["match_obj"].get("risk", worst_entry["germ_score"]),
                                         "room_class":           pt_class,
                                         "alert_threshold":      "Score ≥ 24",
                                         "action_threshold":     "Score > 36",
@@ -5524,9 +5524,9 @@ if active == "analyse":
                 evol_dates=[]; evol_j2=[]; evol_j7=[]
                 seuil_alerte=None; seuil_action=None
                 for r in pt_records:
-                    d = _parse_date(r.get("date",""))
-                    if not d: continue
                     d = _parse_date(r.get("date_prelevement", r.get("date","")))
+                    if not d: continue
+                    evol_dates.append(d.strftime("%d/%m/%y"))
                     evol_j2.append(int(r.get("ufc_48h",r.get("ufc",0)) or 0))
                     evol_j7.append(int(r.get("ufc_5j", r.get("ufc",0)) or 0))
                     if seuil_alerte is None:
