@@ -3394,7 +3394,7 @@ if active == "surveillance":
                                         for e in scored_entries
                                     ]
                                     st.session_state.surveillance.append({
-                                        "date":                 str(date_id),
+                                        "date": str(_date_prelev),
                                         "date_prelevement":     str(_date_prelev),   # ← AJOUTER cette ligne
                                         "prelevement":          _label,
                                         "sample_id":            _sid,
