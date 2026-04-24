@@ -2860,7 +2860,8 @@ if active == "surveillance":
                         except (ValueError, TypeError):
                             pass
                         st.session_state.surveillance.append({
-                            "date":                 str(datetime.today().date()),
+                            "date":                 str(datetime.today().date()),   # date de lecture (inchangé)
+                            "date_prelevement":     smp.get("date", ""),            # ← AJOUTER cette ligne
                             "prelevement":          smp.get("label", "?"),
                             "sample_id":            proc["sample_id"],
                             "germ_match":           "Négatif",
@@ -2907,7 +2908,8 @@ if active == "surveillance":
             except (ValueError, TypeError):
                 pass
             st.session_state.surveillance.append({
-                "date":                 str(datetime.today().date()),
+                "date":                 str(datetime.today().date()),   # date de lecture (inchangé)
+                "date_prelevement":     smp.get("date", ""),            # ← AJOUTER cette ligne
                 "prelevement":          smp.get("label", "?"),
                 "sample_id":            proc["sample_id"],
                 "germ_match":           "Négatif",
