@@ -2516,24 +2516,37 @@ if active == "surveillance":
                 help="Si des caractères spéciaux apparaissent, configurez la douchette en layout EN-US.")
 
             qr_raw = qr_raw_input.strip() if qr_raw_input else ""
-            if qr_raw:
-                qr_fixed = _fix_qr_input(qr_raw)
-                if qr_fixed != qr_raw:
-                    st.caption("🔄 Correction automatique appliquée.")
-                qr_raw = qr_fixed
-
             _scanned_data = None
+
             if qr_raw:
-                _found = next((p for p in st.session_state.points
-                               if str(p["id"]) == qr_raw), None)
-                if _found:
-                    _scanned_data = _found
-                else:
+                point_id_from_qr, parse_error = _parse_qr_to_point_id(qr_raw)
+
+                if parse_error:
                     st.markdown(
-                        "<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
-                        "border-radius:10px;padding:12px 16px;margin-top:8px'>"
-                        "<div style='font-weight:700;color:#92400e'>⚠️ Numéro non reconnu</div>"
-                        "</div>", unsafe_allow_html=True)
+                        f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+                        f"border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                        f"<div style='font-weight:700;color:#991b1b'>❌ QR illisible</div>"
+                        f"<div style='font-size:.8rem;color:#7f1d1d;margin-top:4px'>{parse_error}</div>"
+                        f"</div>", unsafe_allow_html=True)
+
+                elif point_id_from_qr:
+                    _found = next(
+                        (p for p in st.session_state.points
+                         if str(p["id"]) == str(point_id_from_qr)),
+                        None)
+                    if _found:
+                        _scanned_data = _found
+                        if point_id_from_qr != qr_raw:
+                            st.caption("🔄 Correction automatique appliquée.")
+                    else:
+                        st.markdown(
+                            f"<div style='background:#fffbeb;border:1.5px solid #fcd34d;"
+                            f"border-radius:10px;padding:12px 16px;margin-top:8px'>"
+                            f"<div style='font-weight:700;color:#92400e'>⚠️ Point introuvable</div>"
+                            f"<div style='font-size:.8rem;color:#78350f;margin-top:4px'>"
+                            f"ID lu : <code>{point_id_from_qr}</code> — vérifiez que l'étiquette "
+                            f"correspond à un point actif.</div>"
+                            f"</div>", unsafe_allow_html=True)
 
             if _scanned_data:
                 _lbl        = _scanned_data.get("label", "")
@@ -5073,20 +5086,54 @@ if active == "analyse":
         return {5:"#7c3aed",4:"#ef4444",3:"#f97316",2:"#f59e0b",1:"#22c55e"}.get(c,"#94a3b8")
 
     def _parse_qr_to_point_id(raw: str):
-        import json
+        """
+        Extrait l'id du point depuis le contenu QR.
+        Accepte : ID brut, JSON {"id":...}, JSON corrompu (AZERTY, encodage).
+        Retourne (point_id: str | None, error_msg: str | None)
+        """
+        import json, re
+
+        raw = raw.strip()
         if not raw:
             return None, None
-        raw = raw.strip()
-        if raw.startswith("{"):
-            try:
-                data = json.loads(raw)
-                pid = str(data.get("id", "")).strip()
-                if pid:
-                    return pid, None
-                return None, "QR JSON valide mais sans champ 'id'."
-            except json.JSONDecodeError:
-                return None, "QR JSON invalide."
-        return raw, None
+
+        # Correction encodage latin-1 → utf-8
+        try:
+            raw = raw.encode("latin-1").decode("utf-8")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            pass
+
+        AZERTY_MAP = {
+            "q":"a","z":"w","a":"q","w":"z","Q":"A","Z":"W","A":"Q","W":"Z",
+            "M":":",";" :"m","&":"1","é":"2",'"':"3","'":"4",
+            "(":"5","-":"6","è":"7","_":"8","ç":"9","à":"0",
+        }
+        def _az(s): return "".join(AZERTY_MAP.get(c, c) for c in s)
+
+        # Cas ID brut (pas de JSON)
+        if not raw.startswith("{"):
+            return _az(raw), None
+
+        # Cas JSON — tentative 1 : tel quel
+        try:
+            pid = str(json.loads(raw).get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON valide mais champ 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        # Tentative 2 : après correction AZERTY (scanner en layout AZERTY)
+        try:
+            pid = str(json.loads(_az(raw)).get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON corrigé (AZERTY) mais 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        # Tentative 3 : regex en dernier recours
+        m = re.search(r'"id"\s*:\s*"([^"]+)"', raw) or re.search(r'"id"\s*:\s*(\d+)', raw)
+        if m:
+            return m.group(1), None
+
+        return None, f"QR illisible — contenu non parseable : `{raw[:60]}`"
 
     def _parse_date(date_str):
         try:
