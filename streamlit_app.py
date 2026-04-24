@@ -2276,6 +2276,49 @@ if active == "surveillance":
         st.session_state["qr_counter"] = 0
 
     # ══════════════════════════════════════════════════════════════════════════
+    # HELPER QR — parse
+    # ══════════════════════════════════════════════════════════════════════════
+    def _parse_qr_to_point_id(raw: str):
+        import json, re
+
+        raw = raw.strip()
+        if not raw:
+            return None, None
+
+        try:
+            raw = raw.encode("latin-1").decode("utf-8")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            pass
+
+        AZERTY_MAP = {
+            "q":"a","z":"w","a":"q","w":"z","Q":"A","Z":"W","A":"Q","W":"Z",
+            "M":":",";"  :"m","&":"1","é":"2",'"':"3","'":"4",
+            "(":"5","-":"6","è":"7","_":"8","ç":"9","à":"0",
+        }
+        def _az(s): return "".join(AZERTY_MAP.get(c, c) for c in s)
+
+        if not raw.startswith("{"):
+            return _az(raw), None
+
+        try:
+            pid = str(json.loads(raw).get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON valide mais champ 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            pid = str(json.loads(_az(raw)).get("id", "")).strip()
+            return (pid, None) if pid else (None, "JSON corrigé (AZERTY) mais 'id' absent.")
+        except json.JSONDecodeError:
+            pass
+
+        m = re.search(r'"id"\s*:\s*"([^"]+)"', raw) or re.search(r'"id"\s*:\s*(\d+)', raw)
+        if m:
+            return m.group(1), None
+
+        return None, f"QR illisible : `{raw[:60]}`"
+
+    # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 1 — NOUVEAU PRÉLÈVEMENT
     # ══════════════════════════════════════════════════════════════════════════
     with tab_nouveau:
