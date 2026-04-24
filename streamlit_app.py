@@ -1074,8 +1074,8 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     col_gif, col_btn = st.sidebar.columns([1, 2])
     with col_gif:
         st.components.v1.html("""
@@ -1103,12 +1103,6 @@ with st.sidebar:
         f'<p style="font-size:.7rem;color:#94a3b8;text-align:center">{supa_icon} {supa_txt}</p>',
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<p style="font-size:.75rem;color:#94a3b8;text-align:center">'
-        'MicroSurveillance URC v5.0</p>',
-        unsafe_allow_html=True,
-    )
-
     st.divider()
 
     st.markdown(
