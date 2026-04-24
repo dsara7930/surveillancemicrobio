@@ -1074,7 +1074,28 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+    col_gif, col_btn = st.sidebar.columns([1, 2])
+    with col_gif:
+        st.components.v1.html("""
+<div style="display:flex;justify-content:center;align-items:center;padding-top:4px">
+  <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
+          width="90" height="90"
+          style="border:none;pointer-events:none;display:block"
+          frameBorder="0"></iframe>
+</div>
+""", height=100, scrolling=False)
+
+    with col_btn:
+        st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+        if st.button(
+            "Si tu as besoin\nd'aide, je suis là !",
+            key="faq_open_btn",
+            use_container_width=True,
+        ):
+            st.session_state.active_tab = "faq"
+            st.rerun()
     supa_ok   = get_supabase_client() is not None
     supa_icon = "🟢" if supa_ok else "🔴"
     supa_txt  = "Supabase connecté" if supa_ok else "Mode local (fichiers)"
@@ -1114,28 +1135,6 @@ with st.sidebar:
         )
 
     st.divider()
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-    col_gif, col_btn = st.sidebar.columns([1, 2])
-    with col_gif:
-        st.components.v1.html("""
-<div style="display:flex;justify-content:center;align-items:center;padding-top:4px">
-  <iframe src="https://giphy.com/embed/bSEkPdQfsSHCMYn7fD"
-          width="90" height="90"
-          style="border:none;pointer-events:none;display:block"
-          frameBorder="0"></iframe>
-</div>
-""", height=100, scrolling=False)
-
-    with col_btn:
-        st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
-        if st.button(
-            "Si tu as besoin\nd'aide, je suis là !",
-            key="faq_open_btn",
-            use_container_width=True,
-        ):
-            st.session_state.active_tab = "faq"
-            st.rerun()
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
 active = st.session_state.active_tab
