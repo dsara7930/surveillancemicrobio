@@ -5293,7 +5293,9 @@ if active == "analyse":
             from datetime import date as dt_date
 
             # ── Bornes ────────────────────────────────────────────────────────
-            all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
+            all_dates_ok = [d for d in (
+                _parse_date(r.get("date_prelevement", r.get("date", ""))) for r in surv
+            ) if d]
             d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
             d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
 
@@ -5336,8 +5338,8 @@ if active == "analyse":
 
             # ── Métriques ─────────────────────────────────────────────────────
             surv_f = [r for r in surv
-                      if _parse_date(r.get("date", "")) is not None
-                      and date_debut <= _parse_date(r.get("date", "")) <= date_fin]
+                if _parse_date(r.get("date_prelevement", r.get("date", ""))) is not None
+                and date_debut <= _parse_date(r.get("date_prelevement", r.get("date", ""))) <= date_fin]
             total_f = len(surv_f)
             if total_f < total:
                 st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
@@ -5516,13 +5518,13 @@ if active == "analyse":
                     key="hist_pt_evol", label_visibility="collapsed")
                 pt_records = sorted(
                     [r for r in surv_f if r.get("prelevement")==selected_pt],
-                    key=lambda x: _parse_date(x.get("date","")) or dt_date.min)
+                    key=lambda x: _parse_date(x.get("date_prelevement", x.get("date",""))) or dt_date.min)
                 evol_dates=[]; evol_j2=[]; evol_j7=[]
                 seuil_alerte=None; seuil_action=None
                 for r in pt_records:
                     d = _parse_date(r.get("date",""))
                     if not d: continue
-                    evol_dates.append(d.strftime("%d/%m/%y"))
+                    d = _parse_date(r.get("date_prelevement", r.get("date","")))
                     evol_j2.append(int(r.get("ufc_48h",r.get("ufc",0)) or 0))
                     evol_j7.append(int(r.get("ufc_5j", r.get("ufc",0)) or 0))
                     if seuil_alerte is None:
