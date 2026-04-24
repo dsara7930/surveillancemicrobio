@@ -1073,8 +1073,6 @@ with st.sidebar:
             st.session_state.active_tab = key
             st.rerun()
 
-    st.divider()
-
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     col_gif, col_btn = st.sidebar.columns([1, 2])
     with col_gif:
