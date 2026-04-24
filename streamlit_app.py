@@ -5259,97 +5259,100 @@ if active == "analyse":
     # ── fin helpers ───────────────────────────────────────────────────────────
 
     if surv:
-        # ── Export / Vider ────────────────────────────────────────────────────
-        c_dl, c_cl = st.columns(2)
-        with c_dl:
-            csv_str  = io.StringIO()
-            all_keys = list(dict.fromkeys(k for r in surv for k in r.keys()))
-            writer   = csv.DictWriter(csv_str, fieldnames=all_keys, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(surv)
-            st.download_button(
-                "⬇️ Télécharger CSV", csv_str.getvalue(),
-                "surveillance.csv", "text/csv",
-                use_container_width=True)
-        with c_cl:
-            if st.button("🗑️ Vider l'historique", use_container_width=True):
-                st.session_state.surveillance = []
-                save_surveillance([])
-                try:
-                    supa = get_supabase_client()
-                    if supa:
-                        supa.table("app_data").upsert({
-                            "key": "surveillance",
-                            "value": json.dumps([], ensure_ascii=False)
-                        }).execute()
-                except Exception:
-                    pass
-                if os.path.exists(CSV_FILE):
-                    os.remove(CSV_FILE)
-                st.rerun()
+        with st.expander("⚙️ Export, filtres & métriques", expanded=True):
 
-        from datetime import date as dt_date
+            # ── Export / Vider ────────────────────────────────────────────────
+            c_dl, c_cl = st.columns(2)
+            with c_dl:
+                csv_str  = io.StringIO()
+                all_keys = list(dict.fromkeys(k for r in surv for k in r.keys()))
+                writer   = csv.DictWriter(csv_str, fieldnames=all_keys, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(surv)
+                st.download_button(
+                    "⬇️ Télécharger CSV", csv_str.getvalue(),
+                    "surveillance.csv", "text/csv",
+                    use_container_width=True)
+            with c_cl:
+                if st.button("🗑️ Vider l'historique", use_container_width=True):
+                    st.session_state.surveillance = []
+                    save_surveillance([])
+                    try:
+                        supa = get_supabase_client()
+                        if supa:
+                            supa.table("app_data").upsert({
+                                "key": "surveillance",
+                                "value": json.dumps([], ensure_ascii=False)
+                            }).execute()
+                    except Exception:
+                        pass
+                    if os.path.exists(CSV_FILE):
+                        os.remove(CSV_FILE)
+                    st.rerun()
 
-        # ── Bornes ─────────────────────────────────────
-        all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
-        d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
-        d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
+            from datetime import date as dt_date
 
-        if "hist_date_debut_val" not in st.session_state:
-            st.session_state["hist_date_debut_val"] = d_min
-        if "hist_date_fin_val" not in st.session_state:
-            st.session_state["hist_date_fin_val"] = d_max
+            # ── Bornes ────────────────────────────────────────────────────────
+            all_dates_ok = [d for d in (_parse_date(r.get("date", "")) for r in surv) if d]
+            d_min = min(all_dates_ok) if all_dates_ok else dt_date.today()
+            d_max = max(all_dates_ok) if all_dates_ok else dt_date.today()
 
-        st.session_state["hist_date_debut_val"] = max(
-            d_min, min(st.session_state["hist_date_debut_val"], d_max))
-        st.session_state["hist_date_fin_val"] = max(
-            d_min, min(st.session_state["hist_date_fin_val"], d_max))
-        if st.session_state["hist_date_debut_val"] > st.session_state["hist_date_fin_val"]:
-            st.session_state["hist_date_fin_val"] = st.session_state["hist_date_debut_val"]
-
-        st.markdown(
-            "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
-            "padding:12px 16px;margin:10px 0 6px 0'>"
-            "<div style='font-size:.8rem;font-weight:700;color:#0369a1;margin-bottom:8px'>"
-            "🗓️ Filtrer par période</div>",
-            unsafe_allow_html=True)
-        cf1, cf2, cf3 = st.columns([2, 2, 1])
-        with cf1:
-            date_debut = st.date_input(
-                "Du", value=st.session_state["hist_date_debut_val"],
-                min_value=d_min, max_value=d_max, key="hist_date_debut_input")
-            st.session_state["hist_date_debut_val"] = date_debut
-        with cf2:
-            date_fin = st.date_input(
-                "Au", value=st.session_state["hist_date_fin_val"],
-                min_value=d_min, max_value=d_max, key="hist_date_fin_input")
-            st.session_state["hist_date_fin_val"] = date_fin
-        with cf3:
-            st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
-            if st.button("↺ Reset", use_container_width=True):
+            if "hist_date_debut_val" not in st.session_state:
                 st.session_state["hist_date_debut_val"] = d_min
-                st.session_state["hist_date_fin_val"]   = d_max
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+            if "hist_date_fin_val" not in st.session_state:
+                st.session_state["hist_date_fin_val"] = d_max
 
-        surv_f = [r for r in surv
-                  if _parse_date(r.get("date", "")) is not None
-                  and date_debut <= _parse_date(r.get("date", "")) <= date_fin]
-        total_f = len(surv_f)
-        if total_f < total:
-            st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
-                       f"{date_debut.strftime('%d/%m/%Y')} → {date_fin.strftime('%d/%m/%Y')}")
+            st.session_state["hist_date_debut_val"] = max(
+                d_min, min(st.session_state["hist_date_debut_val"], d_max))
+            st.session_state["hist_date_fin_val"] = max(
+                d_min, min(st.session_state["hist_date_fin_val"], d_max))
+            if st.session_state["hist_date_debut_val"] > st.session_state["hist_date_fin_val"]:
+                st.session_state["hist_date_fin_val"] = st.session_state["hist_date_debut_val"]
 
-        # ── Métriques globales ────────────────────────────────────────────────
-        alerts  = sum(1 for r in surv_f if r.get("status") == "alert")
-        actions = sum(1 for r in surv_f if r.get("status") == "action")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total",        total_f)
-        c2.metric("✅ Conformes", total_f - alerts - actions)
-        c3.metric("⚠️ Alertes",  alerts)
-        c4.metric("🚨 Actions",   actions)
+            st.markdown(
+                "<div style='background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;"
+                "padding:12px 16px;margin:10px 0 6px 0'>"
+                "<div style='font-size:.8rem;font-weight:700;color:#0369a1;margin-bottom:8px'>"
+                "🗓️ Filtrer par période</div>",
+                unsafe_allow_html=True)
+            cf1, cf2, cf3 = st.columns([2, 2, 1])
+            with cf1:
+                date_debut = st.date_input(
+                    "Du", value=st.session_state["hist_date_debut_val"],
+                    min_value=d_min, max_value=d_max, key="hist_date_debut_input")
+                st.session_state["hist_date_debut_val"] = date_debut
+            with cf2:
+                date_fin = st.date_input(
+                    "Au", value=st.session_state["hist_date_fin_val"],
+                    min_value=d_min, max_value=d_max, key="hist_date_fin_input")
+                st.session_state["hist_date_fin_val"] = date_fin
+            with cf3:
+                st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+                if st.button("↺ Reset", use_container_width=True):
+                    st.session_state["hist_date_debut_val"] = d_min
+                    st.session_state["hist_date_fin_val"]   = d_max
+                    st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Métriques ─────────────────────────────────────────────────────
+            surv_f = [r for r in surv
+                      if _parse_date(r.get("date", "")) is not None
+                      and date_debut <= _parse_date(r.get("date", "")) <= date_fin]
+            total_f = len(surv_f)
+            if total_f < total:
+                st.caption(f"🔍 {total_f} résultat(s) sur {total} — "
+                           f"{date_debut.strftime('%d/%m/%Y')} → {date_fin.strftime('%d/%m/%Y')}")
+
+            alerts  = sum(1 for r in surv_f if r.get("status") == "alert")
+            actions = sum(1 for r in surv_f if r.get("status") == "action")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total",        total_f)
+            c2.metric("✅ Conformes", total_f - alerts - actions)
+            c3.metric("⚠️ Alertes",  alerts)
+            c4.metric("🚨 Actions",   actions)
+
+        # ── Tabs (en dehors de l'expander) ────────────────────────────────────
         st.divider()
-
         hist_tab_pts, hist_tab_germs, hist_tab_prev, hist_tab_liste = st.tabs([
             "📍 Stats par point",
             "🦠 Stats par germe",
