@@ -3144,7 +3144,7 @@ if active == "surveillance":
     # ══════════════════════════════════════════════════════════════════════════
     # ONGLET 4 — IDENTIFICATIONS EN ATTENTE
     # ══════════════════════════════════════════════════════════════════════════
-    
+
     with tab_ident:
         from datetime import date
 
@@ -3221,11 +3221,12 @@ if active == "surveillance":
         else:
             for pg in pending_ids_grouped:
 
-                _sid = pg["sample_id"]
-                _when_str = " + ".join(sorted(set(pg["when_list"])))
-                _ufc = pg["colonies"]
-                _label = pg["label"]
-                _date = pg["date"]
+                _sid       = pg["sample_id"]
+                _when_str  = " + ".join(sorted(set(pg["when_list"])))
+                _ufc       = pg["colonies"]
+                _label     = pg["label"]
+                _date      = pg["date"]
+                _entries   = pg["entries"]   # ✅ CORRECTION Bug 3 : défini ici
 
                 # ── prélèvement SAFE ───────────────────────────────
                 smp = next(
@@ -3233,10 +3234,9 @@ if active == "surveillance":
                     None
                 )
 
-                pt_oper = smp.get("operateur", "?") if smp else "?"
+                pt_oper  = smp.get("operateur", "?") if smp else "?"
                 pt_class = smp.get("room_class", "") if smp else ""
 
-                # 🔥 IMPORTANT : clé unique correcte
                 _comment_prelev = (
                     smp.get("commentaire", "").strip()
                     if smp else ""
@@ -3248,7 +3248,7 @@ if active == "surveillance":
                     else date.today()
                 )
 
-                _key = _sid.replace("-", "_")
+                _key          = _sid.replace("-", "_")
                 germs_list_key = f"germs_list_{_key}"
 
                 if germs_list_key not in st.session_state:
@@ -3292,7 +3292,7 @@ if active == "surveillance":
                     )
 
                     # ── germes ─────────────────────────────────────
-                    current_germs = st.session_state[germs_list_key]
+                    current_germs  = st.session_state[germs_list_key]
                     germs_to_remove = []
 
                     for gi, g in enumerate(current_germs):
@@ -3334,7 +3334,7 @@ if active == "surveillance":
                         )
                         st.rerun()
 
-                    # ── REMARQUE─────────────
+                    # ── REMARQUE ────────────────────────────────────
                     remarque = st.text_area(
                         "Remarque",
                         key=f"rem_{_key}",
@@ -3349,10 +3349,18 @@ if active == "surveillance":
                     with idc1:
                         if st.button("🔍 Analyser & Enregistrer", use_container_width=True,
                                      key=f"submit_id_{_key}"):
+
+                            # ✅ CORRECTION Bug 2 : real_indices calculé ici
+                            real_indices = [
+                                i for i, p in enumerate(st.session_state.pending_identifications)
+                                if p["sample_id"] == _sid
+                            ]
+
                             valid_entries = [
                                 g for g in st.session_state[germs_list_key]
                                 if g["germ"] and g["germ"] != "— Sélectionner un germe —"
                             ]
+
                             if not valid_entries:
                                 st.error("Veuillez sélectionner au moins un germe.")
                             else:
@@ -3370,6 +3378,7 @@ if active == "surveillance":
                                             "germ_score":  gs,
                                             "match_obj":   match,
                                         })
+
                                 if not scored_entries:
                                     st.warning("⚠️ Aucune correspondance trouvée.")
                                 else:
@@ -3393,9 +3402,10 @@ if active == "surveillance":
                                         }
                                         for e in scored_entries
                                     ]
+
                                     st.session_state.surveillance.append({
-                                        "date": str(_date_prelev),
-                                        "date_prelevement":     str(_date_prelev),   # ← AJOUTER cette ligne
+                                        "date":                 str(_date_prelev),   # ✅ CORRECTION Bug 1
+                                        "date_prelevement":     str(_date_prelev),
                                         "prelevement":          _label,
                                         "sample_id":            _sid,
                                         "germ_saisi":           worst_entry["germ_saisi"],
@@ -3433,25 +3443,24 @@ if active == "surveillance":
                                     st.session_state.pop(germs_list_key, None)
 
                                     if status in ("alert", "action"):
-                                        # Stocker le pop_data pour le popup mesures correctives
                                         st.session_state["_show_mesures_popup"] = {
-                                            "status":          status,
-                                            "germ":            worst_entry["germ_match"],
-                                            "germ_saisi":      worst_entry["germ_saisi"],
-                                            "germ_match":      worst_entry["germ_match"],
-                                            "ufc":             worst_entry["ufc"],
-                                            "risk":            worst_entry["match_obj"].get(
-                                                "risk", worst_entry["germ_score"]),
-                                            "label":           _label,
-                                            "room_class":      pt_class,
-                                            "triggered_by":    triggered_by,
-                                            "germ_score":      worst_entry["germ_score"],
-                                            "loc_criticality": loc_crit,
+                                            "status":               status,
+                                            "germ":                 worst_entry["germ_match"],
+                                            "germ_saisi":           worst_entry["germ_saisi"],
+                                            "germ_match":           worst_entry["germ_match"],
+                                            "ufc":                  worst_entry["ufc"],
+                                            "risk":                 worst_entry["match_obj"].get(
+                                                                        "risk", worst_entry["germ_score"]),
+                                            "label":                _label,
+                                            "room_class":           pt_class,
+                                            "triggered_by":         triggered_by,
+                                            "germ_score":           worst_entry["germ_score"],
+                                            "loc_criticality":      loc_crit,
                                             "location_criticality": loc_crit,
-                                            "total_score":     total_sc,
-                                            "germs_detail":    germs_detail,
-                                            "date":            str(date_id),
-                                            "sample_id":       _sid,
+                                            "total_score":          total_sc,
+                                            "germs_detail":         germs_detail,
+                                            "date":                 str(_date_prelev),   # ✅ CORRECTION Bug 1
+                                            "sample_id":            _sid,
                                         }
                                     else:
                                         germs_summary = ", ".join(
@@ -3469,7 +3478,9 @@ if active == "surveillance":
                         )
                         if st.button(_back_lbl, use_container_width=True,
                                      key=f"cancel_id_{_key}"):
-                            for _e in _entries:
+
+                            # ✅ CORRECTION Bug 3 : _entries remplacé par pg["entries"]
+                            for _e in pg["entries"]:
                                 sch = next((x for x in st.session_state.schedules
                                             if x["sample_id"] == _sid
                                             and x["when"] == _e["when"]
@@ -3477,6 +3488,11 @@ if active == "surveillance":
                                 if sch:
                                     sch["status"] = "pending"
                             save_schedules(st.session_state.schedules)
+
+                            real_indices = [
+                                i for i, p in enumerate(st.session_state.pending_identifications)
+                                if p["sample_id"] == _sid
+                            ]
                             for _ri in sorted(real_indices, reverse=True):
                                 st.session_state.pending_identifications.pop(_ri)
                             save_pending_identifications(st.session_state.pending_identifications)
@@ -3509,6 +3525,10 @@ if active == "surveillance":
 
                     with idc4:
                         if st.button("🗑️", use_container_width=True, key=f"del_id_{_key}"):
+                            real_indices = [
+                                i for i, p in enumerate(st.session_state.pending_identifications)
+                                if p["sample_id"] == _sid
+                            ]
                             for _ri in sorted(real_indices, reverse=True):
                                 st.session_state.pending_identifications.pop(_ri)
                             save_pending_identifications(st.session_state.pending_identifications)
