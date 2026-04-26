@@ -5519,7 +5519,7 @@ if active == "analyse":
     # ── fin helpers ───────────────────────────────────────────────────────────
 
     if surv:
-        with st.expander("⚙️ Export, filtres & métriques", expanded=True):
+        with st.expander("⚙️ Export, filtres & métriques", expanded=False):
 
             # ── Export / Vider ────────────────────────────────────────────────
             c_dl, c_cl = st.columns(2)
