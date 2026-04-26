@@ -5113,7 +5113,14 @@ if active == "analyse":
             mc_statut = r.get("mc_statut", "")
             mc_detail = r.get("mc_detail", "")
             mc_date   = r.get("mc_date", "")
-            germ_r    = r.get("germ_saisi", "") or r.get("germ_match","") or ""
+            _gd_r = r.get("germs_detail", [])
+            if _gd_r:
+                _worst_r = next((g for g in _gd_r if g.get("is_worst")), None) or _gd_r[0]
+                germ_r   = _worst_r.get("name","") or r.get("germ_saisi","") or ""
+            else:
+                germ = (r.get("germ_saisi","") or "").strip()
+                if not germ or germ in ("—", "Négatif"):
+                    germ = (r.get("germ_match","") or "").strip()
 
             if status_r == "action":
                 _sc = "#dc2626"; _sb = "#fef2f2"; _sl = "🚨 ACTION"
@@ -5242,9 +5249,21 @@ if active == "analyse":
                             unsafe_allow_html=True,
                         )
                     else:
+                        # Priorité : germs_detail[0] > germ_saisi > germ_match > Négatif
+                        _gd0_name   = _germs_det_edit[0].get("name","").strip() if _germs_det_edit else ""
                         _cur_germ_e = (
-                            (_germs_det_edit[0].get("name","") if _germs_det_edit else "")
-                            or r.get("germ_saisi","") or "Négatif"
+                            _gd0_name
+                            or (r.get("germ_saisi","") or "").strip()
+                            or (r.get("germ_match","") or "").strip()
+                            or "Négatif"
+                        )
+                        if _cur_germ_e in ("—", ""):
+                            _cur_germ_e = "Négatif"
+                        
+                        _cur_ufc_e = int(
+                            (_germs_det_edit[0].get("ufc", None) if _germs_det_edit else None)
+                            or r.get("ufc", 0)
+                            or 0
                         )
                         _germ_idx_e = (
                             _germ_opts_edit.index(_cur_germ_e)
@@ -6074,7 +6093,9 @@ if active == "analyse":
             })
             for r in surv_f:
                 op     = (r.get("operateur","") or "Non renseigné").strip() or "Non renseigné"
-                germ   = (r.get("germ_saisi","") or r.get("germ_match","") or "").strip()
+                germ = (r.get("germ_saisi","") or "").strip()
+                if not germ or germ in ("—", "Négatif"):
+                    germ = (r.get("germ_match","") or "").strip()
                 st_r   = r.get("status","ok")
                 ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
                 ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
