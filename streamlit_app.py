@@ -5106,14 +5106,19 @@ if active == "analyse":
 
             _k = f"{key_prefix}{_real_idx}"
 
-            _gd_r = r.get("germs_detail", [])
-            if _gd_r:
+            # APRÈS
+            _ufc_r = int(r.get("ufc", 0) or 0)
+            _gd_r  = r.get("germs_detail", [])
+            if _gd_r and any(int(g.get("ufc",0) or 0) > 0 for g in _gd_r):
                 _worst_r = next((g for g in _gd_r if g.get("is_worst")), None) or _gd_r[0]
                 germ_r   = (_worst_r.get("name","") or "").strip() or r.get("germ_saisi","") or ""
-            else:
-                germ_r   = (r.get("germ_saisi","") or "").strip()
+            elif _ufc_r > 0:
+                germ_r = (r.get("germ_saisi","") or "").strip()
                 if not germ_r or germ_r in ("—", "Négatif", ""):
                     germ_r = (r.get("germ_match","") or "").strip()
+            else:
+                germ_r = ""  # UFC = 0 → pas de germe affiché
+
             if germ_r in ("—", "Négatif", ""):
                 germ_r = ""
 
