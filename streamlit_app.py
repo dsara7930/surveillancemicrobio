@@ -5094,20 +5094,17 @@ if active == "analyse":
         except Exception:
             return None
 
-    def _render_liste_entries(entries, surv_ref):
+    
+    def _render_liste_entries(entries, surv_ref, key_prefix=""):
         for _li, r in enumerate(entries):
             _real_idx = next(
-                (
-                    i for i, s in enumerate(st.session_state.surveillance)
-                    if s.get("date") == r.get("date")
-                    and s.get("prelevement") == r.get("prelevement")
-                    and s.get("operateur", s.get("preleveur","")) == r.get("operateur", r.get("preleveur",""))
-                    and s.get("ufc") == r.get("ufc")
-                ),
+                (i for i, s in enumerate(st.session_state.surveillance) if s is r),
                 None,
             )
             if _real_idx is None:
                 continue
+
+            _k = f"{key_prefix}{_real_idx}"
 
             _gd_r = r.get("germs_detail", [])
             if _gd_r:
@@ -5238,19 +5235,19 @@ if active == "analyse":
                     _new_prelev = st.text_input(
                         "📍 Point de prélèvement",
                         value=r.get("prelevement", ""),
-                        key=f"edit_prelev_{_real_idx}",
+                        key=f"edit_prelev_{_k}",
                     )
                     # APRÈS
                     _new_date = st.text_input(
                         "📅 Date (YYYY-MM-DD)",
                         value=r.get("date_prelevement", r.get("date", "")),
-                        key=f"edit_date_{_real_idx}",
+                        key=f"edit_date_{_k}",
                     )
                     
                     _new_oper = st.text_input(
                         "👤 Opérateur",
                         value=r.get("operateur", r.get("preleveur", "")),
-                        key=f"edit_oper_{_real_idx}",
+                        key=f"edit_oper_{_k}",
                     )
                 with _ec2:
                     if len(_germs_det_edit) > 1:
@@ -5289,7 +5286,7 @@ if active == "analyse":
                             "🦠 Germe identifié",
                             _germ_opts_edit,
                             index=_germ_idx_e,
-                            key=f"edit_germ_{_real_idx}",
+                            key=f"edit_germ_{_k}",
                         )
                         # APRÈS
                         _new_ufc = st.number_input(
@@ -5297,7 +5294,7 @@ if active == "analyse":
                             min_value=0,
                             value=_cur_ufc_e,
                             step=1,
-                            key=f"edit_ufc_{_real_idx}",
+                            key=f"edit_ufc_{_k}",
                         )
 
                         # APRÈS
@@ -5305,7 +5302,7 @@ if active == "analyse":
                             "💬 Remarque",
                             value=r.get("remarque", ""),
                             height=70,
-                            key=f"edit_rem_{_real_idx}",
+                            key=f"edit_rem_{_k}",
                         )
 
                 # ══════════════════════════════════════════════════════════════
@@ -5374,7 +5371,7 @@ if active == "analyse":
                     # APRÈS
                     if st.button(
                         "💾 Sauvegarder les modifications",
-                        key=f"edit_save_{_real_idx}",
+                        key=f"edit_save_{_k}",
                         type="primary",
                         use_container_width=True,
                     ):
@@ -5383,8 +5380,8 @@ if active == "analyse":
                         _new_gd   = []
                         for gi, gde in enumerate(_germs_det_edit):
                             # APRÈS
-                            _sv_name = st.session_state.get(f"edit_mg_name_{_real_idx}_{gi}", gde.get("name","Négatif"))
-                            _sv_ufc  = st.session_state.get(f"edit_mg_ufc_{_real_idx}_{gi}",  int(gde.get("ufc",0) or 0))
+                            _sv_name = st.session_state.get(f"edit_mg_name_{_k}_{gi}", gde.get("name","Négatif"))
+                            _sv_ufc  = st.session_state.get(f"edit_mg_ufc_{_k}_{gi}",  int(gde.get("ufc",0) or 0))
                             _sv_gscore = 0
                             if _sv_name != "Négatif":
                                 _go2 = next((g for g in st.session_state.germs if g['name'] == _sv_name), None)
@@ -5521,12 +5518,12 @@ if active == "analyse":
                     unsafe_allow_html=True,
                 )
                 # APRÈS
-                _confirm_key = f"confirm_del_{_real_idx}"
+                _confirm_key = f"confirm_del_{_k}"
                 if not st.session_state.get(_confirm_key, False):
                     # APRÈS
                     if st.button(
                         "🗑️ Supprimer cette entrée",
-                        key=f"del_btn_{_real_idx}",
+                        key=f"del_btn_{_k}",
                         use_container_width=True,
                     ):
                         st.session_state[_confirm_key] = True
@@ -5538,7 +5535,7 @@ if active == "analyse":
                         # APRÈS
                         if st.button(
                             "✅ OUI — Supprimer définitivement",
-                            key=f"del_confirm_{_real_idx}",
+                            key=f"del_confirm_{_k}",
                             type="primary",
                             use_container_width=True,
                         ):
@@ -5551,7 +5548,7 @@ if active == "analyse":
                         # APRÈS
                         if st.button(
                             "❌ Annuler",
-                            key=f"del_cancel_{_real_idx}",
+                            key=f"del_cancel_{_k}",
                             use_container_width=True,
                         ):
                             st.session_state[_confirm_key] = False
