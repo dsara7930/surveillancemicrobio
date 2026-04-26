@@ -5109,11 +5109,21 @@ if active == "analyse":
             if _real_idx is None:
                 continue
 
+            _gd_r = r.get("germs_detail", [])
+            if _gd_r:
+                _worst_r = next((g for g in _gd_r if g.get("is_worst")), None) or _gd_r[0]
+                germ_r   = (_worst_r.get("name","") or "").strip() or r.get("germ_saisi","") or ""
+            else:
+                germ_r   = (r.get("germ_saisi","") or "").strip()
+                if not germ_r or germ_r in ("—", "Négatif", ""):
+                    germ_r = (r.get("germ_match","") or "").strip()
+            if germ_r in ("—", "Négatif", ""):
+                germ_r = ""
+
             status_r  = r.get("status", "ok")
             mc_statut = r.get("mc_statut", "")
             mc_detail = r.get("mc_detail", "")
             mc_date   = r.get("mc_date", "")
-            _gd_r = r.get("germs_detail", [])
             if _gd_r:
                 _worst_r = next((g for g in _gd_r if g.get("is_worst")), None) or _gd_r[0]
                 germ_r   = _worst_r.get("name","") or r.get("germ_saisi","") or ""
