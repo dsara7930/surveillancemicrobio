@@ -5094,7 +5094,251 @@ if active == "analyse":
         except Exception:
             return None
 
-    
+    def _generate_mc_pdf(r, origin_measures, germs_list):
+        """Génère un PDF des mesures correctives applicables à l'entrée r."""
+        import io
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        )
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+
+        # ── Infos de l'entrée ──────────────────────────────────────────
+        status_e   = r.get("status", "ok")
+        germ_name  = r.get("germ_saisi","") or r.get("germ_match","") or "—"
+        _gd        = r.get("germs_detail", [])
+        date_e     = r.get("date_prelevement", r.get("date","—"))
+        point_e    = r.get("prelevement","—")
+        operateur_e= r.get("operateur", r.get("preleveur","—"))
+        ufc_e      = r.get("ufc", 0)
+        score_e    = int(r.get("total_score", 0) or 0)
+        room_e     = r.get("room_class","—")
+
+        # ── Criticité du germe (1-5) ───────────────────────────────────
+        def _get_crit(gname):
+            for g in germs_list:
+                if g.get("name","") == gname:
+                    return int(g.get("criticite", 0) or 0)
+            return 0
+
+        # Collecter tous les germes présents dans l'entrée
+        germes_entry = []
+        if _gd:
+            germes_entry = [g.get("name","") for g in _gd if g.get("ufc",0) and g.get("name","") not in ("Négatif","—","")]
+        elif germ_name not in ("Négatif","—",""):
+            germes_entry = [germ_name]
+
+        # ── Type germe (bacteria/fungi) ────────────────────────────────
+        def _get_germ_type(gname):
+            for g in germs_list:
+                if g.get("name","") == gname:
+                    path = g.get("path", [])
+                    if len(path) > 1:
+                        return "fungi" if path[1] == "Champignons" else "bacteria"
+            return "bacteria"
+
+        germ_types_entry = set(_get_germ_type(gn) for gn in germes_entry) if germes_entry else set()
+        max_crit = max((_get_crit(gn) for gn in germes_entry), default=0)
+
+        # ── Filtrage des mesures correctives ───────────────────────────
+        def _mc_matches(m):
+            # Type alerte/action
+            mt = m.get("type","alert")
+            if mt != "both" and mt != status_e:
+                return False
+            # Criticité
+            mr = m.get("risk","all")
+            if mr != "all" and max_crit > 0:
+                if isinstance(mr, list):
+                    if max_crit not in mr:
+                        return False
+                else:
+                    if int(mr) != max_crit:
+                        return False
+            # Type de germe
+            mgt = m.get("germ_type","all")
+            if mgt != "all" and mgt != "both":
+                if not germ_types_entry or mgt not in germ_types_entry:
+                    return False
+            return True
+
+        mc_applicables = [m for m in origin_measures if _mc_matches(m)]
+
+        # ── Construction PDF ───────────────────────────────────────────
+        buf    = io.BytesIO()
+        doc    = SimpleDocTemplate(
+            buf, pagesize=A4,
+            leftMargin=18*mm, rightMargin=18*mm,
+            topMargin=18*mm, bottomMargin=18*mm,
+        )
+        styles = getSampleStyleSheet()
+        story  = []
+
+        # Couleurs
+        if status_e == "action":
+            status_color = colors.HexColor("#dc2626")
+            status_label = "🚨 ACTION REQUISE"
+        else:
+            status_color = colors.HexColor("#d97706")
+            status_label = "⚠️ ALERTE"
+
+        # ── Titre ──────────────────────────────────────────────────────
+        title_style = ParagraphStyle(
+            "title", parent=styles["Normal"],
+            fontSize=16, textColor=colors.HexColor("#1e3a5f"),
+            spaceAfter=4, fontName="Helvetica-Bold", alignment=TA_CENTER,
+        )
+        story.append(Paragraph("FICHE MESURES CORRECTIVES", title_style))
+        story.append(Paragraph("Surveillance microbiologique — Environnement pharmaceutique", 
+            ParagraphStyle("sub", parent=styles["Normal"], fontSize=9,
+                textColor=colors.HexColor("#64748b"), alignment=TA_CENTER, spaceAfter=10)))
+        story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1e3a5f")))
+        story.append(Spacer(1, 8))
+
+        # ── Bandeau statut ─────────────────────────────────────────────
+        status_data = [[
+            Paragraph(status_label, ParagraphStyle("sl", parent=styles["Normal"],
+                fontSize=13, textColor=colors.white, fontName="Helvetica-Bold", alignment=TA_CENTER))
+        ]]
+        status_table = Table(status_data, colWidths=["100%"])
+        status_table.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,-1), status_color),
+            ("ROUNDEDCORNERS", [6]),
+            ("TOPPADDING",    (0,0), (-1,-1), 8),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+        ]))
+        story.append(status_table)
+        story.append(Spacer(1, 10))
+
+        # ── Infos du prélèvement ───────────────────────────────────────
+        info_style  = ParagraphStyle("info", parent=styles["Normal"], fontSize=9,
+                                    textColor=colors.HexColor("#0f172a"))
+        label_style = ParagraphStyle("lbl", parent=styles["Normal"], fontSize=9,
+                                    textColor=colors.HexColor("#64748b"), fontName="Helvetica-Bold")
+
+        info_rows = [
+            [Paragraph("Point de prélèvement", label_style), Paragraph(point_e, info_style),
+            Paragraph("Date", label_style),                  Paragraph(str(date_e), info_style)],
+            [Paragraph("Germe(s) identifié(s)", label_style), Paragraph(", ".join(germes_entry) or "—", info_style),
+            Paragraph("UFC/m³", label_style),                Paragraph(str(ufc_e), info_style)],
+            [Paragraph("Classe de salle", label_style),       Paragraph(room_e, info_style),
+            Paragraph("Score total", label_style),           Paragraph(str(score_e), info_style)],
+            [Paragraph("Opérateur", label_style),             Paragraph(operateur_e, info_style),
+            Paragraph("Criticité germe", label_style),       Paragraph(str(max_crit) if max_crit else "—", info_style)],
+        ]
+        info_table = Table(info_rows, colWidths=[45*mm, 55*mm, 35*mm, 45*mm])
+        info_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+            ("BOX",           (0,0), (-1,-1), 1, colors.HexColor("#e2e8f0")),
+            ("INNERGRID",     (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+            ("TOPPADDING",    (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+            ("LEFTPADDING",   (0,0), (-1,-1), 8),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ]))
+        story.append(info_table)
+        story.append(Spacer(1, 12))
+
+        # ── Mesures correctives ────────────────────────────────────────
+        story.append(Paragraph(
+            f"MESURES CORRECTIVES APPLICABLES ({len(mc_applicables)})",
+            ParagraphStyle("mct", parent=styles["Normal"], fontSize=11,
+                textColor=colors.HexColor("#1e3a5f"), fontName="Helvetica-Bold", spaceAfter=6)
+        ))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1")))
+        story.append(Spacer(1, 6))
+
+        if not mc_applicables:
+            story.append(Paragraph(
+                "Aucune mesure corrective définie pour ce profil.",
+                ParagraphStyle("none", parent=styles["Normal"], fontSize=9,
+                    textColor=colors.HexColor("#94a3b8"), spaceAfter=6)
+            ))
+        else:
+            scope_fr = {
+                "Air": "💨 Air", "Humidité": "💧 Humidité",
+                "Flore fécale": "🦠 Flore fécale",
+                "Oropharynx / Gouttelettes": "😷 Oropharynx",
+                "Peau / Muqueuse": "🖐️ Peau / Muqueuse",
+                "Sol / Carton / Surface sèche": "📦 Sol / Surface",
+                "all": "🌐 Toutes origines",
+            }
+            mc_row_style = ParagraphStyle("mcr", parent=styles["Normal"],
+                fontSize=9, textColor=colors.HexColor("#0f172a"), leading=13)
+            mc_tag_style = ParagraphStyle("mctag", parent=styles["Normal"],
+                fontSize=8, textColor=colors.HexColor("#475569"), alignment=TA_CENTER)
+
+            for i, mc in enumerate(mc_applicables):
+                row_bg = colors.HexColor("#ffffff") if i % 2 == 0 else colors.HexColor("#f8fafc")
+                scope_lbl = scope_fr.get(mc.get("scope","all"), mc.get("scope","—"))
+                type_lbl  = "⚠️ Alerte" if mc.get("type","alert") == "alert" \
+                            else "🚨 Action" if mc.get("type") == "action" else "⚠️🚨 Les deux"
+                risk_val  = mc.get("risk","all")
+                risk_lbl  = ("🌐" if risk_val == "all"
+                            else "-".join(str(x) for x in risk_val) if isinstance(risk_val, list)
+                            else str(risk_val))
+
+                mc_row = [[
+                    Paragraph(f"<b>{i+1}.</b>  {mc.get('text','')}", mc_row_style),
+                    Paragraph(scope_lbl,  mc_tag_style),
+                    Paragraph(type_lbl,   mc_tag_style),
+                    Paragraph(f"Crit. {risk_lbl}", mc_tag_style),
+                ]]
+                mc_table = Table(mc_row, colWidths=[95*mm, 30*mm, 28*mm, 27*mm])
+                mc_table.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0), (-1,-1), row_bg),
+                    ("BOX",           (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+                    ("TOPPADDING",    (0,0), (-1,-1), 7),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 8),
+                    ("RIGHTPADDING",  (0,0), (-1,-1), 6),
+                    ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                ]))
+                story.append(mc_table)
+
+        story.append(Spacer(1, 14))
+
+        # ── Zone signature ─────────────────────────────────────────────
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#cbd5e1")))
+        story.append(Spacer(1, 8))
+        sig_rows = [[
+            Paragraph("Réalisé par :", ParagraphStyle("sg", parent=styles["Normal"],
+                fontSize=8, textColor=colors.HexColor("#64748b"))),
+            Paragraph("Validé par :", ParagraphStyle("sg2", parent=styles["Normal"],
+                fontSize=8, textColor=colors.HexColor("#64748b"))),
+            Paragraph("Date de clôture :", ParagraphStyle("sg3", parent=styles["Normal"],
+                fontSize=8, textColor=colors.HexColor("#64748b"))),
+        ],[
+            Paragraph("&nbsp;" * 40, styles["Normal"]),
+            Paragraph("&nbsp;" * 40, styles["Normal"]),
+            Paragraph("&nbsp;" * 30, styles["Normal"]),
+        ]]
+        sig_table = Table(sig_rows, colWidths=[60*mm, 60*mm, 60*mm])
+        sig_table.setStyle(TableStyle([
+            ("BOX",           (0,1), (-1,1), 0.5, colors.HexColor("#cbd5e1")),
+            ("TOPPADDING",    (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 18),
+            ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ]))
+        story.append(sig_table)
+
+        # ── Pied de page ───────────────────────────────────────────────
+        from datetime import datetime as _dt
+        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))
+        story.append(Paragraph(
+            f"Document généré le {_dt.now().strftime('%d/%m/%Y à %H:%M')} — Surveillance microbiologique",
+            ParagraphStyle("footer", parent=styles["Normal"], fontSize=7,
+                textColor=colors.HexColor("#94a3b8"), alignment=TA_CENTER, spaceBefore=4)
+        ))
+
+        doc.build(story)
+        buf.seek(0)
+        return buf.read()
+
     def _render_liste_entries(entries, surv_ref, key_prefix=""):
         for _li, r in enumerate(entries):
             _real_idx = next(
@@ -5220,6 +5464,29 @@ if active == "analyse":
             with _tab_mc:
                 if status_r in ("alert", "action"):
                     _render_mesures_correctives(st.session_state.surveillance[_real_idx], _real_idx)
+                    
+                    # ── Bouton impression PDF ──────────────────────────────
+                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                    try:
+                        _pdf_bytes = _generate_mc_pdf(
+                            r,
+                            st.session_state.get("origin_measures", []),
+                            st.session_state.get("germs", []),
+                        )
+                        _pdf_fname = (
+                            f"MC_{r.get('prelevement','point').replace(' ','_')[:20]}"
+                            f"_{r.get('date_prelevement', r.get('date',''))}.pdf"
+                        )
+                        st.download_button(
+                            label="🖨️ Imprimer / Télécharger la fiche MC (PDF)",
+                            data=_pdf_bytes,
+                            file_name=_pdf_fname,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key=f"pdf_mc_{_k}",
+                        )
+                    except Exception as _pdf_err:
+                        st.warning(f"Impossible de générer le PDF : {_pdf_err}")
                 else:
                     st.markdown(
                         "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
@@ -6337,6 +6604,7 @@ if active == "parametres":
             return freq / 4.33          # ≈ semaines par mois
         else:
             return freq                 # fallback : on suppose hebdomadaire
+        
 # MESURES CORRECTIVES #
     with subtab_mesures:
         om = st.session_state.origin_measures
