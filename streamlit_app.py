@@ -5208,7 +5208,11 @@ if active == "analyse":
 
             with _tab_edit:
                 st.markdown("**✏️ Modifier cette entrée**")
-                germ_names_edit = sorted([g['name'] for g in st.session_state.germs])
+                germ_names_edit  = sorted([g['name'] for g in st.session_state.germs])
+                _germ_opts_edit  = ["Négatif"] + germ_names_edit
+                _germs_det_edit  = r.get("germs_detail", [])
+
+                # ── Champs communs ─────────────────────────────────────────────
                 _ec1, _ec2 = st.columns(2)
                 with _ec1:
                     _new_prelev = st.text_input(
@@ -5217,7 +5221,7 @@ if active == "analyse":
                         key=f"edit_prelev_{_li}",
                     )
                     _new_date = st.text_input(
-                        "📅 Date de prélèvement (YYYY-MM-DD)",
+                        "📅 Date (YYYY-MM-DD)",
                         value=r.get("date_prelevement", r.get("date", "")),
                         key=f"edit_date_{_li}",
                     )
@@ -5227,81 +5231,242 @@ if active == "analyse":
                         key=f"edit_oper_{_li}",
                     )
                 with _ec2:
-                    _cur_germ  = r.get("germ_saisi", "") or "Négatif"
-                    _germ_opts = ["Négatif"] + germ_names_edit
-                    _germ_idx  = _germ_opts.index(_cur_germ) if _cur_germ in _germ_opts else 0
-                    _new_germ  = st.selectbox(
-                        "🦠 Germe identifié",
-                        _germ_opts,
-                        index=_germ_idx,
-                        key=f"edit_germ_{_li}",
-                    )
-                    _new_ufc = st.number_input(
-                        "UFC",
-                        min_value=0,
-                        value=int(r.get("ufc", 0) or 0),
-                        step=1,
-                        key=f"edit_ufc_{_li}",
-                    )
-                    _new_remarque = st.text_area(
-                        "💬 Remarque",
-                        value=r.get("remarque", ""),
-                        height=80,
-                        key=f"edit_rem_{_li}",
-                    )
-
-                if _new_germ != "Négatif":
-                    _gobj = next(
-                        (g for g in st.session_state.germs if g['name'] == _new_germ), None
-                    )
-                    if _gobj:
-                        _new_germ_score = (
-                            int(_gobj.get('pathogenicity', 1))
-                            * int(_gobj.get('resistance', 1))
-                            * int(_gobj.get('dissemination', 1))
-                        )
-                        _loc_c_edit = int(r.get("location_criticality", 1) or 1)
-                        _new_total  = _loc_c_edit * _new_germ_score
-                        _new_status, _new_lbl, _new_col = _evaluate_score(_new_total)
+                    if len(_germs_det_edit) > 1:
                         st.markdown(
-                            f"<div style='background:{_new_col}11;border:1px solid {_new_col}44;"
-                            f"border-radius:8px;padding:8px 12px;font-size:.78rem;"
-                            f"font-weight:700;color:{_new_col}'>"
-                            f"Score recalculé : {_new_total} "
-                            f"(lieu {_loc_c_edit} × germe {_new_germ_score}) → {_new_lbl}"
-                            f"</div>",
+                            f"<div style='background:#eff6ff;border:1px solid #93c5fd;"
+                            f"border-radius:10px;padding:12px;margin-top:4px;"
+                            f"font-size:.8rem;color:#1e40af;font-weight:700'>"
+                            f"🦠 {len(_germs_det_edit)} germes saisis<br>"
+                            f"<span style='font-weight:400;font-size:.75rem;color:#475569'>"
+                            f"Éditez chaque germe dans ses onglets ci-dessous.</span></div>",
                             unsafe_allow_html=True,
                         )
                     else:
-                        _new_germ_score = int(r.get("germ_score", 0) or 0)
-                        _new_total      = int(r.get("total_score", 0) or 0)
-                        _new_status     = r.get("status", "ok")
-                else:
-                    _new_germ_score = 0
-                    _new_total      = 0
-                    _new_status     = "ok"
+                        _cur_germ_e = (
+                            (_germs_det_edit[0].get("name","") if _germs_det_edit else "")
+                            or r.get("germ_saisi","") or "Négatif"
+                        )
+                        _germ_idx_e = (
+                            _germ_opts_edit.index(_cur_germ_e)
+                            if _cur_germ_e in _germ_opts_edit else 0
+                        )
+                        _new_germ = st.selectbox(
+                            "🦠 Germe identifié",
+                            _germ_opts_edit,
+                            index=_germ_idx_e,
+                            key=f"edit_germ_{_li}",
+                        )
+                        _new_ufc = st.number_input(
+                            "UFC",
+                            min_value=0,
+                            value=int(
+                                (_germs_det_edit[0].get("ufc",0) if _germs_det_edit
+                                else r.get("ufc", 0)) or 0
+                            ),
+                            step=1,
+                            key=f"edit_ufc_{_li}",
+                        )
 
-                if st.button(
-                    "💾 Sauvegarder les modifications",
-                    key=f"edit_save_{_li}",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    st.session_state.surveillance[_real_idx].update({
-                        "prelevement": _new_prelev.strip(),
-                        "date":        _new_date.strip(),
-                        "operateur":   _new_oper.strip(),
-                        "germ_saisi":  _new_germ,
-                        "ufc":         _new_ufc,
-                        "ufc_total":   _new_ufc,
-                        "germ_score":  _new_germ_score,
-                        "total_score": _new_total,
-                        "status":      _new_status,
-                        "remarque":    _new_remarque.strip(),
-                    })
-                    save_surveillance(st.session_state.surveillance)
-                    st.success("✅ Entrée mise à jour — stats recalculées automatiquement.")
-                    st.rerun()
+                _new_remarque = st.text_area(
+                    "💬 Remarque",
+                    value=r.get("remarque", ""),
+                    height=70,
+                    key=f"edit_rem_{_li}",
+                )
+
+                # ══════════════════════════════════════════════════════════════
+                # CAS MULTI-GERMES : onglets par germe
+                # ══════════════════════════════════════════════════════════════
+                if len(_germs_det_edit) > 1:
+                    st.markdown(
+                        "<div style='font-size:.78rem;font-weight:700;color:#1e40af;"
+                        "margin:10px 0 4px 0'>🦠 Modifier chaque germe</div>",
+                        unsafe_allow_html=True,
+                    )
+                    _mg_tab_labels = [
+                        f"{'👑 ' if gde.get('is_worst') else ''}Germe {gi+1} · "
+                        f"{(gde.get('name') or '?')[:22]}"
+                        for gi, gde in enumerate(_germs_det_edit)
+                    ]
+                    _mg_tabs = st.tabs(_mg_tab_labels)
+
+                    for gi, (mgtab, gde) in enumerate(zip(_mg_tabs, _germs_det_edit)):
+                        with mgtab:
+                            _mg_c1, _mg_c2 = st.columns(2)
+                            _cur_mg_name = gde.get("name","") or "Négatif"
+                            _mg_idx = (
+                                _germ_opts_edit.index(_cur_mg_name)
+                                if _cur_mg_name in _germ_opts_edit else 0
+                            )
+                            with _mg_c1:
+                                _ng_name = st.selectbox(
+                                    "🦠 Germe",
+                                    _germ_opts_edit,
+                                    index=_mg_idx,
+                                    key=f"edit_mg_name_{_li}_{gi}",
+                                )
+                            with _mg_c2:
+                                _ng_ufc = st.number_input(
+                                    "UFC",
+                                    min_value=0,
+                                    value=int(gde.get("ufc",0) or 0),
+                                    step=1,
+                                    key=f"edit_mg_ufc_{_li}_{gi}",
+                                )
+                            # Aperçu score pour ce germe
+                            if _ng_name != "Négatif":
+                                _gobj_mg = next(
+                                    (g for g in st.session_state.germs if g['name'] == _ng_name), None
+                                )
+                                if _gobj_mg:
+                                    _mg_gscore = (
+                                        int(_gobj_mg.get('pathogenicity',1))
+                                        * int(_gobj_mg.get('resistance',1))
+                                        * int(_gobj_mg.get('dissemination',1))
+                                    )
+                                    _loc_c_mg  = int(r.get("location_criticality",1) or 1)
+                                    _mg_total  = _loc_c_mg * _mg_gscore
+                                    _mg_st, _mg_lbl, _mg_col = _evaluate_score(_mg_total)
+                                    st.markdown(
+                                        f"<div style='background:{_mg_col}11;border:1px solid {_mg_col}44;"
+                                        f"border-radius:8px;padding:6px 10px;font-size:.75rem;"
+                                        f"font-weight:700;color:{_mg_col}'>"
+                                        f"Score : {_mg_total} (lieu {_loc_c_mg} × germe {_mg_gscore}) → {_mg_lbl}"
+                                        f"</div>",
+                                        unsafe_allow_html=True,
+                                    )
+
+                    if st.button(
+                        "💾 Sauvegarder les modifications",
+                        key=f"edit_save_{_li}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        # ── Reconstruire germs_detail depuis les widgets ───────
+                        _loc_c_sv = int(r.get("location_criticality",1) or 1)
+                        _new_gd   = []
+                        for gi, gde in enumerate(_germs_det_edit):
+                            _sv_name = st.session_state.get(f"edit_mg_name_{_li}_{gi}", gde.get("name","Négatif"))
+                            _sv_ufc  = st.session_state.get(f"edit_mg_ufc_{_li}_{gi}",  int(gde.get("ufc",0) or 0))
+                            _sv_gscore = 0
+                            if _sv_name != "Négatif":
+                                _go2 = next((g for g in st.session_state.germs if g['name'] == _sv_name), None)
+                                if _go2:
+                                    _sv_gscore = (
+                                        int(_go2.get('pathogenicity',1))
+                                        * int(_go2.get('resistance',1))
+                                        * int(_go2.get('dissemination',1))
+                                    )
+                            _new_gd.append({
+                                "name":       _sv_name,
+                                "ufc":        _sv_ufc,
+                                "germ_score": _sv_gscore,
+                                "is_worst":   False,
+                            })
+
+                        # ── Trouver le germe le plus critique (worst) ─────────
+                        _best_ts    = -1
+                        _worst_name = None
+                        _worst_gs   = 0
+                        _total_ufc_sv = 0
+                        for ngd in _new_gd:
+                            if ngd["name"] != "Négatif" and ngd["ufc"] > 0:
+                                _ts_ngd = _loc_c_sv * ngd["germ_score"]
+                                _total_ufc_sv += ngd["ufc"]
+                                if _ts_ngd > _best_ts:
+                                    _best_ts    = _ts_ngd
+                                    _worst_name = ngd["name"]
+                                    _worst_gs   = ngd["germ_score"]
+
+                        for ngd in _new_gd:
+                            ngd["is_worst"] = (ngd["name"] == _worst_name and _worst_name is not None)
+
+                        if _worst_name:
+                            _final_ts  = _loc_c_sv * _worst_gs
+                            _final_st, _, _ = _evaluate_score(_final_ts)
+                        else:
+                            _final_ts = 0; _final_st = "ok"; _worst_gs = 0
+
+                        st.session_state.surveillance[_real_idx].update({
+                            "prelevement":  _new_prelev.strip(),
+                            "date":         _new_date.strip(),
+                            "operateur":    _new_oper.strip(),
+                            "germ_saisi":   _worst_name or "Négatif",
+                            "ufc":          _total_ufc_sv,
+                            "ufc_total":    _total_ufc_sv,
+                            "germ_score":   _worst_gs,
+                            "total_score":  _final_ts,
+                            "status":       _final_st,
+                            "remarque":     _new_remarque.strip(),
+                            "germs_detail": _new_gd,
+                        })
+                        save_surveillance(st.session_state.surveillance)
+                        st.success("✅ Entrée mise à jour — germes et stats recalculés.")
+                        st.rerun()
+
+                # ══════════════════════════════════════════════════════════════
+                # CAS MONO-GERME : logique d'origine
+                # ══════════════════════════════════════════════════════════════
+                else:
+                    if _new_germ != "Négatif":
+                        _gobj_s = next(
+                            (g for g in st.session_state.germs if g['name'] == _new_germ), None
+                        )
+                        if _gobj_s:
+                            _new_germ_score = (
+                                int(_gobj_s.get('pathogenicity',1))
+                                * int(_gobj_s.get('resistance',1))
+                                * int(_gobj_s.get('dissemination',1))
+                            )
+                            _loc_c_edit = int(r.get("location_criticality",1) or 1)
+                            _new_total  = _loc_c_edit * _new_germ_score
+                            _new_status, _new_lbl, _new_col = _evaluate_score(_new_total)
+                            st.markdown(
+                                f"<div style='background:{_new_col}11;border:1px solid {_new_col}44;"
+                                f"border-radius:8px;padding:8px 12px;font-size:.78rem;"
+                                f"font-weight:700;color:{_new_col}'>"
+                                f"Score recalculé : {_new_total} "
+                                f"(lieu {_loc_c_edit} × germe {_new_germ_score}) → {_new_lbl}"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            _new_germ_score = int(r.get("germ_score",0) or 0)
+                            _new_total      = int(r.get("total_score",0) or 0)
+                            _new_status     = r.get("status","ok")
+                    else:
+                        _new_germ_score = 0
+                        _new_total      = 0
+                        _new_status     = "ok"
+
+                    if st.button(
+                        "💾 Sauvegarder les modifications",
+                        key=f"edit_save_{_li}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        # Met à jour germs_detail si existant, sinon champ plat
+                        _upd_gd = (
+                            [{"name": _new_germ, "ufc": _new_ufc,
+                            "germ_score": _new_germ_score, "is_worst": True}]
+                            if _new_germ != "Négatif" else []
+                        )
+                        st.session_state.surveillance[_real_idx].update({
+                            "prelevement":  _new_prelev.strip(),
+                            "date":         _new_date.strip(),
+                            "operateur":    _new_oper.strip(),
+                            "germ_saisi":   _new_germ,
+                            "ufc":          _new_ufc,
+                            "ufc_total":    _new_ufc,
+                            "germ_score":   _new_germ_score,
+                            "total_score":  _new_total,
+                            "status":       _new_status,
+                            "remarque":     _new_remarque.strip(),
+                            "germs_detail": _upd_gd,
+                        })
+                        save_surveillance(st.session_state.surveillance)
+                        st.success("✅ Entrée mise à jour — stats recalculées automatiquement.")
+                        st.rerun()
 
             with _tab_del:
                 st.markdown(
@@ -5471,30 +5636,50 @@ if active == "analyse":
                 "ufc_j2_list":[],"ufc_j7_list":[],
             })
             for r in surv_f:
-                pt     = r.get("prelevement","—")
-                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
-                st_r   = r.get("status","ok")
-                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
-                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+                pt           = r.get("prelevement","—")
+                st_r         = r.get("status","ok")
+                _gd_list     = r.get("germs_detail", [])
+                ufc_j2       = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                ufc_j7       = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
 
-                j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
-                j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
+                # ── Déterminer positivité ──────────────────────────────────────
+                if _gd_list:
+                    is_pos = any(
+                        int(g.get("ufc",0) or 0) > 0
+                        and g.get("name","") not in ("Négatif","—","")
+                        for g in _gd_list
+                    )
+                else:
+                    germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                    j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
+                    j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
+                    is_pos = j2_pos or j7_pos
 
-                if j2_pos:
-                    pts_stats[pt]["total"]     += 1
+                pts_stats[pt]["total"] += 1
+
+                if is_pos:
                     pts_stats[pt]["positives"] += 1
-                    pts_stats[pt]["germes"][germ] += 1
-                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
-                    elif st_r == "action": pts_stats[pt]["actions"] += 1
-                    pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
-                    if ufc_j7 > 0:
-                        pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
-
-                elif not j2_pos and not j7_pos:
-                    pts_stats[pt]["total"]     += 1
+                    if _gd_list:
+                        # Compter CHAQUE germe individuellement
+                        for gde in _gd_list:
+                            g_name = gde.get("name","")
+                            g_ufc  = int(gde.get("ufc",0) or 0)
+                            if g_ufc > 0 and g_name not in ("Négatif","—",""):
+                                pts_stats[pt]["germes"][g_name] += 1
+                                pts_stats[pt]["ufc_j2_list"].append(g_ufc)
+                    else:
+                        germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                        if germ not in ("Négatif","—",""):
+                            pts_stats[pt]["germes"][germ] += 1
+                        if ufc_j2 > 0:
+                            pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
+                        if ufc_j7 > 0:
+                            pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
+                else:
                     pts_stats[pt]["negatives"] += 1
-                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
-                    elif st_r == "action": pts_stats[pt]["actions"] += 1
+
+                if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                elif st_r == "action": pts_stats[pt]["actions"] += 1
 
                 else:
                     pts_stats[pt]["total"]     += 1
@@ -5718,28 +5903,41 @@ if active == "analyse":
             germs_stats=defaultdict(lambda:{"count":0,"ufc_sum":0,"points":set(),"criticite":0})
             total_pos=0
             for r in surv_f:
-                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
-                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
-                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+                _gd_list = r.get("germs_detail", [])
 
-                j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
-                j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
-
-                if j2_pos:
-                    total_pos += 1
-                    germs_stats[germ]["count"]   += 1
-                    germs_stats[germ]["ufc_sum"] += ufc_j2
-                    germs_stats[germ]["points"].add(r.get("prelevement","—"))
-                    if germs_stats[germ]["criticite"] == 0:
-                        germs_stats[germ]["criticite"] = _get_criticite(germ)
-
-                elif not j2_pos and j7_pos:
-                    total_pos += 1
-                    germs_stats[germ]["count"]   += 1
-                    germs_stats[germ]["ufc_sum"] += ufc_j7
-                    germs_stats[germ]["points"].add(r.get("prelevement","—"))
-                    if germs_stats[germ]["criticite"] == 0:
-                        germs_stats[germ]["criticite"] = _get_criticite(germ)
+                if _gd_list:
+                    # ── Multi-germes : chaque germe compté individuellement ──
+                    for gde in _gd_list:
+                        germ    = gde.get("name","")
+                        ufc_val = int(gde.get("ufc",0) or 0)
+                        if ufc_val > 0 and germ not in ("Négatif","—",""):
+                            total_pos += 1
+                            germs_stats[germ]["count"]   += 1
+                            germs_stats[germ]["ufc_sum"] += ufc_val
+                            germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                            if germs_stats[germ]["criticite"] == 0:
+                                germs_stats[germ]["criticite"] = _get_criticite(germ)
+                else:
+                    # ── Mono-germe : logique d'origine ───────────────────────
+                    germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                    ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                    ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+                    j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
+                    j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
+                    if j2_pos:
+                        total_pos += 1
+                        germs_stats[germ]["count"]   += 1
+                        germs_stats[germ]["ufc_sum"] += ufc_j2
+                        germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                        if germs_stats[germ]["criticite"] == 0:
+                            germs_stats[germ]["criticite"] = _get_criticite(germ)
+                    elif not j2_pos and j7_pos:
+                        total_pos += 1
+                        germs_stats[germ]["count"]   += 1
+                        germs_stats[germ]["ufc_sum"] += ufc_j7
+                        germs_stats[germ]["points"].add(r.get("prelevement","—"))
+                        if germs_stats[germ]["criticite"] == 0:
+                            germs_stats[germ]["criticite"] = _get_criticite(germ)
 
             if not germs_stats:
                 st.info("Aucun germe positif dans l'historique.")
