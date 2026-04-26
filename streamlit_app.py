@@ -5118,10 +5118,14 @@ if active == "analyse":
         room_e     = r.get("room_class","—")
 
         # ── Criticité du germe (1-5) ───────────────────────────────────
+        
         def _get_crit(gname):
             for g in germs_list:
                 if g.get("name","") == gname:
-                    return int(g.get("criticite", 0) or 0)
+                    # Calcul depuis les 3 champs si présents, sinon champ risk stocké
+                    if all(k in g for k in ("pathogenicity","resistance","dissemination")):
+                        return int(g["pathogenicity"]) * int(g["resistance"]) * int(g["dissemination"])
+                    return int(g.get("risk", 0) or 0)
             return 0
 
         # Collecter tous les germes présents dans l'entrée
