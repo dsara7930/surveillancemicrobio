@@ -5246,7 +5246,7 @@ if active == "analyse":
                         value=r.get("date_prelevement", r.get("date", "")),
                         key=f"edit_date_{_real_idx}",
                     )
-                    _# APRÈS
+                    
                     _new_oper = st.text_input(
                         "👤 Opérateur",
                         value=r.get("operateur", r.get("preleveur", "")),
