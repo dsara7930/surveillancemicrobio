@@ -5636,46 +5636,30 @@ if active == "analyse":
                 "ufc_j2_list":[],"ufc_j7_list":[],
             })
             for r in surv_f:
-                pt       = r.get("prelevement","—")
-                st_r     = r.get("status","ok")
-                _gd_list = r.get("germs_detail", [])
-                ufc_j2   = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
-                ufc_j7   = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
+                pt     = r.get("prelevement","—")
+                germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
+                st_r   = r.get("status","ok")
+                ufc_j2 = int(r.get("ufc_48h", r.get("ufc",0)) or 0)
+                ufc_j7 = int(r.get("ufc_5j",  r.get("ufc",0)) or 0)
 
-                # ── 1 prélèvement = 1 ligne, positif OU négatif ──────────────
-                if _gd_list:
-                    is_pos = any(
-                        int(g.get("ufc",0) or 0) > 0
-                        and g.get("name","") not in ("Négatif","—","")
-                        for g in _gd_list
-                    )
-                else:
-                    germ   = r.get("germ_saisi","") or r.get("germ_match","") or ""
-                    is_pos = (ufc_j2 > 0 or ufc_j7 > 0) and germ not in ("Négatif","—","")
+                j2_pos = ufc_j2 > 0 and germ not in ("Négatif","—","")
+                j7_pos = ufc_j7 > 0 and germ not in ("Négatif","—","")
 
-                pts_stats[pt]["total"] += 1          # toujours +1
-
-                if is_pos:
+                if j2_pos:
+                    pts_stats[pt]["total"]     += 1
                     pts_stats[pt]["positives"] += 1
-                    # Germes & UFC
-                    if _gd_list:
-                        for gde in _gd_list:
-                            g_name = gde.get("name","")
-                            g_ufc  = int(gde.get("ufc",0) or 0)
-                            if g_ufc > 0 and g_name not in ("Négatif","—",""):
-                                pts_stats[pt]["germes"][g_name] += 1
-                                pts_stats[pt]["ufc_j2_list"].append(g_ufc)
-                    else:
-                        germ = r.get("germ_saisi","") or r.get("germ_match","") or ""
-                        if germ not in ("Négatif","—",""):
-                            pts_stats[pt]["germes"][germ] += 1
-                        if ufc_j2 > 0: pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
-                        if ufc_j7 > 0: pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
-                else:
-                    pts_stats[pt]["negatives"] += 1  # exclusif avec positives
+                    pts_stats[pt]["germes"][germ] += 1
+                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                    elif st_r == "action": pts_stats[pt]["actions"] += 1
+                    pts_stats[pt]["ufc_j2_list"].append(ufc_j2)
+                    if ufc_j7 > 0:
+                        pts_stats[pt]["ufc_j7_list"].append(ufc_j7)
 
-                if st_r == "alert":    pts_stats[pt]["alertes"] += 1
-                elif st_r == "action": pts_stats[pt]["actions"] += 1
+                elif not j2_pos and not j7_pos:
+                    pts_stats[pt]["total"]     += 1
+                    pts_stats[pt]["negatives"] += 1
+                    if st_r == "alert":    pts_stats[pt]["alertes"] += 1
+                    elif st_r == "action": pts_stats[pt]["actions"] += 1
 
                 else:
                     pts_stats[pt]["total"]     += 1
