@@ -5207,11 +5207,13 @@ if active == "analyse":
                     unsafe_allow_html=True,
                 )
 
+            # APRÈS
             _tab_mc, _tab_edit, _tab_del = st.tabs([
                 "🔧 Mesures correctives" if status_r in ("alert","action") else "ℹ️ Détails",
                 "✏️ Modifier",
                 "🗑️ Supprimer",
             ])
+            # (pas de changement ici, st.tabs n'a pas de clé)
 
             with _tab_mc:
                 if status_r in ("alert", "action"):
@@ -5232,20 +5234,23 @@ if active == "analyse":
                 # ── Champs communs ─────────────────────────────────────────────
                 _ec1, _ec2 = st.columns(2)
                 with _ec1:
+                    # APRÈS
                     _new_prelev = st.text_input(
                         "📍 Point de prélèvement",
                         value=r.get("prelevement", ""),
-                        key=f"edit_prelev_{_li}",
+                        key=f"edit_prelev_{_real_idx}",
                     )
+                    # APRÈS
                     _new_date = st.text_input(
                         "📅 Date (YYYY-MM-DD)",
                         value=r.get("date_prelevement", r.get("date", "")),
-                        key=f"edit_date_{_li}",
+                        key=f"edit_date_{_real_idx}",
                     )
+                    _# APRÈS
                     _new_oper = st.text_input(
                         "👤 Opérateur",
                         value=r.get("operateur", r.get("preleveur", "")),
-                        key=f"edit_oper_{_li}",
+                        key=f"edit_oper_{_real_idx}",
                     )
                 with _ec2:
                     if len(_germs_det_edit) > 1:
@@ -5279,29 +5284,29 @@ if active == "analyse":
                             _germ_opts_edit.index(_cur_germ_e)
                             if _cur_germ_e in _germ_opts_edit else 0
                         )
+                        # APRÈS
                         _new_germ = st.selectbox(
                             "🦠 Germe identifié",
                             _germ_opts_edit,
                             index=_germ_idx_e,
-                            key=f"edit_germ_{_li}",
+                            key=f"edit_germ_{_real_idx}",
                         )
+                        # APRÈS
                         _new_ufc = st.number_input(
                             "UFC",
                             min_value=0,
-                            value=int(
-                                (_germs_det_edit[0].get("ufc",0) if _germs_det_edit
-                                else r.get("ufc", 0)) or 0
-                            ),
+                            value=_cur_ufc_e,
                             step=1,
-                            key=f"edit_ufc_{_li}",
+                            key=f"edit_ufc_{_real_idx}",
                         )
 
-                _new_remarque = st.text_area(
-                    "💬 Remarque",
-                    value=r.get("remarque", ""),
-                    height=70,
-                    key=f"edit_rem_{_li}",
-                )
+                        # APRÈS
+                        _new_remarque = st.text_area(
+                            "💬 Remarque",
+                            value=r.get("remarque", ""),
+                            height=70,
+                            key=f"edit_rem_{_real_idx}",
+                        )
 
                 # ══════════════════════════════════════════════════════════════
                 # CAS MULTI-GERMES : onglets par germe
@@ -5332,7 +5337,8 @@ if active == "analyse":
                                     "🦠 Germe",
                                     _germ_opts_edit,
                                     index=_mg_idx,
-                                    key=f"edit_mg_name_{_li}_{gi}",
+                                    # APRÈS
+                                    key=f"edit_mg_name_{_real_idx}_{gi}"
                                 )
                             with _mg_c2:
                                 _ng_ufc = st.number_input(
@@ -5340,7 +5346,7 @@ if active == "analyse":
                                     min_value=0,
                                     value=int(gde.get("ufc",0) or 0),
                                     step=1,
-                                    key=f"edit_mg_ufc_{_li}_{gi}",
+                                    key=f"edit_mg_ufc_{_real_idx}_{gi}"
                                 )
                             # Aperçu score pour ce germe
                             if _ng_name != "Négatif":
@@ -5365,9 +5371,10 @@ if active == "analyse":
                                         unsafe_allow_html=True,
                                     )
 
+                    # APRÈS
                     if st.button(
                         "💾 Sauvegarder les modifications",
-                        key=f"edit_save_{_li}",
+                        key=f"edit_save_{_real_idx}",
                         type="primary",
                         use_container_width=True,
                     ):
@@ -5375,8 +5382,9 @@ if active == "analyse":
                         _loc_c_sv = int(r.get("location_criticality",1) or 1)
                         _new_gd   = []
                         for gi, gde in enumerate(_germs_det_edit):
-                            _sv_name = st.session_state.get(f"edit_mg_name_{_li}_{gi}", gde.get("name","Négatif"))
-                            _sv_ufc  = st.session_state.get(f"edit_mg_ufc_{_li}_{gi}",  int(gde.get("ufc",0) or 0))
+                            # APRÈS
+                            _sv_name = st.session_state.get(f"edit_mg_name_{_real_idx}_{gi}", gde.get("name","Négatif"))
+                            _sv_ufc  = st.session_state.get(f"edit_mg_ufc_{_real_idx}_{gi}",  int(gde.get("ufc",0) or 0))
                             _sv_gscore = 0
                             if _sv_name != "Négatif":
                                 _go2 = next((g for g in st.session_state.germs if g['name'] == _sv_name), None)
@@ -5512,11 +5520,13 @@ if active == "analyse":
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-                _confirm_key = f"confirm_del_{_li}"
+                # APRÈS
+                _confirm_key = f"confirm_del_{_real_idx}"
                 if not st.session_state.get(_confirm_key, False):
+                    # APRÈS
                     if st.button(
                         "🗑️ Supprimer cette entrée",
-                        key=f"del_btn_{_li}",
+                        key=f"del_btn_{_real_idx}",
                         use_container_width=True,
                     ):
                         st.session_state[_confirm_key] = True
@@ -5525,9 +5535,10 @@ if active == "analyse":
                     st.error("⚠️ Confirmer la suppression définitive ?")
                     _dc1, _dc2 = st.columns(2)
                     with _dc1:
+                        # APRÈS
                         if st.button(
                             "✅ OUI — Supprimer définitivement",
-                            key=f"del_confirm_{_li}",
+                            key=f"del_confirm_{_real_idx}",
                             type="primary",
                             use_container_width=True,
                         ):
@@ -5537,9 +5548,10 @@ if active == "analyse":
                             st.success("🗑️ Entrée supprimée — stats recalculées.")
                             st.rerun()
                     with _dc2:
+                        # APRÈS
                         if st.button(
                             "❌ Annuler",
-                            key=f"del_cancel_{_li}",
+                            key=f"del_cancel_{_real_idx}",
                             use_container_width=True,
                         ):
                             st.session_state[_confirm_key] = False
