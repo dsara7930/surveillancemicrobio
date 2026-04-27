@@ -3692,41 +3692,6 @@ if active == "planning":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    # ════════════════════════════════════════════════════════════════════════
-    # AUTO-SKIP : vendredi 23h59 passé → non-fait automatique + Supabase
-    # ════════════════════════════════════════════════════════════════════════
-    def _auto_skip_past_weeks(raw_plan, planning_skips, prelevements, today):
-        from datetime import datetime as _dt
-        nb_new = 0
-
-        for day in sorted(raw_plan.keys()):
-            friday_of_week = day + timedelta(days=(4 - day.weekday()))
-            # Auto-skip uniquement pour les semaines entièrement passées (vendredi < aujourd'hui)
-            if friday_of_week >= today:
-                continue  # Semaine en cours ou future → jamais touché automatiquement
-
-            tasks = raw_plan.get(day, [])
-            if not tasks:
-                continue
-
-            done_labels = {
-                p["label"]
-                for p in prelevements
-                if p.get("date")
-                and not p.get("archived", False)
-                and datetime.fromisoformat(p["date"]).date() == day
-            }
-            dk             = day.isoformat()
-            existing_skips = set(planning_skips.get(dk, []))
-
-            for task in tasks:
-                lbl = task["label"]
-                if lbl not in done_labels and lbl not in existing_skips:
-                    planning_skips.setdefault(dk, [])
-                    planning_skips[dk].append(lbl)
-                    nb_new += 1
-
-        return planning_skips, nb_new
 
     def _compute_monthly_planning(year, month, holidays_set, prelevements=None):
         import calendar as _cm
@@ -4199,22 +4164,7 @@ if active == "planning":
             for k, v in monthly_plan_raw.items()
         }
 
-        # ── AUTO-SKIP : semaines entièrement passées (vendredi < aujourd'hui) ──
-        _skips_before = sum(len(v) for v in st.session_state["planning_skips"].values())
-        st.session_state["planning_skips"], _nb_auto = _auto_skip_past_weeks(
-            monthly_plan_raw,
-            st.session_state["planning_skips"],
-            st.session_state.get("prelevements", []),
-            _today_dt,
-        )
-        if _nb_auto > 0:
-            # Sauvegarde Supabase uniquement si de nouveaux skips ont été ajoutés
-            _supa_upsert('planning_skips', json.dumps(st.session_state["planning_skips"]))
-            st.info(
-                f"🔄 **{_nb_auto} prélèvement(s)** non réalisé(s) sur des semaines "
-                f"passées ont été automatiquement marqués non-faits et redistribués.",
-                icon="⏭️",
-            )
+        # (auto-skip supprimé — utiliser le bouton ⬜ Non-faits par semaine)
 
         # ── Redistribution des skips (manuels + auto) ────────────────────
         monthly_plan = _redistribute_skips(
