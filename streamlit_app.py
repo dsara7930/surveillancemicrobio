@@ -1911,20 +1911,117 @@ def _render_mesures_correctives(
     if STATUS not in ("alert", "action"):
         return
 
-    # ── Clé de suffixe unique pour les widgets Streamlit ─────────────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # RÉSOLUTION AUTOMATIQUE DES FILTRES MC selon le germe de l'entrée
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── 1. Germe le plus critique ─────────────────────────────────────────
+    _gd_mc = entry.get("germs_detail", [])
+    if _gd_mc:
+        _worst_mc     = next((g for g in _gd_mc if g.get("is_worst")), None) or _gd_mc[0]
+        _germ_name_mc = (_worst_mc.get("name") or "").strip()
+    else:
+        _germ_name_mc = (
+            entry.get("germ_saisi") or entry.get("germ_match") or ""
+        ).strip()
+
+    _germ_obj_mc = next(
+        (g for g in st.session_state.get("germs", [])
+         if g.get("name") == _germ_name_mc),
+        None,
+    )
+
+    # ── 2. Scope = path[3] (Air, Humidité, Peau/Muqueuse…) ───────────────
+    _germ_scope_mc = None
+    if _germ_obj_mc:
+        _path_mc       = _germ_obj_mc.get("path", [])
+        _germ_scope_mc = _path_mc[3] if len(_path_mc) > 3 else None
+
+    # ── 3. Germ type = path[1] → bacteria / fungi ─────────────────────────
+    _germ_type_mc = None
+    if _germ_obj_mc:
+        _fam = (_germ_obj_mc.get("path") or ["", ""])[1]
+        _germ_type_mc = {"Bactéries": "bacteria", "Champignons": "fungi"}.get(_fam)
+
+    # ── 4. Mode de dissémination → environmental / manual / aerial ────────
+    _dissem_mc = int(_germ_obj_mc.get("dissemination", 0) or 0) if _germ_obj_mc else 0
+    _dissem_key_mc = {1: "environmental", 2: "manual", 3: "aerial"}.get(_dissem_mc)
+
+    # ── 5. Score de l'entrée ──────────────────────────────────────────────
+    try:
+        _score_mc = int(entry.get("total_score") or entry.get("risk_level") or 0)
+    except (TypeError, ValueError):
+        _score_mc = 0
+
+    # ── Helpers filtre risk ───────────────────────────────────────────────
+    def _risk_matches(mc_risk):
+        if not mc_risk or mc_risk == "all":
+            return True
+        if str(mc_risk).startswith("["):
+            try:
+                import json as _j
+                return _score_mc in _j.loads(str(mc_risk))
+            except Exception:
+                return True
+        try:
+            return _score_mc == int(mc_risk)
+        except (TypeError, ValueError):
+            return True
+
+    # ── Fonction de filtrage globale ──────────────────────────────────────
+    def _mc_applicable(mc):
+        # scope (catégorie du germe)
+        mc_scope = mc.get("scope", "all")
+        if mc_scope != "all" and _germ_scope_mc:
+            if mc_scope != _germ_scope_mc:
+                return False
+
+        # type bactérie / champignon
+        mc_germ_type = mc.get("germ_type", "all")
+        if mc_germ_type not in ("all", "both") and _germ_type_mc:
+            if mc_germ_type != _germ_type_mc:
+                return False
+
+        # mode de dissémination
+        mc_dissem = mc.get("dissemination", "all")
+        if mc_dissem not in ("all", None) and _dissem_key_mc:
+            if mc_dissem != _dissem_key_mc:
+                return False
+
+        # alert / action / both
+        mc_type = mc.get("type", "both")
+        if mc_type != "both":
+            if mc_type != STATUS:
+                return False
+
+        # niveau de risque
+        if not _risk_matches(mc.get("risk", "all")):
+            return False
+
+        return True
+
+    # ── Liste filtrée — à utiliser partout dans cette fonction ────────────
+    available_measures = [
+        mc for mc in st.session_state.get("origin_measures", [])
+        if _mc_applicable(mc)
+    ]
+
+    # ══════════════════════════════════════════════════════════════════════
+    # SUITE INCHANGÉE — palette, badge, helper index
+    # ══════════════════════════════════════════════════════════════════════
+
     key_suffix = (
         str(entry_idx)
         if entry_idx is not None
         else str(entry.get("sample_id", entry.get("label", "pop")))
     )
 
-    # ── Palette selon l'état des mesures ─────────────────────────────────────
     if MC_STATUT == "fait":
-        _brd      = "#86efac"; _bg = "#f0fdf4"; _title_col = "#166534"
-        _badge_bg = "#22c55e"; _badge_txt = "MESURES CORRECTIVES FAITES ✅"
+        _brd       = "#86efac"; _bg = "#f0fdf4"; _title_col = "#166534"
+        _badge_bg  = "#22c55e"; _badge_txt = "MESURES CORRECTIVES FAITES ✅"
     else:
-        _brd      = "#fca5a5" if STATUS == "action" else "#fcd34d"
-        _bg       = "#fef2f2" if STATUS == "action" else "#fffbeb"
+        _brd       = "#fca5a5" if STATUS == "action" else "#fcd34d"
+        _bg        = "#fef2f2" if STATUS == "action" else "#fffbeb"
         _title_col = "#991b1b" if STATUS == "action" else "#92400e"
         _badge_bg  = "#ef4444" if STATUS == "action" else "#f59e0b"
         _badge_txt = "MESURES CORRECTIVES EN ATTENTE"
@@ -1940,8 +2037,23 @@ def _render_mesures_correctives(
         f"</div>",
         unsafe_allow_html=True,
     )
+    # ── Mise en cache du PDF pour récupération externe ────────────────────
+    try:
+        _pdf_cached = _generate_mc_pdf(
+            entry,
+            available_measures,   # ← filtrées, pas origin_measures brutes
+            st.session_state.get("germs", []),
+        )
+        st.session_state[f"pdf_mc_cache_{key_suffix}"] = {
+            "data":  _pdf_cached,
+            "fname": (
+                f"MC_{entry.get('prelevement','point').replace(' ','_')[:20]}"
+                f"_{entry.get('date_prelevement', entry.get('date',''))}.pdf"
+            ),
+        }
+    except Exception:
+        st.session_state.pop(f"pdf_mc_cache_{key_suffix}", None)
 
-    # ── Helper : trouver l'index réel dans st.session_state.surveillance ──────
     def _find_surv_index() -> int | None:
         if entry_idx is not None and 0 <= entry_idx < len(st.session_state.surveillance):
             return entry_idx
@@ -1964,7 +2076,6 @@ def _render_mesures_correctives(
             ):
                 return _i
         return None
-
     def _persist():
         save_surveillance(st.session_state.surveillance)
         _supa_upsert(
@@ -5437,27 +5548,17 @@ if active == "analyse":
                     _render_mesures_correctives(st.session_state.surveillance[_real_idx], _real_idx)
                     
                     # ── Bouton impression PDF ──────────────────────────────
-                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-                    try:
-                        _pdf_bytes = _generate_mc_pdf(
-                            r,
-                            st.session_state.get("origin_measures", []),
-                            st.session_state.get("germs", []),
-                        )
-                        _pdf_fname = (
-                            f"MC_{r.get('prelevement','point').replace(' ','_')[:20]}"
-                            f"_{r.get('date_prelevement', r.get('date',''))}.pdf"
-                        )
+                    _pdf_cache = st.session_state.get(f"pdf_mc_cache_{_real_idx}")
+                    if _pdf_cache:
                         st.download_button(
                             label="🖨️ Imprimer / Télécharger la fiche MC (PDF)",
-                            data=_pdf_bytes,
-                            file_name=_pdf_fname,
+                            data=_pdf_cache["data"],
+                            file_name=_pdf_cache["fname"],
                             mime="application/pdf",
                             use_container_width=True,
                             key=f"pdf_mc_{_k}",
                         )
-                    except Exception as _pdf_err:
-                        st.warning(f"Impossible de générer le PDF : {_pdf_err}")
+                
                 else:
                     st.markdown(
                         "<div style='font-size:.82rem;color:#16a34a;padding:8px 0'>"
