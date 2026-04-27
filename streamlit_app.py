@@ -3696,16 +3696,14 @@ if active == "planning":
     # AUTO-SKIP : vendredi 23h59 passé → non-fait automatique + Supabase
     # ════════════════════════════════════════════════════════════════════════
     def _auto_skip_past_weeks(raw_plan, planning_skips, prelevements, today):
-        from datetime import datetime as _dt, time as _time
+        from datetime import datetime as _dt
         nb_new = 0
-        _now = _dt.now()
 
         for day in sorted(raw_plan.keys()):
             friday_of_week = day + timedelta(days=(4 - day.weekday()))
-            # ✅ Cutoff : vendredi à 16h00 (et non plus 23h59)
-            friday_cutoff = _dt.combine(friday_of_week, _time(16, 0))
-            if _now < friday_cutoff:
-                continue  # Semaine encore en cours ou future → on ne touche pas
+            # Auto-skip uniquement pour les semaines entièrement passées (vendredi < aujourd'hui)
+            if friday_of_week >= today:
+                continue  # Semaine en cours ou future → jamais touché automatiquement
 
             tasks = raw_plan.get(day, [])
             if not tasks:
@@ -4245,7 +4243,7 @@ if active == "planning":
             _week_current = week_monday <= _today_dt <= _friday_sem
 
             # ── En-tête semaine avec indicateur de statut ─────────────────
-            c1, c2 = st.columns([4, 2])
+            c1, c2, c3 = st.columns([4, 1.5, 1.5])
             with c1:
                 if _week_passed:
                     _sem_badge = "<span style='color:#94a3b8;font-size:.72rem'>✅ Semaine passée</span>"
@@ -4263,6 +4261,25 @@ if active == "planning":
                     unsafe_allow_html=True,
                 )
             with c2:
+                if st.button("⬜ Non-faits", key=f"nonfaits_{week_monday}", help="Marquer tous les non-réalisés de cette semaine"):
+                    _skips = st.session_state["planning_skips"]
+                    for wd in wd_week:
+                        done_lbls = {
+                            p["label"]
+                            for p in st.session_state.prelevements
+                            if p.get("date")
+                            and datetime.fromisoformat(p["date"]).date() == wd
+                        }
+                        tasks_wd = monthly_plan.get(wd, [])
+                        dk = wd.isoformat()
+                        _skips.setdefault(dk, [])
+                        for t in tasks_wd:
+                            if t["label"] not in done_lbls and t["label"] not in _skips[dk]:
+                                _skips[dk].append(t["label"])
+                    st.session_state["planning_skips"] = _skips
+                    _supa_upsert('planning_skips', json.dumps(_skips))
+                    st.rerun()
+            with c3:
                 if st.button("🖨️ Imprimer", key=f"print_{week_monday}"):
                     week_days = [(wd, monthly_plan.get(wd, [])) for wd in wd_week]
 
