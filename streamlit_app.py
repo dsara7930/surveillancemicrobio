@@ -2555,8 +2555,163 @@ if active == "surveillance":
                         # ── réinitialisation du formulaire ──────────────────
                         st.session_state["manuel_counter"] += 1
                         st.rerun()
+                        
+                # ── FORMULAIRE D'ÉDITION ──────────────────────────────────────
+                _edit_id = st.session_state.get("edit_prelev_id")
+                if _edit_id:
+                    _edit_smp = next((s for s in st.session_state.prelevements
+                                      if s["id"] == _edit_id), None)
+                    if _edit_smp:
+                        st.markdown(
+                            "<div style='background:#fffbeb;border:2px solid #fcd34d;"
+                            "border-radius:12px;padding:16px 20px;margin-top:12px'>",
+                            unsafe_allow_html=True)
+                        st.markdown(
+                            f"<div style='font-size:.8rem;font-weight:700;color:#92400e;"
+                            f"margin-bottom:12px'>✏️ Modifier — {_edit_smp['label']}</div>",
+                            unsafe_allow_html=True)
+
+                        e_col1, e_col2 = st.columns([3, 2])
+
+                        with e_col1:
+                            # point de prélèvement
+                            _edit_pt_idx = next(
+                                (i for i, pt in enumerate(st.session_state.points)
+                                 if pt["label"] == _edit_smp.get("label")), 0)
+                            e_sel_idx = st.selectbox(
+                                "Point de prélèvement",
+                                list(range(len(point_labels))),
+                                format_func=lambda i: point_labels[i],
+                                index=_edit_pt_idx,
+                                key=f"edit_point_{_edit_id}")
+                            e_pt       = st.session_state.points[e_sel_idx]
+                            e_room     = e_pt.get("room_class", "")
+                            e_loc_crit = int(e_pt.get("location_criticality", 1))
+                            e_is_a     = str(e_room).strip().upper() == "A"
+
+                        with e_col2:
+                            # opérateur
+                            if oper_list:
+                                # trouver l'index actuel dans la liste
+                                _cur_oper = _edit_smp.get("operateur", "")
+                                _oper_options = ["— Sélectionner —"] + oper_list
+                                _oper_idx = next(
+                                    (i for i, o in enumerate(_oper_options) if o == _cur_oper),
+                                    0)
+                                e_oper_sel = st.selectbox(
+                                    "Opérateur", _oper_options,
+                                    index=_oper_idx,
+                                    key=f"edit_oper_{_edit_id}")
+                                e_oper = e_oper_sel if e_oper_sel != "— Sélectionner —" else ""
+                            else:
+                                e_oper = st.text_input(
+                                    "Opérateur", value=_edit_smp.get("operateur", ""),
+                                    key=f"edit_oper_manual_{_edit_id}")
+
+                            # date
+                            try:
+                                _cur_date = date.fromisoformat(_edit_smp.get("date", str(today)))
+                            except (ValueError, TypeError):
+                                _cur_date = today
+                            e_date = st.date_input(
+                                "Date prélèvement", value=_cur_date,
+                                key=f"edit_date_{_edit_id}")
+
+                            # commentaire
+                            e_comment = st.text_area(
+                                "💬 Commentaire",
+                                value=_edit_smp.get("commentaire", ""),
+                                height=60,
+                                key=f"edit_comment_{_edit_id}")
+
+                        # isolateur / poste si classe A
+                        e_isolateur = _edit_smp.get("num_isolateur", "")
+                        e_poste     = _edit_smp.get("poste", "")
+                        if e_is_a:
+                            st.markdown(
+                                "<div style='background:#fef9c3;border:1px solid #fde047;"
+                                "border-radius:8px;padding:8px 12px;margin-top:6px;"
+                                "font-size:.7rem;font-weight:700;color:#854d0e;"
+                                "margin-bottom:6px'>🔬 Paramètres Zone Classe A</div>",
+                                unsafe_allow_html=True)
+                            _iso_opts   = ["Iso 16/0724", "Iso 14/07169"]
+                            _poste_opts = ["Poste 1", "Poste 2", "Commun"]
+                            iso_c, poste_c = st.columns(2)
+                            with iso_c:
+                                _iso_idx = _iso_opts.index(e_isolateur) if e_isolateur in _iso_opts else None
+                                e_isolateur = st.radio(
+                                    "Isolateur", _iso_opts,
+                                    index=_iso_idx, horizontal=True,
+                                    key=f"edit_iso_{_edit_id}")
+                            with poste_c:
+                                _poste_idx = _poste_opts.index(e_poste) if e_poste in _poste_opts else None
+                                e_poste = st.radio(
+                                    "Poste", _poste_opts,
+                                    index=_poste_idx, horizontal=True,
+                                    key=f"edit_poste_{_edit_id}")
+
+                        # recalcul des dates J2/J7 si la date change
+                        e_j2 = next_working_day_offset(e_date, 2)
+                        e_j7 = next_working_day_offset(e_date, 7)
+                        if e_date != _cur_date:
+                            st.markdown(
+                                f"<div style='background:#fff7ed;border:1px solid #fed7aa;"
+                                f"border-radius:8px;padding:6px 12px;font-size:.7rem;"
+                                f"color:#9a3412;margin-top:4px'>"
+                                f"⚠️ La date change — les échéances seront recalculées :<br>"
+                                f"J2 → <strong>{e_j2.strftime('%d/%m/%Y')}</strong> &nbsp;·&nbsp; "
+                                f"J7 → <strong>{e_j7.strftime('%d/%m/%Y')}</strong></div>",
+                                unsafe_allow_html=True)
+
+                        eb1, eb2 = st.columns([3, 1])
+                        with eb1:
+                            if st.button("💾 Sauvegarder les modifications",
+                                         type="primary", use_container_width=True,
+                                         key=f"edit_save_{_edit_id}"):
+                                if not e_oper:
+                                    st.error("⚠️ Veuillez sélectionner un opérateur.")
+                                elif e_is_a and not e_isolateur:
+                                    st.error("⚠️ Veuillez sélectionner un isolateur.")
+                                elif e_is_a and not e_poste:
+                                    st.error("⚠️ Veuillez sélectionner un poste.")
+                                else:
+                                    # mise à jour du prélèvement
+                                    _edit_smp["label"]                = e_pt["label"]
+                                    _edit_smp["type"]                 = e_pt.get("type")
+                                    _edit_smp["gelose"]               = e_pt.get("gelose", "—")
+                                    _edit_smp["room_class"]           = e_room
+                                    _edit_smp["location_criticality"] = e_loc_crit
+                                    _edit_smp["operateur"]            = e_oper
+                                    _edit_smp["date"]                 = str(e_date)
+                                    _edit_smp["commentaire"]          = e_comment
+                                    _edit_smp["num_isolateur"]        = e_isolateur if e_is_a else ""
+                                    _edit_smp["poste"]                = e_poste     if e_is_a else ""
+                                    save_prelevements(st.session_state.prelevements)
+
+                                    # recalcul schedules si la date a changé
+                                    if e_date != _cur_date:
+                                        for sch in st.session_state.schedules:
+                                            if sch.get("sample_id") == _edit_id:
+                                                if sch["when"] == "J2":
+                                                    sch["due_date"] = e_j2.isoformat()
+                                                elif sch["when"] == "J7":
+                                                    sch["due_date"] = e_j7.isoformat()
+                                                sch["label"] = e_pt["label"]
+                                        save_schedules(st.session_state.schedules)
+
+                                    st.session_state.pop("edit_prelev_id", None)
+                                    st.success(f"✅ Prélèvement **{e_pt['label']}** mis à jour.")
+                                    st.rerun()
+                        with eb2:
+                            if st.button("✕ Annuler", use_container_width=True,
+                                         key=f"edit_cancel_{_edit_id}"):
+                                st.session_state.pop("edit_prelev_id", None)
+                                st.rerun()
+
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                 st.divider()
+                
                 st.markdown("#### 📋 Prélèvements en cours")
                 actifs = [s for s in st.session_state.prelevements if not s.get("archived")]
                 with st.expander(f"📋 Prélèvements en cours ({len(actifs)})", expanded=False):
