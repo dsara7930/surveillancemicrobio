@@ -2408,6 +2408,12 @@ if active == "surveillance":
 
         # ── MODE MANUEL ───────────────────────────────────────────────────────
         if st.session_state["prelev_mode"] == "manuel":
+
+            # ── compteur de réinitialisation (même mécanique que le scan QR) ──
+            if "manuel_counter" not in st.session_state:
+                st.session_state["manuel_counter"] = 0
+            _mc = st.session_state["manuel_counter"]   # alias court
+
             if not st.session_state.points:
                 st.info("Aucun point de prélèvement défini — allez dans **Paramètres → Points de prélèvement**.")
             else:
@@ -2422,7 +2428,7 @@ if active == "surveillance":
                         "Point de prélèvement",
                         list(range(len(point_labels))),
                         format_func=lambda i: point_labels[i],
-                        key="new_prelev_point")
+                        key=f"new_prelev_point_{_mc}")
                     selected_point = st.session_state.points[sel_idx]
                     pt_type     = selected_point.get("type", "—")
                     pt_loc_crit = int(selected_point.get("location_criticality", 1))
@@ -2461,14 +2467,14 @@ if active == "surveillance":
                     ]
                     if oper_list:
                         oper_sel = st.selectbox("Opérateur", ["— Sélectionner —"] + oper_list,
-                                                key="new_prelev_oper_sel")
+                                                key=f"new_prelev_oper_sel_{_mc}")
                         p_oper = oper_sel if oper_sel != "— Sélectionner —" else ""
                     else:
                         st.info("Aucun opérateur — ajoutez-en dans Paramètres")
                         p_oper = st.text_input("Opérateur (manuel)", placeholder="Nom",
-                                               key="new_prelev_oper_manual")
+                                               key=f"new_prelev_oper_manual_{_mc}")
                     p_date = st.date_input("Date prélèvement", value=datetime.today(),
-                                           key="new_prelev_date")
+                                           key=f"new_prelev_date_{_mc}")
                     j2_date_calc = next_working_day_offset(p_date, 2)
                     j7_date_calc = next_working_day_offset(p_date, 7)
                     st.markdown(f"""
@@ -2477,7 +2483,7 @@ if active == "surveillance":
                     📅 J7 (7 jours calendaires) : <strong>{j7_date_calc.strftime('%d/%m/%Y')}</strong>
                     </div>""", unsafe_allow_html=True)
                     p_commentaire = st.text_area("💬 Commentaire", placeholder="Remarque, contexte...",
-                                                 height=70, key="new_prelev_commentaire")
+                                                 height=70, key=f"new_prelev_commentaire_{_mc}")
 
                 p_isolateur = ""
                 p_poste     = "Poste 1"
@@ -2493,16 +2499,16 @@ if active == "surveillance":
                         p_isolateur = st.radio("Isolateur",
                                                ["Iso 16/0724", "Iso 14/07169"],
                                                index=None, horizontal=True,
-                                               key="new_prelev_isolateur")
+                                               key=f"new_prelev_isolateur_{_mc}")
                     with poste_col:
                         p_poste = st.radio("Poste",
                                            ["Poste 1", "Poste 2", "Commun"],
                                            index=None, horizontal=True,
-                                           key="new_prelev_poste")
+                                           key=f"new_prelev_poste_{_mc}")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("💾 Enregistrer le prélèvement", use_container_width=True,
-                            key="save_prelev", type="primary"):
+                            key=f"save_prelev_{_mc}", type="primary"):
                     if not p_oper:
                         st.error("⚠️ Veuillez sélectionner un opérateur.")
                     elif str(pt_room).strip().upper() == "A" and not p_isolateur:
@@ -2540,11 +2546,15 @@ if active == "surveillance":
                                 "status":    "pending",
                             })
                         save_schedules(st.session_state.schedules)
+                        iso_info = f" · {p_isolateur} · {p_poste}" if is_zone_a else ""
                         st.success(
-                            f"✅ **{sample['label']}** enregistré !\n"
+                            f"✅ **{sample['label']}** enregistré{iso_info} !\n"
                             f"J2 → {j2_date_calc.strftime('%d/%m/%Y')} | "
                             f"J7 → {j7_date_calc.strftime('%d/%m/%Y')}"
                         )
+                        # ── réinitialisation du formulaire ──────────────────
+                        st.session_state["manuel_counter"] += 1
+                        st.rerun()
 
                 st.divider()
                 st.markdown("#### 📋 Prélèvements en cours")
@@ -2571,6 +2581,15 @@ if active == "surveillance":
                                 "padding:1px 6px;font-size:.65rem;margin-left:4px'>QR</span>"
                                 if samp.get("created_via") == "qr_scan" else ""
                             )
+                            # badge isolateur/poste pour classe A
+                            _iso = samp.get("num_isolateur", "")
+                            _poste = samp.get("poste", "")
+                            iso_badge = (
+                                f"<span style='background:#fef9c3;color:#854d0e;border:1px solid #fde047;"
+                                f"border-radius:4px;padding:1px 6px;font-size:.65rem;margin-left:4px'>"
+                                f"🔬 {_iso} · {_poste}</span>"
+                                if _iso else ""
+                            )
                             _comment_html = (
                                 f"<div style='font-size:.72rem;color:#6366f1;margin-top:3px'>"
                                 f"💬 {samp['commentaire']}</div>"
@@ -2580,7 +2599,7 @@ if active == "surveillance":
                                 f"<div style='background:#fff;border:1.5px solid #e2e8f0;"
                                 f"border-radius:10px;padding:10px 16px;margin-bottom:6px'>"
                                 f"<span style='font-weight:700'>{samp['label']}</span>"
-                                f"{room_badge}{via_badge} "
+                                f"{room_badge}{via_badge}{iso_badge} "
                                 f"<span style='color:#64748b;font-size:.8rem'>— {samp.get('type','—')} · "
                                 f"<span style='color:{lc_col_r};font-weight:600'>Nv.{loc_c}</span> · "
                                 f"{samp.get('date','—')} · {samp.get('operateur','—')}</span>"
