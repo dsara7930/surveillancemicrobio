@@ -4014,61 +4014,88 @@ if active == "planning":
         return plan
 
     # ════════════════════════════════════════════════════════════════════════
-    # ÉQUILIBRAGE SEMAINE GELÉE
-    # Dès vendredi 16h00 : rééquilibrage homogène de la semaine +1
+    # ÉQUILIBRAGE DES SEMAINES
+    # Rééquilibre toutes les semaines dont les jours ne sont pas encore passés.
+    # Pour la semaine en cours : seuls les jours >= aujourd'hui sont rééquilibrés
+    # (les tâches des jours passés restent en place).
+    # La semaine +1 est gelée dès vendredi 16h00 (équilibrage définitif).
     # ════════════════════════════════════════════════════════════════════════
     def _balance_frozen_week(plan, holidays_set):
+        import copy
         from datetime import datetime as _dt, time as _time
+        from collections import defaultdict
 
-        _now           = _dt.now()
-        _cur_monday    = _today_dt - timedelta(days=_today_dt.weekday())
-        _cur_friday    = _cur_monday + timedelta(days=4)
-        _freeze_cutoff = _dt.combine(_cur_friday, _time(16, 0))
+        plan        = copy.deepcopy(plan)
+        _now        = _dt.now()
+        today       = _today_dt
+        _cur_monday = today - timedelta(days=today.weekday())
 
-        if _now < _freeze_cutoff:
-            return plan  # Pas encore gelé → rien à faire
+        # ── Identifier toutes les semaines présentes dans le plan ─────────
+        weeks = set()
+        for d in plan.keys():
+            weeks.add(d - timedelta(days=d.weekday()))
+        weeks = sorted(weeks)
 
-        _next_monday = _cur_monday + timedelta(weeks=1)
-        _next_friday = _next_monday + timedelta(days=4)
+        for wk_monday in weeks:
+            wk_friday = wk_monday + timedelta(days=4)
 
-        frozen_days = sorted([
-            d for d in plan.keys()
-            if _next_monday <= d <= _next_friday
-            and d not in holidays_set
-        ])
+            # Semaine entièrement passée → ne pas toucher
+            if wk_friday < today:
+                continue
 
-        if not frozen_days:
-            return plan
+            # Jours ouvrés de cette semaine présents dans le plan
+            all_week_days = sorted([
+                d for d in plan.keys()
+                if wk_monday <= d <= wk_friday
+                and d not in holidays_set
+            ])
+            if not all_week_days:
+                continue
 
-        # Collecter toutes les tâches de la semaine gelée
-        all_tasks = []
-        for d in frozen_days:
-            all_tasks.extend(plan.get(d, []))
-            plan[d] = []
+            # Pour la semaine en cours : ne rééquilibrer que les jours >= aujourd'hui
+            # (on ne déplace pas les tâches d'un jour déjà passé)
+            is_current_week = (wk_monday <= today <= wk_friday)
+            if is_current_week:
+                free_days = [d for d in all_week_days if d >= today]
+                # Tâches des jours passés : intouchables
+                locked_tasks = defaultdict(list)
+                for d in all_week_days:
+                    if d < today:
+                        locked_tasks[d] = plan.get(d, [])
+            else:
+                free_days = all_week_days
 
-        if not all_tasks:
-            return plan
+            if not free_days:
+                continue
 
-        # Trier par risque décroissant
-        all_tasks.sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
+            # Collecter toutes les tâches des jours libres
+            all_tasks = []
+            for d in free_days:
+                all_tasks.extend(plan.get(d, []))
+                plan[d] = []
 
-        # Round-robin : toujours placer dans le jour le moins chargé
-        # sans mettre deux fois le même label le même jour
-        day_counts = {d: 0 for d in frozen_days}
+            if not all_tasks:
+                continue
 
-        for task in all_tasks:
-            candidates = [
-                d for d in frozen_days
-                if not any(t['label'] == task['label'] for t in plan.get(d, []))
-            ]
-            if not candidates:
-                candidates = frozen_days
-            best = min(candidates, key=lambda d: day_counts[d])
-            plan.setdefault(best, []).append(task)
-            day_counts[best] += 1
+            # Trier par risque décroissant puis label (déterministe)
+            all_tasks.sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
 
-        for d in frozen_days:
-            plan[d].sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
+            # Round-robin équilibré : jour le moins chargé, sans doublon de label
+            day_counts = {d: 0 for d in free_days}
+
+            for task in all_tasks:
+                candidates = [
+                    d for d in free_days
+                    if not any(t['label'] == task['label'] for t in plan.get(d, []))
+                ]
+                if not candidates:
+                    candidates = free_days
+                best = min(candidates, key=lambda d: day_counts[d])
+                plan.setdefault(best, []).append(task)
+                day_counts[best] += 1
+
+            for d in free_days:
+                plan[d].sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
 
         return plan
 
