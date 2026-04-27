@@ -3724,8 +3724,9 @@ if active == "surveillance":
 # TAB : PLANNING — Charge hebdo & Planning mensuel | Export Excel | Étiquettes
 # Algorithme : max prélèvements/classe/semaine → répartition mensuelle
 #              jamais 2× le même point le même jour (sauf freq > 1/jour)
-# Auto-skip   : tout prélèvement non réalisé avant vendredi 23h59 de sa semaine
-#               est automatiquement mis en « non-fait » et redistribué.
+# Non-faits  : bouton manuel ⬜ par semaine (pas d'auto-skip)
+# Gel S+1    : dès vendredi 16h00 → semaine suivante gelée + rééquilibrée
+# Report M-1 : skips non réalisés du mois précédent ajoutés au mois en cours
 # ═══════════════════════════════════════════════════════════════════════════════
 if active == "planning":
     st.markdown("### 📅 Planning des prélèvements & lectures")
@@ -3803,7 +3804,10 @@ if active == "planning":
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-
+    # ════════════════════════════════════════════════════════════════════════
+    # CALCUL DU PLANNING MENSUEL
+    # Inclut le report automatique des skips non réalisés du mois précédent
+    # ════════════════════════════════════════════════════════════════════════
     def _compute_monthly_planning(year, month, holidays_set, prelevements=None):
         import calendar as _cm
         import random as _rnd
@@ -3844,6 +3848,29 @@ if active == "planning":
             _done_this_month.setdefault(_lbl, {})
             _done_this_month[_lbl][_d] = _done_this_month[_lbl].get(_d, 0) + 1
 
+        # ── Reports automatiques du mois précédent ────────────────────────
+        import calendar as _cm2
+        prev_month = month - 1 if month > 1 else 12
+        prev_year  = year if month > 1 else year - 1
+
+        _reports = {}  # label → nb occurrences à reporter
+        for _day_iso, _skipped_lbls in (st.session_state.get("planning_skips") or {}).items():
+            try:
+                _d_obj = date_type.fromisoformat(_day_iso)
+            except Exception:
+                continue
+            if _d_obj.year != prev_year or _d_obj.month != prev_month:
+                continue
+            for _lbl in _skipped_lbls:
+                _was_done = any(
+                    p.get("label") == _lbl and p.get("date")
+                    and datetime.fromisoformat(p["date"]).date() == _d_obj
+                    for p in prelevements
+                )
+                if not _was_done:
+                    _reports[_lbl] = _reports.get(_lbl, 0) + 1
+
+        # ── Répartition par point ─────────────────────────────────────────
         for pt in st.session_state.points:
             rc        = (pt.get('room_class') or '').strip()
             freq_raw  = pt.get('frequency')
@@ -3880,6 +3907,9 @@ if active == "planning":
 
             _already_done_count = sum(_done_this_month.get(pt['label'], {}).values())
             total_occurrences   = max(0, total_occurrences - _already_done_count)
+
+            # Ajout des reports du mois précédent
+            total_occurrences += _reports.get(pt['label'], 0)
 
             if total_occurrences <= 0:
                 continue
@@ -3928,6 +3958,10 @@ if active == "planning":
 
         return planning
 
+    # ════════════════════════════════════════════════════════════════════════
+    # REDISTRIBUTION DES SKIPS
+    # Gel semaine +1 dès vendredi 16h00
+    # ════════════════════════════════════════════════════════════════════════
     def _redistribute_skips(monthly_plan, planning_skips, holidays_set):
         import copy
         from datetime import datetime as _dt, time as _time
@@ -3937,18 +3971,15 @@ if active == "planning":
         all_days_sorted = sorted(plan.keys())
         future_days     = [d for d in all_days_sorted if d > today]
 
-        # ── Gel semaine +1 dès vendredi 16h00 ────────────────────────────────
-        # Calcul du vendredi de la semaine EN COURS
-        _cur_monday  = today - timedelta(days=today.weekday())
-        _cur_friday  = _cur_monday + timedelta(days=4)
+        # ── Gel semaine +1 dès vendredi 16h00 ────────────────────────────
+        _cur_monday    = today - timedelta(days=today.weekday())
+        _cur_friday    = _cur_monday + timedelta(days=4)
         _freeze_cutoff = _dt.combine(_cur_friday, _time(16, 0))
 
         if _now >= _freeze_cutoff:
-            # La semaine +1 est gelée : lundi et vendredi de la semaine prochaine
             _next_monday = _cur_monday + timedelta(weeks=1)
             _next_friday = _next_monday + timedelta(days=4)
-            # On exclut tous les jours de la semaine +1 des cibles de redistribution
-            future_days = [
+            future_days  = [
                 d for d in future_days
                 if not (_next_monday <= d <= _next_friday)
             ]
@@ -3982,6 +4013,68 @@ if active == "planning":
 
         return plan
 
+    # ════════════════════════════════════════════════════════════════════════
+    # ÉQUILIBRAGE SEMAINE GELÉE
+    # Dès vendredi 16h00 : rééquilibrage homogène de la semaine +1
+    # ════════════════════════════════════════════════════════════════════════
+    def _balance_frozen_week(plan, holidays_set):
+        from datetime import datetime as _dt, time as _time
+
+        _now           = _dt.now()
+        _cur_monday    = _today_dt - timedelta(days=_today_dt.weekday())
+        _cur_friday    = _cur_monday + timedelta(days=4)
+        _freeze_cutoff = _dt.combine(_cur_friday, _time(16, 0))
+
+        if _now < _freeze_cutoff:
+            return plan  # Pas encore gelé → rien à faire
+
+        _next_monday = _cur_monday + timedelta(weeks=1)
+        _next_friday = _next_monday + timedelta(days=4)
+
+        frozen_days = sorted([
+            d for d in plan.keys()
+            if _next_monday <= d <= _next_friday
+            and d not in holidays_set
+        ])
+
+        if not frozen_days:
+            return plan
+
+        # Collecter toutes les tâches de la semaine gelée
+        all_tasks = []
+        for d in frozen_days:
+            all_tasks.extend(plan.get(d, []))
+            plan[d] = []
+
+        if not all_tasks:
+            return plan
+
+        # Trier par risque décroissant
+        all_tasks.sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
+
+        # Round-robin : toujours placer dans le jour le moins chargé
+        # sans mettre deux fois le même label le même jour
+        day_counts = {d: 0 for d in frozen_days}
+
+        for task in all_tasks:
+            candidates = [
+                d for d in frozen_days
+                if not any(t['label'] == task['label'] for t in plan.get(d, []))
+            ]
+            if not candidates:
+                candidates = frozen_days
+            best = min(candidates, key=lambda d: day_counts[d])
+            plan.setdefault(best, []).append(task)
+            day_counts[best] += 1
+
+        for d in frozen_days:
+            plan[d].sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
+
+        return plan
+
+    # ════════════════════════════════════════════════════════════════════════
+    # GÉNÉRATION PDF ÉTIQUETTES
+    # ════════════════════════════════════════════════════════════════════════
     def _generate_pdf_etiquettes(tasks, date_obj_or_list):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units     import cm as rl_cm
@@ -4261,8 +4354,8 @@ if active == "planning":
         st.caption(
             "Répartition basée sur la fréquence de chaque point. "
             "Un point n'apparaît jamais 2× le même jour sauf fréquence ≥ 1/jour. "
-            "Les tâches non réalisées avant vendredi 23h59 sont automatiquement "
-            "marquées non-faites et redistribuées sur les jours ouvrés futurs du mois."
+            "Les skips du mois précédent sont reportés automatiquement. "
+            "La semaine suivante est équilibrée et gelée dès vendredi 16h00."
         )
 
         # ── Calcul du planning brut ───────────────────────────────────────
@@ -4275,14 +4368,13 @@ if active == "planning":
             for k, v in monthly_plan_raw.items()
         }
 
-        # (auto-skip supprimé — utiliser le bouton ⬜ Non-faits par semaine)
-
-        # ── Redistribution des skips (manuels + auto) ────────────────────
+        # ── Redistribution des skips puis équilibrage semaine gelée ──────
         monthly_plan = _redistribute_skips(
             monthly_plan_raw,
             st.session_state["planning_skips"],
             _ch_holidays,
         )
+        monthly_plan = _balance_frozen_week(monthly_plan, _ch_holidays)
 
         if "pm_selected_day" not in st.session_state:
             st.session_state["pm_selected_day"] = None
@@ -4303,7 +4395,7 @@ if active == "planning":
             _week_passed  = _friday_sem < _today_dt
             _week_current = week_monday <= _today_dt <= _friday_sem
 
-            # ── En-tête semaine avec indicateur de statut ─────────────────
+            # ── En-tête semaine ───────────────────────────────────────────
             c1, c2, c3 = st.columns([4, 1.5, 1.5])
             with c1:
                 if _week_passed:
@@ -4322,7 +4414,10 @@ if active == "planning":
                     unsafe_allow_html=True,
                 )
             with c2:
-                if st.button("⬜ Non-faits", key=f"nonfaits_{week_monday}", help="Marquer tous les non-réalisés de cette semaine"):
+                if st.button(
+                    "⬜ Non-faits", key=f"nonfaits_{week_monday}",
+                    help="Marquer tous les non-réalisés de cette semaine",
+                ):
                     _skips = st.session_state["planning_skips"]
                     for wd in wd_week:
                         done_lbls = {
@@ -4393,12 +4488,7 @@ if active == "planning":
                     if t["label"] not in done_labels
                     and t["label"] not in skipped
                 ]
-
-                # Tâches auto-skippées (semaine passée)
-                auto_skipped_this_day = (
-                    set(st.session_state["planning_skips"].get(wd.isoformat(), []))
-                    - done_labels
-                ) if _friday_sem < _today_dt else set()
+                skipped_this_day = skipped - done_labels
 
                 with cols[i]:
                     st.markdown(f"**{JOURS_FR_LONG[wd.weekday()][:3]} {wd.strftime('%d/%m')}**")
@@ -4410,19 +4500,17 @@ if active == "planning":
                     for t in tasks:
                         _dn     = t["label"] in done_labels
                         _sk     = t["label"] in skipped
-                        _auto   = t["label"] in auto_skipped_this_day
                         _ic     = "💨" if t.get("type") == "Air" else "🧴"
-                        _col    = "#22c55e" if _dn else "#dc2626" if _auto else "#94a3b8" if _sk else "#1e40af"
-                        _strike = "line-through" if (_sk or _auto) else "none"
-                        _suffix = " ⏭️" if _auto else ""
+                        _col    = "#22c55e" if _dn else "#94a3b8" if _sk else "#1e40af"
+                        _strike = "line-through" if _sk else "none"
                         st.markdown(
                             f"<div style='font-size:.72rem;color:{_col};"
                             f"text-decoration:{_strike};padding:2px 0'>"
-                            f"{_ic} {t['label'][:25]}{_suffix}</div>",
+                            f"{_ic} {t['label'][:25]}</div>",
                             unsafe_allow_html=True,
                         )
 
-                    # Bouton "Non faits" uniquement pour les jours non passés (semaine en cours ou future)
+                    # Bouton non-faits jour : uniquement semaine non passée
                     if non_faits and not _week_passed:
                         with st.popover(f"⬜ {len(non_faits)} Non faits"):
                             selections = []
@@ -4445,11 +4533,10 @@ if active == "planning":
                                 st.session_state["planning_skips"] = _skips
                                 _supa_upsert('planning_skips', json.dumps(_skips))
                                 st.rerun()
-                    elif _week_passed and auto_skipped_this_day:
-                        # Affiche un résumé compact pour les semaines passées
+                    elif _week_passed and skipped_this_day:
                         st.markdown(
                             f"<div style='font-size:.65rem;color:#dc2626;margin-top:2px'>"
-                            f"⏭️ {len(auto_skipped_this_day)} non-fait(s) auto</div>",
+                            f"⏭️ {len(skipped_this_day)} non-fait(s)</div>",
                             unsafe_allow_html=True,
                         )
                     elif not non_faits:
@@ -4658,12 +4745,10 @@ if active == "planning":
 
         only_working = st.checkbox("Inclure uniquement les jours ouvrés", value=True)
 
-        # Option pour inclure les non-faits redistribués dans l'export
         include_nonfaits = st.checkbox(
             "Inclure les prélèvements redistribués (non-faits des semaines passées)",
             value=True,
-            help="Affiche dans l'Excel les prélèvements reportés automatiquement "
-                 "depuis des semaines passées non réalisées.",
+            help="Affiche dans l'Excel les prélèvements reportés depuis des semaines passées.",
         )
 
         if st.button("📊 Générer Excel", use_container_width=True, key="gen_xlsx"):
@@ -4673,7 +4758,7 @@ if active == "planning":
 
             wb = openpyxl.Workbook()
 
-            # ── Palette couleurs ──────────────────────────────────────────
+            # ── Palette ───────────────────────────────────────────────────
             C_BLUE     = "1E40AF"; C_BLUE2  = "2563EB"; C_BLUE_L = "DBEAFE"
             C_WHITE    = "FFFFFF"; C_TEXT   = "0F172A"; C_GREY_L  = "F1F5F9"
             C_GREY_HDR = "334155"; C_GREEN  = "16A34A"; C_RED    = "DC2626"
@@ -4745,11 +4830,11 @@ if active == "planning":
             if only_working:
                 exp_dates = [d for d in exp_dates if is_working_day(d)]
 
-            # ── Plan Excel : on utilise monthly_plan déjà redistribué ─────
-            # Si la période exporte un autre mois, recalculer
+            # ── Construction du plan Excel ────────────────────────────────
+            # Si même mois que l'onglet charge → réutilise le plan déjà calculé
             _xl_months = set((d.year, d.month) for d in exp_dates)
             if len(_xl_months) == 1 and list(_xl_months)[0] == (_ch_year, _ch_month):
-                xl_plan = monthly_plan  # déjà calculé + redistribué
+                xl_plan = monthly_plan  # déjà calculé + redistribué + équilibré
             else:
                 xl_plan = {}
                 for (yr, mo) in _xl_months:
@@ -4759,12 +4844,12 @@ if active == "planning":
                         prelevements=st.session_state.get("prelevements", []),
                     )
                     _raw = {(k.date() if hasattr(k, 'date') else k): v for k, v in _raw.items()}
-                    # Auto-skip + redistribution pour ce mois
-                    _sk_tmp, _ = _auto_skip_past_weeks(
-                        _raw, dict(st.session_state["planning_skips"]),
-                        st.session_state.get("prelevements", []), exp_today,
+                    _raw = _redistribute_skips(
+                        _raw,
+                        dict(st.session_state["planning_skips"]),
+                        _hol,
                     )
-                    _raw = _redistribute_skips(_raw, _sk_tmp, _hol)
+                    _raw = _balance_frozen_week(_raw, _hol)
                     xl_plan.update(_raw)
 
             # ── Feuille 1 — Vue matricielle ───────────────────────────────
@@ -4956,13 +5041,12 @@ if active == "planning":
                             and datetime.fromisoformat(p["date"]).date() == d_for_col
                             for p in st.session_state.prelevements
                         )
-                        # Non-fait auto : planifié dans le plan brut mais skippé
-                        _raw_day_tasks = monthly_plan_raw.get(d_for_col, [])
+                        _raw_day_tasks   = monthly_plan_raw.get(d_for_col, [])
                         _was_planned_raw = any(t.get("label") == pt["label"] for t in _raw_day_tasks)
-                        _is_skipped = pt["label"] in set(
+                        _is_skipped      = pt["label"] in set(
                             st.session_state["planning_skips"].get(d_for_col.isoformat(), [])
                         )
-                        is_auto_nonfait = (
+                        is_nonfait = (
                             _wk_is_past
                             and _was_planned_raw
                             and not is_done
@@ -4975,8 +5059,7 @@ if active == "planning":
                             c.font  = Font(name="Arial", size=11, bold=True, color=C_GREEN)
                             c.fill  = fill("DCFCE7")
 
-                        elif is_auto_nonfait:
-                            # Affiché dans la colonne d'origine (semaine passée)
+                        elif is_nonfait:
                             c.value = "⏭"
                             c.font  = Font(name="Arial", size=10, bold=True, color=C_RED)
                             c.fill  = fill("FEE2E2")
@@ -5070,7 +5153,7 @@ if active == "planning":
                     d_obj = date_type.fromisoformat(d)
                 except Exception:
                     continue
-                if d_obj not in [ed for ed in exp_dates]:
+                if d_obj not in exp_dates:
                     continue
                 skipped_lbls = st.session_state["planning_skips"][d]
                 if not skipped_lbls:
@@ -5084,8 +5167,11 @@ if active == "planning":
                     if done:
                         continue
                     _pt_info = next((p for p in pts_all if p.get("label") == lbl), {})
-                    statut   = "⏭ Auto (sem. passée)" if (
-                        d_obj + timedelta(days=(4 - d_obj.weekday()))) < exp_today else "⬜ Manuel"
+                    statut   = (
+                        "⏭ Non-fait (sem. passée)"
+                        if (d_obj + timedelta(days=(4 - d_obj.weekday()))) < exp_today
+                        else "⬜ Manuel"
+                    )
                     ws_nf.row_dimensions[nf_row].height = 16
                     row_bg_nf = "FFF1F2" if nf_row % 2 == 0 else "FFFFFF"
                     vals = [
@@ -5100,7 +5186,7 @@ if active == "planning":
                         c = ws_nf.cell(nf_row, ci)
                         c.value     = val
                         c.font      = Font(name="Arial", size=9,
-                                          color="DC2626" if "Auto" in statut else C_TEXT)
+                                          color="DC2626" if "passée" in statut else C_TEXT)
                         c.fill      = fill(row_bg_nf)
                         c.alignment = al_l() if ci == 3 else al_c()
                         c.border    = border_all()
