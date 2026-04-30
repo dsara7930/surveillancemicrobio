@@ -5115,11 +5115,15 @@ if active == "planning":
                         prelevements=st.session_state.get("prelevements", []),
                     )
                     _raw = {(k.date() if hasattr(k, 'date') else k): v for k, v in _raw.items()}
-                    _raw = _redistribute_skips(
-                        _raw,
-                        dict(st.session_state["planning_skips"]),
-                        _hol,
-                    )
+
+                    # ✅ Normalisation des clés de planning_skips en objets `date`
+                    _skips = {
+                        (k.date() if hasattr(k, 'date') else k
+                        if not isinstance(k, str) else datetime.fromisoformat(k).date()): v
+                        for k, v in dict(st.session_state["planning_skips"]).items()
+                    }
+
+                    _raw = _redistribute_skips(_raw, _skips, _hol)
                     _raw = _balance_frozen_week(_raw, _hol)
                     xl_plan.update(_raw)
 
