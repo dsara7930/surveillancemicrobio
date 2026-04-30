@@ -5124,7 +5124,7 @@ if active == "planning":
                     }
 
                     _raw = _redistribute_skips(_raw, _skips, _hol, yr, mo) 
-                    _raw = _balance_frozen_week(_raw, _hol)
+                    _raw = _balance_weeks(_raw, _hol)
                     xl_plan.update(_raw)
 
             # ── Feuille 1 — Vue matricielle ───────────────────────────────
