@@ -5123,7 +5123,7 @@ if active == "planning":
                         for k, v in dict(st.session_state["planning_skips"]).items()
                     }
 
-                    _raw = _redistribute_skips(_raw, _skips, _hol)
+                    _raw = _redistribute_skips(_raw, _skips, _hol, yr, mo) 
                     _raw = _balance_frozen_week(_raw, _hol)
                     xl_plan.update(_raw)
 
