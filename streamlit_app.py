@@ -4666,32 +4666,27 @@ if active == "planning":
 
             # ── FIX 1 : Bouton Annuler Non-faits ─────────────────────────
             with c4:
-                # Vérifier s'il existe des skips pour cette semaine
-                _has_skips_this_week = any(
-                    st.session_state["planning_skips"].get(wd.isoformat())
-                    for wd in wd_week
-                )
-                if _has_skips_this_week or _week_frozen:
+                _next_monday_check = week_monday + timedelta(weeks=1)
+                _next_week_frozen  = _next_monday_check.isoformat() in st.session_state.get("planning_frozen_weeks", {})
+
+                # ✅ on affiche Annuler si des skips existent sur N, OU si N+1 est gelée
+                if _has_skips_this_week or _next_week_frozen:
                     if st.button(
                         "🔄 Annuler",
                         key=f"undo_nonfaits_{week_monday}",
                         help="Annuler les non-faits de cette semaine et dégeler S+1",
                     ):
-                        # Supprimer les skips de tous les jours de la semaine
                         _skips = st.session_state["planning_skips"]
                         for wd in wd_week:
                             _skips.pop(wd.isoformat(), None)
                         st.session_state["planning_skips"] = _skips
                         _supa_upsert('planning_skips', json.dumps(_skips))
 
-                        # Dégeler S+1 (la semaine suivante)
                         _frozen = st.session_state.get("planning_frozen_weeks", {})
-                        _next_key_undo = (week_monday + timedelta(weeks=1)).isoformat()
                         _changed = False
-                        if _next_key_undo in _frozen:
-                            del _frozen[_next_key_undo]
+                        if _next_monday_check.isoformat() in _frozen:
+                            del _frozen[_next_monday_check.isoformat()]
                             _changed = True
-                        # Dégeler aussi la semaine elle-même si elle était gelée
                         _this_key = week_monday.isoformat()
                         if _this_key in _frozen:
                             del _frozen[_this_key]
@@ -6156,7 +6151,7 @@ if active == "analyse":
 
                     if st.button(
                         "💾 Sauvegarder les modifications",
-                        key=f"edit_save_{_li}",
+                        key=f"edit_save_{_k}",        # ← _k = f"{key_prefix}{_real_idx}", unique global
                         type="primary",
                         use_container_width=True,
                     ):
