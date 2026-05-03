@@ -4021,7 +4021,14 @@ if active == "planning":
             _done_this_month.setdefault(_lbl, {})
             _done_this_month[_lbl][_d] = _done_this_month[_lbl].get(_d, 0) + 1
 
-        for pt in st.session_state.points:
+        # ── Trier les points par risque décroissant pour placer les plus critiques
+        # en premier sur les jours les moins chargés ──────────────────────────────
+        sorted_points = sorted(
+            st.session_state.points,
+            key=lambda p: -int(p.get('risk_level', 1) or 1)
+        )
+
+        for pt in sorted_points:
             lbl = pt['label']
             rc  = (pt.get('room_class') or '').strip()
 
@@ -4060,6 +4067,17 @@ if active == "planning":
                 remaining    = total_occ
                 max_attempts = remaining * max(len(available_wd), 1) * 4 + 50
                 attempts     = 0
+
+                # ── Espacement minimal souhaité entre deux occurrences du même point
+                # Pour 1/semaine : idéalement ~5 jours ouvrés entre chaque passage
+                freq_unit = task_base['_freq_unit']
+                if '/ semaine' in freq_unit and total_occ > 0 and len(available_wd) > 0:
+                    ideal_gap = max(1, len(available_wd) // total_occ)
+                else:
+                    ideal_gap = 1
+
+                last_assigned = None  # dernier jour assigné pour ce point
+
                 while remaining > 0 and attempts < max_attempts:
                     attempts += 1
                     candidates = [
@@ -4068,10 +4086,29 @@ if active == "planning":
                     ]
                     if not candidates:
                         break
-                    best = min(candidates, key=lambda d: (day_counts[d], rng.random()))
+
+                    def _score(d):
+                        load_score = day_counts[d] * 10
+                        # Pénaliser les jours trop proches du dernier assigné
+                        if last_assigned:
+                            diff = abs((d - last_assigned).days)
+                            if diff == 0:
+                                gap_penalty = 9999
+                            elif diff < ideal_gap // 2:
+                                gap_penalty = 500
+                            elif diff < ideal_gap:
+                                gap_penalty = 100
+                            else:
+                                gap_penalty = 0
+                        else:
+                            gap_penalty = 0
+                        return load_score + gap_penalty + rng.random()
+
+                    best = min(candidates, key=_score)
                     planning[best].append(dict(task_base))
                     day_counts[best] += 1
                     day_labels[best][lbl] = day_labels[best].get(lbl, 0) + 1
+                    last_assigned = best
                     remaining -= 1
 
         for d in planning:
@@ -4152,6 +4189,8 @@ if active == "planning":
 
         weeks = sorted(set(d - timedelta(days=d.weekday()) for d in plan.keys()))
 
+        label_last_day = {}  # mémoire inter-semaines
+
         for wk_monday in weeks:
             wk_key    = wk_monday.isoformat()
             wk_friday = wk_monday + timedelta(days=4)
@@ -4162,11 +4201,16 @@ if active == "planning":
                         d = date_type.fromisoformat(day_iso)
                         if d in plan:
                             plan[d] = list(tasks)
+                        for t in tasks:
+                            label_last_day[t['label']] = d
                     except Exception:
                         pass
                 continue
 
             if wk_friday < today:
+                for d in sorted(d for d in plan.keys() if wk_monday <= d <= wk_friday):
+                    for t in plan.get(d, []):
+                        label_last_day[t['label']] = d
                 continue
 
             all_week_days = sorted([
@@ -4186,6 +4230,9 @@ if active == "planning":
                 locked_days = []
 
             if not free_days:
+                for d in locked_days:
+                    for t in plan.get(d, []):
+                        label_last_day[t['label']] = d
                 continue
 
             all_tasks = []
@@ -4194,25 +4241,87 @@ if active == "planning":
                 plan[d] = []
 
             if not all_tasks:
+                for d in locked_days:
+                    for t in plan.get(d, []):
+                        label_last_day[t['label']] = d
                 continue
 
             all_tasks.sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
 
             day_counts = {d: len(plan.get(d, [])) for d in free_days}
 
+            # ── Pré-calculer le nb d'occurrences de chaque label dans la semaine ──
+            label_occ_in_week = {}
+            for t in all_tasks:
+                label_occ_in_week[t['label']] = label_occ_in_week.get(t['label'], 0) + 1
+
+            # ── Mémoire intra-semaine : dernier jour assigné dans CETTE semaine ───
+            label_last_day_week = {}
+
             for task in all_tasks:
+                lbl     = task['label']
+                n_occ   = label_occ_in_week.get(lbl, 1)
+                n_free  = len(free_days)
+
+                # Espacement idéal dans la semaine selon la fréquence
+                # Ex: 3 occ sur 5 jours → gap = 5//3 = 1 (Lun/Mer/Ven)
+                # Ex: 1 occ sur 5 jours → gap = 5 (une seule fois, n'importe quel jour)
+                # Ex: 2 occ sur 5 jours → gap = 2 (Lun/Mer ou Mar/Jeu...)
+                ideal_gap_week = max(1, n_free // n_occ) if n_occ > 0 else 1
+
+                # Dernier jour connu : intra-semaine prioritaire, sinon inter-semaines
+                last_d_week  = label_last_day_week.get(lbl)
+                last_d_inter = label_last_day.get(lbl)
+
                 candidates = [
                     d for d in free_days
-                    if not any(t['label'] == task['label'] for t in plan.get(d, []))
+                    if not any(t['label'] == lbl for t in plan.get(d, []))
                 ]
                 if not candidates:
                     candidates = free_days
-                best = min(candidates, key=lambda d: day_counts[d])
+
+                def _week_score(d, _lw=last_d_week, _li=last_d_inter, _gap=ideal_gap_week):
+                    load = day_counts[d] * 10
+
+                    # ── Espacement intra-semaine (priorité haute) ─────────────────
+                    if _lw is not None:
+                        diff_w = abs((d - _lw).days)
+                        if diff_w == 0:
+                            intra_penalty = 9999
+                        elif diff_w < _gap:
+                            # Trop proche du précédent passage dans la semaine
+                            intra_penalty = 300 * (_gap - diff_w)
+                        else:
+                            intra_penalty = 0
+                    else:
+                        intra_penalty = 0
+
+                    # ── Espacement inter-semaines (éviter consécutif Ven→Lun) ─────
+                    if _li is not None and _lw is None:
+                        diff_i = abs((d - _li).days)
+                        if diff_i <= 1:
+                            inter_penalty = 200
+                        elif diff_i <= 3:
+                            inter_penalty = 50
+                        else:
+                            inter_penalty = 0
+                    else:
+                        inter_penalty = 0
+
+                    return load + intra_penalty + inter_penalty
+
+                best = min(candidates, key=_week_score)
                 plan.setdefault(best, []).append(task)
                 day_counts[best] += 1
+                label_last_day_week[lbl] = best
+                label_last_day[lbl]      = best
 
             for d in free_days:
                 plan[d].sort(key=lambda x: (-x.get('risk', 1), x.get('label', '')))
+
+            for d in locked_days:
+                for t in plan.get(d, []):
+                    label_last_day[t['label']] = d
 
         return plan
 
@@ -4665,33 +4774,31 @@ if active == "planning":
                     st.rerun()
 
             # ── FIX 1 : Bouton Annuler Non-faits ─────────────────────────
+            _has_skips_this_week = any(
+                st.session_state["planning_skips"].get(wd.isoformat())
+                for wd in wd_week
+            )
+            _next_monday_check = week_monday + timedelta(weeks=1)
+            _next_week_frozen  = _next_monday_check.isoformat() in st.session_state.get("planning_frozen_weeks", {})
+
             with c4:
-                # Vérifier s'il existe des skips pour cette semaine
-                _has_skips_this_week = any(
-                    st.session_state["planning_skips"].get(wd.isoformat())
-                    for wd in wd_week
-                )
-                if _has_skips_this_week or _week_frozen:
+                if _has_skips_this_week or _next_week_frozen:
                     if st.button(
                         "🔄 Annuler",
                         key=f"undo_nonfaits_{week_monday}",
                         help="Annuler les non-faits de cette semaine et dégeler S+1",
                     ):
-                        # Supprimer les skips de tous les jours de la semaine
                         _skips = st.session_state["planning_skips"]
                         for wd in wd_week:
                             _skips.pop(wd.isoformat(), None)
                         st.session_state["planning_skips"] = _skips
                         _supa_upsert('planning_skips', json.dumps(_skips))
 
-                        # Dégeler S+1 (la semaine suivante)
                         _frozen = st.session_state.get("planning_frozen_weeks", {})
-                        _next_key_undo = (week_monday + timedelta(weeks=1)).isoformat()
                         _changed = False
-                        if _next_key_undo in _frozen:
-                            del _frozen[_next_key_undo]
+                        if _next_monday_check.isoformat() in _frozen:
+                            del _frozen[_next_monday_check.isoformat()]
                             _changed = True
-                        # Dégeler aussi la semaine elle-même si elle était gelée
                         _this_key = week_monday.isoformat()
                         if _this_key in _frozen:
                             del _frozen[_this_key]
