@@ -4665,11 +4665,14 @@ if active == "planning":
                     st.rerun()
 
             # ── FIX 1 : Bouton Annuler Non-faits ─────────────────────────
-            with c4:
-                _next_monday_check = week_monday + timedelta(weeks=1)
-                _next_week_frozen  = _next_monday_check.isoformat() in st.session_state.get("planning_frozen_weeks", {})
+            _has_skips_this_week = any(
+                st.session_state["planning_skips"].get(wd.isoformat())
+                for wd in wd_week
+            )
+            _next_monday_check = week_monday + timedelta(weeks=1)
+            _next_week_frozen  = _next_monday_check.isoformat() in st.session_state.get("planning_frozen_weeks", {})
 
-                # ✅ on affiche Annuler si des skips existent sur N, OU si N+1 est gelée
+            with c4:
                 if _has_skips_this_week or _next_week_frozen:
                     if st.button(
                         "🔄 Annuler",
